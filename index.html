@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DETRO-RJ — Análise de Requerimentos</title>
+  <style>
+    :root {
+      --verde-detro: #1a5c2a;
+      --verde-claro: #2e7d42;
+      --dourado: #c9a227;
+      --azul-destaque: #1565c0;
+      --amarelo-barra: #f9a825;
+      --azul-barra: #1565c0;
+      --bg: #f4f6f8;
+      --bg-card: #ffffff;
+      --border: #d0d7de;
+      --text: #1c2526;
+      --text-muted: #586069;
+      --danger: #c62828;
+      --warning: #e65100;
+      --success: #2e7d32;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--verde-detro);
+      color: #fff;
+      padding: 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,.35);
+    }
+    .header-top {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 14px 28px;
+    }
+    .header-logo {
+      width: 56px;
+      height: 56px;
+      background: var(--dourado);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--verde-detro);
+      flex-shrink: 0;
+      letter-spacing: -1px;
+    }
+    .header-text h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: .5px;
+    }
+    .header-text p {
+      font-size: .78rem;
+      opacity: .82;
+      margin-top: 2px;
+    }
+    .header-bar {
+      background: var(--dourado);
+      height: 4px;
+    }
+
+    /* ── LAYOUT ── */
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 20px 48px;
+    }
+
+    /* ── SETTINGS PANEL ── */
+    .settings-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 14px;
+      font-size: .82rem;
+      cursor: pointer;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+      background: var(--bg-card);
+      transition: border-color .2s;
+    }
+    .settings-toggle:hover { border-color: var(--verde-claro); color: var(--verde-claro); }
+    .settings-toggle svg { width: 15px; height: 15px; }
+
+    .settings-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    .settings-panel.open { display: block; }
+    .settings-panel h3 {
+      font-size: .88rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      margin-bottom: 12px;
+    }
+    .settings-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .settings-row label {
+      font-size: .84rem;
+      font-weight: 600;
+      min-width: 80px;
+    }
+    .settings-row input[type="password"],
+    .settings-row input[type="text"] {
+      flex: 1;
+      min-width: 260px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: .88rem;
+      font-family: monospace;
+    }
+    .settings-row input:focus {
+      outline: none;
+      border-color: var(--verde-claro);
+      box-shadow: 0 0 0 3px rgba(46,125,66,.12);
+    }
+    .btn-show-key {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: .8rem;
+      color: var(--text-muted);
+    }
+    .btn-show-key:hover { border-color: var(--verde-claro); color: var(--verde-claro); }
+    .settings-note {
+      margin-top: 10px;
+      font-size: .76rem;
+      color: var(--text-muted);
+    }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 22px 24px;
+      margin-bottom: 22px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--verde-detro);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 18px;
+      background: var(--dourado);
+      border-radius: 2px;
+    }
+
+    /* ── FORM ── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group label { font-size: .82rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; }
+    .form-group input, .form-group select {
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: .9rem;
+      background: var(--bg-card);
+    }
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--verde-claro);
+      box-shadow: 0 0 0 3px rgba(46,125,66,.12);
+    }
+
+    .textarea-label {
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      margin-bottom: 6px;
+      display: block;
+    }
+    textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: .88rem;
+      font-family: 'Courier New', monospace;
+      resize: vertical;
+      background: #fafbfc;
+      line-height: 1.6;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: var(--verde-claro);
+      box-shadow: 0 0 0 3px rgba(46,125,66,.12);
+    }
+
+    .helper-text {
+      font-size: .76rem;
+      color: var(--text-muted);
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+
+    /* ── EXAMPLE DATA ── */
+    .example-btn {
+      background: none;
+      border: 1px dashed var(--border);
+      border-radius: 5px;
+      padding: 5px 12px;
+      font-size: .78rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .example-btn:hover { border-color: var(--verde-claro); color: var(--verde-claro); }
+
+    /* ── BUTTONS ── */
+    .btn-primary {
+      background: var(--verde-detro);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 11px 28px;
+      font-size: .94rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background .2s, transform .1s;
+    }
+    .btn-primary:hover { background: var(--verde-claro); }
+    .btn-primary:active { transform: scale(.98); }
+    .btn-primary:disabled { background: #9e9e9e; cursor: not-allowed; transform: none; }
+
+    .btn-secondary {
+      background: #fff;
+      color: var(--verde-detro);
+      border: 1px solid var(--verde-detro);
+      border-radius: 7px;
+      padding: 9px 20px;
+      font-size: .86rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .btn-secondary:hover { background: #e8f5e9; }
+
+    .btn-copy {
+      background: var(--azul-destaque);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 18px;
+      font-size: .84rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-copy:hover { background: #0d47a1; }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    /* ── SPINNER / LOADING ── */
+    .loading-overlay {
+      display: none;
+      text-align: center;
+      padding: 32px;
+    }
+    .loading-overlay.active { display: block; }
+    .spinner {
+      width: 42px; height: 42px;
+      border: 4px solid #e0e0e0;
+      border-top-color: var(--verde-detro);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin: 0 auto 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: .9rem; color: var(--text-muted); }
+
+    /* ── RESULTS ── */
+    #results { display: none; }
+
+    /* summary cards */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .summary-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      text-align: center;
+    }
+    .summary-card .val {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .summary-card .lbl { font-size: .76rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; }
+    .color-regular { color: var(--success); }
+    .color-warning { color: var(--warning); }
+    .color-danger  { color: var(--danger); }
+
+    /* table */
+    .table-wrapper { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .84rem;
+    }
+    thead th {
+      background: var(--verde-detro);
+      color: #fff;
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    tbody tr:nth-child(odd) { background: #f9fafb; }
+    tbody tr:hover { background: #e8f5e9; }
+    tbody td {
+      padding: 9px 12px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 12px;
+      font-size: .74rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .badge-regular  { background: #e8f5e9; color: var(--success); }
+    .badge-warning  { background: #fff3e0; color: var(--warning); }
+    .badge-irregular{ background: #ffebee; color: var(--danger); }
+
+    /* chart */
+    #chartCanvas {
+      width: 100%;
+      max-width: 100%;
+      display: block;
+      border-radius: 6px;
+    }
+    .chart-legend {
+      display: flex;
+      gap: 20px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: .8rem;
+    }
+    .legend-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+    }
+
+    /* irregularities */
+    .irregularidade-item {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      background: #fff8e1;
+      border-left: 4px solid var(--warning);
+      border-radius: 0 6px 6px 0;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      font-size: .86rem;
+    }
+    .irregularidade-item.grave {
+      background: #ffebee;
+      border-left-color: var(--danger);
+    }
+    .irr-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+
+    /* dispatch */
+    .dispatch-textarea {
+      font-family: 'Times New Roman', serif;
+      font-size: .92rem;
+      line-height: 1.8;
+      background: #fffde7;
+      border: 1px solid #f9a825;
+      min-height: 380px;
+    }
+    .dispatch-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .dispatch-toolbar span {
+      font-size: .78rem;
+      color: var(--text-muted);
+    }
+    .copy-feedback {
+      font-size: .78rem;
+      color: var(--success);
+      font-weight: 600;
+      display: none;
+    }
+    .copy-feedback.show { display: inline; }
+
+    /* error */
+    .error-box {
+      background: #ffebee;
+      border: 1px solid #ef9a9a;
+      border-radius: 8px;
+      padding: 14px 18px;
+      color: var(--danger);
+      font-size: .88rem;
+      display: none;
+    }
+    .error-box.show { display: block; }
+
+    /* ── FOOTER ── */
+    footer {
+      text-align: center;
+      padding: 18px;
+      font-size: .74rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div class="header-logo">DT</div>
+    <div class="header-text">
+      <h1>DETRO-RJ — Sistema de Análise de Requerimentos</h1>
+      <p>Departamento de Transportes Rodoviários do Estado do Rio de Janeiro &nbsp;|&nbsp; Uso Interno</p>
+    </div>
+  </div>
+  <div class="header-bar"></div>
+</header>
+
+<div class="container">
+
+  <!-- Settings -->
+  <button class="settings-toggle" onclick="toggleSettings()">
+    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.474l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/></svg>
+    Configurações da API
+  </button>
+
+  <div class="settings-panel" id="settingsPanel">
+    <h3>Chave de API — Anthropic</h3>
+    <div class="settings-row">
+      <label for="apiKeyInput">API Key</label>
+      <input type="password" id="apiKeyInput" placeholder="sk-ant-..." autocomplete="off" />
+      <button class="btn-show-key" onclick="toggleKeyVisibility()">Mostrar</button>
+    </div>
+    <p class="settings-note">
+      ⚠ A chave é armazenada apenas na memória desta sessão do navegador e nunca é enviada a terceiros.
+      Obtenha sua chave em <strong>console.anthropic.com</strong>.
+    </p>
+  </div>
+
+  <!-- Input form -->
+  <div class="card">
+    <div class="card-title">Dados do Requerimento</div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="nomeEmpresa">Empresa Requerente</label>
+        <input type="text" id="nomeEmpresa" placeholder="Ex: Transportes Fluminense Ltda." />
+      </div>
+      <div class="form-group">
+        <label for="numeroLinha">Linha / Serviço</label>
+        <input type="text" id="numeroLinha" placeholder="Ex: 485 — Central / Recreio" />
+      </div>
+      <div class="form-group">
+        <label for="numeroReq">Nº do Requerimento / Processo</label>
+        <input type="text" id="numeroReq" placeholder="Ex: E-14/000123/2025" />
+      </div>
+      <div class="form-group">
+        <label for="dataReq">Data do Requerimento</label>
+        <input type="date" id="dataReq" />
+      </div>
+    </div>
+
+    <label class="textarea-label" for="dadosSecoes">Dados das Seções (cole ou digite abaixo)</label>
+    <textarea id="dadosSecoes" rows="12"
+      placeholder="Cole aqui os dados das seções do requerimento. Pode ser texto livre, tabela copiada de planilha ou PDF.
+
+Exemplo:
+Seção          | Tarifa Cadastrada | Tarifa Proposta | Passageiros/Mês
+Central–Madureira    | R$ 5,20           | R$ 6,40         | 18.500
+Madureira–Guadalupe  | R$ 3,80           | R$ 4,70         | 12.300
+Guadalupe–Deodoro    | R$ 4,50           | R$ 4,50         | 9.800
+Deodoro–Recreio      | R$ 7,20           | R$ 9,10         | 5.400"></textarea>
+
+    <p class="helper-text">
+      O sistema aceita qualquer formato de texto. Inclua os valores tarifários cadastrados e propostos, bem como os dados de passageiros por seção.
+      Quanto mais completos os dados, melhor a análise gerada.
+    </p>
+    <button class="example-btn" onclick="preencherExemplo()">↓ Preencher com dados de exemplo</button>
+
+    <div class="error-box" id="errorBox"></div>
+
+    <div class="btn-row">
+      <button class="btn-primary" id="btnAnalisar" onclick="analisarRequerimento()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M10.97 4.97a.75.75 0 0 1 1.071 1.05l-3.992 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.236.236 0 0 1 .02-.022z"/><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/></svg>
+        Analisar Requerimento
+      </button>
+      <button class="btn-secondary" onclick="limpar()">Limpar</button>
+    </div>
+
+    <div class="loading-overlay" id="loading">
+      <div class="spinner"></div>
+      <p class="loading-text">Processando análise com IA&hellip; aguarde.</p>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="results">
+
+    <!-- Summary cards -->
+    <div class="summary-grid" id="summaryGrid"></div>
+
+    <!-- Sections table -->
+    <div class="card">
+      <div class="card-title">Análise por Seção</div>
+      <div class="table-wrapper">
+        <table id="secoesTable">
+          <thead>
+            <tr>
+              <th>Seção</th>
+              <th>Tarifa Cadastrada</th>
+              <th>Tarifa Proposta</th>
+              <th>Variação</th>
+              <th>Passageiros/Mês</th>
+              <th>Índice de Aproveitamento</th>
+              <th>Situação</th>
+            </tr>
+          </thead>
+          <tbody id="secoesBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="card">
+      <div class="card-title">Comparativo de Tarifas por Seção</div>
+      <canvas id="chartCanvas" height="320"></canvas>
+      <div class="chart-legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--amarelo-barra)"></div>
+          <span>Tarifa Cadastrada</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--azul-barra)"></div>
+          <span>Tarifa Proposta</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#4caf50; border-radius:50%"></div>
+          <span>↑ Passageiros/mês (acima das barras)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Irregularities -->
+    <div class="card" id="irregCard">
+      <div class="card-title">Inconsistências e Irregularidades Identificadas</div>
+      <div id="irregList"></div>
+    </div>
+
+    <!-- Dispatch -->
+    <div class="card">
+      <div class="card-title">Despacho Administrativo — Rascunho</div>
+      <div class="dispatch-toolbar">
+        <span>Texto editável. Revise antes de usar.</span>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <span class="copy-feedback" id="copyFeedback">✓ Copiado!</span>
+          <button class="btn-copy" onclick="copiarDespacho()">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg>
+            Copiar Despacho
+          </button>
+        </div>
+      </div>
+      <textarea class="dispatch-textarea" id="despachoText" rows="20"></textarea>
+    </div>
+
+  </div><!-- /results -->
+
+</div><!-- /container -->
+
+<footer>
+  DETRO-RJ — Sistema de Análise de Requerimentos &nbsp;|&nbsp; Uso restrito a servidores autorizados &nbsp;|&nbsp; Análise gerada por IA — sujeita a revisão técnica
+</footer>
+
+<script>
+/* ────────────────────────────────────────────────
+   SETTINGS
+──────────────────────────────────────────────── */
+function toggleSettings() {
+  document.getElementById('settingsPanel').classList.toggle('open');
+}
+
+function toggleKeyVisibility() {
+  const inp = document.getElementById('apiKeyInput');
+  const btn = inp.nextElementSibling;
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = 'Ocultar'; }
+  else { inp.type = 'password'; btn.textContent = 'Mostrar'; }
+}
+
+function getApiKey() {
+  return document.getElementById('apiKeyInput').value.trim();
+}
+
+/* ────────────────────────────────────────────────
+   EXAMPLE DATA
+──────────────────────────────────────────────── */
+function preencherExemplo() {
+  document.getElementById('nomeEmpresa').value = 'Transportes Fluminense Ltda.';
+  document.getElementById('numeroLinha').value  = '485 — Central / Recreio dos Bandeirantes';
+  document.getElementById('numeroReq').value    = 'E-14/004821/2025';
+  document.getElementById('dataReq').value      = '2025-03-18';
+  document.getElementById('dadosSecoes').value  =
+`Seção                        | Tarifa Cadastrada | Tarifa Proposta | Passageiros/Mês
+Central – Madureira          | R$ 5,20           | R$ 6,40         | 18.540
+Madureira – Guadalupe        | R$ 3,80           | R$ 4,70         | 12.310
+Guadalupe – Deodoro          | R$ 4,50           | R$ 5,00         | 9.870
+Deodoro – Campo Grande       | R$ 5,80           | R$ 7,90         | 6.120
+Campo Grande – Santa Cruz    | R$ 4,20           | R$ 4,20         | 4.380
+Santa Cruz – Recreio         | R$ 6,10           | R$ 8,50         | 3.250
+
+Capacidade do veículo: 80 passageiros
+Frequência mensal estimada: 620 viagens por seção
+Justificativa da empresa: reajuste necessário em virtude de aumento de insumos (combustível, pneus e mão de obra) acumulado de 18,4% no período.`;
+}
+
+/* ────────────────────────────────────────────────
+   CLEAR
+──────────────────────────────────────────────── */
+function limpar() {
+  ['nomeEmpresa','numeroLinha','numeroReq','dataReq','dadosSecoes'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('results').style.display  = 'none';
+  showError('');
+}
+
+/* ────────────────────────────────────────────────
+   ERROR HELPER
+──────────────────────────────────────────────── */
+function showError(msg) {
+  const box = document.getElementById('errorBox');
+  if (msg) { box.textContent = msg; box.classList.add('show'); }
+  else      { box.textContent = ''; box.classList.remove('show'); }
+}
+
+/* ────────────────────────────────────────────────
+   MAIN ANALYSIS
+──────────────────────────────────────────────── */
+async function analisarRequerimento() {
+  showError('');
+
+  const apiKey  = getApiKey();
+  const empresa = document.getElementById('nomeEmpresa').value.trim();
+  const linha   = document.getElementById('numeroLinha').value.trim();
+  const numReq  = document.getElementById('numeroReq').value.trim();
+  const data    = document.getElementById('dataReq').value;
+  const dados   = document.getElementById('dadosSecoes').value.trim();
+
+  if (!apiKey)  { showError('⚠ Informe a chave de API nas Configurações antes de prosseguir.'); return; }
+  if (!empresa) { showError('⚠ Informe o nome da empresa requerente.'); return; }
+  if (!dados)   { showError('⚠ Cole ou digite os dados das seções do requerimento.'); return; }
+
+  setLoading(true);
+
+  const prompt = buildPrompt(empresa, linha, numReq, data, dados);
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(`API retornou ${response.status}: ${err.error?.message || response.statusText}`);
+    }
+
+    const result = await response.json();
+    const raw    = result.content?.[0]?.text ?? '';
+
+    const json = extrairJSON(raw);
+    if (!json) throw new Error('A IA não retornou JSON válido. Tente novamente.');
+
+    renderResults(json, empresa, linha, numReq, data);
+
+  } catch (e) {
+    showError('Erro ao processar análise: ' + e.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function setLoading(on) {
+  document.getElementById('loading').classList.toggle('active', on);
+  document.getElementById('btnAnalisar').disabled = on;
+  if (on) document.getElementById('results').style.display = 'none';
+}
+
+/* ────────────────────────────────────────────────
+   PROMPT BUILDER
+──────────────────────────────────────────────── */
+function buildPrompt(empresa, linha, numReq, data, dados) {
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  return `Você é um analista técnico do DETRO-RJ (Departamento de Transportes Rodoviários do Rio de Janeiro).
+Analise o requerimento abaixo e retorne EXCLUSIVAMENTE um objeto JSON válido, sem markdown, sem texto antes ou depois.
+
+DADOS DO REQUERIMENTO:
+- Empresa: ${empresa}
+- Linha: ${linha || 'Não informada'}
+- Nº do Processo: ${numReq || 'Não informado'}
+- Data do Requerimento: ${data || 'Não informada'}
+- Dados das Seções:
+${dados}
+
+INSTRUÇÕES DE ANÁLISE:
+1. Extraia as seções com seus valores cadastrados, propostos e passageiros.
+2. Para cada seção, calcule:
+   - variacao_percentual: ((proposto - cadastrado) / cadastrado) * 100, arredondado a 2 casas
+   - indice_aproveitamento: se houver dados de capacidade e frequência, calcule (passageiros / (capacidade × viagens)) × 100; caso contrário, estime com base nos passageiros relativos entre seções (a maior seção = 100%)
+3. Classifique a situação de cada seção:
+   - "REGULAR": variação ≤ 10%
+   - "ATENÇÃO": variação entre 10% e 20% (inclusive)
+   - "IRREGULAR": variação > 20%
+4. Identifique irregularidades ou inconsistências.
+5. Gere um despacho administrativo formal no padrão brasileiro de órgão público estadual.
+
+FORMATO DE RETORNO (JSON puro, sem markdown):
+{
+  "empresa": string,
+  "linha": string,
+  "processo": string,
+  "data_requerimento": string,
+  "data_analise": "${hoje}",
+  "secoes": [
+    {
+      "nome": string,
+      "valor_cadastrado": number,
+      "valor_proposto": number,
+      "passageiros": number,
+      "indice_aproveitamento": number,
+      "variacao_percentual": number,
+      "situacao": "REGULAR" | "ATENÇÃO" | "IRREGULAR"
+    }
+  ],
+  "irregularidades": [
+    { "descricao": string, "gravidade": "alta" | "media" | "baixa" }
+  ],
+  "resumo_analise": string (2-3 frases técnicas resumindo a análise),
+  "despacho": string (despacho administrativo formal completo, em português jurídico-administrativo, com referência ao processo, empresa, linha, análise técnica das seções, conclusão e determinação)
+}`;
+}
+
+/* ────────────────────────────────────────────────
+   JSON EXTRACTOR
+──────────────────────────────────────────────── */
+function extrairJSON(text) {
+  const start = text.indexOf('{');
+  const end   = text.lastIndexOf('}');
+  if (start === -1 || end === -1) return null;
+  try { return JSON.parse(text.slice(start, end + 1)); }
+  catch { return null; }
+}
+
+/* ────────────────────────────────────────────────
+   RENDER RESULTS
+──────────────────────────────────────────────── */
+function renderResults(data, empresaFallback, linhaFallback, numReqFallback, dataFallback) {
+  const secoes = data.secoes || [];
+
+  // Summary cards
+  const total      = secoes.length;
+  const regulares  = secoes.filter(s => s.situacao === 'REGULAR').length;
+  const atencao    = secoes.filter(s => s.situacao === 'ATENÇÃO').length;
+  const irregulares= secoes.filter(s => s.situacao === 'IRREGULAR').length;
+  const varMedia   = secoes.length
+    ? (secoes.reduce((a,s) => a + (s.variacao_percentual||0), 0) / secoes.length).toFixed(1)
+    : '—';
+
+  document.getElementById('summaryGrid').innerHTML = `
+    <div class="summary-card">
+      <div class="val">${total}</div>
+      <div class="lbl">Seções Analisadas</div>
+    </div>
+    <div class="summary-card">
+      <div class="val color-regular">${regulares}</div>
+      <div class="lbl">Regulares</div>
+    </div>
+    <div class="summary-card">
+      <div class="val color-warning">${atencao}</div>
+      <div class="lbl">Em Atenção</div>
+    </div>
+    <div class="summary-card">
+      <div class="val color-danger">${irregulares}</div>
+      <div class="lbl">Irregulares</div>
+    </div>
+    <div class="summary-card">
+      <div class="val ${irregulares > 0 ? 'color-danger' : atencao > 0 ? 'color-warning' : 'color-regular'}">${varMedia}%</div>
+      <div class="lbl">Variação Média</div>
+    </div>
+  `;
+
+  // Table
+  const tbody = document.getElementById('secoesBody');
+  tbody.innerHTML = secoes.map(s => {
+    const varClass = s.situacao === 'IRREGULAR' ? 'color-danger'
+                   : s.situacao === 'ATENÇÃO'   ? 'color-warning' : 'color-regular';
+    const badgeCls = s.situacao === 'IRREGULAR' ? 'badge-irregular'
+                   : s.situacao === 'ATENÇÃO'   ? 'badge-warning'  : 'badge-regular';
+    const sinal = s.variacao_percentual > 0 ? '+' : '';
+    return `<tr>
+      <td>${s.nome}</td>
+      <td>R$ ${fmtNum(s.valor_cadastrado)}</td>
+      <td>R$ ${fmtNum(s.valor_proposto)}</td>
+      <td class="${varClass}">${sinal}${fmtNum(s.variacao_percentual)}%</td>
+      <td>${s.passageiros ? s.passageiros.toLocaleString('pt-BR') : '—'}</td>
+      <td>${s.indice_aproveitamento != null ? fmtNum(s.indice_aproveitamento) + '%' : '—'}</td>
+      <td><span class="badge ${badgeCls}">${s.situacao}</span></td>
+    </tr>`;
+  }).join('');
+
+  // Chart
+  renderChart(secoes);
+
+  // Irregularidades
+  const irregList = document.getElementById('irregList');
+  const irregs = data.irregularidades || [];
+  if (irregs.length === 0) {
+    irregList.innerHTML = '<p style="color:var(--success);font-size:.88rem;">Nenhuma irregularidade ou inconsistência identificada.</p>';
+  } else {
+    irregList.innerHTML = irregs.map(i => `
+      <div class="irregularidade-item ${i.gravidade === 'alta' ? 'grave' : ''}">
+        <span class="irr-icon">${i.gravidade === 'alta' ? '🔴' : i.gravidade === 'media' ? '🟡' : '🔵'}</span>
+        <span>${i.descricao}</span>
+      </div>
+    `).join('');
+  }
+
+  // Dispatch
+  document.getElementById('despachoText').value = data.despacho || '';
+
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ────────────────────────────────────────────────
+   CHART
+──────────────────────────────────────────────── */
+function renderChart(secoes) {
+  const canvas = document.getElementById('chartCanvas');
+  const ctx    = canvas.getContext('2d');
+
+  const dpr = window.devicePixelRatio || 1;
+  const W   = canvas.parentElement.clientWidth - 48;
+  const H   = 320;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+
+  const PAD_L = 60, PAD_R = 20, PAD_T = 40, PAD_B = 70;
+  const plotW = W - PAD_L - PAD_R;
+  const plotH = H - PAD_T - PAD_B;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = '#fafbfc';
+  ctx.fillRect(0, 0, W, H);
+
+  const n = secoes.length;
+  if (n === 0) return;
+
+  const allVals  = secoes.flatMap(s => [s.valor_cadastrado||0, s.valor_proposto||0]);
+  const maxVal   = Math.max(...allVals) * 1.25 || 10;
+
+  const groupW   = plotW / n;
+  const barW     = Math.min(groupW * 0.32, 30);
+  const gap      = barW * 0.4;
+
+  // Grid lines
+  const gridLines = 5;
+  ctx.strokeStyle = '#e0e0e0';
+  ctx.lineWidth   = 1;
+  ctx.fillStyle   = '#888';
+  ctx.font        = `11px Segoe UI`;
+  ctx.textAlign   = 'right';
+  for (let i = 0; i <= gridLines; i++) {
+    const y = PAD_T + plotH - (i / gridLines) * plotH;
+    ctx.beginPath();
+    ctx.moveTo(PAD_L, y);
+    ctx.lineTo(PAD_L + plotW, y);
+    ctx.stroke();
+    const label = 'R$ ' + fmtNum((i / gridLines) * maxVal);
+    ctx.fillText(label, PAD_L - 6, y + 4);
+  }
+
+  secoes.forEach((s, i) => {
+    const cx  = PAD_L + i * groupW + groupW / 2;
+    const x1  = cx - gap / 2 - barW;
+    const x2  = cx + gap / 2;
+
+    const h1  = (s.valor_cadastrado || 0) / maxVal * plotH;
+    const h2  = (s.valor_proposto   || 0) / maxVal * plotH;
+    const y1  = PAD_T + plotH - h1;
+    const y2  = PAD_T + plotH - h2;
+
+    // Cadastrada bar (yellow)
+    ctx.fillStyle = '#f9a825';
+    roundRect(ctx, x1, y1, barW, h1, 3);
+    ctx.fill();
+
+    // Proposta bar (blue)
+    ctx.fillStyle = '#1565c0';
+    roundRect(ctx, x2, y2, barW, h2, 3);
+    ctx.fill();
+
+    // Value labels on bars
+    ctx.fillStyle = '#333';
+    ctx.font = `bold 10px Segoe UI`;
+    ctx.textAlign = 'center';
+    if (h1 > 12) ctx.fillText('R$' + fmtNum(s.valor_cadastrado), x1 + barW/2, y1 - 4);
+    if (h2 > 12) ctx.fillText('R$' + fmtNum(s.valor_proposto),   x2 + barW/2, y2 - 4);
+
+    // Passengers arrow + label
+    if (s.passageiros) {
+      const topY = Math.min(y1, y2) - 18;
+      const arrowX = cx;
+      ctx.fillStyle = '#2e7d42';
+      ctx.font = `10px Segoe UI`;
+      ctx.textAlign = 'center';
+      ctx.fillText('▲ ' + (s.passageiros/1000).toFixed(1) + 'k', arrowX, topY);
+    }
+
+    // X-axis label
+    const label = s.nome.length > 16 ? s.nome.slice(0, 14) + '…' : s.nome;
+    ctx.fillStyle = '#444';
+    ctx.font      = `10px Segoe UI`;
+    ctx.textAlign = 'center';
+    ctx.save();
+    ctx.translate(cx, PAD_T + plotH + 12);
+    ctx.rotate(-Math.PI / 5);
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  });
+
+  // Axes
+  ctx.strokeStyle = '#bbb';
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(PAD_L, PAD_T);
+  ctx.lineTo(PAD_L, PAD_T + plotH);
+  ctx.lineTo(PAD_L + plotW, PAD_T + plotH);
+  ctx.stroke();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x, y + h);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+/* ────────────────────────────────────────────────
+   COPY DISPATCH
+──────────────────────────────────────────────── */
+function copiarDespacho() {
+  const text = document.getElementById('despachoText').value;
+  navigator.clipboard.writeText(text).then(() => {
+    const fb = document.getElementById('copyFeedback');
+    fb.classList.add('show');
+    setTimeout(() => fb.classList.remove('show'), 2500);
+  }).catch(() => {
+    document.getElementById('despachoText').select();
+    document.execCommand('copy');
+  });
+}
+
+/* ────────────────────────────────────────────────
+   FORMAT NUMBER
+──────────────────────────────────────────────── */
+function fmtNum(n) {
+  if (n == null || isNaN(n)) return '—';
+  return Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/* ────────────────────────────────────────────────
+   RESIZE CHART ON WINDOW RESIZE
+──────────────────────────────────────────────── */
+let _resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => {
+    const lastData = window._lastAnalysisData;
+    if (lastData) renderChart(lastData.secoes || []);
+  }, 200);
+});
+
+// Intercept renderResults to store for resize
+const _origRenderResults = renderResults;
+function renderResults(data, ...rest) {
+  window._lastAnalysisData = data;
+  _origRenderResults(data, ...rest);
+}
+</script>
+</body>
+</html>
