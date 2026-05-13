@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Filtrador BOM DETRO-RJ</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #eef2f7;
+      color: #222;
+      min-height: 100vh;
+      padding: 24px 16px 48px;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 3px 16px rgba(0,0,0,.12);
+      overflow: hidden;
+    }
+
+    .page-header {
+      background: #0d2b6e;
+      color: #fff;
+      padding: 20px 28px;
+    }
+
+    .page-header h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: .3px;
+    }
+
+    .page-header p {
+      font-size: .82rem;
+      opacity: .75;
+      margin-top: 3px;
+    }
+
+    .controls {
+      padding: 22px 28px;
+      border-bottom: 1px solid #e3e8f0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      align-items: flex-end;
+    }
+
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .field-group label {
+      font-size: .78rem;
+      font-weight: 600;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+
+    .file-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: #f0f4ff;
+      border: 1.5px solid #7b9de0;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: .9rem;
+      color: #0d2b6e;
+      font-weight: 600;
+      transition: background .15s;
+    }
+
+    .file-label:hover { background: #dce7ff; }
+
+    #fileInput { display: none; }
+
+    .file-status {
+      font-size: .8rem;
+      color: #444;
+      margin-top: 3px;
+      min-height: 1.2em;
+    }
+
+    .file-status.ok { color: #1b5e20; }
+    .file-status.err { color: #b71c1c; }
+
+    input[type="text"] {
+      padding: 9px 13px;
+      border: 1.5px solid #ccc;
+      border-radius: 5px;
+      font-size: .95rem;
+      width: 210px;
+      outline: none;
+      transition: border-color .15s;
+    }
+
+    input[type="text"]:focus { border-color: #3a6fd8; }
+
+    .btn {
+      padding: 9px 22px;
+      border: none;
+      border-radius: 5px;
+      font-size: .92rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .15s, transform .08s;
+    }
+
+    .btn:active { transform: scale(.97); }
+
+    .btn-filter {
+      background: #0d2b6e;
+      color: #fff;
+      align-self: flex-end;
+    }
+
+    .btn-filter:hover { background: #163a99; }
+
+    .btn-copy {
+      background: #1a7a3a;
+      color: #fff;
+      font-size: .85rem;
+      padding: 7px 18px;
+    }
+
+    .btn-copy:hover { background: #1f8f43; }
+
+    .btn-copy.copied { background: #1565c0; }
+
+    /* ─── results ──────────────────────────────────── */
+    #results { padding: 24px 28px; min-height: 60px; }
+
+    .msg-error {
+      color: #b71c1c;
+      background: #fff3f3;
+      border: 1px solid #f5c2c2;
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: .9rem;
+    }
+
+    .msg-error code {
+      display: block;
+      margin-top: 6px;
+      font-size: .78rem;
+      color: #444;
+      word-break: break-all;
+    }
+
+    .result-box { }
+
+    .line-header {
+      background: #0d2b6e;
+      color: #fff;
+      padding: 14px 20px 12px;
+      border-radius: 7px 7px 0 0;
+    }
+
+    .line-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    .line-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 5px;
+      font-size: .8rem;
+      opacity: .85;
+    }
+
+    .line-meta span::before { content: '● '; }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid #c5cae9;
+      border-top: none;
+      border-radius: 0 0 7px 7px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .82rem;
+      white-space: nowrap;
+    }
+
+    thead tr:first-child th {
+      background: #e8eaf6;
+      border-bottom: 2px solid #7986cb;
+    }
+
+    thead tr:last-child th {
+      background: #f0f2fb;
+      border-bottom: 2px solid #9fa8da;
+      font-weight: 600;
+      color: #303f9f;
+      font-size: .75rem;
+    }
+
+    th, td {
+      padding: 7px 11px;
+      border-right: 1px solid #dde2f4;
+      text-align: left;
+    }
+
+    th:last-child, td:last-child { border-right: none; }
+
+    .th-sec  { width: 90px; }
+    .th-nome { min-width: 180px; }
+    .th-month { text-align: center; color: #1a237e; font-size: .8rem; background: #e8eaf6; }
+    .th-dir { text-align: right; font-size: .72rem; }
+
+    tbody tr:nth-child(even) { background: #fafbff; }
+    tbody tr:hover { background: #eef0ff; }
+
+    .td-cod {
+      font-family: 'Courier New', monospace;
+      color: #555;
+      font-size: .78rem;
+    }
+
+    .td-num {
+      text-align: right;
+      font-family: 'Courier New', monospace;
+      color: #1a237e;
+    }
+
+    .zero { color: #bbb; }
+
+    .copy-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 12px;
+    }
+
+    /* columns debug */
+    .debug-cols {
+      margin-top: 12px;
+      font-size: .75rem;
+      color: #666;
+      background: #f9f9f9;
+      border: 1px solid #e0e0e0;
+      border-radius: 5px;
+      padding: 10px 14px;
+    }
+
+    .debug-cols summary { cursor: pointer; font-weight: 600; color: #444; }
+
+    .debug-cols table { font-size: .73rem; margin-top: 6px; }
+    .debug-cols td, .debug-cols th { padding: 3px 8px; border: 1px solid #ddd; }
+    .debug-cols th { background: #eee; }
+    .debug-ok { color: #1b5e20; }
+    .debug-missing { color: #b71c1c; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="page-header">
+    <h1>Filtrador BOM — DETRO-RJ</h1>
+    <p>Boletim de Operação e Monitoramento · carregue o CSV e informe o código da linha</p>
+  </div>
+
+  <div class="controls">
+    <div class="field-group">
+      <label>Arquivo CSV</label>
+      <label class="file-label" for="fileInput">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Selecionar arquivo…
+      </label>
+      <input type="file" id="fileInput" accept=".csv,.txt">
+      <span class="file-status" id="fileStatus">Nenhum arquivo carregado</span>
+    </div>
+
+    <div class="field-group">
+      <label>Código da Linha</label>
+      <input type="text" id="lineCode" placeholder="ex: 132005000" maxlength="30">
+    </div>
+
+    <button class="btn btn-filter" onclick="filter()">Filtrar</button>
+  </div>
+
+  <div id="results"></div>
+</div>
+
+<script>
+'use strict';
+
+let rows = [];
+let headers = [];
+let lastResult = null;
+
+/* ── FILE LOADING ─────────────────────────────────────────── */
+document.getElementById('fileInput').addEventListener('change', function (e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  setStatus('Carregando…', '');
+  const reader = new FileReader();
+  reader.onload = function (ev) {
+    try {
+      const decoder = new TextDecoder('windows-1252');
+      const text = decoder.decode(ev.target.result);
+      parseCSV(text);
+      setStatus('✔ ' + rows.length.toLocaleString('pt-BR') + ' registros carregados — ' + file.name, 'ok');
+    } catch (ex) {
+      setStatus('Erro ao ler arquivo: ' + ex.message, 'err');
+    }
+  };
+  reader.onerror = function () { setStatus('Erro ao abrir o arquivo.', 'err'); };
+  reader.readAsArrayBuffer(file);
+});
+
+function setStatus(msg, cls) {
+  const el = document.getElementById('fileStatus');
+  el.textContent = msg;
+  el.className = 'file-status' + (cls ? ' ' + cls : '');
+}
+
+/* ── CSV PARSER ───────────────────────────────────────────── */
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/);
+  headers = splitLine(lines[0] || '');
+  rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const cols = splitLine(lines[i]);
+    if (cols.every(c => !c)) continue;
+    const row = {};
+    headers.forEach((h, j) => { row[h] = (cols[j] || '').trim(); });
+    rows.push(row);
+  }
+}
+
+function splitLine(line) {
+  const result = [];
+  let field = '';
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i + 1] === '"') { field += '"'; i++; }
+      else inQ = !inQ;
+    } else if (ch === ';' && !inQ) {
+      result.push(field.trim());
+      field = '';
+    } else {
+      field += ch;
+    }
+  }
+  result.push(field.trim());
+  return result;
+}
+
+/* ── COLUMN DETECTION ─────────────────────────────────────── */
+function norm(s) {
+  return s.toUpperCase().replace(/[\s_\-\.]/g, '');
+}
+
+function findCol(patterns) {
+  const normHeaders = headers.map(norm);
+  const normPats = patterns.map(norm);
+  // Exact match first
+  for (const p of normPats) {
+    const idx = normHeaders.indexOf(p);
+    if (idx !== -1) return headers[idx];
+  }
+  // Substring match
+  for (const p of normPats) {
+    const idx = normHeaders.findIndex(h => h.includes(p) || p.includes(h));
+    if (idx !== -1) return headers[idx];
+  }
+  return null;
+}
+
+function detectColumns() {
+  return {
+    lineCod:  findCol(['COD_LINHA','CODIGO_LINHA','LIN_COD','CD_LINHA','CODLINHA','LINHA_COD','CODIGOLINHA']),
+    lineName: findCol(['NOME_LINHA','DESC_LINHA','NOM_LINHA','LIN_NOME','NOMELINHA','DESCRICAO_LINHA','DESCRIÇÃO_LINHA']),
+    empresa:  findCol(['EMPRESA','NOME_EMPRESA','OPERADORA','CONSORCIO','CONSORCIADA']),
+    tipoVei:  findCol(['TIPO_VEICULO','TIPOVEICULO','TIPO_VEI','TIPOVEI','TIPO VEICULO','VEICULOTIPO']),
+    cap:      findCol(['CAP_LINHA','CAPACIDADE','CAPAC','CAPACIDADE_LINHA','CAPLINHA','CAPCIDADE']),
+    mes:      findCol(['ANO_MES','ANOMES','MES_ANO','PERIODO','COMPETENCIA','DATA_MES','DATAMES','ANO/MES','MES','REFERENCIA']),
+    secCod:   findCol(['COD_SECAO','CODIGO_SECAO','CODSECAO','SEC_COD','CD_SECAO','CODSEÇÃO','CODIGOSECAO']),
+    secNome:  findCol(['NOME_SECAO','DESC_SECAO','NOM_SECAO','DESCRICAO_SECAO','NOMESECAO','DESCSEÇÃO']),
+    ab:       findCol(['MEDIA_AB','MEDIAAB','MED_AB','PASSAGEIROS_AB','PASS_AB','DEMANDA_AB','DEM_AB','MEDIASAB','PASSAB']),
+    ba:       findCol(['MEDIA_BA','MEDIABA','MED_BA','PASSAGEIROS_BA','PASS_BA','DEMANDA_BA','DEM_BA','MEDIASBA','PASSBA']),
+  };
+}
+
+/* ── FILTER ───────────────────────────────────────────────── */
+function filter() {
+  const code = document.getElementById('lineCode').value.trim();
+  const out = document.getElementById('results');
+  lastResult = null;
+
+  if (!rows.length) { out.innerHTML = msgErr('Carregue um arquivo CSV primeiro.'); return; }
+  if (!code) { out.innerHTML = msgErr('Digite o código da linha.'); return; }
+
+  const C = detectColumns();
+
+  if (!C.lineCod) {
+    out.innerHTML = msgErr(
+      'Coluna de código de linha não identificada. Verifique se o arquivo é um BOM DETRO-RJ válido.',
+      'Colunas encontradas: ' + headers.join(' | ')
+    );
+    return;
+  }
+
+  const filtered = rows.filter(r => (r[C.lineCod] || '').trim() === code);
+  if (!filtered.length) {
+    out.innerHTML = msgErr(`Linha "${esc(code)}" não encontrada no arquivo.`);
+    return;
+  }
+
+  const first = filtered[0];
+  const info = {
+    code,
+    name:    C.lineName ? first[C.lineName] : '—',
+    empresa: C.empresa  ? first[C.empresa]  : '—',
+    tipoVei: C.tipoVei  ? first[C.tipoVei]  : '—',
+    cap:     C.cap      ? first[C.cap]      : '—',
+  };
+
+  /* 4 most recent months */
+  const allMonths = [...new Set(filtered.map(r => C.mes ? r[C.mes] : '').filter(Boolean))];
+  allMonths.sort((a, b) => parseMonth(b) - parseMonth(a));
+  const months = allMonths.slice(0, 4).reverse();
+
+  /* sections — accumulate ab/ba sums + counts to average if duplicates */
+  const secOrder = [];
+  const secMap = new Map();
+
+  filtered.forEach(r => {
+    const mes = C.mes ? r[C.mes] : '';
+    if (!months.includes(mes)) return;
+    const secCod  = C.secCod  ? r[C.secCod]  : '';
+    const secNome = C.secNome ? r[C.secNome] : '';
+    const ab = toNum(C.ab ? r[C.ab] : '');
+    const ba = toNum(C.ba ? r[C.ba] : '');
+    const key = (secCod || '') + '||' + (secNome || '');
+    if (!secMap.has(key)) {
+      secMap.set(key, { cod: secCod, nome: secNome, months: {} });
+      secOrder.push(key);
+    }
+    const entry = secMap.get(key);
+    if (!entry.months[mes]) entry.months[mes] = { sumAB: 0, sumBA: 0, n: 0 };
+    entry.months[mes].sumAB += ab;
+    entry.months[mes].sumBA += ba;
+    entry.months[mes].n++;
+  });
+
+  const sections = secOrder.map(k => {
+    const s = secMap.get(k);
+    const mdata = {};
+    months.forEach(m => {
+      const d = s.months[m];
+      mdata[m] = d ? { ab: d.sumAB / d.n, ba: d.sumBA / d.n } : null;
+    });
+    return { cod: s.cod, nome: s.nome, months: mdata };
+  });
+
+  lastResult = { info, months, sections, C };
+  out.innerHTML = renderHTML(info, months, sections, C);
+}
+
+/* ── MONTH HELPERS ────────────────────────────────────────── */
+function parseMonth(s) {
+  s = (s || '').trim();
+  let m;
+  if ((m = s.match(/^(\d{4})-?(\d{2})$/)))       return +m[1] * 100 + +m[2];
+  if ((m = s.match(/^(\d{2})\/(\d{4})$/)))        return +m[2] * 100 + +m[1];
+  if ((m = s.match(/^(\d{2})-(\d{4})$/)))         return +m[2] * 100 + +m[1];
+  if ((m = s.match(/^([A-ZÇ]{3})[\/\-](\d{4})$/i))) {
+    const nm = {JAN:1,FEV:2,MAR:3,ABR:4,MAI:5,JUN:6,JUL:7,AGO:8,SET:9,OUT:10,NOV:11,DEZ:12};
+    return +m[2] * 100 + (nm[m[1].toUpperCase()] || 0);
+  }
+  return 0;
+}
+
+function fmtMonth(s) {
+  s = (s || '').trim();
+  const nm = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  let m;
+  if ((m = s.match(/^(\d{4})-?(\d{2})$/))) return nm[+m[2]-1] + '/' + m[1];
+  if ((m = s.match(/^(\d{2})\/(\d{4})$/))) return nm[+m[1]-1] + '/' + m[2];
+  return s;
+}
+
+/* ── HELPERS ──────────────────────────────────────────────── */
+function toNum(v) {
+  return parseFloat((v || '0').replace(',', '.')) || 0;
+}
+
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function msgErr(msg, detail) {
+  let h = `<div class="msg-error">${msg}`;
+  if (detail) h += `<code>${esc(detail)}</code>`;
+  h += '</div>';
+  return h;
+}
+
+/* ── RENDER ───────────────────────────────────────────────── */
+function renderHTML(info, months, sections, C) {
+  const mf = months.map(fmtMonth);
+
+  let h = `
+  <div class="result-box">
+    <div class="line-header">
+      <div class="line-title">${esc(info.code)} &ndash; ${esc(info.name)}</div>
+      <div class="line-meta">
+        <span>Empresa: ${esc(info.empresa)}</span>
+        <span>Tipo de Veículo: ${esc(info.tipoVei)}</span>
+        <span>Capacidade da Linha: ${esc(info.cap)}</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th rowspan="2" class="th-sec">Cód. Seção</th>
+          <th rowspan="2" class="th-nome">Nome da Seção</th>`;
+
+  mf.forEach(m => {
+    h += `<th colspan="2" class="th-month">${m}</th>`;
+  });
+  h += `</tr><tr>`;
+  months.forEach(() => {
+    h += `<th class="th-dir">Média A→B</th><th class="th-dir">Média B→A</th>`;
+  });
+  h += `</tr></thead><tbody>`;
+
+  sections.forEach(sec => {
+    h += `<tr>
+      <td class="td-cod">${esc(sec.cod)}</td>
+      <td>${esc(sec.nome)}</td>`;
+    months.forEach(m => {
+      const d = sec.months[m];
+      const ab = d !== null ? Math.round(d.ab) : 0;
+      const ba = d !== null ? Math.round(d.ba) : 0;
+      const cls = (ab === 0 && ba === 0) ? ' zero' : '';
+      h += `<td class="td-num${cls}">${ab}</td><td class="td-num${cls}">${ba}</td>`;
+    });
+    h += `</tr>`;
+  });
+
+  h += `</tbody></table></div>
+
+  <div class="copy-row">
+    <button class="btn btn-copy" id="btnCopy" onclick="copyResult()">Copiar resultado</button>
+  </div>`;
+
+  /* column debug */
+  const colLabels = {
+    lineCod:'Cód. Linha', lineName:'Nome Linha', empresa:'Empresa',
+    tipoVei:'Tipo Veículo', cap:'Capacidade', mes:'Mês/Período',
+    secCod:'Cód. Seção', secNome:'Nome Seção', ab:'Média A→B', ba:'Média B→A'
+  };
+  h += `<details class="debug-cols"><summary>Colunas detectadas no arquivo</summary>
+  <table><thead><tr><th>Campo</th><th>Coluna CSV</th></tr></thead><tbody>`;
+  Object.entries(colLabels).forEach(([k, label]) => {
+    const val = C[k];
+    h += `<tr><td>${label}</td><td class="${val ? 'debug-ok' : 'debug-missing'}">${val ? esc(val) : '— não encontrado —'}</td></tr>`;
+  });
+  h += `</tbody></table></details></div>`;
+
+  return h;
+}
+
+/* ── COPY ─────────────────────────────────────────────────── */
+function copyResult() {
+  if (!lastResult) return;
+  const { info, months, sections } = lastResult;
+  const mf = months.map(fmtMonth);
+
+  const pad  = (s, n) => String(s).padEnd(n);
+  const rpad = (s, n) => String(s).padStart(n);
+
+  const maxCod  = Math.max(8, ...sections.map(s => s.cod.length));
+  const maxNome = Math.max(10, ...sections.map(s => s.nome.length));
+  const numW = 10;
+
+  let lines = [];
+  lines.push(`Linha: ${info.code} – ${info.name}`);
+  lines.push(`Empresa: ${info.empresa}`);
+  lines.push(`Tipo de Veículo: ${info.tipoVei}  |  Capacidade da Linha: ${info.cap}`);
+  lines.push(`Período analisado: ${mf.join(', ')}`);
+  lines.push('');
+
+  /* header row 1 */
+  let h1 = pad('Cód. Seção', maxCod + 2) + pad('Nome da Seção', maxNome + 2);
+  mf.forEach(m => {
+    h1 += rpad(m + ' A→B', numW + 2) + rpad(m + ' B→A', numW + 2);
+  });
+  lines.push(h1);
+  lines.push('─'.repeat(h1.length));
+
+  sections.forEach(sec => {
+    let row = pad(sec.cod, maxCod + 2) + pad(sec.nome, maxNome + 2);
+    months.forEach(m => {
+      const d = sec.months[m];
+      row += rpad(d !== null ? Math.round(d.ab) : 0, numW + 2);
+      row += rpad(d !== null ? Math.round(d.ba) : 0, numW + 2);
+    });
+    lines.push(row);
+  });
+
+  const text = lines.join('\n');
+
+  const btn = document.getElementById('btnCopy');
+
+  const success = () => {
+    btn.textContent = '✔ Copiado!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copiar resultado'; btn.classList.remove('copied'); }, 2200);
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(success).catch(() => fallbackCopy(text, success));
+  } else {
+    fallbackCopy(text, success);
+  }
+}
+
+function fallbackCopy(text, cb) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try { document.execCommand('copy'); cb(); } catch (_) {}
+  document.body.removeChild(ta);
+}
+
+/* Enter key triggers filter */
+document.getElementById('lineCode').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') filter();
+});
+</script>
+</body>
+</html>
