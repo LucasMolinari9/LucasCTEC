@@ -364,20 +364,29 @@ function splitLine(line) {
 }
 
 /* ── COLUMN DETECTION ─────────────────────────────────────── */
+
+// Normaliza para comparação: remove diacríticos, preposições PT, e tudo que não for A-Z0-9.
+// Ex: "Código da Linha" → "CODIGOLINHA", "Tipo de Veículo" → "TIPOVEICULO"
 function norm(s) {
-  return s.toUpperCase().replace(/[\s_\-\.]/g, '');
+  // strip diacritics: NFD decomposes accented chars, then we drop combining marks U+0300-U+036F
+  var noDiac = (s || '').normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]', 'g'), '');
+  return noDiac
+    .toUpperCase()
+    .replace(/\b(DA|DE|DO|DAS|DOS|DES|EM|NO|NA|NOS|NAS)\b/g, '')
+    .replace(/[^A-Z0-9]/g, '');
 }
 
 function findCol(patterns) {
   const normHeaders = headers.map(norm);
-  const normPats = patterns.map(norm);
-  // Exact match first
+  const normPats = patterns.map(norm).filter(Boolean);
+  // 1. Exact match
   for (const p of normPats) {
     const idx = normHeaders.indexOf(p);
     if (idx !== -1) return headers[idx];
   }
-  // Substring match
+  // 2. Substring match (header contains pattern or vice-versa)
   for (const p of normPats) {
+    if (p.length < 3) continue;
     const idx = normHeaders.findIndex(h => h.includes(p) || p.includes(h));
     if (idx !== -1) return headers[idx];
   }
@@ -386,16 +395,16 @@ function findCol(patterns) {
 
 function detectColumns() {
   return {
-    lineCod:  findCol(['COD_LINHA','CODIGO_LINHA','LIN_COD','CD_LINHA','CODLINHA','LINHA_COD','CODIGOLINHA']),
-    lineName: findCol(['NOME_LINHA','DESC_LINHA','NOM_LINHA','LIN_NOME','NOMELINHA','DESCRICAO_LINHA','DESCRIÇÃO_LINHA']),
-    empresa:  findCol(['EMPRESA','NOME_EMPRESA','OPERADORA','CONSORCIO','CONSORCIADA']),
-    tipoVei:  findCol(['TIPO_VEICULO','TIPOVEICULO','TIPO_VEI','TIPOVEI','TIPO VEICULO','VEICULOTIPO']),
-    cap:      findCol(['CAP_LINHA','CAPACIDADE','CAPAC','CAPACIDADE_LINHA','CAPLINHA','CAPCIDADE']),
-    mes:      findCol(['ANO_MES','ANOMES','MES_ANO','PERIODO','COMPETENCIA','DATA_MES','DATAMES','ANO/MES','MES','REFERENCIA']),
-    secCod:   findCol(['COD_SECAO','CODIGO_SECAO','CODSECAO','SEC_COD','CD_SECAO','CODSEÇÃO','CODIGOSECAO']),
-    secNome:  findCol(['NOME_SECAO','DESC_SECAO','NOM_SECAO','DESCRICAO_SECAO','NOMESECAO','DESCSEÇÃO']),
-    ab:       findCol(['MEDIA_AB','MEDIAAB','MED_AB','PASSAGEIROS_AB','PASS_AB','DEMANDA_AB','DEM_AB','MEDIASAB','PASSAB']),
-    ba:       findCol(['MEDIA_BA','MEDIABA','MED_BA','PASSAGEIROS_BA','PASS_BA','DEMANDA_BA','DEM_BA','MEDIASBA','PASSBA']),
+    lineCod:  findCol(['CODIGOLINHA','CODLINHA','LINHACODIGO','CDLINHA','LINHACD','CODIGOLINHA','CODLINHA']),
+    lineName: findCol(['NOMELINHA','NOMEDLINHA','DESCLINHA','DESCRICAOLINHA','NOMLINHA','LINNOME']),
+    empresa:  findCol(['EMPRESA','NOMEEMPRESA','OPERADORA','CONSORCIO','CONSORCIADA']),
+    tipoVei:  findCol(['TIPOVEICULO','TIPOVEI','VEICULOTIPO','TIPODEVECULO']),
+    cap:      findCol(['CAPACIDADELINHA','CAPLINHA','CAPACIDADE','CAPAC']),
+    mes:      findCol(['ANOMES','MESANO','PERIODO','COMPETENCIA','DATAMES','MES','REFERENCIA','ANOMES']),
+    secCod:   findCol(['CODIGOSECAO','CODSECAO','SECCOD','CDSECAO','SECAOCODIGO']),
+    secNome:  findCol(['NOMESECAO','DESCSECAO','NOMSECAO','DESCRICAOSECAO','SECAONOME']),
+    ab:       findCol(['MEDIAAB','MEDAB','PASSAGEIROSAB','PASSAB','DEMANDAAB','DEMAB','MEDIASAB']),
+    ba:       findCol(['MEDIABA','MEDBA','PASSAGEIROSBA','PASSBA','DEMANDABA','DEMBA','MEDIASBA']),
   };
 }
 
