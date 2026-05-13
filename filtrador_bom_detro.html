@@ -5,112 +5,150 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Filtrador BOM DETRO-RJ</title>
   <style>
+    /* ── Paleta Claude dark ──────────────────────────────────── */
+    :root {
+      --bg:        #1C1917;   /* fundo da página  */
+      --surface:   #292524;   /* card/container   */
+      --surface2:  #3C3836;   /* linhas pares, hover base */
+      --border:    #44403C;   /* bordas           */
+      --border2:   #57534E;   /* bordas secundárias */
+      --text:      #E7E5E4;   /* texto principal  */
+      --muted:     #A8A29E;   /* texto suave      */
+      --accent:    #D97757;   /* laranja Claude   */
+      --accent-dk: #C4623E;   /* hover do acento  */
+      --green:     #4ADE80;   /* ok / copiado     */
+      --red:       #F87171;   /* erro             */
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #eef2f7;
-      color: #222;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
-      padding: 24px 16px 48px;
+      padding: 28px 16px 56px;
+      font-size: 16px;
     }
 
     .container {
-      max-width: 1100px;
+      max-width: 1180px;
       margin: 0 auto;
-      background: #fff;
-      border-radius: 10px;
-      box-shadow: 0 3px 16px rgba(0,0,0,.12);
+      background: var(--surface);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 32px rgba(0,0,0,.45);
       overflow: hidden;
     }
 
+    /* ── Cabeçalho ───────────────────────────────────────────── */
     .page-header {
-      background: #0d2b6e;
-      color: #fff;
-      padding: 20px 28px;
+      background: #231F1C;
+      border-bottom: 2px solid var(--accent);
+      padding: 22px 32px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .page-header-icon {
+      width: 36px; height: 36px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
     }
 
     .page-header h1 {
-      font-size: 1.35rem;
+      font-size: 1.45rem;
       font-weight: 700;
-      letter-spacing: .3px;
+      color: var(--text);
+      letter-spacing: .2px;
     }
 
     .page-header p {
-      font-size: .82rem;
-      opacity: .75;
-      margin-top: 3px;
+      font-size: .88rem;
+      color: var(--muted);
+      margin-top: 2px;
     }
 
+    /* ── Controles ───────────────────────────────────────────── */
     .controls {
-      padding: 22px 28px;
-      border-bottom: 1px solid #e3e8f0;
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border);
       display: flex;
       flex-wrap: wrap;
-      gap: 20px;
+      gap: 22px;
       align-items: flex-end;
+      background: #221E1B;
     }
 
     .field-group {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 6px;
     }
 
     .field-group label {
-      font-size: .78rem;
+      font-size: .8rem;
       font-weight: 600;
-      color: #555;
+      color: var(--muted);
       text-transform: uppercase;
-      letter-spacing: .4px;
+      letter-spacing: .5px;
     }
 
     .file-label {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 14px;
-      background: #f0f4ff;
-      border: 1.5px solid #7b9de0;
-      border-radius: 5px;
+      padding: 10px 16px;
+      background: var(--surface2);
+      border: 1.5px solid var(--border2);
+      border-radius: 7px;
       cursor: pointer;
-      font-size: .9rem;
-      color: #0d2b6e;
+      font-size: 1rem;
+      color: var(--text);
       font-weight: 600;
-      transition: background .15s;
+      transition: border-color .15s, background .15s;
     }
 
-    .file-label:hover { background: #dce7ff; }
+    .file-label:hover {
+      border-color: var(--accent);
+      background: #4A3830;
+    }
 
     #fileInput { display: none; }
 
     .file-status {
-      font-size: .8rem;
-      color: #444;
-      margin-top: 3px;
-      min-height: 1.2em;
+      font-size: .88rem;
+      color: var(--muted);
+      margin-top: 2px;
+      min-height: 1.3em;
     }
 
-    .file-status.ok { color: #1b5e20; }
-    .file-status.err { color: #b71c1c; }
+    .file-status.ok  { color: var(--green); }
+    .file-status.err { color: var(--red); }
 
     input[type="text"] {
-      padding: 9px 13px;
-      border: 1.5px solid #ccc;
-      border-radius: 5px;
-      font-size: .95rem;
-      width: 210px;
+      padding: 10px 14px;
+      border: 1.5px solid var(--border2);
+      border-radius: 7px;
+      font-size: 1rem;
+      width: 220px;
       outline: none;
+      background: var(--surface2);
+      color: var(--text);
       transition: border-color .15s;
     }
 
-    input[type="text"]:focus { border-color: #3a6fd8; }
+    input[type="text"]::placeholder { color: var(--muted); }
+    input[type="text"]:focus { border-color: var(--accent); }
 
     .btn {
-      padding: 9px 22px;
+      padding: 10px 24px;
       border: none;
-      border-radius: 5px;
-      font-size: .92rem;
+      border-radius: 7px;
+      font-size: 1rem;
       font-weight: 700;
       cursor: pointer;
       transition: background .15s, transform .08s;
@@ -119,158 +157,172 @@
     .btn:active { transform: scale(.97); }
 
     .btn-filter {
-      background: #0d2b6e;
+      background: var(--accent);
       color: #fff;
       align-self: flex-end;
     }
 
-    .btn-filter:hover { background: #163a99; }
+    .btn-filter:hover { background: var(--accent-dk); }
 
     .btn-copy {
-      background: #1a7a3a;
-      color: #fff;
-      font-size: .85rem;
-      padding: 7px 18px;
+      background: #2D4A3A;
+      color: var(--green);
+      border: 1px solid #3D6B50;
+      font-size: .95rem;
+      padding: 8px 20px;
     }
 
-    .btn-copy:hover { background: #1f8f43; }
+    .btn-copy:hover { background: #3A5E4A; }
+    .btn-copy.copied { background: #1e3a5f; color: #93C5FD; border-color: #3B82F6; }
 
-    .btn-copy.copied { background: #1565c0; }
-
-    /* ─── results ──────────────────────────────────── */
-    #results { padding: 24px 28px; min-height: 60px; }
+    /* ── Resultados ──────────────────────────────────────────── */
+    #results { padding: 28px 32px; min-height: 60px; }
 
     .msg-error {
-      color: #b71c1c;
-      background: #fff3f3;
-      border: 1px solid #f5c2c2;
-      border-radius: 6px;
-      padding: 12px 16px;
-      font-size: .9rem;
+      color: var(--red);
+      background: #2D1B1B;
+      border: 1px solid #5C2E2E;
+      border-radius: 8px;
+      padding: 14px 18px;
+      font-size: 1rem;
     }
 
     .msg-error code {
       display: block;
-      margin-top: 6px;
-      font-size: .78rem;
-      color: #444;
+      margin-top: 8px;
+      font-size: .85rem;
+      color: var(--muted);
       word-break: break-all;
     }
 
     .result-box { }
 
     .line-header {
-      background: #0d2b6e;
-      color: #fff;
-      padding: 14px 20px 12px;
-      border-radius: 7px 7px 0 0;
+      background: #231F1C;
+      border: 1px solid var(--border);
+      border-bottom: 2px solid var(--accent);
+      padding: 16px 22px 14px;
+      border-radius: 9px 9px 0 0;
     }
 
     .line-title {
-      font-size: 1.05rem;
+      font-size: 1.2rem;
       font-weight: 700;
+      color: var(--text);
     }
 
     .line-meta {
       display: flex;
       flex-wrap: wrap;
-      gap: 14px;
-      margin-top: 5px;
-      font-size: .8rem;
-      opacity: .85;
+      gap: 18px;
+      margin-top: 6px;
+      font-size: .9rem;
+      color: var(--muted);
     }
 
-    .line-meta span::before { content: '● '; }
+    .line-meta span { color: var(--text); }
+    .line-meta span::before { content: '● '; color: var(--accent); }
 
+    /* ── Tabela ──────────────────────────────────────────────── */
     .table-wrap {
       overflow-x: auto;
-      border: 1px solid #c5cae9;
+      border: 1px solid var(--border);
       border-top: none;
-      border-radius: 0 0 7px 7px;
+      border-radius: 0 0 9px 9px;
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: .82rem;
+      font-size: 1rem;
       white-space: nowrap;
     }
 
     thead tr:first-child th {
-      background: #e8eaf6;
-      border-bottom: 2px solid #7986cb;
+      background: #2E2A27;
+      border-bottom: 1px solid var(--border2);
+      color: var(--accent);
+      font-size: .95rem;
     }
 
     thead tr:last-child th {
-      background: #f0f2fb;
-      border-bottom: 2px solid #9fa8da;
+      background: #271F1C;
+      border-bottom: 2px solid var(--border);
       font-weight: 600;
-      color: #303f9f;
-      font-size: .75rem;
+      color: var(--muted);
+      font-size: .88rem;
     }
 
     th, td {
-      padding: 7px 11px;
-      border-right: 1px solid #dde2f4;
+      padding: 10px 14px;
+      border-right: 1px solid var(--border);
       text-align: left;
     }
 
     th:last-child, td:last-child { border-right: none; }
 
-    .th-sec  { width: 90px; }
-    .th-nome { min-width: 180px; }
-    .th-month { text-align: center; color: #1a237e; font-size: .8rem; background: #e8eaf6; }
-    .th-dir { text-align: right; font-size: .72rem; }
+    .th-sec  { width: 100px; }
+    .th-nome { min-width: 200px; }
+    .th-month { text-align: center; }
+    .th-dir { text-align: right; }
 
-    tbody tr:nth-child(even) { background: #fafbff; }
-    tbody tr:hover { background: #eef0ff; }
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:nth-child(even) { background: #241F1D; }
+    tbody tr:hover { background: #332C28; }
 
     .td-cod {
       font-family: 'Courier New', monospace;
-      color: #555;
-      font-size: .78rem;
+      color: var(--muted);
+      font-size: .95rem;
     }
 
     .td-num {
       text-align: right;
       font-family: 'Courier New', monospace;
-      color: #1a237e;
+      color: #FCD34D;
+      font-size: 1rem;
     }
 
-    .zero { color: #bbb; }
+    .zero { color: var(--border2); }
 
     .copy-row {
       display: flex;
       justify-content: flex-end;
-      margin-top: 12px;
+      margin-top: 14px;
     }
 
-    /* columns debug */
+    /* ── Debug de colunas ────────────────────────────────────── */
     .debug-cols {
-      margin-top: 12px;
-      font-size: .75rem;
-      color: #666;
-      background: #f9f9f9;
-      border: 1px solid #e0e0e0;
-      border-radius: 5px;
-      padding: 10px 14px;
+      margin-top: 14px;
+      font-size: .88rem;
+      color: var(--muted);
+      background: #221E1B;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 10px 16px;
     }
 
-    .debug-cols summary { cursor: pointer; font-weight: 600; color: #444; }
+    .debug-cols summary { cursor: pointer; font-weight: 600; color: var(--muted); }
+    .debug-cols summary:hover { color: var(--text); }
 
-    .debug-cols table { font-size: .73rem; margin-top: 6px; }
-    .debug-cols td, .debug-cols th { padding: 3px 8px; border: 1px solid #ddd; }
-    .debug-cols th { background: #eee; }
-    .debug-ok { color: #1b5e20; }
-    .debug-missing { color: #b71c1c; }
+    .debug-cols table { font-size: .85rem; margin-top: 8px; }
+    .debug-cols td, .debug-cols th { padding: 4px 10px; border: 1px solid var(--border); color: var(--text); }
+    .debug-cols th { background: #2E2A27; color: var(--muted); }
+    .debug-ok      { color: var(--green) !important; }
+    .debug-missing { color: var(--red)   !important; }
   </style>
 </head>
 <body>
 <div class="container">
 
   <div class="page-header">
-    <h1>Filtrador BOM — DETRO-RJ</h1>
-    <p>Boletim de Operação e Monitoramento · carregue o CSV e informe o código da linha</p>
+    <div class="page-header-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+    </div>
+    <div>
+      <h1>Filtrador BOM — DETRO-RJ</h1>
+      <p>Boletim de Operação e Monitoramento · carregue o CSV e informe o código da linha</p>
+    </div>
   </div>
 
   <div class="controls">
