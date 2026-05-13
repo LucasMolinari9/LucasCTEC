@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Planilha Financeira — Dashboard Profissional</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --primary: #0f172a;
+      --primary-light: #1e293b;
+      --accent: #3b82f6;
+      --accent-light: #60a5fa;
+      --success: #10b981;
+      --success-light: #34d399;
+      --danger: #ef4444;
+      --danger-light: #f87171;
+      --warning: #f59e0b;
+      --warning-light: #fbbf24;
+      --purple: #8b5cf6;
+      --pink: #ec4899;
+      --bg: #f1f5f9;
+      --bg-card: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --text-light: #94a3b8;
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, .04);
+      --shadow: 0 4px 12px rgba(15, 23, 42, .06);
+      --shadow-lg: 0 12px 32px rgba(15, 23, 42, .08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, 'Segoe UI', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── SIDEBAR ── */
+    .layout {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      background: var(--primary);
+      color: #fff;
+      padding: 24px 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .sidebar-brand {
+      padding: 0 24px 24px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 18px;
+    }
+
+    .brand-name {
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .brand-tag {
+      font-size: 11px;
+      color: var(--text-light);
+      letter-spacing: .5px;
+      text-transform: uppercase;
+    }
+
+    .nav {
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .nav-title {
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-light);
+      padding: 8px 12px;
+      margin-top: 8px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: #cbd5e1;
+      text-decoration: none;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all .15s;
+    }
+
+    .nav-item:hover {
+      background: rgba(255,255,255,.06);
+      color: #fff;
+    }
+
+    .nav-item.active {
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .nav-icon {
+      width: 18px;
+      height: 18px;
+      display: inline-block;
+    }
+
+    /* ── MAIN ── */
+    .main {
+      padding: 28px 36px 60px;
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .page-title h1 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .page-title p {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .topbar-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .period-select {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn {
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all .15s;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: var(--shadow);
+    }
+
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    /* ── KPI CARDS ── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .kpi {
+      background: var(--bg-card);
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .kpi::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--accent);
+    }
+
+    .kpi.success::before { background: var(--success); }
+    .kpi.danger::before  { background: var(--danger); }
+    .kpi.warning::before { background: var(--warning); }
+    .kpi.purple::before  { background: var(--purple); }
+
+    .kpi-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .kpi-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+    }
+
+    .kpi-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      color: #fff;
+      background: var(--accent);
+    }
+
+    .kpi.success .kpi-icon { background: var(--success); }
+    .kpi.danger .kpi-icon  { background: var(--danger); }
+    .kpi.warning .kpi-icon { background: var(--warning); }
+    .kpi.purple .kpi-icon  { background: var(--purple); }
+
+    .kpi-value {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+
+    .kpi-trend {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 12px;
+    }
+
+    .kpi-trend.up {
+      background: rgba(16, 185, 129, .1);
+      color: var(--success);
+    }
+
+    .kpi-trend.down {
+      background: rgba(239, 68, 68, .1);
+      color: var(--danger);
+    }
+
+    .kpi-foot {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-left: 6px;
+    }
+
+    /* ── CHART CARDS ── */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border-radius: 14px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+    }
+
+    .card-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .chart-legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      background: var(--accent);
+    }
+
+    .chart-container {
+      position: relative;
+      height: 280px;
+    }
+
+    .chart-sm {
+      height: 240px;
+    }
+
+    /* ── SPREADSHEET ── */
+    .sheet-wrap {
+      background: var(--bg-card);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+
+    .sheet-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .sheet-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+      background: #f8fafc;
+    }
+
+    .sheet-tab {
+      padding: 12px 18px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all .15s;
+    }
+
+    .sheet-tab:hover { color: var(--text); }
+
+    .sheet-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .table-scroll {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      min-width: 800px;
+    }
+
+    thead th {
+      background: #f8fafc;
+      padding: 12px 14px;
+      text-align: right;
+      font-weight: 600;
+      font-size: 11px;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    thead th:first-child,
+    tbody td:first-child {
+      text-align: left;
+      position: sticky;
+      left: 0;
+      background: inherit;
+      z-index: 1;
+    }
+
+    thead th:first-child { background: #f8fafc; }
+
+    tbody td {
+      padding: 11px 14px;
+      text-align: right;
+      border-bottom: 1px solid #f1f5f9;
+      background: #fff;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    tbody tr:hover td {
+      background: #f8fafc;
+    }
+
+    tbody td.category {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    tbody td.editable {
+      cursor: text;
+      outline: none;
+    }
+
+    tbody td.editable:focus {
+      background: rgba(59, 130, 246, .08);
+      box-shadow: inset 0 0 0 2px var(--accent);
+    }
+
+    tr.section td {
+      background: #f1f5f9 !important;
+      font-weight: 700;
+      font-size: 11px;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 8px 14px;
+    }
+
+    tr.total td {
+      background: #fafbfc !important;
+      font-weight: 700;
+      border-top: 2px solid var(--border);
+      border-bottom: 2px solid var(--border);
+    }
+
+    tr.grand-total td {
+      background: linear-gradient(135deg, rgba(59, 130, 246, .08), rgba(139, 92, 246, .08)) !important;
+      font-weight: 800;
+      font-size: 14px;
+      color: var(--primary);
+      border-top: 2px solid var(--accent);
+      border-bottom: 2px solid var(--accent);
+    }
+
+    .val-pos { color: var(--success); font-weight: 600; }
+    .val-neg { color: var(--danger); font-weight: 600; }
+
+    /* ── BOTTOM CHARTS ── */
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    /* ── BUDGET BARS ── */
+    .budget-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .budget-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .budget-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+    }
+
+    .budget-cat {
+      font-weight: 600;
+    }
+
+    .budget-val {
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .budget-bar {
+      height: 8px;
+      background: #f1f5f9;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .budget-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width .5s;
+    }
+
+    /* ── TRANSACTIONS ── */
+    .tx-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .tx {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .tx:last-child { border-bottom: none; }
+
+    .tx-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      font-size: 14px;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .tx-body { flex: 1; min-width: 0; }
+
+    .tx-title {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tx-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .tx-val {
+      font-size: 13px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .tx-val.pos { color: var(--success); }
+    .tx-val.neg { color: var(--danger); }
+
+    /* ── FOOTER ── */
+    .footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 20px 0;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar {
+        position: relative;
+        height: auto;
+        padding: 16px 0;
+      }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .chart-grid { grid-template-columns: 1fr; }
+      .bottom-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 600px) {
+      .main { padding: 18px; }
+      .kpi-grid { grid-template-columns: 1fr; }
+      .kpi-value { font-size: 22px; }
+    }
+
+    @media print {
+      .sidebar, .topbar-actions { display: none; }
+      .layout { grid-template-columns: 1fr; }
+      .card, .kpi, .sheet-wrap { box-shadow: none; border: 1px solid #ddd; }
+      body { background: #fff; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-logo">F</div>
+        <div>
+          <div class="brand-name">FinTrack</div>
+          <div class="brand-tag">Pro Dashboard</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <div class="nav-title">Principal</div>
+        <a class="nav-item active">▦  Dashboard</a>
+        <a class="nav-item">📊  Relatórios</a>
+        <a class="nav-item">💰  Receitas</a>
+        <a class="nav-item">💸  Despesas</a>
+        <a class="nav-item">📈  Investimentos</a>
+
+        <div class="nav-title">Gestão</div>
+        <a class="nav-item">📁  Contas</a>
+        <a class="nav-item">🏷️  Categorias</a>
+        <a class="nav-item">🎯  Metas</a>
+        <a class="nav-item">⚙️  Configurações</a>
+      </nav>
+    </aside>
+
+    <!-- ── MAIN ── -->
+    <main class="main">
+
+      <!-- TOPBAR -->
+      <div class="topbar">
+        <div class="page-title">
+          <h1>Planilha Financeira 2026</h1>
+          <p>Visão consolidada de receitas, despesas e fluxo de caixa</p>
+        </div>
+        <div class="topbar-actions">
+          <select class="period-select">
+            <option>Ano: 2026</option>
+            <option>Ano: 2025</option>
+            <option>Ano: 2024</option>
+          </select>
+          <button class="btn btn-secondary" onclick="window.print()">⤓  Exportar</button>
+          <button class="btn btn-primary">+  Nova entrada</button>
+        </div>
+      </div>
+
+      <!-- KPI CARDS -->
+      <section class="kpi-grid">
+        <div class="kpi success">
+          <div class="kpi-header">
+            <span class="kpi-label">Receita Total</span>
+            <div class="kpi-icon">↑</div>
+          </div>
+          <div class="kpi-value">R$ 487.250</div>
+          <span class="kpi-trend up">▲ 12,4%</span>
+          <span class="kpi-foot">vs. ano anterior</span>
+        </div>
+
+        <div class="kpi danger">
+          <div class="kpi-header">
+            <span class="kpi-label">Despesa Total</span>
+            <div class="kpi-icon">↓</div>
+          </div>
+          <div class="kpi-value">R$ 312.680</div>
+          <span class="kpi-trend up">▲ 5,8%</span>
+          <span class="kpi-foot">vs. ano anterior</span>
+        </div>
+
+        <div class="kpi">
+          <div class="kpi-header">
+            <span class="kpi-label">Lucro Líquido</span>
+            <div class="kpi-icon">$</div>
+          </div>
+          <div class="kpi-value">R$ 174.570</div>
+          <span class="kpi-trend up">▲ 28,1%</span>
+          <span class="kpi-foot">margem 35,8%</span>
+        </div>
+
+        <div class="kpi purple">
+          <div class="kpi-header">
+            <span class="kpi-label">Saldo em Caixa</span>
+            <div class="kpi-icon">◈</div>
+          </div>
+          <div class="kpi-value">R$ 92.418</div>
+          <span class="kpi-trend down">▼ 2,3%</span>
+          <span class="kpi-foot">vs. mês anterior</span>
+        </div>
+      </section>
+
+      <!-- CHART GRID -->
+      <section class="chart-grid">
+        <!-- LINE CHART: REVENUE x EXPENSE -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Receitas vs. Despesas</div>
+              <div class="card-subtitle">Comparativo mensal — Jan a Dez/2026</div>
+            </div>
+            <div class="chart-legend">
+              <span class="legend-item"><span class="legend-dot" style="background:#10b981"></span>Receitas</span>
+              <span class="legend-item"><span class="legend-dot" style="background:#ef4444"></span>Despesas</span>
+              <span class="legend-item"><span class="legend-dot" style="background:#3b82f6"></span>Lucro</span>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="chartRevenue"></canvas>
+          </div>
+        </div>
+
+        <!-- DOUGHNUT CHART: EXPENSE CATEGORIES -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Despesas por Categoria</div>
+              <div class="card-subtitle">Distribuição atual</div>
+            </div>
+          </div>
+          <div class="chart-container chart-sm">
+            <canvas id="chartCategories"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- SPREADSHEET -->
+      <section class="sheet-wrap">
+        <div class="sheet-header">
+          <div>
+            <div class="card-title">Demonstrativo Anual Detalhado</div>
+            <div class="card-subtitle">Valores em R$ — clique nas células para editar</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-secondary" onclick="recalc()">↻  Recalcular</button>
+          </div>
+        </div>
+
+        <div class="sheet-tabs">
+          <div class="sheet-tab active">Resumo</div>
+          <div class="sheet-tab">Receitas</div>
+          <div class="sheet-tab">Despesas</div>
+          <div class="sheet-tab">Investimentos</div>
+        </div>
+
+        <div class="table-scroll">
+          <table id="finTable">
+            <thead>
+              <tr>
+                <th>Categoria</th>
+                <th>Jan</th><th>Fev</th><th>Mar</th><th>Abr</th><th>Mai</th><th>Jun</th>
+                <th>Jul</th><th>Ago</th><th>Set</th><th>Out</th><th>Nov</th><th>Dez</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="section"><td colspan="14">Receitas</td></tr>
+              <tr data-type="rev">
+                <td class="category">Vendas de Produtos</td>
+                <td class="editable" contenteditable="true">28500</td>
+                <td class="editable" contenteditable="true">31200</td>
+                <td class="editable" contenteditable="true">29800</td>
+                <td class="editable" contenteditable="true">32400</td>
+                <td class="editable" contenteditable="true">34100</td>
+                <td class="editable" contenteditable="true">33600</td>
+                <td class="editable" contenteditable="true">35900</td>
+                <td class="editable" contenteditable="true">37200</td>
+                <td class="editable" contenteditable="true">36400</td>
+                <td class="editable" contenteditable="true">38800</td>
+                <td class="editable" contenteditable="true">41200</td>
+                <td class="editable" contenteditable="true">42150</td>
+                <td class="row-total">—</td>
+              </tr>
+              <tr data-type="rev">
+                <td class="category">Prestação de Serviços</td>
+                <td class="editable" contenteditable="true">8200</td>
+                <td class="editable" contenteditable="true">9100</td>
+                <td class="editable" contenteditable="true">10500</td>
+                <td class="editable" contenteditable="true">9800</td>
+                <td class="editable" contenteditable="true">11200</td>
+                <td class="editable" contenteditable="true">10900</td>
+                <td class="editable" contenteditable="true">12400</td>
+                <td class="editable" contenteditable="true">13100</td>
+                <td class="editable" contenteditable="true">12800</td>
+                <td class="editable" contenteditable="true">14200</td>
+                <td class="editable" contenteditable="true">15600</td>
+                <td class="editable" contenteditable="true">16800</td>
+                <td class="row-total">—</td>
+              </tr>
+              <tr data-type="rev">
+                <td class="category">Rendimentos Financeiros</td>
+                <td class="editable" contenteditable="true">1850</td>
+                <td class="editable" contenteditable="true">1920</td>
+                <td class="editable" contenteditable="true">1880</td>
+                <td class="editable" contenteditable="true">2010</td>
+                <td class="editable" contenteditable="true">2150</td>
+                <td class="editable" contenteditable="true">2240</td>
+                <td class="editable" contenteditable="true">2310</td>
+                <td class="editable" contenteditable="true">2480</td>
+                <td class="editable" contenteditable="true">2520</td>
+                <td class="editable" contenteditable="true">2680</td>
+                <td class="editable" contenteditable="true">2790</td>
+                <td class="editable" contenteditable="true">2920</td>
+                <td class="row-total">—</td>
+              </tr>
+              <tr class="total" data-type="total-rev">
+                <td class="category">Total de Receitas</td>
+                <td></td><td></td><td></td><td></td><td></td><td></td>
+                <td></td><td></td><td></td><td></td><td></td><td></td>
+                <td></td>
+              </tr>
+
+              <tr class="section"><td colspan="14">Despesas Operacionais</td></tr>
+              <tr data-type="exp">
+                <td class="category">Folha de Pagamento</td>
+                <td class="editable" contenteditable="true">14200</td>
+                <td class="editable" contenteditable="true">14200</td>
+                <td class="editable" contenteditable="true">14200</td>
+                <td class="editable" contenteditable="true">14800</td>
+                <td class="editable" contenteditable="true">14800</td>
+                <td class="editable" contenteditable="true">14800</td>
+                <td class="editable" contenteditable="true">15400</td>
+                <td class="editable" contenteditable="true">15400</td>
+                <td class="editable" contenteditable="true">15400</td>
+                <td class="editable" contenteditable="true">16100</td>
+                <td class="editable" contenteditable="true">16100</td>
+                <td class="editable" contenteditable="true">22000</td>
+                <td class="row-total">—</td>
+              </tr>
+              <tr data-type="exp">
+                <td class="category">Aluguel e Condomínio</td>
+                <td class="editable" contenteditable="true">4500</td>
+                <td class="editable" contenteditable="true">4500</td>
+                <td class="editable" contenteditable="true">4500</td>
+                <td class="editable" contenteditable="true">4500</td>
+                <td class="editable" contenteditable="true">4500</td>
+                <td class="editable" contenteditable="true">4500</td>
+                <td class="editable" contenteditable="true">4750</td>
+                <td class="editable" contenteditable="true">4750</td>
+                <td class="editable" contenteditable="true">4750</td>
+                <td class="editable" contenteditable="true">4750</td>
+                <td class="editable" contenteditable="true">4750</td>
+                <td class="editable" contenteditable="true">4750</td>
+                <td class="row-total">—</td>
+              </tr>
+              <tr data-type="exp">
+                <td class="category">Marketing e Publicidade</td>
+                <td class="editable" contenteditable="true">2800</td>
+                <td class="editable" contenteditable="true">3200</td>
+                <td class="editable" contenteditable="true">3500</td>
+                <td class="editable" contenteditable="true">3100</td>
+                <td class="editable" contenteditable="true">3800</td>
+                <td class="editable" contenteditable="true">4200</td>
+                <td class="editable" contenteditable="true">4500</td>
+                <td class="editable" contenteditable="true">4800</td>
+                <td class="editable" contenteditable="true">4200</td>
+                <td class="editable" contenteditable="true">5100</td>
+                <td class="editable" contenteditable="true">5800</td>
+                <td class="editable" contenteditable="true">6400</td>
+                <td class="row-total">—</td>
+              </tr>
+              <tr data-type="exp">
+                <td class="category">Tecnologia e Software</td>
+                <td class="editable" contenteditable="true">1200</td>
+                <td class="editable" contenteditable="true">1200</td>
+                <td class="editable" contenteditable="true">1450</td>
+                <td class="editable" contenteditable="true">1450</td>
+                <td class="editable" contenteditable="true">1450</td>
+                <td class="editable" contenteditable="true">1450</td>
+                <td class="editable" contenteditable="true">1600</td>
+                <td class="editable" contenteditable="true">1600</td>
+                <td class="editable" contenteditable="true">1600</td>
+                <td class="editable" contenteditable="true">1820</td>
+                <td class="editable" contenteditable="true">1820</td>
+                <td class="editable" contenteditable="true">1820</td>
+                <td class="row-total">—</td>
+              </tr>
+              <tr data-type="exp">
+                <td class="category">Impostos e Taxas</td>
+                <td class="editable" contenteditable="true">3800</td>
+                <td class="editable" contenteditable="true">4100</td>
+                <td class="editable" contenteditable="true">4200</td>
+                <td class="editable" contenteditable="true">4400</td>
+                <td class="editable" contenteditable="true">4650</td>
+                <td class="editable" contenteditable="true">4580</td>
+                <td class="editable" contenteditable="true">4920</td>
+                <td class="editable" contenteditable="true">5100</td>
+                <td class="editable" contenteditable="true">5020</td>
+                <td class="editable" contenteditable="true">5380</td>
+                <td class="editable" contenteditable="true">5780</td>
+                <td class="editable" contenteditable="true">6100</td>
+                <td class="row-total">—</td>
+              </tr>
+              <tr data-type="exp">
+                <td class="category">Outras Despesas</td>
+                <td class="editable" contenteditable="true">1850</td>
+                <td class="editable" contenteditable="true">2100</td>
+                <td class="editable" contenteditable="true">1980</td>
+                <td class="editable" contenteditable="true">2240</td>
+                <td class="editable" contenteditable="true">2080</td>
+                <td class="editable" contenteditable="true">2320</td>
+                <td class="editable" contenteditable="true">2480</td>
+                <td class="editable" contenteditable="true">2640</td>
+                <td class="editable" contenteditable="true">2520</td>
+                <td class="editable" contenteditable="true">2780</td>
+                <td class="editable" contenteditable="true">2920</td>
+                <td class="editable" contenteditable="true">3180</td>
+                <td class="row-total">—</td>
+              </tr>
+              <tr class="total" data-type="total-exp">
+                <td class="category">Total de Despesas</td>
+                <td></td><td></td><td></td><td></td><td></td><td></td>
+                <td></td><td></td><td></td><td></td><td></td><td></td>
+                <td></td>
+              </tr>
+
+              <tr class="grand-total" data-type="result">
+                <td class="category">Resultado Líquido</td>
+                <td></td><td></td><td></td><td></td><td></td><td></td>
+                <td></td><td></td><td></td><td></td><td></td><td></td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- BOTTOM ROW -->
+      <section class="bottom-grid">
+        <!-- CASH FLOW BAR -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Fluxo de Caixa</div>
+              <div class="card-subtitle">Saldo acumulado mensal</div>
+            </div>
+          </div>
+          <div class="chart-container chart-sm">
+            <canvas id="chartCashFlow"></canvas>
+          </div>
+        </div>
+
+        <!-- BUDGET BARS -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Orçamento vs. Realizado</div>
+              <div class="card-subtitle">Mês atual</div>
+            </div>
+          </div>
+          <div class="budget-list">
+            <div class="budget-row">
+              <div class="budget-info">
+                <span class="budget-cat">Folha de Pagamento</span>
+                <span class="budget-val">R$ 22.000 / R$ 21.000</span>
+              </div>
+              <div class="budget-bar"><div class="budget-fill" style="width:104%; background:linear-gradient(90deg,#ef4444,#f87171)"></div></div>
+            </div>
+            <div class="budget-row">
+              <div class="budget-info">
+                <span class="budget-cat">Marketing</span>
+                <span class="budget-val">R$ 6.400 / R$ 7.000</span>
+              </div>
+              <div class="budget-bar"><div class="budget-fill" style="width:91%; background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>
+            </div>
+            <div class="budget-row">
+              <div class="budget-info">
+                <span class="budget-cat">Tecnologia</span>
+                <span class="budget-val">R$ 1.820 / R$ 2.500</span>
+              </div>
+              <div class="budget-bar"><div class="budget-fill" style="width:73%; background:linear-gradient(90deg,#10b981,#34d399)"></div></div>
+            </div>
+            <div class="budget-row">
+              <div class="budget-info">
+                <span class="budget-cat">Aluguel</span>
+                <span class="budget-val">R$ 4.750 / R$ 4.800</span>
+              </div>
+              <div class="budget-bar"><div class="budget-fill" style="width:99%; background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>
+            </div>
+            <div class="budget-row">
+              <div class="budget-info">
+                <span class="budget-cat">Impostos</span>
+                <span class="budget-val">R$ 6.100 / R$ 6.500</span>
+              </div>
+              <div class="budget-bar"><div class="budget-fill" style="width:94%; background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>
+            </div>
+            <div class="budget-row">
+              <div class="budget-info">
+                <span class="budget-cat">Outras Despesas</span>
+                <span class="budget-val">R$ 3.180 / R$ 3.500</span>
+              </div>
+              <div class="budget-bar"><div class="budget-fill" style="width:91%; background:linear-gradient(90deg,#10b981,#34d399)"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RECENT TRANSACTIONS -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Últimas Transações</div>
+              <div class="card-subtitle">Movimentações recentes</div>
+            </div>
+          </div>
+          <div class="tx-list">
+            <div class="tx">
+              <div class="tx-icon" style="background:#10b981">+</div>
+              <div class="tx-body">
+                <div class="tx-title">Pagamento Cliente Premium</div>
+                <div class="tx-meta">Hoje, 14:23 · Receita</div>
+              </div>
+              <div class="tx-val pos">+R$ 12.500</div>
+            </div>
+            <div class="tx">
+              <div class="tx-icon" style="background:#ef4444">−</div>
+              <div class="tx-body">
+                <div class="tx-title">Folha — Funcionários CLT</div>
+                <div class="tx-meta">Ontem · Despesa</div>
+              </div>
+              <div class="tx-val neg">−R$ 22.000</div>
+            </div>
+            <div class="tx">
+              <div class="tx-icon" style="background:#10b981">+</div>
+              <div class="tx-body">
+                <div class="tx-title">Venda Loja Online #4892</div>
+                <div class="tx-meta">12/05 · Receita</div>
+              </div>
+              <div class="tx-val pos">+R$ 3.840</div>
+            </div>
+            <div class="tx">
+              <div class="tx-icon" style="background:#ef4444">−</div>
+              <div class="tx-body">
+                <div class="tx-title">Aluguel — Sede Comercial</div>
+                <div class="tx-meta">10/05 · Despesa</div>
+              </div>
+              <div class="tx-val neg">−R$ 4.750</div>
+            </div>
+            <div class="tx">
+              <div class="tx-icon" style="background:#8b5cf6">$</div>
+              <div class="tx-body">
+                <div class="tx-title">Investimento CDB</div>
+                <div class="tx-meta">08/05 · Aplicação</div>
+              </div>
+              <div class="tx-val">R$ 15.000</div>
+            </div>
+            <div class="tx">
+              <div class="tx-icon" style="background:#10b981">+</div>
+              <div class="tx-body">
+                <div class="tx-title">Consultoria — Projeto X</div>
+                <div class="tx-meta">05/05 · Receita</div>
+              </div>
+              <div class="tx-val pos">+R$ 8.500</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="footer">
+        © 2026 FinTrack Pro · Planilha financeira interativa · Os valores são editáveis e os totais recalculados em tempo real
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    /* ── FORMATTERS ── */
+    const fmt = (n) => new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 0, maximumFractionDigits: 0
+    }).format(n);
+
+    const parseN = (s) => {
+      if (typeof s === 'number') return s;
+      return Number((s || '0').toString().replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+    };
+
+    /* ── RECALC SPREADSHEET ── */
+    function recalc() {
+      const tbody = document.querySelector('#finTable tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+
+      const monthTotals = { rev: Array(12).fill(0), exp: Array(12).fill(0) };
+
+      rows.forEach(row => {
+        const type = row.dataset.type;
+        if (type !== 'rev' && type !== 'exp') return;
+        const cells = row.querySelectorAll('td.editable');
+        let rowSum = 0;
+        cells.forEach((c, i) => {
+          const v = parseN(c.textContent);
+          rowSum += v;
+          monthTotals[type][i] += v;
+        });
+        row.querySelector('.row-total').textContent = fmt(rowSum);
+      });
+
+      const setTotalRow = (type, values) => {
+        const row = tbody.querySelector(`tr[data-type="${type}"]`);
+        if (!row) return;
+        const tds = row.querySelectorAll('td');
+        let total = 0;
+        for (let i = 0; i < 12; i++) {
+          total += values[i];
+          tds[i + 1].textContent = fmt(values[i]);
+        }
+        tds[13].textContent = fmt(total);
+        return total;
+      };
+
+      setTotalRow('total-rev', monthTotals.rev);
+      setTotalRow('total-exp', monthTotals.exp);
+
+      const resultRow = tbody.querySelector('tr[data-type="result"]');
+      const tds = resultRow.querySelectorAll('td');
+      let grand = 0;
+      for (let i = 0; i < 12; i++) {
+        const r = monthTotals.rev[i] - monthTotals.exp[i];
+        grand += r;
+        tds[i + 1].textContent = fmt(r);
+        tds[i + 1].className = r >= 0 ? 'val-pos' : 'val-neg';
+      }
+      tds[13].textContent = fmt(grand);
+      tds[13].className = grand >= 0 ? 'val-pos' : 'val-neg';
+
+      updateCharts(monthTotals.rev, monthTotals.exp);
+    }
+
+    document.querySelectorAll('td.editable').forEach(td => {
+      td.addEventListener('blur', recalc);
+      td.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); td.blur(); }
+      });
+    });
+
+    /* ── CHARTS ── */
+    const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+    const baseFont = {
+      family: "'Inter', 'Segoe UI', Arial, sans-serif",
+      size: 11,
+    };
+
+    Chart.defaults.font = baseFont;
+    Chart.defaults.color = '#64748b';
+
+    /* gradient helper */
+    const makeGradient = (ctx, color1, color2) => {
+      const g = ctx.createLinearGradient(0, 0, 0, 300);
+      g.addColorStop(0, color1);
+      g.addColorStop(1, color2);
+      return g;
+    };
+
+    /* CHART 1: REVENUE vs EXPENSE */
+    const ctx1 = document.getElementById('chartRevenue').getContext('2d');
+    const gradRev = makeGradient(ctx1, 'rgba(16,185,129,.35)', 'rgba(16,185,129,0)');
+    const gradExp = makeGradient(ctx1, 'rgba(239,68,68,.35)', 'rgba(239,68,68,0)');
+
+    const chartRevenue = new Chart(ctx1, {
+      type: 'line',
+      data: {
+        labels: months,
+        datasets: [
+          {
+            label: 'Receitas',
+            data: [],
+            borderColor: '#10b981',
+            backgroundColor: gradRev,
+            borderWidth: 2.5,
+            tension: 0.4,
+            fill: true,
+            pointBackgroundColor: '#10b981',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+          },
+          {
+            label: 'Despesas',
+            data: [],
+            borderColor: '#ef4444',
+            backgroundColor: gradExp,
+            borderWidth: 2.5,
+            tension: 0.4,
+            fill: true,
+            pointBackgroundColor: '#ef4444',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+          },
+          {
+            label: 'Lucro',
+            data: [],
+            borderColor: '#3b82f6',
+            borderWidth: 2.5,
+            borderDash: [5, 4],
+            tension: 0.4,
+            fill: false,
+            pointBackgroundColor: '#3b82f6',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 3,
+            pointHoverRadius: 6,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#0f172a',
+            padding: 12,
+            cornerRadius: 8,
+            titleFont: { weight: 700 },
+            callbacks: {
+              label: (c) => ` ${c.dataset.label}: R$ ${fmt(c.parsed.y)}`
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(148,163,184,.15)' },
+            ticks: { callback: v => 'R$ ' + (v/1000) + 'k' }
+          },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+
+    /* CHART 2: CATEGORIES DOUGHNUT */
+    const ctx2 = document.getElementById('chartCategories').getContext('2d');
+    const chartCategories = new Chart(ctx2, {
+      type: 'doughnut',
+      data: {
+        labels: ['Folha', 'Aluguel', 'Marketing', 'Tecnologia', 'Impostos', 'Outras'],
+        datasets: [{
+          data: [187400, 56000, 51400, 18460, 58030, 29090],
+          backgroundColor: [
+            '#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#64748b'
+          ],
+          borderColor: '#fff',
+          borderWidth: 3,
+          hoverOffset: 8,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '65%',
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              usePointStyle: true,
+              pointStyle: 'rectRounded',
+              padding: 14,
+              boxWidth: 10,
+              boxHeight: 10,
+            }
+          },
+          tooltip: {
+            backgroundColor: '#0f172a',
+            padding: 12,
+            cornerRadius: 8,
+            callbacks: {
+              label: (c) => ` ${c.label}: R$ ${fmt(c.parsed)}`
+            }
+          }
+        }
+      }
+    });
+
+    /* CHART 3: CASH FLOW BAR */
+    const ctx3 = document.getElementById('chartCashFlow').getContext('2d');
+    const gradBar = makeGradient(ctx3, '#3b82f6', '#8b5cf6');
+    const chartCashFlow = new Chart(ctx3, {
+      type: 'bar',
+      data: {
+        labels: months,
+        datasets: [{
+          label: 'Saldo',
+          data: [],
+          backgroundColor: gradBar,
+          borderRadius: 6,
+          borderSkipped: false,
+          maxBarThickness: 28,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#0f172a',
+            padding: 12,
+            cornerRadius: 8,
+            callbacks: {
+              label: (c) => ` Saldo: R$ ${fmt(c.parsed.y)}`
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(148,163,184,.15)' },
+            ticks: { callback: v => 'R$ ' + (v/1000) + 'k' }
+          },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+
+    function updateCharts(rev, exp) {
+      chartRevenue.data.datasets[0].data = rev;
+      chartRevenue.data.datasets[1].data = exp;
+      chartRevenue.data.datasets[2].data = rev.map((r, i) => r - exp[i]);
+      chartRevenue.update();
+
+      chartCashFlow.data.datasets[0].data = rev.map((r, i) => r - exp[i]);
+      chartCashFlow.update();
+    }
+
+    /* ── INIT ── */
+    recalc();
+
+    /* tabs (visual only) */
+    document.querySelectorAll('.sheet-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.sheet-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+      });
+    });
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        item.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>
