@@ -555,11 +555,26 @@ function switchTab(name){
 /* ═══════════════════════════════════════════
    GEOCODING — Photon primary + Nominatim fallback
 ═══════════════════════════════════════════ */
-// RJ expanded bbox (lon_min, lat_min, lon_max, lat_max)
-const RJ_BBOX = [-46, -24, -40, -20];
+// RJ bbox (lon_min, lat_min, lon_max, lat_max)
+const RJ_BBOX = [-44.0, -23.5, -40.0, -20.5];
+
+function removeAccents(s) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+function normalizeInput(s) {
+  return s.trim().replace(/\s+/g, ' ');
+}
+function parseCoords(s) {
+  const m = s.match(/^(-?\d+\.?\d*)\s*[,;]\s*(-?\d+\.?\d*)$/);
+  if (!m) return null;
+  const a = +m[1], b = +m[2];
+  if (Math.abs(a) <= 90 && Math.abs(b) <= 180) return { lat: a, lon: b };
+  return null;
+}
 
 async function searchPhoton(q) {
-  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lat=-22.9&lon=-43.2&limit=8&lang=pt&bbox=${RJ_BBOX.join(',')}`;
+  const bbox = `${RJ_BBOX[0]},${RJ_BBOX[1]},${RJ_BBOX[2]},${RJ_BBOX[3]}`;
+  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=5&lang=pt&bbox=${bbox}`;
   const r = await fetch(url);
   if (!r.ok) throw new Error('photon fail');
   const { features } = await r.json();
@@ -570,25 +585,48 @@ async function searchPhoton(q) {
     })
     .map(f => {
       const p = f.properties;
-      const parts = [p.name, p.street&&p.street!==p.name?p.street:null, p.district||p.suburb, p.city||p.county, p.state, p.country].filter(Boolean);
-      return { lat: String(f.geometry.coordinates[1]), lon: String(f.geometry.coordinates[0]), display_name: parts.join(', '), type: p.type||'' };
+      const name = p.name || '';
+      const district = p.district || p.suburb || '';
+      const city = p.city || p.county || '';
+      const state = p.state || '';
+      const _label = district ? `${name} - ${district}` : name;
+      const _sub = [city, state].filter(Boolean).join(', ');
+      const display_name = [_label, _sub].filter(Boolean).join(', ');
+      return { lat: String(f.geometry.coordinates[1]), lon: String(f.geometry.coordinates[0]), display_name, _label, _sub, type: p.type || '' };
     });
 }
 
 async function searchNominatim(q) {
-  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&countrycodes=br&addressdetails=1&accept-language=pt`;
-  const r = await fetch(url);
+  const vb = `${RJ_BBOX[0]},${RJ_BBOX[3]},${RJ_BBOX[2]},${RJ_BBOX[1]}`;
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&countrycodes=br&addressdetails=1&accept-language=pt&viewbox=${vb}&bounded=0`;
+  const r = await fetch(url, { headers: { 'User-Agent': 'MapaRJ/1.0' } });
   if (!r.ok) return [];
   const data = await r.json();
   return data.filter(x => { const lo=+x.lon, la=+x.lat; return lo>=RJ_BBOX[0]&&lo<=RJ_BBOX[2]&&la>=RJ_BBOX[1]&&la<=RJ_BBOX[3]; });
 }
 
-async function geocode(q) {
-  try {
-    const res = await searchPhoton(q);
-    if (res.length >= 1) return res;
-  } catch {}
-  return searchNominatim(q);
+async function geocode(q, onStatus) {
+  const notify = msg => { if (onStatus) onStatus(msg); };
+
+  // 1ª tentativa: Photon com bbox RJ
+  try { const r1 = await searchPhoton(q); if (r1.length) return r1; } catch {}
+
+  // 2ª tentativa: Photon com "Rio de Janeiro" anexado
+  notify('Tentando variação…');
+  if (!q.toLowerCase().includes('rio de janeiro')) {
+    try { const r2 = await searchPhoton(`${q} Rio de Janeiro`); if (r2.length) return r2; } catch {}
+  }
+
+  // 3ª tentativa: Nominatim com bias RJ
+  try { const r3 = await searchNominatim(`${q}, Rio de Janeiro, Brasil`); if (r3.length) return r3; } catch {}
+
+  // 4ª tentativa: Nominatim sem acentos
+  const qc = removeAccents(q);
+  if (qc !== q) {
+    try { const r4 = await searchNominatim(`${qc}, Rio de Janeiro, Brasil`); if (r4.length) return r4; } catch {}
+  }
+
+  return [];
 }
 
 async function reverseGeocode(lat, lon) {
@@ -599,8 +637,8 @@ async function reverseGeocode(lat, lon) {
   } catch { return `${lat.toFixed(5)}, ${lon.toFixed(5)}`; }
 }
 
-const iLabel = r => r.display_name.split(',').slice(0,2).join(',').trim();
-const iSub   = r => r.display_name.split(',').slice(2,5).join(',').trim();
+const iLabel = r => r._label || r.display_name.split(',').slice(0,2).join(',').trim();
+const iSub   = r => r._sub   || r.display_name.split(',').slice(2,5).join(',').trim();
 function iIcon(r){
   const t=r.type||'';
   if(/motorway|trunk|primary|secondary|tertiary|residential|road|street|path/.test(t)) return '🛣';
@@ -613,14 +651,20 @@ function iIcon(r){
 function wireAC(inputId, dropId, onSelect){
   const inp=document.getElementById(inputId), dd=document.getElementById(dropId);
   let t;
-  inp.addEventListener('input',()=>{clearTimeout(t);const q=inp.value.trim();if(q.length<2){closeAC(dd);return;}t=setTimeout(()=>runAC(q,dd,onSelect),380);});
+  inp.addEventListener('input',()=>{clearTimeout(t);const q=normalizeInput(inp.value);if(q.length<3){closeAC(dd);return;}t=setTimeout(()=>runAC(q,dd,onSelect),380);});
   inp.addEventListener('keydown',e=>{if(e.key==='Escape')closeAC(dd);});
 }
 async function runAC(q,dd,cb){
+  const coords=parseCoords(q);
+  if(coords){
+    const name=`${coords.lat.toFixed(5)}, ${coords.lon.toFixed(5)}`;
+    cb({lat:String(coords.lat),lon:String(coords.lon),display_name:name,_label:name,_sub:'Coordenadas',type:'coordinate'});
+    return;
+  }
   dd.innerHTML='<div class="ac-msg">Buscando…</div>'; dd.classList.add('open');
   try{
-    const rs=await geocode(q);
-    if(!rs.length){dd.innerHTML='<div class="ac-msg">Nenhum resultado.</div>';return;}
+    const rs=await geocode(q,msg=>{dd.innerHTML=`<div class="ac-msg">${msg}</div>`;dd.classList.add('open');});
+    if(!rs.length){dd.innerHTML='<div class="ac-msg">Nenhum resultado encontrado.</div>';return;}
     dd.innerHTML='';
     rs.forEach(r=>{
       const el=document.createElement('div'); el.className='ac-item';
