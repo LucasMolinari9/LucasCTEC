@@ -10,72 +10,97 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --verde:      #1a5c2a;
-      --verde-c:    #2e7d42;
-      --dourado:    #c9a227;
-      --bg:         #f4f6f8;
-      --border:     #d0d7de;
-      --text:       #1c2526;
-      --muted:      #586069;
-      --sidebar-w:  350px;
+      --bg:         #1f1e1c;     /* sidebar bg */
+      --bg-2:       #262522;     /* secondary surface */
+      --surface:    #2a2a27;     /* inputs / cards */
+      --surface-h:  #34342f;     /* hover */
+      --border:     #3a3a36;
+      --border-l:   #4a4a44;
+      --text:       #f0eee6;
+      --muted:      #a8a89c;
+      --verde:      #2e7d42;
+      --verde-l:    #4caf50;
+      --dourado:    #d4a82a;
+      --accent:     #d97757;
+      --danger:     #e57373;
+      --sidebar-w:  360px;
     }
 
     html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; }
+    body { display: flex; color: var(--text); background: var(--bg); }
 
-    body { display: flex; color: var(--text); }
+    /* ── SCROLLBAR (dark) ── */
+    .tab-pane::-webkit-scrollbar,
+    .muni-list::-webkit-scrollbar,
+    .kml-list::-webkit-scrollbar,
+    .ac-drop::-webkit-scrollbar { width: 8px; }
+    .tab-pane::-webkit-scrollbar-track,
+    .muni-list::-webkit-scrollbar-track,
+    .kml-list::-webkit-scrollbar-track,
+    .ac-drop::-webkit-scrollbar-track { background: var(--bg-2); }
+    .tab-pane::-webkit-scrollbar-thumb,
+    .muni-list::-webkit-scrollbar-thumb,
+    .kml-list::-webkit-scrollbar-thumb,
+    .ac-drop::-webkit-scrollbar-thumb { background: var(--border-l); border-radius: 4px; }
+    .tab-pane::-webkit-scrollbar-thumb:hover,
+    .muni-list::-webkit-scrollbar-thumb:hover,
+    .kml-list::-webkit-scrollbar-thumb:hover,
+    .ac-drop::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
     /* ── SIDEBAR ── */
     #sidebar {
       width: var(--sidebar-w);
       height: 100vh;
-      background: #fff;
+      background: var(--bg);
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      box-shadow: 2px 0 10px rgba(0,0,0,.1);
+      box-shadow: 2px 0 14px rgba(0,0,0,.35);
       z-index: 1000;
       flex-shrink: 0;
     }
 
     .sb-header {
-      background: var(--verde);
+      background: linear-gradient(135deg, #1a5c2a 0%, #143f1d 100%);
       color: #fff;
-      padding: 13px 15px;
+      padding: 14px 16px;
       display: flex;
       align-items: center;
-      gap: 11px;
+      gap: 12px;
       flex-shrink: 0;
+      border-bottom: 1px solid #0e2914;
     }
     .sb-logo {
       width: 40px; height: 40px;
       background: var(--dourado);
       border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      font-weight: 900; font-size: 13px; color: var(--verde);
-      flex-shrink: 0;
+      font-weight: 900; font-size: 13px; color: #143f1d;
+      flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,.3);
     }
-    .sb-header h1 { font-size: .9rem; font-weight: 700; }
+    .sb-header h1 { font-size: .92rem; font-weight: 700; letter-spacing: .2px; }
     .sb-header p  { font-size: .7rem; opacity: .8; margin-top: 2px; }
 
     /* ── TABS ── */
     .tab-bar {
       display: flex;
-      border-bottom: 2px solid var(--border);
-      background: #fafbfc;
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
     .tab-btn {
-      flex: 1; padding: 10px 4px;
-      font-size: .76rem; font-weight: 700;
+      flex: 1; padding: 11px 2px;
+      font-size: .72rem; font-weight: 700;
       border: none; background: none; cursor: pointer;
       color: var(--muted);
       border-bottom: 3px solid transparent;
-      margin-bottom: -2px;
-      transition: color .2s, border-color .2s, background .2s;
-      display: flex; align-items: center; justify-content: center; gap: 4px;
+      margin-bottom: -1px;
+      transition: color .15s, border-color .15s, background .15s;
+      display: flex; align-items: center; justify-content: center; gap: 3px;
+      letter-spacing: .2px;
     }
-    .tab-btn.active { color: var(--verde); border-bottom-color: var(--verde); background: #fff; }
-    .tab-btn:hover:not(.active) { color: var(--verde-c); background: #f0f5f0; }
+    .tab-btn.active { color: var(--text); border-bottom-color: var(--dourado); background: var(--bg); }
+    .tab-btn:hover:not(.active) { color: var(--text); background: var(--surface-h); }
 
     /* ── TAB CONTENT ── */
     .tab-pane {
@@ -88,22 +113,27 @@
     /* ── LABELS ── */
     .sec-label {
       font-size: .7rem; text-transform: uppercase;
-      letter-spacing: .5px; color: var(--muted); font-weight: 700;
+      letter-spacing: .6px; color: var(--muted); font-weight: 700;
     }
 
-    /* ── SEARCH / INPUT ── */
+    /* ── INPUTS ── */
     .input-wrap { position: relative; }
     .s-input {
       width: 100%;
-      padding: 9px 36px 9px 12px;
+      padding: 10px 36px 10px 12px;
+      background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 8px;
-      font-size: .86rem; outline: none;
-      transition: border-color .2s, box-shadow .2s;
+      font-size: .86rem;
+      color: var(--text);
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
     }
+    .s-input::placeholder { color: var(--muted); }
     .s-input:focus {
-      border-color: var(--verde-c);
-      box-shadow: 0 0 0 3px rgba(46,125,66,.12);
+      border-color: var(--verde-l);
+      box-shadow: 0 0 0 3px rgba(76,175,80,.18);
+      background: var(--bg-2);
     }
     .s-ico {
       position: absolute; right: 10px; top: 50%;
@@ -114,110 +144,140 @@
     /* ── AUTOCOMPLETE ── */
     .ac-drop {
       position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-      background: #fff; border: 1px solid var(--border);
+      background: var(--bg-2); border: 1px solid var(--border);
       border-radius: 8px;
-      box-shadow: 0 6px 20px rgba(0,0,0,.13);
+      box-shadow: 0 8px 24px rgba(0,0,0,.45);
       max-height: 230px; overflow-y: auto;
       z-index: 9999; display: none;
     }
     .ac-drop.open { display: block; }
     .ac-item {
       padding: 8px 12px; cursor: pointer;
-      font-size: .82rem; border-bottom: 1px solid #f0f0f0;
+      font-size: .82rem; border-bottom: 1px solid var(--border);
       display: flex; gap: 8px; align-items: flex-start;
+      color: var(--text);
     }
     .ac-item:last-child { border-bottom: none; }
-    .ac-item:hover { background: #f0f6f0; }
-    .ac-ico { flex-shrink: 0; margin-top: 1px; }
+    .ac-item:hover { background: var(--surface-h); }
+    .ac-ico  { flex-shrink: 0; margin-top: 1px; }
     .ac-name { font-weight: 600; color: var(--text); line-height: 1.3; }
     .ac-sub  { font-size: .73rem; color: var(--muted); margin-top: 1px; }
-    .ac-msg  { padding: 10px 12px; font-size: .8rem; color: var(--muted); text-align: center; }
+    .ac-msg  { padding: 12px; font-size: .8rem; color: var(--muted); text-align: center; }
 
     /* ── BUTTONS ── */
     .btn {
       padding: 9px 14px; border-radius: 7px;
       font-size: .84rem; font-weight: 600;
-      cursor: pointer; border: none;
+      cursor: pointer; border: 1px solid transparent;
       display: flex; align-items: center; justify-content: center; gap: 6px;
-      transition: background .2s, transform .1s; width: 100%;
+      transition: background .15s, transform .1s, border-color .15s;
+      width: 100%; font-family: inherit;
     }
     .btn:active { transform: scale(.98); }
+
     .btn-g  { background: var(--verde);  color: #fff; }
-    .btn-g:hover { background: var(--verde-c); }
-    .btn-g:disabled { background: #9e9e9e; cursor: not-allowed; transform: none; }
-    .btn-o  { background: #fff; color: var(--verde); border: 1px solid var(--verde); }
-    .btn-o:hover { background: #e8f5e9; }
-    .btn-r  { background: #fff; color: #c62828; border: 1px solid #ef9a9a; }
-    .btn-r:hover { background: #ffebee; }
+    .btn-g:hover { background: var(--verde-l); }
+    .btn-g:disabled { background: #555; cursor: not-allowed; transform: none; }
+
+    .btn-o {
+      background: transparent; color: var(--verde-l);
+      border: 1px solid var(--verde-l);
+    }
+    .btn-o:hover { background: rgba(76,175,80,.12); }
+
+    .btn-r {
+      background: transparent; color: var(--danger);
+      border: 1px solid #6e3a3a;
+    }
+    .btn-r:hover { background: rgba(229,115,115,.1); border-color: var(--danger); }
 
     .btn-row { display: flex; gap: 8px; }
     .btn-row .btn { flex: 1; }
 
     /* ── ROUTE ── */
     .rt-label {
-      font-size: .73rem; font-weight: 700; color: var(--muted);
-      text-transform: uppercase; letter-spacing: .4px;
+      font-size: .72rem; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .5px;
       display: flex; align-items: center; gap: 6px; margin-bottom: 5px;
     }
-    .rt-dot {
-      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
-    }
-    .dot-o { background: #2e7d32; }
-    .dot-d { background: #c62828; }
-    .rt-connector {
-      width: 2px; height: 12px;
-      background: #ccc; margin-left: 4px; margin-bottom: -4px;
-    }
+    .rt-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .dot-o { background: #4caf50; box-shadow: 0 0 6px rgba(76,175,80,.6); }
+    .dot-d { background: #ef5350; box-shadow: 0 0 6px rgba(239,83,80,.6); }
+    .rt-connector { width: 2px; height: 12px; background: var(--border-l); margin-left: 4px; margin-bottom: -4px; }
 
     .info-box {
-      background: #e8f5e9; border: 1px solid #a5d6a7;
-      border-radius: 8px; padding: 11px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border-l);
+      border-left: 3px solid var(--verde-l);
+      border-radius: 8px;
+      padding: 11px 14px;
       display: none;
     }
     .info-box.show { display: block; }
     .info-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
     .info-row:last-child { margin-bottom: 0; }
-    .info-lbl { font-size: .73rem; color: var(--muted); text-transform: uppercase; }
-    .info-val { font-size: .9rem; font-weight: 700; color: var(--verde); }
+    .info-lbl { font-size: .73rem; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+    .info-val { font-size: .94rem; font-weight: 700; color: var(--text); }
 
-    /* ── MUNICIPALITY ── */
-    .muni-list {
+    /* ── LIST (municipalities + kml) ── */
+    .muni-list, .kml-list {
       flex: 1; overflow-y: auto;
+      background: var(--bg-2);
       border: 1px solid var(--border);
       border-radius: 8px;
-      min-height: 0;
+      min-height: 100px;
     }
-    .muni-item {
+    .muni-item, .kml-item {
       display: flex; align-items: center; gap: 9px;
-      padding: 7px 11px; border-bottom: 1px solid #f0f0f0;
-      font-size: .83rem; transition: background .15s;
+      padding: 8px 11px; border-bottom: 1px solid var(--border);
+      font-size: .83rem; transition: background .12s;
+      color: var(--text);
     }
-    .muni-item:last-child { border-bottom: none; }
-    .muni-item:hover { background: #f5f8f5; }
-    .muni-item.on { background: #e8f5e9; }
+    .muni-item:last-child, .kml-item:last-child { border-bottom: none; }
+    .muni-item:hover, .kml-item:hover { background: var(--surface-h); }
+    .muni-item.on, .kml-item.on { background: rgba(46,125,66,.15); border-left: 3px solid var(--verde-l); padding-left: 8px; }
+
     .muni-cb {
-      width: 15px; height: 15px; cursor: pointer;
-      accent-color: var(--verde); flex-shrink: 0;
+      width: 16px; height: 16px; cursor: pointer;
+      accent-color: var(--verde-l); flex-shrink: 0;
     }
-    .muni-nm { flex: 1; font-weight: 500; cursor: pointer; user-select: none; }
-    .muni-clr {
-      width: 22px; height: 22px;
-      border-radius: 5px; border: 2px solid rgba(0,0,0,.15);
+    .muni-nm, .kml-nm {
+      flex: 1; font-weight: 500;
+      cursor: pointer; user-select: none;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .muni-clr, .kml-clr {
+      width: 24px; height: 24px;
+      border-radius: 6px; border: 2px solid rgba(255,255,255,.15);
       cursor: pointer; padding: 0; flex-shrink: 0;
       appearance: none; -webkit-appearance: none;
+      background-clip: content-box;
     }
-    .muni-spin {
-      width: 12px; height: 12px;
-      border: 2px solid #ccc; border-top-color: var(--verde);
+    .muni-clr::-webkit-color-swatch-wrapper, .kml-clr::-webkit-color-swatch-wrapper { padding: 0; }
+    .muni-clr::-webkit-color-swatch, .kml-clr::-webkit-color-swatch { border: none; border-radius: 4px; }
+
+    .muni-spin, .kml-spin {
+      width: 13px; height: 13px;
+      border: 2px solid var(--border-l); border-top-color: var(--verde-l);
       border-radius: 50%; animation: spin .6s linear infinite;
       display: none; flex-shrink: 0;
     }
-    .muni-spin.a { display: inline-block; }
+    .muni-spin.a, .kml-spin.a { display: inline-block; }
+
+    .icon-btn {
+      background: none; border: none;
+      color: var(--muted); cursor: pointer;
+      padding: 4px; border-radius: 4px;
+      font-size: 14px; line-height: 1;
+      flex-shrink: 0; transition: color .15s, background .15s;
+    }
+    .icon-btn:hover { color: var(--text); background: var(--border); }
+    .icon-btn.danger:hover { color: var(--danger); background: rgba(229,115,115,.12); }
 
     /* ── SPINNER ── */
     .sp {
       width: 15px; height: 15px;
-      border: 2px solid rgba(255,255,255,.4);
+      border: 2px solid rgba(255,255,255,.3);
       border-top-color: #fff;
       border-radius: 50%; animation: spin .65s linear infinite;
       display: none;
@@ -227,39 +287,84 @@
 
     /* ── ERROR ── */
     .err {
-      background: #ffebee; border: 1px solid #ef9a9a;
+      background: rgba(229,115,115,.1);
+      border: 1px solid rgba(229,115,115,.4);
       border-radius: 6px; padding: 8px 12px;
-      font-size: .78rem; color: #c62828; display: none;
+      font-size: .78rem; color: var(--danger); display: none;
     }
     .err.show { display: block; }
 
     /* ── RESULT CARD ── */
     .result-card {
-      background: #f0f6f0; border: 1px solid #a5d6a7;
+      background: var(--surface);
+      border: 1px solid var(--border-l);
+      border-left: 3px solid var(--verde-l);
       border-radius: 8px; padding: 10px 12px;
       font-size: .83rem; display: none;
     }
     .result-card.show { display: block; }
-    .result-card strong { display: block; margin-bottom: 3px; }
+    .result-card strong { display: block; margin-bottom: 3px; color: var(--text); }
     .result-card small { color: var(--muted); }
+
+    /* ── KML upload zone ── */
+    .upload-zone {
+      border: 2px dashed var(--border-l);
+      border-radius: 10px;
+      padding: 22px 14px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      background: var(--bg-2);
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--verde-l);
+      background: rgba(76,175,80,.06);
+    }
+    .upload-zone .ico { font-size: 28px; display: block; margin-bottom: 6px; }
+    .upload-zone .lbl { font-size: .86rem; font-weight: 600; color: var(--text); }
+    .upload-zone .hint { font-size: .73rem; color: var(--muted); margin-top: 4px; }
+    #kmlFileInput { display: none; }
+
+    .kml-empty {
+      text-align: center; padding: 28px 14px;
+      color: var(--muted); font-size: .82rem;
+    }
+    .kml-empty .ico { display: block; font-size: 32px; opacity: .4; margin-bottom: 6px; }
+
+    .session-note {
+      font-size: .72rem; color: var(--muted);
+      text-align: center; padding: 6px 0;
+      border-top: 1px solid var(--border);
+    }
+    .session-note strong { color: var(--dourado); }
 
     /* ── MAP ── */
     #map { flex: 1; height: 100vh; }
 
-    /* ── HOME BUTTON ── */
-    .leaflet-control-home a {
-      font-size: 16px !important;
-      line-height: 30px !important;
+    /* Leaflet controls — dark adapt */
+    .leaflet-bar a {
+      background: var(--bg-2) !important;
+      color: var(--text) !important;
+      border-bottom: 1px solid var(--border) !important;
     }
+    .leaflet-bar a:hover { background: var(--surface-h) !important; }
+    .leaflet-control-attribution {
+      background: rgba(31,30,28,.85) !important;
+      color: var(--muted) !important;
+    }
+    .leaflet-control-attribution a { color: var(--verde-l) !important; }
 
-    /* Tooltip municipality */
-    .muni-tip {
-      background: rgba(0,0,0,.75); color: #fff;
-      border: none; border-radius: 5px;
+    /* Tooltip layer */
+    .muni-tip, .kml-tip {
+      background: rgba(20,19,17,.92); color: #fff;
+      border: 1px solid var(--border-l); border-radius: 5px;
       font-size: .78rem; font-weight: 600;
-      padding: 4px 9px; box-shadow: none;
+      padding: 4px 9px; box-shadow: 0 2px 8px rgba(0,0,0,.5);
     }
-    .muni-tip::before { display: none; }
+    .muni-tip::before, .kml-tip::before { display: none; }
+
+    /* Leaflet popups (keep light for legibility over map) */
+    .leaflet-popup-content-wrapper { border-radius: 8px; box-shadow: 0 6px 22px rgba(0,0,0,.3); }
 
     /* Responsive */
     @media (max-width: 640px) {
@@ -286,6 +391,7 @@
     <button class="tab-btn active" onclick="switchTab('buscar')" id="tbtn-buscar">🔍 Buscar</button>
     <button class="tab-btn"        onclick="switchTab('rota')"   id="tbtn-rota">🗺 Rota</button>
     <button class="tab-btn"        onclick="switchTab('muni')"   id="tbtn-muni">🏙 Municípios</button>
+    <button class="tab-btn"        onclick="switchTab('kml')"    id="tbtn-kml">📁 KML</button>
   </div>
 
   <!-- ── TAB: BUSCAR ── -->
@@ -294,8 +400,7 @@
 
     <div class="input-wrap">
       <input class="s-input" id="searchInp" type="text"
-             placeholder="Ex: Copacabana, Av. Brasil, Niterói…"
-             autocomplete="off" />
+             placeholder="Ex: Copacabana, Av. Brasil, Niterói…" autocomplete="off" />
       <span class="s-ico">🔍</span>
       <div class="ac-drop" id="searchDrop"></div>
     </div>
@@ -318,8 +423,7 @@
     <div>
       <div class="rt-label"><span class="rt-dot dot-o"></span> Origem</div>
       <div class="input-wrap">
-        <input class="s-input" id="originInp" type="text"
-               placeholder="Ponto de partida…" autocomplete="off" />
+        <input class="s-input" id="originInp" type="text" placeholder="Ponto de partida…" autocomplete="off" />
         <span class="s-ico">📍</span>
         <div class="ac-drop" id="originDrop"></div>
       </div>
@@ -330,8 +434,7 @@
     <div>
       <div class="rt-label"><span class="rt-dot dot-d"></span> Destino</div>
       <div class="input-wrap">
-        <input class="s-input" id="destInp" type="text"
-               placeholder="Ponto de chegada…" autocomplete="off" />
+        <input class="s-input" id="destInp" type="text" placeholder="Ponto de chegada…" autocomplete="off" />
         <span class="s-ico">🏁</span>
         <div class="ac-drop" id="destDrop"></div>
       </div>
@@ -358,7 +461,6 @@
     <button class="btn btn-r" id="btnClearRoute" onclick="clearRoute()" style="display:none;">
       ✕ Limpar rota
     </button>
-
   </div>
 
   <!-- ── TAB: MUNICÍPIOS ── -->
@@ -366,8 +468,7 @@
     <div class="sec-label">Destacar municípios no mapa com cores</div>
 
     <div class="input-wrap">
-      <input class="s-input" id="muniFilter" type="text"
-             placeholder="Filtrar município…" oninput="filterMunis()" />
+      <input class="s-input" id="muniFilter" type="text" placeholder="Filtrar município…" oninput="filterMunis()" />
       <span class="s-ico">🔎</span>
     </div>
 
@@ -380,6 +481,38 @@
 
     <div class="muni-list" id="muniList">
       <div class="ac-msg">Clique na aba para carregar…</div>
+    </div>
+  </div>
+
+  <!-- ── TAB: KML ── -->
+  <div class="tab-pane" id="pane-kml">
+    <div class="sec-label">Importar arquivos KML</div>
+
+    <label for="kmlFileInput" class="upload-zone" id="kmlDropZone">
+      <span class="ico">📂</span>
+      <div class="lbl">Clique ou arraste KML aqui</div>
+      <div class="hint">Aceita .kml • múltiplos arquivos</div>
+    </label>
+    <input type="file" id="kmlFileInput" accept=".kml,application/vnd.google-earth.kml+xml,text/xml" multiple />
+
+    <div class="err" id="kmlErr"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-o" onclick="showAllKMLs()" style="font-size:.76rem;">Exibir todos</button>
+      <button class="btn btn-r" onclick="clearAllKMLs()" style="font-size:.76rem;">Apagar todos</button>
+    </div>
+
+    <div class="sec-label" style="margin-top:4px;">KMLs Salvos na Sessão</div>
+
+    <div class="kml-list" id="kmlList">
+      <div class="kml-empty">
+        <span class="ico">📭</span>
+        Nenhum KML importado.
+      </div>
+    </div>
+
+    <div class="session-note">
+      💾 KMLs ficam salvos enquanto a aba do navegador estiver aberta (<strong>sessionStorage</strong>).
     </div>
   </div>
 
@@ -398,13 +531,12 @@ const RJ_ZOOM   = 8;
 const map = L.map('map', { center: RJ_CENTER, zoom: RJ_ZOOM, zoomControl: false });
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; <a href="https://openstreetmap.org" target="_blank">OpenStreetMap</a> contributors | Rotas: OSRM | Fronteiras: IBGE',
+  attribution: '&copy; <a href="https://openstreetmap.org" target="_blank">OpenStreetMap</a> | Rotas: OSRM | Fronteiras: IBGE',
   maxZoom: 19
 }).addTo(map);
 
 L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-// Home button
 const HomeControl = L.Control.extend({
   options: { position: 'bottomright' },
   onAdd() {
@@ -412,7 +544,7 @@ const HomeControl = L.Control.extend({
     const a = L.DomUtil.create('a', '', c);
     a.title = 'Voltar ao Rio de Janeiro';
     a.innerHTML = '🏠';
-    a.style.cssText = 'display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;';
+    a.style.cssText = 'display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;line-height:30px;';
     L.DomEvent.on(a, 'click', e => {
       L.DomEvent.stopPropagation(e);
       map.flyTo(RJ_CENTER, RJ_ZOOM, { duration: 1 });
@@ -430,14 +562,16 @@ let routePolyline  = null;
 let routePins      = [];
 let originLatLon   = null;
 let destLatLon     = null;
-let muniData       = [];       // [{id, nome}]
-let muniLayers     = {};       // id → L.GeoJSON
-let muniColors     = {};       // id → hex color
+let muniData       = [];
+let muniLayers     = {};
+let muniColors     = {};
+let kmls           = [];    // [{ id, name, raw, color, visible }]
+let kmlLayers      = {};    // id → L.GeoJSON
 
 const PALETTE = [
   '#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6',
   '#1abc9c','#e67e22','#16a085','#d81b60','#00897b',
-  '#fb8c00','#6d4c41','#546e7a','#7b1fa2','#0288d1'
+  '#fb8c00','#7b1fa2','#0288d1','#c2185b','#5d4037'
 ];
 let _pi = 0;
 const pickColor = () => PALETTE[_pi++ % PALETTE.length];
@@ -446,9 +580,8 @@ const pickColor = () => PALETTE[_pi++ % PALETTE.length];
    TABS
 ══════════════════════════════════════════════ */
 let _muniLoaded = false;
-
 function switchTab(name) {
-  ['buscar','rota','muni'].forEach(t => {
+  ['buscar','rota','muni','kml'].forEach(t => {
     document.getElementById('tbtn-' + t).classList.toggle('active', t === name);
     document.getElementById('pane-' + t).classList.toggle('active', t === name);
   });
@@ -456,7 +589,7 @@ function switchTab(name) {
 }
 
 /* ══════════════════════════════════════════════
-   NOMINATIM (viewbox: left,top,right,bottom = W,N,E,S)
+   NOMINATIM
 ══════════════════════════════════════════════ */
 const VIEWBOX = '-44.9,-20.7,-40.9,-23.4';
 
@@ -470,12 +603,8 @@ async function geocode(query) {
   return r.json();
 }
 
-function itemLabel(r) {
-  return r.display_name.split(',').slice(0, 2).join(',').trim();
-}
-function itemSub(r) {
-  return r.display_name.split(',').slice(2, 5).join(',').trim();
-}
+const itemLabel = r => r.display_name.split(',').slice(0, 2).join(',').trim();
+const itemSub   = r => r.display_name.split(',').slice(2, 5).join(',').trim();
 function itemIcon(r) {
   const t = r.type || r.class || '';
   if (/motorway|trunk|primary|secondary|tertiary|residential|road|street|path/.test(t)) return '🛣';
@@ -486,12 +615,10 @@ function itemIcon(r) {
   return '📍';
 }
 
-/* ── Generic autocomplete wiring ── */
 function wireAutocomplete(inputId, dropId, onSelect) {
   const inp = document.getElementById(inputId);
   const dd  = document.getElementById(dropId);
   let timer = null;
-
   inp.addEventListener('input', () => {
     clearTimeout(timer);
     const q = inp.value.trim();
@@ -499,12 +626,6 @@ function wireAutocomplete(inputId, dropId, onSelect) {
     timer = setTimeout(() => runAC(q, dd, onSelect), 420);
   });
   inp.addEventListener('keydown', e => { if (e.key === 'Escape') closeAC(dd); });
-  inp.addEventListener('focus', () => {
-    const q = inp.value.trim();
-    if (q.length >= 2 && !dd.classList.contains('open')) {
-      timer = setTimeout(() => runAC(q, dd, onSelect), 420);
-    }
-  });
 }
 
 async function runAC(q, dd, onSelect) {
@@ -514,39 +635,22 @@ async function runAC(q, dd, onSelect) {
     const results = await geocode(q);
     if (!results.length) { dd.innerHTML = '<div class="ac-msg">Nenhum resultado.</div>'; return; }
     dd.innerHTML = '';
-    results.forEach((r, i) => {
+    results.forEach(r => {
       const el = document.createElement('div');
       el.className = 'ac-item';
       el.innerHTML = `<span class="ac-ico">${itemIcon(r)}</span>`
         + `<div><div class="ac-name">${itemLabel(r)}</div>`
         + `<div class="ac-sub">${itemSub(r)}</div></div>`;
-      el.addEventListener('mousedown', e => {
-        e.preventDefault();
-        onSelect(r);
-        closeAC(dd);
-      });
+      el.addEventListener('mousedown', e => { e.preventDefault(); onSelect(r); closeAC(dd); });
       dd.appendChild(el);
     });
-  } catch {
-    closeAC(dd);
-  }
+  } catch { closeAC(dd); }
 }
 
-function closeAC(dd) {
-  dd.classList.remove('open');
-}
-
-function closeAllAC() {
-  ['searchDrop','originDrop','destDrop'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) closeAC(el);
-  });
-}
-
+const closeAC = dd => dd.classList.remove('open');
+const closeAllAC = () => ['searchDrop','originDrop','destDrop'].forEach(id => closeAC(document.getElementById(id)));
 map.on('click', closeAllAC);
-document.addEventListener('mousedown', e => {
-  if (!e.target.closest('.input-wrap')) closeAllAC();
-});
+document.addEventListener('mousedown', e => { if (!e.target.closest('.input-wrap')) closeAllAC(); });
 
 /* ══════════════════════════════════════════════
    SEARCH TAB
@@ -554,17 +658,13 @@ document.addEventListener('mousedown', e => {
 wireAutocomplete('searchInp', 'searchDrop', r => {
   const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
   const name = itemLabel(r), addr = itemSub(r);
-
   document.getElementById('searchInp').value = name;
-
   if (searchMarker) map.removeLayer(searchMarker);
   searchMarker = L.marker([lat, lon])
     .addTo(map)
     .bindPopup(`<strong>${name}</strong><br><small>${addr}</small>`, { maxWidth: 260 })
     .openPopup();
-
   map.flyTo([lat, lon], 15, { duration: 1.2 });
-
   document.getElementById('searchCardName').textContent = name;
   document.getElementById('searchCardAddr').textContent = addr;
   document.getElementById('searchCard').classList.add('show');
@@ -593,60 +693,40 @@ wireAutocomplete('destInp', 'destDrop', r => {
 
 async function calcRoute() {
   setErr('routeErr', '');
-
   if (!originLatLon) { setErr('routeErr', 'Selecione a origem a partir dos resultados da busca.'); return; }
   if (!destLatLon)   { setErr('routeErr', 'Selecione o destino a partir dos resultados da busca.'); return; }
-
   const btn = document.getElementById('btnCalc');
   const sp  = document.getElementById('routeSp');
   btn.disabled = true; sp.classList.add('a');
-
   clearRoute(false);
-
   try {
     const [oLat, oLon] = originLatLon;
     const [dLat, dLon] = destLatLon;
-
-    const url = `https://router.project-osrm.org/route/v1/driving/${oLon},${oLat};${dLon},${dLat}`
-              + `?overview=full&geometries=geojson&steps=false`;
-
-    const res  = await fetch(url);
-    if (!res.ok) throw new Error('Servidor de rotas indisponível. Tente novamente.');
+    const url = `https://router.project-osrm.org/route/v1/driving/${oLon},${oLat};${dLon},${dLat}?overview=full&geometries=geojson&steps=false`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Servidor de rotas indisponível.');
     const data = await res.json();
-
-    if (data.code !== 'Ok' || !data.routes?.length) throw new Error('Rota não encontrada entre os pontos selecionados.');
-
+    if (data.code !== 'Ok' || !data.routes?.length) throw new Error('Rota não encontrada entre os pontos.');
     const route = data.routes[0];
-
-    // Draw polyline
     routePolyline = L.geoJSON(route.geometry, {
-      style: { color: '#1565c0', weight: 5, opacity: .88, lineJoin: 'round', lineCap: 'round' }
+      style: { color: '#42a5f5', weight: 5, opacity: .9, lineJoin: 'round', lineCap: 'round' }
     }).addTo(map);
-
-    // Pins
-    const mkIcon = (color, emoji) => L.divIcon({
+    const mkIcon = (color) => L.divIcon({
       className: '',
-      html: `<div style="width:16px;height:16px;background:${color};border-radius:50%;border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;font-size:8px;">${emoji}</div>`,
-      iconSize: [16,16], iconAnchor: [8,8]
+      html: `<div style="width:18px;height:18px;background:${color};border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5);"></div>`,
+      iconSize: [18,18], iconAnchor: [9,9]
     });
-
-    const oPin = L.marker(originLatLon, { icon: mkIcon('#2e7d32','●') })
-      .addTo(map)
-      .bindPopup('<strong>Origem</strong><br>' + document.getElementById('originInp').value);
-    const dPin = L.marker(destLatLon, { icon: mkIcon('#c62828','●') })
-      .addTo(map)
-      .bindPopup('<strong>Destino</strong><br>' + document.getElementById('destInp').value);
+    const oPin = L.marker(originLatLon, { icon: mkIcon('#4caf50') })
+      .addTo(map).bindPopup('<strong>Origem</strong><br>' + document.getElementById('originInp').value);
+    const dPin = L.marker(destLatLon, { icon: mkIcon('#ef5350') })
+      .addTo(map).bindPopup('<strong>Destino</strong><br>' + document.getElementById('destInp').value);
     routePins = [oPin, dPin];
-
-    map.fitBounds(routePolyline.getBounds(), { padding: [45, 45] });
-
-    // Info
+    map.fitBounds(routePolyline.getBounds(), { padding: [45,45] });
     const d = route.distance, t = route.duration;
     document.getElementById('infoDist').textContent = d >= 1000 ? (d/1000).toFixed(1) + ' km' : Math.round(d) + ' m';
     document.getElementById('infoTime').textContent = fmtTime(t);
     document.getElementById('routeInfo').classList.add('show');
     document.getElementById('btnClearRoute').style.display = '';
-
   } catch (e) {
     setErr('routeErr', e.message);
   } finally {
@@ -667,24 +747,23 @@ function clearRoute(full = true) {
   }
 }
 
-function fmtTime(s) {
+const fmtTime = s => {
   const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
   return h > 0 ? `${h}h ${m}min` : `${m} min`;
-}
+};
 
 /* ══════════════════════════════════════════════
-   MUNICIPALITY TAB — IBGE
+   MUNICIPALITY TAB
 ══════════════════════════════════════════════ */
 async function loadMunis() {
   const listEl = document.getElementById('muniList');
   listEl.innerHTML = '<div class="ac-msg">Carregando municípios…</div>';
   setErr('muniErr', '');
   try {
-    const res  = await fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados/33/municipios');
+    const res = await fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados/33/municipios');
     if (!res.ok) throw new Error('Falha ao carregar lista');
-    const raw  = await res.json();
-    muniData   = raw.map(m => ({ id: m.id, nome: m.nome }))
-                    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt'));
+    const raw = await res.json();
+    muniData = raw.map(m => ({ id: m.id, nome: m.nome })).sort((a,b) => a.nome.localeCompare(b.nome, 'pt'));
     renderMuniList(muniData);
   } catch (e) {
     listEl.innerHTML = '';
@@ -695,17 +774,15 @@ async function loadMunis() {
 function renderMuniList(list) {
   const listEl = document.getElementById('muniList');
   if (!list.length) { listEl.innerHTML = '<div class="ac-msg">Nenhum município encontrado.</div>'; return; }
-
   listEl.innerHTML = list.map(m => {
     const color   = muniColors[m.id] || '#3498db';
     const checked = !!muniLayers[m.id];
     return `<div class="muni-item ${checked ? 'on' : ''}" id="mi-${m.id}">
       <input type="checkbox" class="muni-cb" id="cb-${m.id}" ${checked ? 'checked' : ''}
-             onchange="toggleMuni(${m.id},'${escHtml(m.nome)}',this)" />
+             onchange="toggleMuni(${m.id},'${escAttr(m.nome)}',this)" />
       <label class="muni-nm" for="cb-${m.id}">${m.nome}</label>
       <span class="muni-spin" id="sp-${m.id}"></span>
       <input type="color" class="muni-clr" value="${color}"
-             style="background:${color}"
              title="Cor de ${m.nome}"
              onchange="changeMuniColor(${m.id},this.value)" />
     </div>`;
@@ -720,55 +797,40 @@ function filterMunis() {
 async function toggleMuni(id, nome, cb) {
   const item = document.getElementById(`mi-${id}`);
   const sp   = document.getElementById(`sp-${id}`);
-
   if (!cb.checked) {
     if (muniLayers[id]) { map.removeLayer(muniLayers[id]); delete muniLayers[id]; }
-    item.classList.remove('on');
-    return;
+    item.classList.remove('on'); return;
   }
-
-  cb.disabled = true;
-  sp.classList.add('a');
-  item.classList.add('on');
-
+  cb.disabled = true; sp.classList.add('a'); item.classList.add('on');
   if (!muniColors[id]) {
     muniColors[id] = pickColor();
     const clrInp = item.querySelector('.muni-clr');
-    if (clrInp) { clrInp.value = muniColors[id]; clrInp.style.background = muniColors[id]; }
+    if (clrInp) clrInp.value = muniColors[id];
   }
-
   try {
-    const url  = `https://servicodados.ibge.gov.br/api/v3/malhas/municipios/${id}?formato=application/vnd.geo+json`;
-    const res  = await fetch(url);
+    const url = `https://servicodados.ibge.gov.br/api/v3/malhas/municipios/${id}?formato=application/vnd.geo+json`;
+    const res = await fetch(url);
     if (!res.ok) throw new Error('Falha ao obter fronteira');
-    const geo  = await res.json();
-    const c    = muniColors[id];
-
+    const geo = await res.json();
+    const c   = muniColors[id];
     const layer = L.geoJSON(geo, {
       style: { color: c, weight: 2.5, opacity: 1, fillColor: c, fillOpacity: .22 }
-    })
-    .bindTooltip(nome, { sticky: true, className: 'muni-tip', direction: 'center' })
-    .on('click', () => map.fitBounds(layer.getBounds(), { padding: [30,30], maxZoom: 13 }))
-    .addTo(map);
-
+    }).bindTooltip(nome, { sticky: true, className: 'muni-tip', direction: 'center' })
+      .on('click', () => map.fitBounds(layer.getBounds(), { padding: [30,30], maxZoom: 13 }))
+      .addTo(map);
     muniLayers[id] = layer;
     map.fitBounds(layer.getBounds(), { padding: [30,30], maxZoom: 13 });
-
   } catch (e) {
-    cb.checked = false;
-    item.classList.remove('on');
+    cb.checked = false; item.classList.remove('on');
     setErr('muniErr', `Erro ao carregar ${nome}: ${e.message}`);
   } finally {
-    cb.disabled = false;
-    sp.classList.remove('a');
+    cb.disabled = false; sp.classList.remove('a');
   }
 }
 
 function changeMuniColor(id, color) {
   muniColors[id] = color;
-  if (muniLayers[id]) {
-    muniLayers[id].setStyle({ color, fillColor: color });
-  }
+  if (muniLayers[id]) muniLayers[id].setStyle({ color, fillColor: color });
 }
 
 function markAllVisible() {
@@ -782,12 +844,267 @@ function markAllVisible() {
 function clearAllMunis() {
   Object.entries(muniLayers).forEach(([id, layer]) => {
     map.removeLayer(layer);
-    const cb   = document.getElementById(`cb-${id}`);
+    const cb = document.getElementById(`cb-${id}`);
     const item = document.getElementById(`mi-${id}`);
     if (cb)   cb.checked = false;
     if (item) item.classList.remove('on');
   });
   muniLayers = {};
+}
+
+/* ══════════════════════════════════════════════
+   KML — IMPORT, PARSE, DISPLAY, SAVE
+══════════════════════════════════════════════ */
+const KML_STORAGE_KEY = 'detro_rj_kmls_v1';
+
+/* ── Inline KML→GeoJSON parser ── */
+function kmlToGeoJSON(kmlText) {
+  const xml = new DOMParser().parseFromString(kmlText, 'text/xml');
+  const err = xml.getElementsByTagName('parsererror');
+  if (err.length) throw new Error('KML inválido (erro de XML)');
+
+  const parseCoords = txt => txt.trim().split(/\s+/)
+    .map(p => p.split(',').map(parseFloat))
+    .filter(c => c.length >= 2 && !isNaN(c[0]) && !isNaN(c[1]))
+    .map(c => [c[0], c[1]]);
+
+  function geomsFromContainer(node) {
+    const geoms = [];
+    Array.from(node.getElementsByTagName('Point')).forEach(pt => {
+      const c = pt.getElementsByTagName('coordinates')[0];
+      if (!c) return;
+      const co = parseCoords(c.textContent);
+      if (co.length) geoms.push({ type: 'Point', coordinates: co[0] });
+    });
+    Array.from(node.getElementsByTagName('LineString')).forEach(ls => {
+      const c = ls.getElementsByTagName('coordinates')[0];
+      if (!c) return;
+      const co = parseCoords(c.textContent);
+      if (co.length >= 2) geoms.push({ type: 'LineString', coordinates: co });
+    });
+    Array.from(node.getElementsByTagName('Polygon')).forEach(pg => {
+      const rings = [];
+      const outer = pg.getElementsByTagName('outerBoundaryIs')[0];
+      if (outer) {
+        const c = outer.getElementsByTagName('coordinates')[0];
+        if (c) {
+          const co = parseCoords(c.textContent);
+          if (co.length >= 3) rings.push(co);
+        }
+      }
+      Array.from(pg.getElementsByTagName('innerBoundaryIs')).forEach(inner => {
+        const c = inner.getElementsByTagName('coordinates')[0];
+        if (c) {
+          const co = parseCoords(c.textContent);
+          if (co.length >= 3) rings.push(co);
+        }
+      });
+      if (rings.length) geoms.push({ type: 'Polygon', coordinates: rings });
+    });
+    return geoms;
+  }
+
+  const features = [];
+  const placemarks = xml.getElementsByTagName('Placemark');
+  for (const pm of placemarks) {
+    const name = pm.getElementsByTagName('name')[0]?.textContent?.trim() || '';
+    const desc = pm.getElementsByTagName('description')[0]?.textContent?.trim() || '';
+    const geoms = geomsFromContainer(pm);
+    if (!geoms.length) continue;
+    const geometry = geoms.length === 1 ? geoms[0] : { type: 'GeometryCollection', geometries: geoms };
+    features.push({ type: 'Feature', properties: { name, description: desc }, geometry });
+  }
+
+  if (!features.length) throw new Error('KML não contém Placemarks válidos');
+  return { type: 'FeatureCollection', features };
+}
+
+/* ── File handling ── */
+const kmlFileInput = document.getElementById('kmlFileInput');
+const kmlDropZone  = document.getElementById('kmlDropZone');
+
+kmlFileInput.addEventListener('change', e => handleKMLFiles(e.target.files));
+
+['dragenter','dragover'].forEach(ev => kmlDropZone.addEventListener(ev, e => {
+  e.preventDefault(); e.stopPropagation();
+  kmlDropZone.classList.add('dragover');
+}));
+['dragleave','drop'].forEach(ev => kmlDropZone.addEventListener(ev, e => {
+  e.preventDefault(); e.stopPropagation();
+  kmlDropZone.classList.remove('dragover');
+}));
+kmlDropZone.addEventListener('drop', e => {
+  if (e.dataTransfer?.files) handleKMLFiles(e.dataTransfer.files);
+});
+
+async function handleKMLFiles(files) {
+  setErr('kmlErr', '');
+  const list = Array.from(files).filter(f => /\.kml$/i.test(f.name) || f.type.includes('kml') || f.type.includes('xml'));
+  if (!list.length) { setErr('kmlErr', 'Selecione arquivos .kml.'); return; }
+
+  for (const file of list) {
+    try {
+      const text = await file.text();
+      // validate parsing
+      kmlToGeoJSON(text);
+      const kml = {
+        id: 'k_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        name: file.name.replace(/\.kml$/i, ''),
+        raw: text,
+        color: pickColor(),
+        visible: true
+      };
+      kmls.push(kml);
+      addKMLLayer(kml);
+    } catch (e) {
+      setErr('kmlErr', `${file.name}: ${e.message}`);
+    }
+  }
+  saveKMLsToSession();
+  renderKMLList();
+  kmlFileInput.value = '';
+}
+
+function addKMLLayer(kml) {
+  try {
+    const geo   = kmlToGeoJSON(kml.raw);
+    const layer = L.geoJSON(geo, {
+      style: { color: kml.color, weight: 3, opacity: .95, fillColor: kml.color, fillOpacity: .28 },
+      pointToLayer: (f, latlng) => L.circleMarker(latlng, {
+        radius: 6, color: '#fff', weight: 2, fillColor: kml.color, fillOpacity: 1
+      }),
+      onEachFeature: (f, lyr) => {
+        const n = f.properties?.name;
+        const d = f.properties?.description;
+        if (n || d) {
+          const html = `<strong>${n || ''}</strong>` + (d ? `<br><small>${d}</small>` : '');
+          lyr.bindPopup(html, { maxWidth: 280 });
+        }
+      }
+    }).bindTooltip(kml.name, { sticky: true, className: 'kml-tip' });
+    if (kml.visible) layer.addTo(map);
+    kmlLayers[kml.id] = layer;
+  } catch (e) {
+    console.error('KML parse error', kml.name, e);
+  }
+}
+
+function renderKMLList() {
+  const listEl = document.getElementById('kmlList');
+  if (!kmls.length) {
+    listEl.innerHTML = '<div class="kml-empty"><span class="ico">📭</span>Nenhum KML importado.</div>';
+    return;
+  }
+  listEl.innerHTML = kmls.map(k => `
+    <div class="kml-item ${k.visible ? 'on' : ''}" id="ki-${k.id}">
+      <input type="checkbox" class="muni-cb" ${k.visible ? 'checked' : ''}
+             onchange="toggleKML('${k.id}', this.checked)" />
+      <label class="kml-nm" title="${escAttr(k.name)}" onclick="fitKML('${k.id}')">${escHtml(k.name)}</label>
+      <button class="icon-btn" title="Centralizar" onclick="fitKML('${k.id}')">🎯</button>
+      <input type="color" class="kml-clr" value="${k.color}"
+             title="Cor"
+             onchange="changeKMLColor('${k.id}', this.value)" />
+      <button class="icon-btn danger" title="Remover" onclick="deleteKML('${k.id}')">✕</button>
+    </div>
+  `).join('');
+}
+
+function toggleKML(id, visible) {
+  const k = kmls.find(x => x.id === id);
+  if (!k) return;
+  k.visible = visible;
+  const layer = kmlLayers[id];
+  if (!layer) return;
+  if (visible) layer.addTo(map);
+  else map.removeLayer(layer);
+  document.getElementById(`ki-${id}`)?.classList.toggle('on', visible);
+  saveKMLsToSession();
+}
+
+function changeKMLColor(id, color) {
+  const k = kmls.find(x => x.id === id);
+  if (!k) return;
+  k.color = color;
+  const layer = kmlLayers[id];
+  if (layer) {
+    layer.setStyle({ color, fillColor: color });
+    layer.eachLayer(l => {
+      if (l.setStyle && l instanceof L.CircleMarker) l.setStyle({ fillColor: color });
+    });
+  }
+  saveKMLsToSession();
+}
+
+function fitKML(id) {
+  const layer = kmlLayers[id];
+  if (!layer) return;
+  const b = layer.getBounds();
+  if (b.isValid()) map.fitBounds(b, { padding: [40,40], maxZoom: 16 });
+}
+
+function deleteKML(id) {
+  const k = kmls.find(x => x.id === id);
+  if (!k) return;
+  if (!confirm(`Remover "${k.name}" da sessão?`)) return;
+  if (kmlLayers[id]) { map.removeLayer(kmlLayers[id]); delete kmlLayers[id]; }
+  kmls = kmls.filter(x => x.id !== id);
+  saveKMLsToSession();
+  renderKMLList();
+}
+
+function showAllKMLs() {
+  kmls.forEach(k => {
+    if (!k.visible) {
+      k.visible = true;
+      const layer = kmlLayers[k.id];
+      if (layer && !map.hasLayer(layer)) layer.addTo(map);
+    }
+  });
+  renderKMLList();
+  saveKMLsToSession();
+  // Fit to all
+  const allBounds = L.latLngBounds([]);
+  Object.values(kmlLayers).forEach(l => {
+    const b = l.getBounds();
+    if (b.isValid()) allBounds.extend(b);
+  });
+  if (allBounds.isValid()) map.fitBounds(allBounds, { padding: [40,40] });
+}
+
+function clearAllKMLs() {
+  if (!kmls.length) return;
+  if (!confirm('Remover TODOS os KMLs da sessão?')) return;
+  Object.values(kmlLayers).forEach(l => map.removeLayer(l));
+  kmlLayers = {};
+  kmls = [];
+  saveKMLsToSession();
+  renderKMLList();
+}
+
+/* ── Session persistence ── */
+function saveKMLsToSession() {
+  try {
+    const lean = kmls.map(k => ({ id: k.id, name: k.name, raw: k.raw, color: k.color, visible: k.visible }));
+    sessionStorage.setItem(KML_STORAGE_KEY, JSON.stringify(lean));
+  } catch (e) {
+    setErr('kmlErr', 'Não foi possível salvar na sessão (limite excedido).');
+  }
+}
+
+function loadKMLsFromSession() {
+  try {
+    const raw = sessionStorage.getItem(KML_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    parsed.forEach(k => {
+      kmls.push(k);
+      addKMLLayer(k);
+    });
+    renderKMLList();
+  } catch (e) {
+    console.warn('Falha ao restaurar KMLs:', e);
+  }
 }
 
 /* ══════════════════════════════════════════════
@@ -799,10 +1116,13 @@ function setErr(id, msg) {
   el.textContent = msg;
   el.classList.toggle('show', !!msg);
 }
+const escAttr = s => String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+const escHtml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-function escHtml(s) {
-  return s.replace(/'/g, "\\'");
-}
+/* ══════════════════════════════════════════════
+   INIT — restore session KMLs
+══════════════════════════════════════════════ */
+loadKMLsFromSession();
 </script>
 </body>
 </html>
