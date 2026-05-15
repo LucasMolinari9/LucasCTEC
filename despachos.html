@@ -1,0 +1,1631 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a5c2a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ORION" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>ORION — Despachos DETRO-RJ</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231a5c2a'/%3E%3Ctext x='32' y='42' font-family='Arial' font-size='28' font-weight='900' text-anchor='middle' fill='%23c9a227'%3EOR%3C/text%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --verde: #1a5c2a;
+      --verde-claro: #2e7d42;
+      --verde-acento: #43a047;
+      --dourado: #c9a227;
+      --azul: #1565c0;
+      --bg: #f4f6f8;
+      --bg-card: #ffffff;
+      --bg-soft: #f8faf9;
+      --border: #d8dee4;
+      --text: #1c2526;
+      --text-muted: #5b6770;
+      --danger: #c62828;
+      --warning: #e65100;
+      --success: #2e7d32;
+      --shadow: 0 2px 6px rgba(0,0,0,.07);
+      --radius: 10px;
+      --tap: 44px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { overscroll-behavior-y: contain; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: calc(86px + env(safe-area-inset-bottom));
+      font-size: 16px;
+      line-height: 1.45;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--verde);
+      color: #fff;
+      padding: calc(env(safe-area-inset-top) + 12px) 16px 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .header-row { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; }
+    .logo {
+      width: 42px; height: 42px;
+      background: var(--dourado);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 16px; color: var(--verde);
+      flex-shrink: 0; letter-spacing: -.5px;
+    }
+    .header-title h1 { font-size: 1.05rem; font-weight: 700; line-height: 1.1; }
+    .header-title p { font-size: .72rem; opacity: .8; margin-top: 2px; }
+    .gold-bar { height: 3px; background: var(--dourado); margin: 0 -16px; }
+
+    /* ── TABS ── */
+    .tabs {
+      display: flex;
+      background: var(--verde);
+      border-top: 1px solid rgba(255,255,255,.1);
+      margin: 0 -16px;
+      padding: 0 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      flex: 1 0 auto;
+      background: none;
+      border: none;
+      color: rgba(255,255,255,.7);
+      padding: 12px 14px;
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      white-space: nowrap;
+      min-height: var(--tap);
+      transition: color .15s, border-color .15s;
+    }
+    .tab.active { color: #fff; border-bottom-color: var(--dourado); }
+
+    /* ── MAIN ── */
+    main { padding: 14px 14px 0; max-width: 720px; margin: 0 auto; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .card-summary {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px;
+      cursor: pointer;
+      user-select: none;
+      min-height: var(--tap);
+      list-style: none;
+    }
+    .card-summary::-webkit-details-marker { display: none; }
+    .card-summary .title {
+      font-weight: 700;
+      color: var(--verde);
+      font-size: .98rem;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .card-summary .title .num {
+      width: 26px; height: 26px;
+      background: var(--verde);
+      color: #fff;
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .82rem; font-weight: 800;
+    }
+    .card-summary .chev {
+      transition: transform .2s;
+      color: var(--text-muted);
+      font-size: 1.1rem;
+    }
+    details[open] .chev { transform: rotate(180deg); }
+    .card-body {
+      padding: 0 16px 16px;
+      border-top: 1px solid var(--border);
+      padding-top: 14px;
+    }
+
+    /* ── FORM ── */
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block;
+      font-size: .78rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      margin-bottom: 6px;
+    }
+    .field .hint {
+      font-size: .76rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+    input[type="text"], input[type="number"], input[type="password"], select, textarea {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 16px;
+      font-family: inherit;
+      background: var(--bg-card);
+      color: var(--text);
+      min-height: var(--tap);
+      -webkit-appearance: none;
+    }
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+      line-height: 1.5;
+      font-family: 'SFMono-Regular', Consolas, 'Courier New', monospace;
+      font-size: 14px;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--verde-claro);
+      box-shadow: 0 0 0 3px rgba(46,125,66,.12);
+    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    @media (max-width: 380px) { .grid-3 { grid-template-columns: 1fr 1fr; } }
+
+    /* segmented (radio group) */
+    .segmented {
+      display: flex;
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 3px;
+    }
+    .segmented input { display: none; }
+    .segmented label {
+      flex: 1;
+      text-align: center;
+      padding: 9px 4px;
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-radius: 6px;
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: 0;
+      margin: 0;
+      min-height: 38px;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s, color .15s;
+    }
+    .segmented input:checked + label {
+      background: var(--verde);
+      color: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,.15);
+    }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px 18px;
+      border-radius: 8px;
+      font-size: .92rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      min-height: var(--tap);
+      font-family: inherit;
+    }
+    .btn-primary { background: var(--verde); color: #fff; }
+    .btn-primary:active { background: var(--verde-claro); transform: scale(.98); }
+    .btn-primary:disabled { background: #9e9e9e; opacity: .7; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--verde);
+      border: 1px solid var(--verde);
+    }
+    .btn-ghost:active { background: rgba(26,92,42,.08); }
+    .btn-soft {
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn-row > .btn { flex: 1; min-width: 120px; }
+
+    /* ── ACTION BAR ── */
+    .action-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(255,255,255,.96);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-top: 1px solid var(--border);
+      padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+      z-index: 100;
+      box-shadow: 0 -2px 10px rgba(0,0,0,.08);
+    }
+    .action-bar .btn { width: 100%; padding: 14px; font-size: 1rem; }
+
+    /* ── METRICS ── */
+    .metrics-card {
+      background: linear-gradient(135deg, #fff8e1 0%, #fffde7 100%);
+      border: 1px solid var(--dourado);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 12px;
+      display: none;
+    }
+    .metrics-card.show { display: block; }
+    .metrics-title {
+      font-size: .78rem;
+      font-weight: 700;
+      color: #8d6e00;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 10px;
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .metric {
+      background: rgba(255,255,255,.7);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    .metric-label { font-size: .68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .3px; }
+    .metric-value { font-size: 1.05rem; font-weight: 700; color: var(--text); margin-top: 2px; }
+    .metric-value.warn { color: var(--danger); }
+    .metric-value.ok { color: var(--success); }
+    .metric-sub { font-size: .72rem; color: var(--text-muted); margin-top: 2px; }
+
+    /* ── OUTPUT ── */
+    .output-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+      display: none;
+      box-shadow: var(--shadow);
+    }
+    .output-card.show { display: block; }
+    .output-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .output-title {
+      font-size: .92rem;
+      font-weight: 700;
+      color: var(--verde);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+    .badge-tipo1 { background: #ffebee; color: var(--danger); }
+    .badge-tipo2 { background: #fff3e0; color: var(--warning); }
+    .badge-tipo3 { background: #fff3e0; color: var(--warning); }
+    .badge-tipo4 { background: #e8f5e9; color: var(--success); }
+    .badge-tipo5 { background: #ffebee; color: var(--danger); }
+    .badge-tipo6 { background: #e8f5e9; color: var(--success); }
+    .output-actions { display: flex; gap: 6px; }
+    .output-actions .btn {
+      padding: 7px 12px;
+      font-size: .8rem;
+      min-height: 36px;
+    }
+    .output-body { padding: 14px; }
+    #despachoOutput {
+      width: 100%;
+      min-height: 360px;
+      font-family: 'Times New Roman', Georgia, serif;
+      font-size: 14px;
+      line-height: 1.55;
+      padding: 14px;
+      background: #fafbfc;
+    }
+
+    /* ── ERROR / TOAST ── */
+    .error {
+      background: #ffebee;
+      color: var(--danger);
+      border: 1px solid #ffcdd2;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin: 10px 0;
+      font-size: .86rem;
+      display: none;
+    }
+    .error.show { display: block; }
+    .toast {
+      position: fixed;
+      bottom: calc(96px + env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--text);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 24px;
+      font-size: .85rem;
+      opacity: 0;
+      transition: opacity .25s, transform .25s;
+      pointer-events: none;
+      z-index: 200;
+      box-shadow: 0 4px 12px rgba(0,0,0,.25);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ── LOADING ── */
+    .loading {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 28px 16px;
+      text-align: center;
+    }
+    .loading.show { display: flex; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #e0e0e0;
+      border-top-color: var(--verde);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: .88rem; color: var(--text-muted); }
+    .loading-step { font-size: .78rem; color: var(--text-muted); margin-top: 4px; }
+
+    /* ── HORARIOS GROUP ── */
+    .horario-group {
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .horario-group .label-day {
+      font-weight: 700;
+      font-size: .82rem;
+      color: var(--verde);
+      margin-bottom: 8px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .horario-group textarea {
+      min-height: 60px;
+      font-size: 13px;
+    }
+
+    /* ── INFO BANNER ── */
+    .info-banner {
+      background: #e3f2fd;
+      border: 1px solid #90caf9;
+      color: #0d47a1;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: .82rem;
+      margin-bottom: 12px;
+      line-height: 1.45;
+    }
+    .info-banner strong { color: #0d47a1; }
+
+    /* ── SUMMARY (Texto Livre) ── */
+    .free-textarea {
+      min-height: 280px;
+      font-size: 14px;
+    }
+
+    /* ── CHIP ── */
+    .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .chip {
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 5px 10px;
+      border-radius: 14px;
+      font-size: .76rem;
+      cursor: pointer;
+      min-height: 32px;
+      display: inline-flex; align-items: center;
+    }
+    .chip:active { background: var(--verde); color: #fff; border-color: var(--verde); }
+
+    /* ── FOOTER NOTE ── */
+    .footer-note {
+      text-align: center;
+      font-size: .72rem;
+      color: var(--text-muted);
+      padding: 8px 0 16px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-row">
+    <div class="logo">OR</div>
+    <div class="header-title">
+      <h1>ORION — Despachos</h1>
+      <p>DETRO-RJ &middot; Análise de Programação Cadastrada</p>
+    </div>
+  </div>
+  <div class="gold-bar"></div>
+  <div class="tabs">
+    <button class="tab active" data-tab="estruturado">Formulário</button>
+    <button class="tab" data-tab="livre">Texto Livre</button>
+    <button class="tab" data-tab="config">Configurações</button>
+  </div>
+</header>
+
+<main>
+
+<!-- ─────────── ESTRUTURADO ─────────── -->
+<section class="tab-content active" id="tab-estruturado">
+
+  <div class="info-banner">
+    Preencha os campos com os dados do PDF cadastrado, da proposta da empresa e da planilha BOM. Os cálculos (viagens mensais, índices, frota mínima) são feitos automaticamente e enviados à IA junto com o Manual ORION.
+  </div>
+
+  <details class="card" open>
+    <summary class="card-summary">
+      <span class="title"><span class="num">1</span> Empresa e Processo</span>
+      <span class="chev">&#9662;</span>
+    </summary>
+    <div class="card-body">
+      <div class="field">
+        <label for="empresa">Nome da empresa</label>
+        <input type="text" id="empresa" placeholder="Ex.: Evanil Transportes e Turismo Ltda." autocomplete="off" />
+        <p class="hint">Sem caixa-alta. Se houver dúvida, deixe como está no cadastro.</p>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label for="rj">Identificação RJ</label>
+          <input type="text" id="rj" placeholder="RJ-132" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="processo">Nº do processo</label>
+          <input type="text" id="processo" placeholder="(opcional)" autocomplete="off" />
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary class="card-summary">
+      <span class="title"><span class="num">2</span> Linha</span>
+      <span class="chev">&#9662;</span>
+    </summary>
+    <div class="card-body">
+      <div class="grid-2">
+        <div class="field">
+          <label for="numLinha">Nº da linha</label>
+          <input type="text" id="numLinha" placeholder="Ex.: 1956B" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="codigo">Código (sem traços)</label>
+          <input type="text" id="codigo" placeholder="Ex.: 132004001" autocomplete="off" inputmode="numeric" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="nomeLigacao">Nome da ligação</label>
+        <input type="text" id="nomeLigacao" placeholder="Ex.: Cabuçu - Castelo" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label for="via">Via</label>
+        <input type="text" id="via" placeholder="Ex.: Plínio Casado" autocomplete="off" />
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label for="origemA">Origem A (sentido A&rarr;B)</label>
+          <input type="text" id="origemA" placeholder="Ex.: Cabuçu" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="origemB">Origem B (sentido B&rarr;A)</label>
+          <input type="text" id="origemB" placeholder="Ex.: Castelo" autocomplete="off" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Possui seção tarifária?</label>
+        <div class="segmented">
+          <input type="radio" name="temSecao" id="secao-nao" value="nao" checked />
+          <label for="secao-nao">Não</label>
+          <input type="radio" name="temSecao" id="secao-sim" value="sim" />
+          <label for="secao-sim">Sim</label>
+        </div>
+        <p class="hint">Se sim, descreva as seções no campo "Médias do BOM" e indique a ordem do itinerário.</p>
+      </div>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary class="card-summary">
+      <span class="title"><span class="num">3</span> Veículo</span>
+      <span class="chev">&#9662;</span>
+    </summary>
+    <div class="card-body">
+      <div class="field">
+        <label>Característica (anexo do cadastro)</label>
+        <div class="segmented">
+          <input type="radio" name="caract" id="c-AC" value="AC" checked />
+          <label for="c-AC">AC</label>
+          <input type="radio" name="caract" id="c-A" value="A" />
+          <label for="c-A">A</label>
+          <input type="radio" name="caract" id="c-SAC" value="SAC" />
+          <label for="c-SAC">SAC</label>
+          <input type="radio" name="caract" id="c-SA" value="SA" />
+          <label for="c-SA">SA</label>
+        </div>
+        <p class="hint">AC = rodoviário c/ AC &middot; A = rodoviário &middot; SAC = urbano c/ AC &middot; SA = urbano</p>
+      </div>
+      <div class="field">
+        <label for="capacidade">Capacidade (assentos)</label>
+        <input type="number" id="capacidade" placeholder="Ex.: 46" inputmode="numeric" min="1" />
+      </div>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary class="card-summary">
+      <span class="title"><span class="num">4</span> Programação Cadastrada</span>
+      <span class="chev">&#9662;</span>
+    </summary>
+    <div class="card-body">
+      <p class="hint" style="margin-bottom:10px;">Cole os horários (qualquer formato — 05:05, 05h05, separados por vírgula ou linha). O sistema converte para o padrão ORION.</p>
+
+      <h4 style="font-size:.84rem; color:var(--verde); margin: 10px 0 8px;">Sentido A &rarr; B (de Origem A)</h4>
+      <div class="horario-group">
+        <div class="label-day">Dias úteis</div>
+        <textarea id="cadAB-du" placeholder="Ex.: 05:30, 06:15, 07:00, 08:30..."></textarea>
+      </div>
+      <div class="horario-group">
+        <div class="label-day">Sábado</div>
+        <textarea id="cadAB-sab" placeholder="(opcional)"></textarea>
+      </div>
+      <div class="horario-group">
+        <div class="label-day">Domingo / feriado</div>
+        <textarea id="cadAB-dom" placeholder="(opcional)"></textarea>
+      </div>
+
+      <h4 style="font-size:.84rem; color:var(--verde); margin: 16px 0 8px;">Sentido B &rarr; A (de Origem B)</h4>
+      <div class="horario-group">
+        <div class="label-day">Dias úteis</div>
+        <textarea id="cadBA-du" placeholder="Ex.: 06:00, 07:30, 09:00..."></textarea>
+      </div>
+      <div class="horario-group">
+        <div class="label-day">Sábado</div>
+        <textarea id="cadBA-sab" placeholder="(opcional)"></textarea>
+      </div>
+      <div class="horario-group">
+        <div class="label-day">Domingo / feriado</div>
+        <textarea id="cadBA-dom" placeholder="(opcional)"></textarea>
+      </div>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary class="card-summary">
+      <span class="title"><span class="num">5</span> Programação Proposta</span>
+      <span class="chev">&#9662;</span>
+    </summary>
+    <div class="card-body">
+      <p class="hint" style="margin-bottom:10px;">Apenas os horários da <strong>1ª página</strong> do PDF da proposta.</p>
+
+      <h4 style="font-size:.84rem; color:var(--verde); margin: 10px 0 8px;">Sentido A &rarr; B</h4>
+      <div class="horario-group">
+        <div class="label-day">Dias úteis</div>
+        <textarea id="propAB-du" placeholder=""></textarea>
+      </div>
+      <div class="horario-group">
+        <div class="label-day">Sábado</div>
+        <textarea id="propAB-sab" placeholder=""></textarea>
+      </div>
+      <div class="horario-group">
+        <div class="label-day">Domingo / feriado</div>
+        <textarea id="propAB-dom" placeholder=""></textarea>
+      </div>
+
+      <h4 style="font-size:.84rem; color:var(--verde); margin: 16px 0 8px;">Sentido B &rarr; A</h4>
+      <div class="horario-group">
+        <div class="label-day">Dias úteis</div>
+        <textarea id="propBA-du" placeholder=""></textarea>
+      </div>
+      <div class="horario-group">
+        <div class="label-day">Sábado</div>
+        <textarea id="propBA-sab" placeholder=""></textarea>
+      </div>
+      <div class="horario-group">
+        <div class="label-day">Domingo / feriado</div>
+        <textarea id="propBA-dom" placeholder=""></textarea>
+      </div>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary class="card-summary">
+      <span class="title"><span class="num">6</span> BOM &mdash; Médias</span>
+      <span class="chev">&#9662;</span>
+    </summary>
+    <div class="card-body">
+      <div class="grid-2">
+        <div class="field">
+          <label for="mesIni">Mês inicial</label>
+          <input type="text" id="mesIni" placeholder="Ex.: jan/2026" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="mesFim">Mês final</label>
+          <input type="text" id="mesFim" placeholder="Ex.: abr/2026" autocomplete="off" />
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label for="mediaAB">Média Pass. A&rarr;B</label>
+          <input type="number" id="mediaAB" placeholder="Ex.: 3120" inputmode="numeric" min="0" />
+        </div>
+        <div class="field">
+          <label for="mediaBA">Média Pass. B&rarr;A</label>
+          <input type="number" id="mediaBA" placeholder="Ex.: 2980" inputmode="numeric" min="0" />
+        </div>
+      </div>
+      <div class="field" id="secoesField" style="display:none;">
+        <label for="dadosSecoes">Seções tarifárias (descreva)</label>
+        <textarea id="dadosSecoes" placeholder="Liste cada seção, ordem geográfica e médias A-B / B-A.
+
+Ex.:
+Seção 01 Cabuçu - Posto: A-B = 1240 | B-A = 1190
+Seção 02 Posto - Castelo: A-B = 980 | B-A = 1010
+
+Ordem do itinerário (A→B): Cabuçu → Posto → Centro → Castelo"></textarea>
+      </div>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary class="card-summary">
+      <span class="title"><span class="num">7</span> Frota e Ciclo</span>
+      <span class="chev">&#9662;</span>
+    </summary>
+    <div class="card-body">
+      <div class="grid-2">
+        <div class="field">
+          <label for="ciclo">Ciclo (min)</label>
+          <input type="number" id="ciclo" placeholder="Ex.: 180" inputmode="numeric" min="1" />
+          <p class="hint">Ida + volta + intervalos de terminal. Confirme com o cadastro.</p>
+        </div>
+        <div class="field">
+          <label for="intervaloMin">Menor intervalo (min)</label>
+          <input type="number" id="intervaloMin" placeholder="Auto" inputmode="numeric" min="1" />
+          <p class="hint">Deixe vazio para detectar automaticamente.</p>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <div class="error" id="errorBox"></div>
+
+  <!-- métricas computadas -->
+  <div class="metrics-card" id="metricsCard">
+    <div class="metrics-title">Cálculos automáticos</div>
+    <div class="metrics-grid" id="metricsGrid"></div>
+  </div>
+
+  <div class="loading" id="loadingBox">
+    <div class="spinner"></div>
+    <div class="loading-text">Gerando despacho com a IA&hellip;</div>
+    <div class="loading-step" id="loadingStep">Enviando dados ao modelo NVIDIA</div>
+  </div>
+
+  <!-- output -->
+  <div class="output-card" id="outputCard">
+    <div class="output-header">
+      <div class="output-title">
+        <span>Despacho gerado</span>
+        <span class="badge" id="tipoBadge"></span>
+      </div>
+      <div class="output-actions">
+        <button class="btn btn-soft" onclick="copiarDespacho()">Copiar</button>
+        <button class="btn btn-soft" onclick="compartilhar()">Compartilhar</button>
+      </div>
+    </div>
+    <div class="output-body">
+      <textarea id="despachoOutput" placeholder="O despacho aparecerá aqui."></textarea>
+    </div>
+  </div>
+
+</section>
+
+<!-- ─────────── TEXTO LIVRE ─────────── -->
+<section class="tab-content" id="tab-livre">
+  <div class="info-banner">
+    Cole abaixo qualquer combinação de dados — texto do PDF cadastrado, proposta, recortes do BOM, observações. A IA segue o Manual ORION para identificar o tipo de despacho, fazer os cálculos e redigir.
+  </div>
+  <div class="card">
+    <div class="card-body" style="border-top:none; padding-top:16px;">
+      <div class="field">
+        <label for="livreTexto">Dados do requerimento</label>
+        <textarea id="livreTexto" class="free-textarea" placeholder="Cole aqui:
+- Empresa e RJ-XXX
+- Linha (número, nome, código, via, característica)
+- Programação cadastrada (por dia e sentido)
+- Programação proposta
+- Médias do BOM (últimos 4 meses)
+- Capacidade
+- Ciclo (se conhecido)
+- Observações"></textarea>
+      </div>
+      <div class="field">
+        <label for="livreInstr">Instrução adicional (opcional)</label>
+        <input type="text" id="livreInstr" placeholder="Ex.: gerar no formato de chat, ou só calcular índices" />
+      </div>
+    </div>
+  </div>
+
+  <div class="error" id="errorBoxLivre"></div>
+  <div class="loading" id="loadingBoxLivre">
+    <div class="spinner"></div>
+    <div class="loading-text">Gerando despacho com a IA&hellip;</div>
+  </div>
+
+  <div class="output-card" id="outputCardLivre">
+    <div class="output-header">
+      <div class="output-title"><span>Despacho gerado</span></div>
+      <div class="output-actions">
+        <button class="btn btn-soft" onclick="copiarDespachoLivre()">Copiar</button>
+        <button class="btn btn-soft" onclick="compartilharLivre()">Compartilhar</button>
+      </div>
+    </div>
+    <div class="output-body">
+      <textarea id="despachoOutputLivre"></textarea>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────── CONFIG ─────────── -->
+<section class="tab-content" id="tab-config">
+  <div class="card">
+    <div class="card-body" style="border-top:none; padding-top:16px;">
+      <div class="field">
+        <label for="apiKey">Chave da API NVIDIA</label>
+        <input type="password" id="apiKey" placeholder="nvapi-..." autocomplete="off" />
+        <p class="hint">Obtenha em <strong>build.nvidia.com</strong>. A chave fica salva apenas no seu dispositivo (localStorage).</p>
+      </div>
+      <div class="field">
+        <label for="modelo">Modelo</label>
+        <select id="modelo">
+          <option value="meta/llama-3.3-70b-instruct">meta/llama-3.3-70b-instruct (recomendado)</option>
+          <option value="nvidia/llama-3.1-nemotron-70b-instruct">nvidia/llama-3.1-nemotron-70b-instruct</option>
+          <option value="meta/llama-3.1-405b-instruct">meta/llama-3.1-405b-instruct (mais lento, mais preciso)</option>
+          <option value="deepseek-ai/deepseek-r1">deepseek-ai/deepseek-r1 (reasoning)</option>
+          <option value="qwen/qwen2.5-72b-instruct">qwen/qwen2.5-72b-instruct</option>
+          <option value="mistralai/mixtral-8x22b-instruct-v0.1">mistralai/mixtral-8x22b-instruct-v0.1</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="endpoint">Endpoint (avançado)</label>
+        <input type="text" id="endpoint" value="https://integrate.api.nvidia.com/v1/chat/completions" />
+        <p class="hint">Para usar um proxy/CORS-bypass, altere aqui. Padrão: NVIDIA NIM.</p>
+      </div>
+      <div class="field">
+        <label for="temperature">Temperature</label>
+        <input type="number" id="temperature" value="0.2" step="0.1" min="0" max="2" />
+        <p class="hint">Use 0.0–0.3 para despachos formais.</p>
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn btn-primary" onclick="salvarConfig()">Salvar configurações</button>
+        <button class="btn btn-ghost" onclick="testarConexao()">Testar conexão</button>
+      </div>
+      <div class="error" id="errorBoxConfig" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body" style="border-top:none; padding-top:16px;">
+      <h3 style="font-size:.92rem; color:var(--verde); margin-bottom:10px;">Sobre</h3>
+      <p style="font-size:.86rem; color:var(--text-muted); line-height:1.55;">
+        Aplicativo móvel do <strong>ORION — Manual de Despachos DETRO-RJ v7.1</strong>.
+        Roda no navegador, instalável como PWA (Adicionar à tela inicial).
+        As chamadas vão diretamente do seu dispositivo aos servidores da NVIDIA — nada passa por servidores intermediários.
+      </p>
+      <p style="font-size:.78rem; color:var(--text-muted); margin-top:8px;">
+        Se a NVIDIA bloquear chamadas direto do navegador (CORS), use o campo "Endpoint" para apontar para um proxy próprio.
+      </p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<div class="action-bar">
+  <button class="btn btn-primary" id="btnGerar" onclick="gerarDespachoPrincipal()">
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm3.97 4.97a.235.235 0 0 0-.02.022L7.477 10.417 5.384 8.323a.75.75 0 0 0-1.06 1.06l2.625 2.626a.75.75 0 0 0 1.08-.022l3.992-4.99a.75.75 0 0 0-1.05-1.05z"/></svg>
+    Gerar Despacho
+  </button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="footer-note">
+  ORION v7.1 &middot; DETRO-RJ &middot; Uso interno
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   MANUAL ORION v7.1 — system prompt completo
+═══════════════════════════════════════════════════════════ */
+const MANUAL_ORION = `MANUAL ORION — DESPACHOS DETRO/RJ — Versão 7.1
+
+CONTEXTO
+Você é Orion, assistente do Lucas, servidor do DETRO-RJ. Lucas analisa solicitações de empresas de transporte rodoviário que querem alterar suas programações cadastradas. Seu papel é fazer os cálculos e redigir os despachos corretos seguindo este manual à risca.
+
+FLUXO DE TRABALHO
+1. Empresa envia PDF com solicitação.
+2. Lucas envia o PDF cadastrado + PDF da proposta + planilha BOM (Excel).
+3. Você lê APENAS A PRIMEIRA PÁGINA do PDF da proposta — foca nos horários, ignora boletos e documentos jurídicos.
+4. Você filtra o Excel, faz os cálculos e redige o despacho diretamente — sem apresentar resumo prévio, salvo se Lucas pedir explicitamente.
+5. Entrega: arquivo Word, exceto quando Lucas pedir despacho no chat.
+
+REGRAS DE FORMATAÇÃO — SEMPRE SEGUIR
+- Nome da empresa: SEM todo maiúsculo — ex.: Evanil Transportes e Turismo Ltda.
+- Código da ligação: SEM traços — ex.: 132005000.
+- Número da linha ANTES do nome da ligação; código SEMPRE depois do nome.
+- Identificação da rota: SEMPRE incluir a via. Ex.: "ligação 1956B Cabuçu - Castelo (via Plínio Casado), de código 132004001".
+- Empresa identificada por (RJ-XXX) — ex.: (RJ-132).
+- Usar 'programação cadastrada' — nunca 'quadro de horários'.
+- Horários: dois pontos viram 'h' — ex.: 05h05 (nunca 05:05).
+- SEM travessão entre horários. Antes do PRIMEIRO horário usar 'Às'. Entre horários usar vírgula. Antes do ÚLTIMO usar 'e'. Ex.: Às 05h05, 08h05 e 10h30.
+- Horários por intervalos (se aplicável): 'Das Xh às Yh, de Z em Z minutos'.
+- NUNCA usar tags HTML ou sublinhado HTML.
+- Nunca incluir "Rio de Janeiro, na data da assinatura" no fechamento.
+
+CARACTERÍSTICA DO VEÍCULO (DETRO-RJ)
+Extrair SEMPRE do anexo do cadastro — nunca do BOM.
+- AC = rodoviário com ar condicionado
+- A = rodoviário
+- SA = urbano
+- SAC = urbano com ar condicionado
+
+COMO LER OS PDFs
+PDF 1 — Programação Cadastrada (DETRO): ler tudo. Extrair empresa, RJ, nome da ligação, código, número da linha, via, característica do veículo, horários cadastrados por sentido e dia. Característica do veículo e via são SEMPRE deste PDF.
+PDF 2 — Proposta da empresa: ler APENAS A PRIMEIRA PÁGINA. Focar exclusivamente nos horários propostos. Ignorar boletos, contratos sociais, JUCERJA e demais documentos.
+Se algum trecho ficar ilegível, avise qual parte antes de prosseguir.
+
+COMO FILTRAR O BOM
+- Filtrar pela coluna 'Código da Linha' pelo código da ligação (sem traços).
+- Linha SEM seção tarifária → usar apenas seção 0.
+- Linha COM seção tarifária → usar TODAS as seções, incluindo seção 0. Nunca filtrar apenas seção 0 nesses casos.
+- Pegar os últimos 4 meses disponíveis.
+- Calcular média de Total Passageiros A-B e B-A (por seção, quando houver seções).
+- Verificar Tipo de Veículo e Capacidade da Linha (assentos).
+- Se uma seção apresentar zeros em todos os meses, manter no cálculo com valor zero — não omitir.
+- Atenção: o nome das seções no BOM pode divergir do cadastro. Usar SEMPRE o nome do cadastro oficial no despacho.
+
+CÁLCULO DE VIAGENS MENSAIS
+- Dias Úteis × 22, Sábado × 4, Domingo/Feriado × 4.
+- Total quando opera tudo: 22 + 4 + 4 = 30.
+
+CÁLCULO DOS ÍNDICES
+- Assentos ofertados = viagens mensais × capacidade.
+- Índice = média de passageiros ÷ assentos ofertados.
+- Índice abaixo de 1,0 → ok para aprovar. Acima de 1,0 → não atende → Tipo 5.
+- Se o cadastrado está acima de 1,0 mas o proposto resolve → aprovar normalmente (modelo Tipo 4).
+
+FROTA MÍNIMA
+Fórmula: ciclo ÷ menor intervalo entre partidas, arredondando para cima.
+Redação padrão: "Frota mínima: [X] ([X por extenso]) ônibus [característica por extenso]."
+Exemplos: "Frota mínima: 3 (três) ônibus rodoviários com ar condicionado." | "Frota mínima: 5 (cinco) ônibus rodoviários." | "Frota mínima: 2 (dois) ônibus urbanos." | "Frota mínima: 4 (quatro) ônibus urbanos com ar condicionado."
+Sem negrito. Posição: após o quadro de horários, antes do fechamento.
+
+OS 6 TIPOS DE DESPACHO
+
+TIPO 1 — DIVERGÊNCIA NOS INTERVALOS
+Quando: o cálculo dos intervalos não fecha com o horário final declarado.
+Modelo:
+"Trata-se da solicitação de atualização de programação cadastrada apresentada pela empresa [Nome], ([RJ-XXX]), referente à ligação [NÚMERO] [NOME] (via [VIA]), de código [CÓDIGO].
+Ao analisar a programação proposta, verificou-se a existência de divergências nos intervalos entre as viagens, sendo necessária a apresentação de programação corrigida para prosseguimento da análise.
+Diante do exposto, sugere-se o encaminhamento à requerente para ciência."
+
+TIPO 2 — APENAS UM SENTIDO APRESENTADO
+Modelo:
+"Trata-se da solicitação de atualização de programação cadastrada apresentada pela empresa [Nome], ([RJ-XXX]), referente à ligação [NÚMERO] [NOME] (via [VIA]), de código [CÓDIGO].
+Ao analisar a programação proposta, verificou-se que o quadro apresentado contempla apenas um único sentido de operação da linha, não havendo apresentação dos horários referentes ao sentido inverso, sendo necessária a complementação para prosseguimento da análise.
+Diante do exposto, sugere-se o encaminhamento à requerente para ciência."
+
+TIPO 3 — ALTERAÇÃO DE PERIODICIDADE SEM JUSTIFICATIVA
+Modelo:
+"Trata-se da solicitação de atualização de programação cadastrada apresentada pela empresa [Nome], ([RJ-XXX]), referente à ligação [NÚMERO] [NOME] (via [VIA]), de código [CÓDIGO].
+Ao analisar a programação proposta, verificou-se que a programação cadastrada prevê operação em [dias do cadastro], enquanto a programação proposta contempla apenas [dias da proposta], caracterizando alteração de periodicidade operacional sem a devida justificativa.
+Diante do exposto, sugere-se o encaminhamento à requerente para que esclareça a alteração de periodicidade proposta."
+
+TIPO 4 — APROVAÇÃO (TUDO CORRETO)
+Modelo:
+"À Coordenadoria Técnica,
+
+A empresa [Nome] ([RJ-XXX]) solicita a atualização da programação cadastrada para a ligação [NÚMERO] [NOME] (via [VIA]), de código [CÓDIGO].
+
+Para análise, foram utilizados os dados operacionais do Boletim de Operação Mensal - BOM, no que se refere à quantidade de passageiros transportados, considerando o período entre [MÊS INICIAL] e [MÊS FINAL]. Além disso, foram considerados o quantitativo de partidas cadastradas e propostas e a respectiva oferta de assentos, adotando-se como referência a capacidade média de [XX] assentos dos ônibus rodoviários [característica por extenso] que compõem a frota da empresa.
+
+Média de passageiros transportados:
+Sentido A x B: [valor]
+Sentido B x A: [valor]
+
+Estimativa de assentos ofertados cadastrados:
+Sentido A x B: [viagens] viagens mensais × [cap] assentos = [total]
+Sentido B x A: [viagens] viagens mensais × [cap] assentos = [total]
+
+Estimativa de assentos ofertados propostos:
+Sentido A x B: [viagens] viagens mensais × [cap] assentos = [total]
+Sentido B x A: [viagens] viagens mensais × [cap] assentos = [total]
+
+A partir desses, são calculados os índices de aproveitamento, que consistem em verificar a relação entre os passageiros transportados e os assentos ofertados, decorrente do número de viagens cadastradas e propostas.
+
+Índices de Aproveitamento:
+Sentido A x B: [pass] / [ass cadastrados] = [índice] | [pass] / [ass propostos] = [índice]
+Sentido B x A: [pass] / [ass cadastrados] = [índice] | [pass] / [ass propostos] = [índice]
+
+Os resultados encontrados indicam que a quantidade de viagens apresentadas atende à demanda da ligação [NÚMERO] [NOME], de código [CÓDIGO], permitindo sugerir a adoção da frequência de partidas proposta, conforme a seguir descrita.
+
+Partidas de [Origem A]:
+Dias Úteis: Às [horários].
+Sábado: Às [horários].
+Domingo: Às [horários se houver].
+
+Partidas de [Origem B]:
+Dias Úteis: Às [horários].
+Sábado: Às [horários].
+Domingo: Às [horários se houver].
+
+Frota mínima: [X] ([extenso]) ônibus [característica por extenso]."
+
+TIPO 5 — ÍNDICE PROPOSTO ACIMA DE 1,0
+Modelo:
+"À Coordenadoria Técnica,
+
+A empresa [Nome] ([RJ-XXX]) solicita a atualização da programação cadastrada para a ligação [NÚMERO] [NOME] (via [VIA]), de código [CÓDIGO].
+
+Para análise foram obtidos os dados operacionais do Boletim de Operação Mensal - BOM, no que se refere à quantidade de passageiros transportados, considerando o período entre [MÊS INICIAL] e [MÊS FINAL]. Foram considerados também o quantitativo de partidas cadastradas e propostas e a respectiva oferta de assentos, adotando-se como referência a capacidade média de [XX] assentos dos ônibus rodoviários [característica por extenso] que compõem a frota da empresa.
+
+Média de passageiros transportados:
+Sentido A x B: [valor]
+Sentido B x A: [valor]
+
+Estimativa de assentos ofertados cadastrados:
+Sentido A x B: [viagens] viagens mensais × [cap] assentos = [total]
+Sentido B x A: [viagens] viagens mensais × [cap] assentos = [total]
+
+Estimativa de assentos ofertados propostos:
+Sentido A x B: [viagens] viagens mensais × [cap] assentos = [total]
+Sentido B x A: [viagens] viagens mensais × [cap] assentos = [total]
+
+A partir desses, são calculados os índices de aproveitamento, que consistem em verificar a relação entre os passageiros transportados e os assentos ofertados, decorrente do número de viagens cadastradas e propostas.
+
+Índices de Aproveitamento
+
+Sentido A x B
+[pass] passageiros mensais / [ass cadastrados] assentos cadastrados = [índice]
+[pass] passageiros mensais / [ass propostos] assentos propostos = [índice]
+
+Sentido B x A
+[pass] passageiros mensais / [ass cadastrados] assentos cadastrados = [índice]
+[pass] passageiros mensais / [ass propostos] assentos propostos = [índice]
+
+Os valores encontrados indicam que a atualização do quadro de horários apresentada não atenderia a demanda de passageiros de forma adequada. Diante disso, recomenda-se que a permissionária reveja a proposta buscando aumentar a oferta de viagens."
+
+TIPO 6 — ÍNDICE CADASTRADO ACIMA DE 1,0 MAS PROPOSTO RESOLVE
+Aprovar usando o modelo do Tipo 4.
+
+DESPACHOS COM SEÇÃO TARIFÁRIA
+Aplicar quando a linha possuir seções tarifárias cadastradas.
+Ordem do itinerário: SEMPRE confirmar a ordem geográfica dos pontos.
+Médias — texto introdutório:
+"Com base nos quatro últimos Boletins de Operação Mensal informados, os dados médios relativos ao número de passageiros transportados na ligação direta e em suas seções são os seguintes:
+- Ligação [Origem] - [Destino]: A-B = [valor] passageiros | B-A = [valor] passageiros.
+- Seção 01 [Nome conforme cadastro]: A-B = [valor] | B-A = [valor].
+- Seção 02 [Nome conforme cadastro]: A-B = [valor] | B-A = [valor]."
+
+Perfil de carregamento:
+1. Definir sequência de pontos do itinerário (A→B→C→...→Z).
+2. Para cada trecho, identificar quais seções cobrem aquele trecho.
+3. Somar média da ligação direta + média de cada seção que cobre o trecho.
+4. Dividir pelo total de assentos ofertados (viagens da ligação direta × capacidade).
+5. Repetir para o sentido inverso.
+
+Assentos ofertados: sempre baseados nas viagens da ligação direta.
+Parágrafo de transição:
+"A partir desses, são calculados os índices de aproveitamento, que consistem em verificar a relação entre os passageiros transportados e os assentos ofertados, decorrente do número de viagens cadastradas e propostas. Tendo em vista a existência de seções tarifárias, foi realizado o perfil de carregamento da linha, considerando a soma dos passageiros de cada trecho."
+
+Frota mínima em linhas com seção: mesma fórmula (ciclo ÷ menor intervalo).
+
+INSTRUÇÃO FINAL
+- Sempre identifique o tipo de despacho e prefixe a resposta com a tag: "[TIPO X]" na PRIMEIRA LINHA, sozinha.
+- Em seguida, sem comentários ou rodapés, redija o despacho completo conforme o modelo correspondente.
+- Use português formal, sem emojis, sem markdown além de pontuação. Não escreva "Rio de Janeiro, na data da assinatura".
+- Substitua TODOS os placeholders ([Nome], [VIA], [valor], [horários]...) pelos dados reais. Se faltar um dado essencial, escreva o despacho assim mesmo deixando "[a confirmar]" no lugar e adicione no final, após linha em branco, "OBS PARA LUCAS:" listando o que falta.`;
+
+/* ═══════════════════════════════════════════════════════════
+   STORAGE / CONFIG
+═══════════════════════════════════════════════════════════ */
+const STORE_KEY = 'orion_despachos_config_v1';
+function carregarConfig() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return;
+    const cfg = JSON.parse(raw);
+    if (cfg.apiKey) document.getElementById('apiKey').value = cfg.apiKey;
+    if (cfg.modelo) document.getElementById('modelo').value = cfg.modelo;
+    if (cfg.endpoint) document.getElementById('endpoint').value = cfg.endpoint;
+    if (cfg.temperature != null) document.getElementById('temperature').value = cfg.temperature;
+  } catch(e) { console.warn(e); }
+}
+function salvarConfig() {
+  const cfg = {
+    apiKey: document.getElementById('apiKey').value.trim(),
+    modelo: document.getElementById('modelo').value,
+    endpoint: document.getElementById('endpoint').value.trim(),
+    temperature: parseFloat(document.getElementById('temperature').value) || 0.2
+  };
+  localStorage.setItem(STORE_KEY, JSON.stringify(cfg));
+  toast('Configurações salvas');
+}
+function getConfig() {
+  return {
+    apiKey: document.getElementById('apiKey').value.trim(),
+    modelo: document.getElementById('modelo').value,
+    endpoint: document.getElementById('endpoint').value.trim() || 'https://integrate.api.nvidia.com/v1/chat/completions',
+    temperature: parseFloat(document.getElementById('temperature').value) || 0.2
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TABS
+═══════════════════════════════════════════════════════════ */
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    document.getElementById('btnGerar').style.display = (btn.dataset.tab === 'config') ? 'none' : 'inline-flex';
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════
+   SECAO TARIFÁRIA TOGGLE
+═══════════════════════════════════════════════════════════ */
+document.querySelectorAll('input[name="temSecao"]').forEach(r => {
+  r.addEventListener('change', () => {
+    const tem = document.querySelector('input[name="temSecao"]:checked').value === 'sim';
+    document.getElementById('secoesField').style.display = tem ? 'block' : 'none';
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════
+   HELPERS DE FORMATAÇÃO
+═══════════════════════════════════════════════════════════ */
+function parseHorarios(raw) {
+  if (!raw) return [];
+  return raw
+    .split(/[,;\n\r\/|\s]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(normalizaHorario)
+    .filter(Boolean);
+}
+function normalizaHorario(s) {
+  // aceita 5:05, 05:05, 05h05, 5h, 0505
+  s = s.toLowerCase().replace(/\s/g,'').replace('h',':');
+  let m = s.match(/^(\d{1,2}):?(\d{2})?$/);
+  if (m) {
+    let h = parseInt(m[1], 10);
+    let mm = m[2] ? parseInt(m[2], 10) : 0;
+    if (h > 23 || mm > 59) return null;
+    return String(h).padStart(2,'0') + 'h' + String(mm).padStart(2,'0');
+  }
+  return null;
+}
+function formataListaHorarios(arr) {
+  if (!arr.length) return '';
+  if (arr.length === 1) return 'Às ' + arr[0];
+  if (arr.length === 2) return 'Às ' + arr[0] + ' e ' + arr[1];
+  return 'Às ' + arr.slice(0,-1).join(', ') + ' e ' + arr.slice(-1)[0];
+}
+function calcViagensMensais(du, sab, dom) {
+  return 22*du + 4*sab + 4*dom;
+}
+function caractExtenso(c) {
+  switch(c) {
+    case 'AC': return 'rodoviários com ar condicionado';
+    case 'A': return 'rodoviários';
+    case 'SAC': return 'urbanos com ar condicionado';
+    case 'SA': return 'urbanos';
+    default: return '';
+  }
+}
+function numeroExtenso(n) {
+  const m = ['zero','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez',
+             'onze','doze','treze','catorze','quinze','dezesseis','dezessete','dezoito','dezenove','vinte'];
+  if (n <= 20) return m[n];
+  if (n < 100) {
+    const dezenas = ['','','vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
+    const d = Math.floor(n/10), u = n%10;
+    return u === 0 ? dezenas[d] : dezenas[d] + ' e ' + m[u];
+  }
+  return String(n);
+}
+function menorIntervaloMin(horarios) {
+  if (horarios.length < 2) return null;
+  const mins = horarios.map(h => {
+    const [hh, mm] = h.replace('h',':').split(':').map(Number);
+    return hh*60 + mm;
+  }).sort((a,b)=>a-b);
+  let menor = Infinity;
+  for (let i=1; i<mins.length; i++) {
+    const d = mins[i] - mins[i-1];
+    if (d > 0 && d < menor) menor = d;
+  }
+  return menor === Infinity ? null : menor;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   COLETA DE DADOS DO FORMULÁRIO
+═══════════════════════════════════════════════════════════ */
+function coletarDados() {
+  const get = id => document.getElementById(id).value.trim();
+  const cad = {
+    AB: { du: parseHorarios(get('cadAB-du')), sab: parseHorarios(get('cadAB-sab')), dom: parseHorarios(get('cadAB-dom')) },
+    BA: { du: parseHorarios(get('cadBA-du')), sab: parseHorarios(get('cadBA-sab')), dom: parseHorarios(get('cadBA-dom')) }
+  };
+  const prop = {
+    AB: { du: parseHorarios(get('propAB-du')), sab: parseHorarios(get('propAB-sab')), dom: parseHorarios(get('propAB-dom')) },
+    BA: { du: parseHorarios(get('propBA-du')), sab: parseHorarios(get('propBA-sab')), dom: parseHorarios(get('propBA-dom')) }
+  };
+  return {
+    empresa: get('empresa'),
+    rj: get('rj'),
+    processo: get('processo'),
+    numLinha: get('numLinha'),
+    codigo: get('codigo'),
+    nomeLigacao: get('nomeLigacao'),
+    via: get('via'),
+    origemA: get('origemA'),
+    origemB: get('origemB'),
+    temSecao: document.querySelector('input[name="temSecao"]:checked').value === 'sim',
+    caract: document.querySelector('input[name="caract"]:checked').value,
+    capacidade: parseInt(get('capacidade')) || 0,
+    mesIni: get('mesIni'),
+    mesFim: get('mesFim'),
+    mediaAB: parseInt(get('mediaAB')) || 0,
+    mediaBA: parseInt(get('mediaBA')) || 0,
+    dadosSecoes: get('dadosSecoes'),
+    ciclo: parseInt(get('ciclo')) || 0,
+    intervaloMin: parseInt(get('intervaloMin')) || 0,
+    cad, prop
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CÁLCULOS (rodam ao vivo)
+═══════════════════════════════════════════════════════════ */
+function recalcular() {
+  const d = coletarDados();
+  const cap = d.capacidade;
+  const viagensCad = {
+    AB: calcViagensMensais(d.cad.AB.du.length, d.cad.AB.sab.length, d.cad.AB.dom.length),
+    BA: calcViagensMensais(d.cad.BA.du.length, d.cad.BA.sab.length, d.cad.BA.dom.length)
+  };
+  const viagensProp = {
+    AB: calcViagensMensais(d.prop.AB.du.length, d.prop.AB.sab.length, d.prop.AB.dom.length),
+    BA: calcViagensMensais(d.prop.BA.du.length, d.prop.BA.sab.length, d.prop.BA.dom.length)
+  };
+  const assCad  = { AB: viagensCad.AB * cap, BA: viagensCad.BA * cap };
+  const assProp = { AB: viagensProp.AB * cap, BA: viagensProp.BA * cap };
+  const idxCad  = {
+    AB: assCad.AB ? d.mediaAB / assCad.AB : 0,
+    BA: assCad.BA ? d.mediaBA / assCad.BA : 0
+  };
+  const idxProp = {
+    AB: assProp.AB ? d.mediaAB / assProp.AB : 0,
+    BA: assProp.BA ? d.mediaBA / assProp.BA : 0
+  };
+  // frota mínima a partir das propostas (consolidando todos horários DU)
+  let menor = d.intervaloMin;
+  if (!menor) {
+    const todos = [...d.prop.AB.du, ...d.prop.AB.sab, ...d.prop.AB.dom];
+    menor = menorIntervaloMin(todos);
+  }
+  const frota = (d.ciclo && menor) ? Math.ceil(d.ciclo / menor) : 0;
+
+  // tipo provisório (heurística)
+  let tipo = '';
+  const propVazia = (viagensProp.AB + viagensProp.BA) === 0;
+  if (!propVazia) {
+    const sentidoUnico = (viagensProp.AB === 0) || (viagensProp.BA === 0);
+    if (sentidoUnico) tipo = 'TIPO 2';
+    else {
+      // periodicidade
+      const cadDias = (d.cad.AB.du.length>0 || d.cad.BA.du.length>0 ? 'DU' : '') +
+                      (d.cad.AB.sab.length>0 || d.cad.BA.sab.length>0 ? '+Sab' : '') +
+                      (d.cad.AB.dom.length>0 || d.cad.BA.dom.length>0 ? '+Dom' : '');
+      const propDias = (d.prop.AB.du.length>0 || d.prop.BA.du.length>0 ? 'DU' : '') +
+                       (d.prop.AB.sab.length>0 || d.prop.BA.sab.length>0 ? '+Sab' : '') +
+                       (d.prop.AB.dom.length>0 || d.prop.BA.dom.length>0 ? '+Dom' : '');
+      if (cadDias.length > propDias.length) tipo = 'TIPO 3';
+      else if (idxProp.AB > 1.0 || idxProp.BA > 1.0) tipo = 'TIPO 5';
+      else tipo = 'TIPO 4';
+    }
+  }
+  return { d, viagensCad, viagensProp, assCad, assProp, idxCad, idxProp, frota, menorIntervalo: menor, tipo };
+}
+
+function renderMetrics() {
+  const r = recalcular();
+  const grid = document.getElementById('metricsGrid');
+  const card = document.getElementById('metricsCard');
+  const has = r.viagensProp.AB || r.viagensProp.BA || r.viagensCad.AB || r.viagensCad.BA;
+  if (!has) { card.classList.remove('show'); return; }
+  card.classList.add('show');
+  const fmt = n => Number.isFinite(n) ? n.toFixed(2).replace('.',',') : '—';
+  const cls = i => i === 0 ? '' : (i > 1.0 ? 'warn' : 'ok');
+  grid.innerHTML = `
+    <div class="metric"><div class="metric-label">Viag. Cad. A→B</div><div class="metric-value">${r.viagensCad.AB||'—'}</div><div class="metric-sub">${r.assCad.AB||0} assentos</div></div>
+    <div class="metric"><div class="metric-label">Viag. Cad. B→A</div><div class="metric-value">${r.viagensCad.BA||'—'}</div><div class="metric-sub">${r.assCad.BA||0} assentos</div></div>
+    <div class="metric"><div class="metric-label">Viag. Prop. A→B</div><div class="metric-value">${r.viagensProp.AB||'—'}</div><div class="metric-sub">${r.assProp.AB||0} assentos</div></div>
+    <div class="metric"><div class="metric-label">Viag. Prop. B→A</div><div class="metric-value">${r.viagensProp.BA||'—'}</div><div class="metric-sub">${r.assProp.BA||0} assentos</div></div>
+    <div class="metric"><div class="metric-label">Índice Cad. A→B</div><div class="metric-value ${cls(r.idxCad.AB)}">${fmt(r.idxCad.AB)}</div></div>
+    <div class="metric"><div class="metric-label">Índice Cad. B→A</div><div class="metric-value ${cls(r.idxCad.BA)}">${fmt(r.idxCad.BA)}</div></div>
+    <div class="metric"><div class="metric-label">Índice Prop. A→B</div><div class="metric-value ${cls(r.idxProp.AB)}">${fmt(r.idxProp.AB)}</div></div>
+    <div class="metric"><div class="metric-label">Índice Prop. B→A</div><div class="metric-value ${cls(r.idxProp.BA)}">${fmt(r.idxProp.BA)}</div></div>
+    <div class="metric"><div class="metric-label">Frota mínima</div><div class="metric-value">${r.frota || '—'}</div><div class="metric-sub">${r.frota? numeroExtenso(r.frota) : ''}</div></div>
+    <div class="metric"><div class="metric-label">Tipo provável</div><div class="metric-value">${r.tipo || '—'}</div></div>
+  `;
+}
+
+// recalcular ao digitar
+document.querySelectorAll('#tab-estruturado input, #tab-estruturado textarea').forEach(el => {
+  el.addEventListener('input', renderMetrics);
+});
+document.querySelectorAll('input[name="caract"], input[name="temSecao"]').forEach(el => {
+  el.addEventListener('change', renderMetrics);
+});
+
+/* ═══════════════════════════════════════════════════════════
+   PROMPT BUILDER
+═══════════════════════════════════════════════════════════ */
+function buildPromptEstruturado() {
+  const r = recalcular();
+  const d = r.d;
+  const fmtArr = a => a.length ? a.join(', ') : '(nenhum)';
+  const lines = [
+`### Dados do requerimento
+
+EMPRESA: ${d.empresa || '(faltando)'}
+IDENTIFICAÇÃO: ${d.rj || '(faltando)'}
+PROCESSO: ${d.processo || '(não informado)'}
+
+LINHA: ${d.numLinha || '(faltando)'} ${d.nomeLigacao || ''}
+CÓDIGO (sem traços): ${d.codigo || '(faltando)'}
+VIA: ${d.via || '(faltando)'}
+SENTIDOS: A = ${d.origemA || '(faltando)'} | B = ${d.origemB || '(faltando)'}
+CARACTERÍSTICA DO VEÍCULO: ${d.caract} (${caractExtenso(d.caract)})
+CAPACIDADE: ${d.capacidade || '(faltando)'} assentos
+POSSUI SEÇÃO TARIFÁRIA: ${d.temSecao ? 'SIM' : 'NÃO'}
+
+PERÍODO BOM: ${d.mesIni || '(faltando)'} a ${d.mesFim || '(faltando)'}
+MÉDIA PASSAGEIROS A→B: ${d.mediaAB}
+MÉDIA PASSAGEIROS B→A: ${d.mediaBA}
+${d.temSecao && d.dadosSecoes ? '\nSEÇÕES TARIFÁRIAS:\n' + d.dadosSecoes : ''}
+
+CICLO (min): ${d.ciclo || '(não informado)'}
+MENOR INTERVALO (min): ${r.menorIntervalo || '(não detectado)'}
+
+### PROGRAMAÇÃO CADASTRADA
+
+Sentido A→B (de ${d.origemA || 'A'}):
+- Dias úteis: ${fmtArr(d.cad.AB.du)}
+- Sábado: ${fmtArr(d.cad.AB.sab)}
+- Domingo/feriado: ${fmtArr(d.cad.AB.dom)}
+
+Sentido B→A (de ${d.origemB || 'B'}):
+- Dias úteis: ${fmtArr(d.cad.BA.du)}
+- Sábado: ${fmtArr(d.cad.BA.sab)}
+- Domingo/feriado: ${fmtArr(d.cad.BA.dom)}
+
+### PROGRAMAÇÃO PROPOSTA
+
+Sentido A→B:
+- Dias úteis: ${fmtArr(d.prop.AB.du)}
+- Sábado: ${fmtArr(d.prop.AB.sab)}
+- Domingo/feriado: ${fmtArr(d.prop.AB.dom)}
+
+Sentido B→A:
+- Dias úteis: ${fmtArr(d.prop.BA.du)}
+- Sábado: ${fmtArr(d.prop.BA.sab)}
+- Domingo/feriado: ${fmtArr(d.prop.BA.dom)}
+
+### CÁLCULOS PRÉ-COMPUTADOS (use estes valores)
+
+Viagens mensais cadastradas: A→B = ${r.viagensCad.AB} | B→A = ${r.viagensCad.BA}
+Viagens mensais propostas:   A→B = ${r.viagensProp.AB} | B→A = ${r.viagensProp.BA}
+Assentos ofertados cadastrados: A→B = ${r.assCad.AB} | B→A = ${r.assCad.BA}
+Assentos ofertados propostos:   A→B = ${r.assProp.AB} | B→A = ${r.assProp.BA}
+Índice cadastrado: A→B = ${r.idxCad.AB.toFixed(2)} | B→A = ${r.idxCad.BA.toFixed(2)}
+Índice proposto:   A→B = ${r.idxProp.AB.toFixed(2)} | B→A = ${r.idxProp.BA.toFixed(2)}
+Frota mínima sugerida: ${r.frota || '(faltando dados)'} (${r.frota? numeroExtenso(r.frota) : ''}) ${r.frota? 'ônibus ' + caractExtenso(d.caract) : ''}
+Tipo de despacho provável (heurística): ${r.tipo || 'indefinido'}
+
+### TAREFA
+
+Identifique o tipo de despacho correto (revisando a heurística acima quando necessário) e redija o despacho COMPLETO seguindo rigorosamente o modelo do tipo identificado. Lembre: prefixe a resposta com a tag "[TIPO X]" sozinha na primeira linha.`
+  ];
+  return lines.join('\n');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CHAMADA À API NVIDIA
+═══════════════════════════════════════════════════════════ */
+async function callNvidia(userPrompt, onStep) {
+  const cfg = getConfig();
+  if (!cfg.apiKey) throw new Error('Chave da API NVIDIA não configurada. Vá em Configurações.');
+  if (onStep) onStep('Conectando à NVIDIA');
+
+  const body = {
+    model: cfg.modelo,
+    messages: [
+      { role: 'system', content: MANUAL_ORION },
+      { role: 'user', content: userPrompt }
+    ],
+    temperature: cfg.temperature,
+    top_p: 0.9,
+    max_tokens: 4096,
+    stream: false
+  };
+
+  const r = await fetch(cfg.endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + cfg.apiKey,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (onStep) onStep('Aguardando resposta');
+
+  if (!r.ok) {
+    const txt = await r.text().catch(()=>r.statusText);
+    throw new Error(`NVIDIA API ${r.status}: ${txt.slice(0, 400)}`);
+  }
+  const data = await r.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('Resposta vazia da API.');
+  return content.trim();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GERAÇÃO PRINCIPAL
+═══════════════════════════════════════════════════════════ */
+async function gerarDespachoPrincipal() {
+  const tabAtiva = document.querySelector('.tab.active').dataset.tab;
+  if (tabAtiva === 'config') return;
+  if (tabAtiva === 'livre') return gerarLivre();
+
+  showError('');
+  const d = coletarDados();
+  if (!d.empresa) return showError('Informe o nome da empresa.');
+  if (!d.numLinha || !d.nomeLigacao || !d.codigo) return showError('Preencha os dados da linha (número, nome e código).');
+  if (!d.capacidade) return showError('Informe a capacidade do veículo.');
+
+  const cfg = getConfig();
+  if (!cfg.apiKey) {
+    showError('Chave da API NVIDIA não configurada. Toque em "Configurações".');
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const prompt = buildPromptEstruturado();
+    const out = await callNvidia(prompt, step => {
+      document.getElementById('loadingStep').textContent = step;
+    });
+    mostrarResultado(out);
+  } catch(e) {
+    showError(e.message || String(e));
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function gerarLivre() {
+  showErrorLivre('');
+  const txt = document.getElementById('livreTexto').value.trim();
+  const instr = document.getElementById('livreInstr').value.trim();
+  if (!txt) return showErrorLivre('Cole os dados do requerimento.');
+  const cfg = getConfig();
+  if (!cfg.apiKey) return showErrorLivre('Chave da API NVIDIA não configurada.');
+
+  setLoadingLivre(true);
+  try {
+    const prompt = `### Dados do requerimento (texto livre)
+
+${txt}
+
+${instr ? '\n### Instrução adicional\n' + instr + '\n' : ''}
+### TAREFA
+
+Identifique o tipo de despacho conforme o Manual ORION e redija o despacho completo. Prefixe com a tag "[TIPO X]" na primeira linha. Se faltar algum dado essencial, escreva mesmo assim com [a confirmar] e adicione "OBS PARA LUCAS:" no final.`;
+    const out = await callNvidia(prompt);
+    mostrarResultadoLivre(out);
+  } catch(e) {
+    showErrorLivre(e.message || String(e));
+  } finally {
+    setLoadingLivre(false);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   UI HELPERS
+═══════════════════════════════════════════════════════════ */
+function showError(msg) {
+  const b = document.getElementById('errorBox');
+  if (msg) { b.textContent = '⚠ ' + msg; b.classList.add('show'); }
+  else { b.textContent = ''; b.classList.remove('show'); }
+}
+function showErrorLivre(msg) {
+  const b = document.getElementById('errorBoxLivre');
+  if (msg) { b.textContent = '⚠ ' + msg; b.classList.add('show'); }
+  else { b.textContent = ''; b.classList.remove('show'); }
+}
+function setLoading(on) {
+  document.getElementById('loadingBox').classList.toggle('show', on);
+  document.getElementById('btnGerar').disabled = on;
+  if (on) document.getElementById('outputCard').classList.remove('show');
+}
+function setLoadingLivre(on) {
+  document.getElementById('loadingBoxLivre').classList.toggle('show', on);
+  document.getElementById('btnGerar').disabled = on;
+  if (on) document.getElementById('outputCardLivre').classList.remove('show');
+}
+function extractTipo(text) {
+  const m = text.match(/^\s*\[?\s*TIPO\s*([1-6])\s*\]?/i);
+  return m ? parseInt(m[1]) : null;
+}
+function stripTipoTag(text) {
+  return text.replace(/^\s*\[?\s*TIPO\s*[1-6]\s*\]?\s*\n+/i, '');
+}
+function mostrarResultado(text) {
+  const tipo = extractTipo(text);
+  const clean = stripTipoTag(text);
+  const card = document.getElementById('outputCard');
+  const badge = document.getElementById('tipoBadge');
+  if (tipo) {
+    badge.textContent = 'Tipo ' + tipo;
+    badge.className = 'badge badge-tipo' + tipo;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
+  document.getElementById('despachoOutput').value = clean;
+  card.classList.add('show');
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function mostrarResultadoLivre(text) {
+  const card = document.getElementById('outputCardLivre');
+  document.getElementById('despachoOutputLivre').value = stripTipoTag(text);
+  card.classList.add('show');
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function copiarDespacho() {
+  const t = document.getElementById('despachoOutput');
+  navigator.clipboard.writeText(t.value).then(() => toast('Copiado!')).catch(() => {
+    t.select(); document.execCommand('copy'); toast('Copiado!');
+  });
+}
+function copiarDespachoLivre() {
+  const t = document.getElementById('despachoOutputLivre');
+  navigator.clipboard.writeText(t.value).then(() => toast('Copiado!')).catch(() => {
+    t.select(); document.execCommand('copy'); toast('Copiado!');
+  });
+}
+async function compartilhar() {
+  const t = document.getElementById('despachoOutput').value;
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Despacho ORION', text: t }); }
+    catch(e) {}
+  } else { copiarDespacho(); }
+}
+async function compartilharLivre() {
+  const t = document.getElementById('despachoOutputLivre').value;
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Despacho ORION', text: t }); }
+    catch(e) {}
+  } else { copiarDespachoLivre(); }
+}
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TEST CONNECTION
+═══════════════════════════════════════════════════════════ */
+async function testarConexao() {
+  const errBox = document.getElementById('errorBoxConfig');
+  errBox.classList.remove('show');
+  const cfg = getConfig();
+  if (!cfg.apiKey) { errBox.textContent = '⚠ Informe a chave de API.'; errBox.classList.add('show'); return; }
+  toast('Testando…');
+  try {
+    const r = await fetch(cfg.endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + cfg.apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: cfg.modelo,
+        messages: [{ role: 'user', content: 'Responda apenas: OK' }],
+        max_tokens: 10
+      })
+    });
+    if (!r.ok) {
+      const txt = await r.text().catch(()=>r.statusText);
+      throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);
+    }
+    const data = await r.json();
+    const content = data.choices?.[0]?.message?.content || '(vazio)';
+    toast('Conexão OK ✓');
+    errBox.style.color = 'var(--success)';
+    errBox.style.background = '#e8f5e9';
+    errBox.style.borderColor = '#a5d6a7';
+    errBox.textContent = '✓ Resposta: ' + content.trim().slice(0, 120);
+    errBox.classList.add('show');
+  } catch(e) {
+    errBox.style.color = '';
+    errBox.style.background = '';
+    errBox.style.borderColor = '';
+    errBox.textContent = '⚠ ' + (e.message || e);
+    errBox.classList.add('show');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════════ */
+carregarConfig();
+renderMetrics();
+</script>
+</body>
+</html>
