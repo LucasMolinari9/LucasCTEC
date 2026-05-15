@@ -3,30 +3,35 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#1a5c2a" />
+  <meta name="theme-color" content="#002D87" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="ORION" />
   <meta name="mobile-web-app-capable" content="yes" />
   <title>ORION — Despachos DETRO-RJ</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231a5c2a'/%3E%3Ctext x='32' y='42' font-family='Arial' font-size='28' font-weight='900' text-anchor='middle' fill='%23c9a227'%3EOR%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23002D87'/%3E%3Ctext x='32' y='42' font-family='Arial' font-size='28' font-weight='900' text-anchor='middle' fill='%23F5C400'%3EOR%3C/text%3E%3C/svg%3E" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
     :root {
-      --verde: #1a5c2a;
-      --verde-claro: #2e7d42;
-      --dourado: #c9a227;
-      --azul: #1565c0;
-      --bg: #f4f6f8;
+      /* Identidade visual Governo do Estado do RJ / DETRO-RJ */
+      --azul: #0038A8;          /* azul principal */
+      --azul-escuro: #002D87;   /* cabeçalho / rodapé */
+      --dourado: #F5C400;       /* destaque */
+      --branco: #FFFFFF;
+      /* aliases internos (mapeados para a paleta oficial) */
+      --verde: #0038A8;
+      --verde-claro: #002D87;
+      --bg: #eef1f6;
       --bg-card: #ffffff;
-      --bg-soft: #f8faf9;
-      --border: #d8dee4;
-      --text: #1c2526;
-      --text-muted: #5b6770;
+      --bg-soft: #f4f6fb;
+      --border: #c7d0e2;
+      --azul-suave: #e3e9f7;
+      --text: #1b2330;
+      --text-muted: #5a6478;
       --danger: #c62828;
-      --warning: #e65100;
-      --success: #2e7d32;
-      --shadow: 0 2px 6px rgba(0,0,0,.07);
+      --warning: #b35900;
+      --success: #1b6e2e;
+      --shadow: 0 2px 6px rgba(0,45,135,.10);
       --radius: 10px;
       --tap: 44px;
     }
@@ -43,53 +48,55 @@
 
     /* ── HEADER ── */
     header {
-      background: var(--verde);
+      background: var(--azul-escuro);
       color: #fff;
       padding: calc(env(safe-area-inset-top) + 12px) 16px 0;
-      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+      box-shadow: 0 2px 8px rgba(0,45,135,.30);
       position: sticky;
       top: 0;
       z-index: 50;
+      border-bottom: 3px solid var(--dourado);
     }
     .header-row { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; }
     .logo {
       width: 42px; height: 42px;
       background: var(--dourado);
-      border-radius: 10px;
+      border-radius: 8px;
       display: flex; align-items: center; justify-content: center;
-      font-weight: 900; font-size: 16px; color: var(--verde);
+      font-weight: 900; font-size: 16px; color: var(--azul-escuro);
       flex-shrink: 0; letter-spacing: -.5px;
     }
     .header-title h1 { font-size: 1.05rem; font-weight: 700; line-height: 1.1; }
-    .header-title p { font-size: .72rem; opacity: .8; margin-top: 2px; }
+    .header-title p { font-size: .72rem; opacity: .85; margin-top: 2px; }
     .header-actions { margin-left: auto; }
     .gear-btn {
-      background: rgba(255,255,255,.1);
+      background: rgba(255,255,255,.14);
       border: none;
       color: #fff;
       width: 38px; height: 38px;
-      border-radius: 10px;
+      border-radius: 8px;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer;
     }
-    .gear-btn:active { background: rgba(255,255,255,.2); }
-    .gold-bar { height: 3px; background: var(--dourado); margin: 0 -16px; }
+    .gear-btn:active { background: rgba(255,255,255,.28); }
+    .gold-bar { display: none; }
 
     /* ── MAIN ── */
     main { padding: 16px 14px 0; max-width: 720px; margin: 0 auto; }
 
     /* ── INFO BANNER ── */
     .info-banner {
-      background: #e3f2fd;
-      border: 1px solid #90caf9;
-      color: #0d47a1;
+      background: var(--azul-suave);
+      border: 1px solid var(--azul);
+      border-left: 4px solid var(--azul);
+      color: var(--azul-escuro);
       border-radius: 8px;
       padding: 12px 14px;
       font-size: .85rem;
       margin-bottom: 14px;
       line-height: 1.5;
     }
-    .info-banner strong { color: #0d47a1; }
+    .info-banner strong { color: var(--azul-escuro); }
 
     /* ── UPLOAD CARDS ── */
     .upload-card {
@@ -104,11 +111,11 @@
       cursor: pointer;
     }
     .upload-card:active { background: var(--bg-soft); }
-    .upload-card.dragging { border-color: var(--verde-claro); background: #e8f5e9; }
+    .upload-card.dragging { border-color: var(--azul); background: var(--azul-suave); }
     .upload-card.loaded {
       border-style: solid;
-      border-color: var(--verde-claro);
-      background: #f1f8f3;
+      border-color: var(--azul);
+      background: var(--azul-suave);
       text-align: left;
     }
     .upload-card input[type="file"] { display: none; }
@@ -249,6 +256,7 @@
     .output-card {
       background: var(--bg-card);
       border: 1px solid var(--border);
+      border-top: 4px solid var(--azul);
       border-radius: var(--radius);
       margin-bottom: 16px;
       display: none;
@@ -260,7 +268,7 @@
       align-items: center;
       justify-content: space-between;
       padding: 12px 14px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 2px solid var(--dourado);
       flex-wrap: wrap;
       gap: 8px;
     }
@@ -450,10 +458,13 @@
 
     .footer-note {
       text-align: center;
-      font-size: .72rem;
-      color: var(--text-muted);
-      padding: 4px 0 16px;
+      font-size: .74rem;
+      color: #ffffff;
+      background: var(--azul-escuro);
+      border-top: 3px solid var(--dourado);
+      padding: 14px 16px;
       line-height: 1.5;
+      margin: 18px -14px 0;
     }
   </style>
 </head>
@@ -509,13 +520,13 @@
         <svg width="22" height="22" viewBox="0 0 16 16" fill="currentColor"><path d="M5 10.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5z"/><path d="M3 0h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm0 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H3z"/></svg>
       </div>
       <div class="upload-title">PDF da Proposta da Empresa</div>
-      <div class="upload-sub">Toque para selecionar (apenas a 1ª página é usada)</div>
+      <div class="upload-sub">Toque para selecionar (todas as páginas são lidas)</div>
     </div>
     <div class="upload-content" style="display:none;">
       <div class="upload-icon"><svg width="22" height="22" viewBox="0 0 16 16" fill="currentColor"><path d="M10.97 4.97a.75.75 0 0 1 1.071 1.05l-3.992 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.236.236 0 0 1 .02-.022z"/></svg></div>
       <div class="file-mini">
         <div class="upload-title" id="propName">arquivo.pdf</div>
-        <div class="upload-meta" id="propMeta">— páginas (1ª usada)</div>
+        <div class="upload-meta" id="propMeta">— páginas</div>
       </div>
     </div>
     <button type="button" class="clear-btn" onclick="event.preventDefault(); event.stopPropagation(); limparArquivo('prop');">&times;</button>
@@ -555,7 +566,7 @@
     <div id="previewCadBody"></div>
   </div>
   <div class="preview-card" id="previewProp">
-    <div class="preview-label">Texto extraído da 1ª página da proposta (prévia)</div>
+    <div class="preview-label">Texto extraído da proposta (prévia)</div>
     <div id="previewPropBody"></div>
   </div>
 
@@ -674,8 +685,8 @@ CONTEXTO
 Você é Orion, assistente do Lucas, servidor do DETRO-RJ. Lucas analisa solicitações de empresas de transporte rodoviário que querem alterar suas programações cadastradas. Você recebe o texto extraído de dois PDFs: o da programação cadastrada (DETRO) e o da proposta da empresa. Faça TODA a análise sozinho: extraia os dados, calcule e redija o despacho seguindo este manual à risca.
 
 ETAPAS DE TRABALHO
-1. Leia o PDF cadastrado integralmente para extrair: nome da empresa, RJ-XXX, nome da ligação, código (sem traços), número da linha, via, característica do veículo (AC/A/SA/SAC), capacidade, horários cadastrados por sentido e dia.
-2. Do PDF da proposta, considere APENAS a primeira página. Foque exclusivamente nos horários propostos. Ignore boletos, contratos sociais, JUCERJA, declarações etc.
+1. Leia o PDF cadastrado INTEGRALMENTE (todas as páginas) para extrair: nome da empresa, RJ-XXX, nome da ligação, código (sem traços), número da linha, via, característica do veículo (AC/A/SA/SAC), capacidade, horários cadastrados por sentido e dia.
+2. Leia o PDF da proposta INTEGRALMENTE (todas as páginas). Localize os horários propostos onde quer que estejam no documento. Boletos, contratos sociais, JUCERJA, procurações e declarações são irrelevantes para o cálculo — apenas não os utilize, mas examine todas as páginas para não perder nenhum horário ou requerimento.
 3. Compare cadastro × proposta, classifique o tipo de despacho e redija.
 
 REGRAS DE FORMATAÇÃO — SEMPRE SEGUIR
@@ -804,13 +815,18 @@ Médias — texto introdutório: "Com base nos quatro últimos Boletins de Opera
 Perfil de carregamento: somar média da ligação direta + médias das seções que cobrem cada trecho, dividir pelo total de assentos ofertados.
 Parágrafo de transição: "A partir desses, são calculados os índices de aproveitamento... Tendo em vista a existência de seções tarifárias, foi realizado o perfil de carregamento da linha, considerando a soma dos passageiros de cada trecho."
 
-INSTRUÇÕES FINAIS
-- Identifique o tipo correto e prefixe a resposta com a tag "[TIPO X]" sozinha na PRIMEIRA LINHA.
-- Em seguida, sem comentários ou rodapés, redija o despacho completo conforme o modelo correspondente.
-- Use português formal, sem markdown, sem emojis. Não escreva "Rio de Janeiro, na data da assinatura".
-- Faça os cálculos passo a passo (de cabeça, sem mostrar): viagens mensais (22×DU + 4×Sáb + 4×Dom), assentos = viagens × capacidade, índice = pass ÷ assentos.
-- Se o BOM não foi anexado, use [a confirmar] nos valores de passageiros, NÃO invente. Calcule normalmente os assentos ofertados e a frota mínima (que não dependem do BOM). Ao final, deixe linha em branco e adicione "OBS PARA LUCAS:" listando o que faltou.
-- Se a característica do veículo não estiver explícita no PDF cadastrado, deixe [a confirmar] e mencione na OBS.`;
+INSTRUÇÕES FINAIS — ESTILO E REDAÇÃO (OBRIGATÓRIO)
+- Você redige como um ANALISTA TÉCNICO SÊNIOR do DETRO-RJ: linguagem formal, impessoal, técnica, objetiva e CONCLUSIVA. Tom de parecer administrativo oficial.
+- Prefixe a resposta com a tag "[TIPO X]" sozinha na PRIMEIRA LINHA. Logo após, redija APENAS o despacho — nada antes, nada depois.
+- PROIBIDO TERMINANTEMENTE no texto entregue: colchetes ou campos em aberto ("[a confirmar]", "[valor]", "[XX]", "[Nome]" etc.); qualquer bloco "OBS PARA LUCAS", "Observação para Lucas", "Nota interna", "Notas:", "Pendências:"; markdown, emojis, comentários, saudações, frases como "Aqui está" ou "Segue o despacho"; a expressão "Rio de Janeiro, na data da assinatura".
+- TODO placeholder deve ser substituído por valor real concreto. O despacho final deve estar pronto para protocolo, sem nenhuma lacuna visível.
+- Faça os cálculos internamente (não mostre a conta): viagens mensais = 22×DU + 4×Sáb + 4×Dom; assentos = viagens × capacidade; índice = passageiros ÷ assentos.
+- DADOS FALTANTES: nunca deixe lacuna nem nota externa. Incorpore a ressalva DENTRO do próprio despacho, em linguagem administrativa, e conclua mesmo assim. Modelos de redação a usar:
+  • BOM não acostado: "Ressalte-se que o Boletim de Operação Mensal não foi acostado aos autos, razão pela qual os índices de aproveitamento foram calculados com base nos dados cadastrais disponíveis."
+  • Característica do veículo não comprovada: "A característica do veículo foi inferida a partir dos documentos acostados ao processo, adotando-se o tipo SA (urbano) para fins de cálculo."
+  • Capacidade não informada: "Não constando a lotação dos veículos nos autos, adotou-se, para fins de cálculo, a capacidade de XX assentos, compatível com a característica operacional da linha." (substitua XX por um número concreto coerente, ex.: 46 para rodoviário, 70 para urbano).
+- Quando faltar o BOM, ainda assim apresente os assentos ofertados e a frota mínima (que não dependem dele) e conclua o despacho de forma objetiva, sem deixar o resultado em aberto.
+- O despacho deve sempre terminar de forma conclusiva (sugestão de aprovação, de encaminhamento à requerente ou de revisão da proposta, conforme o tipo), sem pendências em aberto.`;
 
 /* ═══════════════════════════════════════════════════════════
    STATE
@@ -865,13 +881,14 @@ function fecharConfig() {
 /* ═══════════════════════════════════════════════════════════
    PDF EXTRACTION
 ═══════════════════════════════════════════════════════════ */
-async function extrairTextoPdf(file, maxPages) {
+async function extrairTextoPdf(file, maxPages, onProgress) {
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
   const totalPages = pdf.numPages;
   const limit = maxPages ? Math.min(maxPages, totalPages) : totalPages;
   const partes = [];
   for (let i = 1; i <= limit; i++) {
+    if (onProgress) onProgress(i, limit);
     const page = await pdf.getPage(i);
     const tc = await page.getTextContent();
     // organiza por linhas usando posição Y
@@ -886,7 +903,7 @@ async function extrairTextoPdf(file, maxPages) {
     const pageText = ys.map(y => {
       return linhas[y].sort((a,b)=>a.x-b.x).map(c=>c.str).join(' ');
     }).join('\n');
-    partes.push(`--- Página ${i} ---\n${pageText}`);
+    partes.push(`--- Página ${i} de ${totalPages} ---\n${pageText}`);
   }
   return { totalPages, usedPages: limit, text: partes.join('\n\n') };
 }
@@ -918,10 +935,11 @@ async function processarPdf(file, kind) {
   const previewBody = document.getElementById(kind === 'cad' ? 'previewCadBody' : 'previewPropBody');
   const previewCard = document.getElementById(kind === 'cad' ? 'previewCad' : 'previewProp');
 
-  setLoading(true, 'Lendo PDF…', file.name);
+  setLoading(true, 'Lendo PDF (todas as páginas)…', file.name);
   try {
-    const maxPages = (kind === 'prop') ? 1 : undefined;
-    const result = await extrairTextoPdf(file, maxPages);
+    const result = await extrairTextoPdf(file, undefined, (p, t) => {
+      document.getElementById('loadingStep').textContent = `Página ${p} de ${t}`;
+    });
     state[kind] = {
       name: file.name,
       totalPages: result.totalPages,
@@ -932,7 +950,7 @@ async function processarPdf(file, kind) {
     card.querySelector('.upload-default').style.display = 'none';
     card.querySelector('.upload-content').style.display = 'flex';
     nameEl.textContent = file.name;
-    metaEl.textContent = `${result.totalPages} página${result.totalPages>1?'s':''} · ${result.text.length.toLocaleString('pt-BR')} caracteres${kind === 'prop' ? ' (só 1ª usada)' : ''}`;
+    metaEl.textContent = `${result.totalPages} página${result.totalPages>1?'s':''} lida${result.totalPages>1?'s':''} · ${result.text.length.toLocaleString('pt-BR')} caracteres`;
     previewBody.textContent = result.text.slice(0, 500) + (result.text.length > 500 ? '…' : '');
     previewCard.classList.add('show');
   } catch(e) {
@@ -1012,15 +1030,14 @@ function atualizarBotao() {
 function montarPrompt() {
   const obs = document.getElementById('obsTexto').value.trim();
   const partes = [];
-  partes.push(`### PDF 1 — PROGRAMAÇÃO CADASTRADA (DETRO)
+  partes.push(`### PDF 1 — PROGRAMAÇÃO CADASTRADA (DETRO) — ${state.cad.totalPages} página(s), todas transcritas abaixo
 Nome do arquivo: ${state.cad.name}
-Total de páginas: ${state.cad.totalPages}
 
 ${state.cad.text}`);
 
-  partes.push(`### PDF 2 — PROPOSTA DA EMPRESA (apenas 1ª página)
+  partes.push(`### PDF 2 — PROPOSTA DA EMPRESA — ${state.prop.totalPages} página(s), TODAS transcritas abaixo
 Nome do arquivo: ${state.prop.name}
-Total de páginas no PDF original: ${state.prop.totalPages} (mas considere SOMENTE o conteúdo abaixo)
+Examine todas as páginas e localize os horários propostos onde quer que estejam. Documentos jurídicos/boletos não servem ao cálculo, mas não deixe de varrer todas as páginas.
 
 ${state.prop.text}`);
 
@@ -1033,7 +1050,7 @@ ${state.bom.text}
 Instruções: filtre pela coluna "Código da Linha" pelo código da ligação (sem traços). Linha SEM seção tarifária → usar apenas seção 0. Linha COM seção tarifária → usar TODAS as seções incluindo a 0. Pegue os 4 últimos meses disponíveis e calcule a média de Total Passageiros A-B e B-A.`);
   } else {
     partes.push(`### BOM
-NÃO foi anexado. Para os valores de passageiros (médias), use [a confirmar] e mencione na seção "OBS PARA LUCAS:" ao final. Calcule normalmente assentos ofertados, frota mínima e demais valores que não dependem do BOM.`);
+Não foi acostado aos autos. NÃO use colchetes nem notas externas. Calcule os assentos ofertados e a frota mínima normalmente (não dependem do BOM) e, no corpo do despacho, registre em linguagem administrativa a ressalva: "Ressalte-se que o Boletim de Operação Mensal não foi acostado aos autos, razão pela qual os índices de aproveitamento foram calculados com base nos dados cadastrais disponíveis." Conclua o despacho de forma objetiva.`);
   }
 
   if (obs) {
@@ -1042,7 +1059,7 @@ ${obs}`);
   }
 
   partes.push(`### TAREFA
-Identifique o tipo de despacho conforme o Manual ORION e redija o despacho completo. Prefixe sua resposta com a tag "[TIPO X]" sozinha na primeira linha. Não escreva nada antes ou depois do despacho (sem comentários, sem "Aqui está", sem rodapés).`);
+Identifique o tipo de despacho conforme o Manual ORION e redija o despacho completo e DEFINITIVO, pronto para protocolo. Prefixe a resposta com a tag "[TIPO X]" sozinha na primeira linha. Não escreva nada antes nem depois do despacho. NÃO inclua colchetes, campos em aberto, "OBS PARA LUCAS" ou qualquer nota interna — incorpore eventuais ressalvas no próprio texto, com linguagem de analista técnico sênior do DETRO-RJ.`);
 
   return partes.join('\n\n');
 }
@@ -1142,9 +1159,27 @@ async function regerar() {
   }
 }
 
+function limparDespacho(text) {
+  let t = String(text || '');
+  // remove preâmbulos conversacionais ANTES da tag
+  t = t.replace(/^\s*(aqui está|segue (abaixo )?o despacho|conforme solicitado|despacho)[^\n]*:?\s*\n+/i, '');
+  // remove a tag [TIPO X] inicial
+  t = t.replace(/^\s*\[?\s*TIPO\s*[1-6]\s*\]?\s*\n+/i, '');
+  // remove preâmbulos que porventura sobraram após a tag
+  t = t.replace(/^\s*(aqui está|segue (abaixo )?o despacho|conforme solicitado)[^\n]*:?\s*\n+/i, '');
+  // remove qualquer bloco de nota interna do marcador até o fim
+  // (específico para "...LUCAS" / "INTERNA" para não apagar o "Obs.:" legítimo de trecho parcial)
+  t = t.replace(/(^|\n)[ \t]*(obs\.?(erva[çc][ãa]o|erva[çc][õo]es)?\s+(para|ao)\s+lucas|notas?\s+(para|ao)\s+lucas|notas?\s+internas?|observa[çc][õo]es\s+internas?|pend[êe]ncias?(\s+para\s+lucas)?)\s*:?[\s\S]*$/i, '');
+  // remove colchetes remanescentes, preservando o conteúdo interno
+  t = t.replace(/\[([^\][\n]{0,90})\]/g, '$1');
+  // remove marcadores markdown eventuais
+  t = t.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/(^|\n)#{1,6}[ \t]*/g, '$1');
+  return t.trim();
+}
+
 function mostrarResultado(text) {
-  const tipo = (text.match(/^\s*\[?\s*TIPO\s*([1-6])\s*\]?/i)||[])[1];
-  const clean = text.replace(/^\s*\[?\s*TIPO\s*[1-6]\s*\]?\s*\n+/i, '');
+  const tipo = ((String(text||'').slice(0, 80).match(/\bTIPO\s*([1-6])\b/i))||[])[1];
+  const clean = limparDespacho(text);
   const badge = document.getElementById('tipoBadge');
   if (tipo) {
     badge.textContent = 'Tipo ' + tipo;
