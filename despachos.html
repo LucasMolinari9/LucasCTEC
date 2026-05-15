@@ -614,14 +614,38 @@
       </select>
     </div>
     <div class="field">
-      <label for="endpoint">Endpoint</label>
+      <label for="endpoint">Endpoint (URL do seu proxy)</label>
       <input type="text" id="endpoint" value="https://integrate.api.nvidia.com/v1/chat/completions" />
-      <p class="hint">Padrão: NVIDIA NIM. Altere se usar proxy.</p>
+      <p class="hint"><strong>Cole aqui a URL do seu proxy</strong> (ex.: https://orion-proxy.SEU-USUARIO.workers.dev). A NVIDIA não aceita chamadas diretas do navegador — veja a ajuda abaixo.</p>
     </div>
     <div class="field">
       <label for="temperature">Temperature</label>
       <input type="number" id="temperature" value="0.2" step="0.1" min="0" max="2" />
     </div>
+
+    <button type="button" class="extras-toggle" style="text-align:left;border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--warning);font-weight:600;" onclick="document.getElementById('proxyHelp').classList.toggle('show')">
+      ▸ Erro "Failed to fetch"? Toque aqui — como criar o proxy (CORS)
+    </button>
+    <div class="extras" id="proxyHelp">
+      <div class="info-banner" style="background:#fff3e0;border-color:#ffb74d;color:#7a3d00;">
+        A API da NVIDIA bloqueia chamadas feitas direto do navegador (CORS), e mais ainda quando o app roda como arquivo local no celular. A correção é um <strong>proxy gratuito</strong> que você cria uma vez. Recomendado: <strong>Cloudflare Workers</strong>.
+      </div>
+      <p style="font-size:.84rem;color:var(--text-muted);line-height:1.6;margin-bottom:10px;">
+        <strong>Passo a passo (uma vez só):</strong><br>
+        1. Crie conta grátis em <strong>dash.cloudflare.com</strong> (pode pelo celular).<br>
+        2. Menu <strong>Workers &amp; Pages → Create → Create Worker</strong>.<br>
+        3. Clique em <strong>Edit code</strong>, apague tudo e cole o código abaixo.<br>
+        4. <strong>Deploy</strong>. Vai aparecer uma URL tipo <em>https://meu-worker.seu-usuario.workers.dev</em>.<br>
+        5. Cole essa URL no campo <strong>Endpoint</strong> aqui em cima e salve. Pronto.
+      </p>
+      <label class="hint" style="display:block;font-weight:700;color:var(--verde);margin-bottom:4px;">Código do Worker (Cloudflare)</label>
+      <textarea id="workerCode" readonly rows="8" style="font-family:'SFMono-Regular',Consolas,monospace;font-size:12px;background:#1c2526;color:#e8f0e8;"></textarea>
+      <button type="button" class="btn btn-soft" style="width:100%;margin-top:8px;" onclick="copiarWorker()">Copiar código do Worker</button>
+      <p class="hint" style="margin-top:8px;">
+        Opcional (mais seguro): em <em>Worker → Settings → Variables</em>, crie a variável <strong>NVIDIA_API_KEY</strong> com sua chave. Assim a chave fica só na Cloudflare e não no celular.
+      </p>
+    </div>
+
     <div class="error" id="errorBoxConfig"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="testarConexao()">Testar</button>
@@ -1026,10 +1050,18 @@ Identifique o tipo de despacho conforme o Manual ORION e redija o despacho compl
 /* ═══════════════════════════════════════════════════════════
    NVIDIA API
 ═══════════════════════════════════════════════════════════ */
+const MSG_CORS = 'Não foi possível conectar (Failed to fetch).\n\nIsso é esperado: a API da NVIDIA não permite chamadas direto do navegador (CORS), ainda mais com o app rodando como arquivo local no celular.\n\nSolução: crie um proxy gratuito (uma vez só) e cole a URL dele no campo "Endpoint". Toque na engrenagem ⚙ → "Erro Failed to fetch? Toque aqui" e siga os passos do Cloudflare Worker.';
+
+function ehErroDeRede(e) {
+  return (e instanceof TypeError) ||
+         /failed to fetch|networkerror|load failed|fetch/i.test(String(e && e.message || e));
+}
+
 async function callNvidia(prompt, onStep) {
   const cfg = getConfig();
-  if (!cfg.apiKey) throw new Error('Chave da API NVIDIA não configurada. Toque na engrenagem.');
-  if (onStep) onStep('Enviando à NVIDIA');
+  const usaProxy = !/integrate\.api\.nvidia\.com/i.test(cfg.endpoint);
+  if (!cfg.apiKey && !usaProxy) throw new Error('Chave da API NVIDIA não configurada. Toque na engrenagem.');
+  if (onStep) onStep(usaProxy ? 'Enviando ao proxy' : 'Enviando à NVIDIA');
   const body = {
     model: cfg.modelo,
     messages: [
@@ -1041,19 +1073,22 @@ async function callNvidia(prompt, onStep) {
     max_tokens: 4096,
     stream: false
   };
-  const r = await fetch(cfg.endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bearer ' + cfg.apiKey,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json'
-    },
-    body: JSON.stringify(body)
-  });
+  const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+  if (cfg.apiKey) headers['Authorization'] = 'Bearer ' + cfg.apiKey;
+  let r;
+  try {
+    r = await fetch(cfg.endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    throw new Error(ehErroDeRede(e) ? MSG_CORS : ('Erro de conexão: ' + (e.message || e)));
+  }
   if (onStep) onStep('Aguardando resposta');
   if (!r.ok) {
     const txt = await r.text().catch(()=>r.statusText);
-    throw new Error(`NVIDIA API ${r.status}: ${txt.slice(0, 400)}`);
+    throw new Error(`API ${r.status}: ${txt.slice(0, 400)}`);
   }
   const data = await r.json();
   const content = data.choices?.[0]?.message?.content;
@@ -1070,9 +1105,10 @@ async function gerar() {
     return showError('Anexe os dois PDFs antes de gerar.');
   }
   const cfg = getConfig();
-  if (!cfg.apiKey) {
+  const usaProxy = !/integrate\.api\.nvidia\.com/i.test(cfg.endpoint);
+  if (!cfg.apiKey && !usaProxy) {
     abrirConfig();
-    return showError('Configure sua chave da API NVIDIA.');
+    return showError('Configure sua chave da API NVIDIA, ou um proxy no campo Endpoint (ver ajuda nas Configurações).');
   }
   const prompt = montarPrompt();
   state.lastPrompt = prompt;
@@ -1137,8 +1173,15 @@ function setLoading(on, text, step) {
 }
 function showError(msg) {
   const b = document.getElementById('errorBox');
-  if (msg) { b.textContent = '⚠ ' + msg; b.classList.add('show'); }
-  else { b.textContent = ''; b.classList.remove('show'); }
+  if (msg) {
+    b.style.whiteSpace = 'pre-line';
+    b.textContent = '⚠ ' + msg;
+    b.classList.add('show');
+    b.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } else {
+    b.textContent = '';
+    b.classList.remove('show');
+  }
 }
 function toast(msg) {
   const t = document.getElementById('toast');
@@ -1170,24 +1213,34 @@ async function testarConexao() {
   const errBox = document.getElementById('errorBoxConfig');
   errBox.classList.remove('show');
   const cfg = getConfig();
-  if (!cfg.apiKey) {
+  const usaProxy = !/integrate\.api\.nvidia\.com/i.test(cfg.endpoint);
+  if (!cfg.apiKey && !usaProxy) {
     errBox.style.color = '';
     errBox.style.background = '';
+    errBox.style.borderColor = '';
+    errBox.style.whiteSpace = '';
     errBox.textContent = '⚠ Informe a chave de API.';
     errBox.classList.add('show');
     return;
   }
   toast('Testando…');
+  const headers = { 'Content-Type': 'application/json' };
+  if (cfg.apiKey) headers['Authorization'] = 'Bearer ' + cfg.apiKey;
   try {
-    const r = await fetch(cfg.endpoint, {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + cfg.apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: cfg.modelo,
-        messages: [{ role: 'user', content: 'Responda apenas: OK' }],
-        max_tokens: 10
-      })
-    });
+    let r;
+    try {
+      r = await fetch(cfg.endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: cfg.modelo,
+          messages: [{ role: 'user', content: 'Responda apenas: OK' }],
+          max_tokens: 10
+        })
+      });
+    } catch (netErr) {
+      throw new Error(ehErroDeRede(netErr) ? MSG_CORS : ('Erro de conexão: ' + (netErr.message || netErr)));
+    }
     if (!r.ok) {
       const txt = await r.text().catch(()=>r.statusText);
       throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);
@@ -1197,12 +1250,14 @@ async function testarConexao() {
     errBox.style.color = 'var(--success)';
     errBox.style.background = '#e8f5e9';
     errBox.style.borderColor = '#a5d6a7';
+    errBox.style.whiteSpace = '';
     errBox.textContent = '✓ Conexão OK · ' + content.trim().slice(0, 120);
     errBox.classList.add('show');
   } catch(e) {
     errBox.style.color = '';
     errBox.style.background = '';
     errBox.style.borderColor = '';
+    errBox.style.whiteSpace = 'pre-line';
     errBox.textContent = '⚠ ' + (e.message || e);
     errBox.classList.add('show');
   }
@@ -1227,8 +1282,67 @@ async function testarConexao() {
 });
 
 /* ═══════════════════════════════════════════════════════════
+   CÓDIGO DO PROXY (Cloudflare Worker)
+═══════════════════════════════════════════════════════════ */
+const WORKER_SRC = [
+"export default {",
+"  async fetch(request, env) {",
+"    const cors = {",
+"      'Access-Control-Allow-Origin': '*',",
+"      'Access-Control-Allow-Methods': 'POST, OPTIONS',",
+"      'Access-Control-Allow-Headers': 'authorization, content-type',",
+"      'Access-Control-Max-Age': '86400'",
+"    };",
+"    if (request.method === 'OPTIONS')",
+"      return new Response(null, { status: 204, headers: cors });",
+"    if (request.method !== 'POST')",
+"      return new Response('Use POST', { status: 405, headers: cors });",
+"",
+"    const auth = env.NVIDIA_API_KEY",
+"      ? 'Bearer ' + env.NVIDIA_API_KEY",
+"      : (request.headers.get('Authorization') || '');",
+"",
+"    const upstream = await fetch(",
+"      'https://integrate.api.nvidia.com/v1/chat/completions',",
+"      {",
+"        method: 'POST',",
+"        headers: {",
+"          'Authorization': auth,",
+"          'Content-Type': 'application/json',",
+"          'Accept': 'application/json'",
+"        },",
+"        body: await request.text()",
+"      }",
+"    );",
+"",
+"    const out = await upstream.text();",
+"    return new Response(out, {",
+"      status: upstream.status,",
+"      headers: Object.assign({}, cors, {",
+"        'Content-Type': upstream.headers.get('Content-Type') || 'application/json'",
+"      })",
+"    });",
+"  }",
+"};"
+].join("\n");
+
+function copiarWorker() {
+  navigator.clipboard.writeText(WORKER_SRC)
+    .then(() => toast('Código do Worker copiado!'))
+    .catch(() => {
+      const ta = document.getElementById('workerCode');
+      ta.removeAttribute('readonly');
+      ta.select();
+      document.execCommand('copy');
+      ta.setAttribute('readonly', '');
+      toast('Código do Worker copiado!');
+    });
+}
+
+/* ═══════════════════════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════════════════════ */
+document.getElementById('workerCode').value = WORKER_SRC;
 carregarConfig();
 atualizarBotao();
 </script>
