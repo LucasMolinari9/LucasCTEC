@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Filtrador BOM — DETRO-RJ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F4F1EA;
+    --paper-warm: #EDE8DC;
+    --surface: #FFFFFF;
+    --ink: #142840;
+    --ink-soft: #2A3F5C;
+    --muted: #6B6B68;
+    --line: #E1DBCD;
+    --accent: #9B6B2E;
+    --accent-soft: #C99560;
+    --ok-bg: #E6EEE4;
+    --ok-fg: #2E5234;
+    --warn-bg: #F5EBD2;
+    --warn-fg: #6B4F1D;
+    --err-bg: #F0D8D5;
+    --err-fg: #6B2A26;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--paper); color: var(--ink); font-family: 'Manrope', sans-serif; -webkit-font-smoothing: antialiased; }
+  body {
+    min-height: 100vh;
+    background-image:
+      radial-gradient(circle at 12% 8%, rgba(155,107,46,0.05) 0%, transparent 40%),
+      radial-gradient(circle at 88% 92%, rgba(20,40,64,0.04) 0%, transparent 45%);
+    padding: 48px 24px 64px;
+  }
+  .container { max-width: 920px; margin: 0 auto; }
+
+  /* HEADER */
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; padding-bottom: 28px; border-bottom: 1px solid var(--line); margin-bottom: 40px; }
+  .brand-mark { display: flex; align-items: center; gap: 14px; }
+  .brand-glyph { width: 42px; height: 42px; border: 1.5px solid var(--ink); border-radius: 2px; display: grid; place-items: center; position: relative; }
+  .brand-glyph::before { content: ''; position: absolute; inset: 5px; border: 1px solid var(--accent); }
+  .brand-glyph span { font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; color: var(--ink); line-height: 1; position: relative; }
+  .brand-text .eyebrow { font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+  .brand-text h1 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 34px; line-height: 1.05; color: var(--ink); letter-spacing: -0.01em; }
+  .brand-text h1 em { font-style: italic; font-weight: 400; color: var(--accent); }
+  header .meta { text-align: right; font-size: 12px; color: var(--muted); line-height: 1.6; }
+  header .meta .label { letter-spacing: 0.16em; text-transform: uppercase; font-size: 10px; font-weight: 600; display: block; }
+
+  /* CARDS */
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 36px; box-shadow: 0 1px 0 rgba(20,40,64,0.02), 0 12px 32px -16px rgba(20,40,64,0.06); }
+  .card + .card { margin-top: 24px; }
+
+  /* STEPS */
+  .step { display: grid; grid-template-columns: 36px 1fr; gap: 20px; padding: 24px 0; border-bottom: 1px dashed var(--line); }
+  .step:first-child { padding-top: 0; }
+  .step:last-of-type { border-bottom: none; padding-bottom: 8px; }
+  .step-num { font-family: 'Fraunces', serif; font-size: 22px; color: var(--accent); font-weight: 500; line-height: 1; padding-top: 2px; font-feature-settings: 'lnum'; }
+  .step-content h3 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 18px; color: var(--ink); margin-bottom: 4px; letter-spacing: -0.005em; }
+  .step-content p.hint { font-size: 13px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+
+  /* DROPZONE */
+  .dropzone { border: 1.5px dashed var(--line); border-radius: 3px; padding: 28px 20px; text-align: center; cursor: pointer; transition: all .2s; background: var(--paper); position: relative; }
+  .dropzone:hover { border-color: var(--accent-soft); background: var(--paper-warm); }
+  .dropzone.dragover { border-color: var(--accent); background: var(--paper-warm); }
+  .dropzone.loaded { border-style: solid; border-color: var(--ink); background: var(--surface); text-align: left; padding: 18px 22px; }
+  .dropzone-text { font-size: 14px; color: var(--ink-soft); }
+  .dropzone-text strong { color: var(--ink); font-weight: 600; }
+  .dropzone-sub { font-size: 11.5px; color: var(--muted); margin-top: 6px; letter-spacing: 0.04em; }
+  .file-info { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  .file-info .name { font-weight: 600; font-size: 14px; color: var(--ink); font-family: 'Manrope', sans-serif; }
+  .file-info .size { font-size: 12px; color: var(--muted); }
+  .file-clear { background: none; border: none; color: var(--accent); font-size: 12px; cursor: pointer; padding: 4px 8px; font-family: inherit; letter-spacing: 0.04em; }
+  .file-clear:hover { color: var(--ink); }
+  input[type="file"] { display: none; }
+
+  /* INPUTS */
+  .input-field { width: 100%; padding: 13px 16px; border: 1px solid var(--line); border-radius: 3px; font-family: 'Manrope', sans-serif; font-size: 15px; color: var(--ink); background: var(--surface); transition: border-color .15s, box-shadow .15s; letter-spacing: 0.01em; }
+  .input-field:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 3px rgba(20,40,64,0.06); }
+  .input-field::placeholder { color: #B5B3AC; }
+
+  /* TOGGLE */
+  .toggle-group { display: inline-flex; background: var(--paper); border: 1px solid var(--line); border-radius: 3px; padding: 3px; gap: 2px; }
+  .toggle-opt { padding: 9px 18px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; border-radius: 2px; transition: all .15s; font-family: inherit; background: none; border: none; letter-spacing: 0.03em; }
+  .toggle-opt.active { background: var(--ink); color: var(--surface); }
+
+  /* BUTTON */
+  .actions { padding-top: 28px; display: flex; gap: 12px; align-items: center; }
+  .btn-primary { background: var(--ink); color: var(--surface); padding: 14px 32px; border: none; font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; border-radius: 3px; transition: background .15s, transform .1s; }
+  .btn-primary:hover:not(:disabled) { background: #0B1A2E; }
+  .btn-primary:active { transform: translateY(1px); }
+  .btn-primary:disabled { background: #C5C2BA; cursor: not-allowed; }
+  .btn-ghost { background: none; color: var(--muted); padding: 14px 18px; border: 1px solid var(--line); font-family: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; border-radius: 3px; transition: all .15s; }
+  .btn-ghost:hover { color: var(--ink); border-color: var(--ink); }
+
+  /* FEEDBACK */
+  .feedback { padding: 14px 18px; border-radius: 3px; font-size: 13.5px; line-height: 1.5; margin-top: 18px; display: none; border-left: 3px solid; }
+  .feedback.show { display: block; }
+  .feedback.error { background: var(--err-bg); color: var(--err-fg); border-left-color: var(--err-fg); }
+  .feedback.warn { background: var(--warn-bg); color: var(--warn-fg); border-left-color: var(--warn-fg); }
+  .feedback.ok { background: var(--ok-bg); color: var(--ok-fg); border-left-color: var(--ok-fg); }
+
+  /* RESULT */
+  #result { display: none; }
+  #result.show { display: block; }
+  .result-header { margin-bottom: 28px; }
+  .result-header .eyebrow { font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-bottom: 8px; }
+  .result-header h2 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 26px; line-height: 1.15; color: var(--ink); letter-spacing: -0.005em; }
+
+  .meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; border: 1px solid var(--line); border-radius: 3px; margin-bottom: 28px; background: var(--paper); }
+  .meta-cell { padding: 14px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .meta-cell:nth-child(2n) { border-right: none; }
+  .meta-cell:nth-last-child(-n+2) { border-bottom: none; }
+  .meta-cell .k { font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 3px; }
+  .meta-cell .v { font-size: 14.5px; color: var(--ink); font-weight: 500; line-height: 1.3; }
+  .meta-cell .v.serif { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 500; }
+
+  .section-title { font-family: 'Fraunces', serif; font-weight: 500; font-size: 17px; color: var(--ink); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 10px; }
+  .section-title .count { font-family: 'Manrope', sans-serif; font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; margin-bottom: 28px; font-size: 14px; }
+  th, td { padding: 11px 14px; text-align: left; border-bottom: 1px solid var(--line); }
+  th { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); font-weight: 700; background: var(--paper); }
+  td.code { font-family: 'Fraunces', serif; color: var(--accent); font-weight: 600; font-size: 15px; }
+  td.num { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+  tr.direct td { background: rgba(155,107,46,0.04); }
+  td .nome-secao { color: var(--ink); font-weight: 500; }
+  td .badge-direct { font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-left: 8px; }
+
+  /* OUTPUT BLOCK */
+  .output-wrap { position: relative; }
+  .output { background: var(--ink); color: #E8E4D9; padding: 24px 28px; border-radius: 3px; font-family: 'Fraunces', serif; font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; max-height: 480px; overflow-y: auto; font-feature-settings: 'lnum'; }
+  .output::-webkit-scrollbar { width: 8px; }
+  .output::-webkit-scrollbar-track { background: transparent; }
+  .output::-webkit-scrollbar-thumb { background: rgba(232,228,217,0.2); border-radius: 4px; }
+  .copy-btn { position: absolute; top: 14px; right: 14px; background: rgba(232,228,217,0.1); color: #E8E4D9; border: 1px solid rgba(232,228,217,0.2); padding: 8px 14px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; cursor: pointer; border-radius: 2px; font-family: 'Manrope', sans-serif; transition: all .15s; }
+  .copy-btn:hover { background: rgba(232,228,217,0.18); }
+  .copy-btn.copied { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+
+  .months-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .month-pill { font-size: 11.5px; padding: 3px 9px; background: var(--paper); border: 1px solid var(--line); border-radius: 2px; color: var(--ink-soft); font-variant-numeric: tabular-nums; font-weight: 500; }
+
+  footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); letter-spacing: 0.06em; }
+  footer .right { font-style: italic; font-family: 'Fraunces', serif; font-size: 12px; }
+
+  @media (max-width: 640px) {
+    body { padding: 24px 16px 40px; }
+    header { flex-direction: column; align-items: flex-start; gap: 16px; }
+    header .meta { text-align: left; }
+    .card { padding: 24px 20px; }
+    .meta-grid { grid-template-columns: 1fr; }
+    .meta-cell { border-right: none; }
+    .meta-cell:not(:last-child) { border-bottom: 1px solid var(--line); }
+    .brand-text h1 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <header>
+    <div class="brand-mark">
+      <div class="brand-glyph"><span>F</span></div>
+      <div class="brand-text">
+        <div class="eyebrow">DETRO-RJ • Análise técnica</div>
+        <h1>Filtrador <em>BOM</em></h1>
+      </div>
+    </div>
+    <div class="meta">
+      <span class="label">Boletim de Operação Mensal</span>
+      Médias de passageiros<br>por linha e seção tarifária
+    </div>
+  </header>
+
+  <div class="card">
+
+    <div class="step">
+      <div class="step-num">01</div>
+      <div class="step-content">
+        <h3>Relatório do BOM</h3>
+        <p class="hint">Arquivo .csv exportado do sistema (separador ponto-e-vírgula, codificação Windows-1252).</p>
+        <label for="fileInput" class="dropzone" id="dropzone">
+          <div id="dropzoneEmpty">
+            <div class="dropzone-text"><strong>Arraste o arquivo aqui</strong> ou clique para selecionar</div>
+            <div class="dropzone-sub">.CSV — RELATÓRIO DO BOM</div>
+          </div>
+          <div id="dropzoneLoaded" style="display:none;" class="file-info">
+            <div>
+              <div class="name" id="fileName"></div>
+              <div class="size" id="fileSize"></div>
+            </div>
+            <button type="button" class="file-clear" id="fileClear">REMOVER</button>
+          </div>
+        </label>
+        <input type="file" id="fileInput" accept=".csv">
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">02</div>
+      <div class="step-content">
+        <h3>Modo de busca</h3>
+        <p class="hint">Buscar uma linha específica ou listar todas as linhas de uma permissionária.</p>
+        <div class="toggle-group" role="group" style="margin-bottom: 16px;">
+          <button type="button" class="toggle-opt active" data-modo="linha" id="modoLinha">Por linha</button>
+          <button type="button" class="toggle-opt" data-modo="empresa" id="modoEmpresa">Por empresa</button>
+        </div>
+        <div id="campoLinha">
+          <input type="text" class="input-field" id="codigoInput" placeholder="Código da linha — ex.: 132004001" inputmode="numeric" maxlength="12">
+        </div>
+        <div id="campoEmpresa" style="display: none;">
+          <select class="input-field" id="empresaSelect" disabled>
+            <option value="">Carregue o arquivo primeiro</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="step" id="stepSecao">
+      <div class="step-num">03</div>
+      <div class="step-content">
+        <h3>Seção tarifária</h3>
+        <p class="hint">A linha possui seções cadastradas além da ligação direta?</p>
+        <div class="toggle-group" role="group">
+          <button type="button" class="toggle-opt active" data-val="false" id="optNao">Sem seção</button>
+          <button type="button" class="toggle-opt" data-val="true" id="optSim">Com seção</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num" id="stepPeriodoNum">04</div>
+      <div class="step-content">
+        <h3>Período de análise</h3>
+        <p class="hint">Quantos meses mais recentes considerar. Padrão do manual: 4. Mínimo 1, máximo 12.</p>
+        <input type="number" class="input-field" id="mesesInput" value="4" min="1" max="12" style="max-width: 140px;">
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" id="processBtn" disabled>Processar</button>
+      <button class="btn-ghost" id="resetBtn" style="display:none;">Nova análise</button>
+    </div>
+
+    <div class="feedback" id="feedback"></div>
+
+  </div>
+
+  <div class="card" id="result">
+
+    <div class="result-header">
+      <div class="eyebrow">Resultado da análise</div>
+      <h2 id="resultTitle">—</h2>
+    </div>
+
+    <div class="meta-grid" id="metaGrid"></div>
+
+    <div class="section-title" id="resultSectionTitle">Médias de passageiros <span class="count" id="secCount"></span></div>
+    <table id="resultTable">
+      <thead id="resultHead"></thead>
+      <tbody id="resultBody"></tbody>
+    </table>
+
+    <div class="section-title">Bloco para colar no chat</div>
+    <div class="output-wrap">
+      <pre class="output" id="outputBlock"></pre>
+      <button class="copy-btn" id="copyBtn">Copiar</button>
+    </div>
+
+  </div>
+
+  <footer>
+    <span>Ferramenta de análise interna</span>
+    <span class="right">DETRO-RJ</span>
+  </footer>
+
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+const state = {
+  file: null,
+  csvText: null,
+  modo: 'linha',
+  codigo: '',
+  empresa: '',
+  temSecao: false,
+  numMeses: 4
+};
+
+// ============================================================
+// ELEMENTS
+// ============================================================
+const fileInput = document.getElementById('fileInput');
+const dropzone = document.getElementById('dropzone');
+const dropzoneEmpty = document.getElementById('dropzoneEmpty');
+const dropzoneLoaded = document.getElementById('dropzoneLoaded');
+const fileNameEl = document.getElementById('fileName');
+const fileSizeEl = document.getElementById('fileSize');
+const fileClear = document.getElementById('fileClear');
+const codigoInput = document.getElementById('codigoInput');
+const empresaSelect = document.getElementById('empresaSelect');
+const modoLinha = document.getElementById('modoLinha');
+const modoEmpresa = document.getElementById('modoEmpresa');
+const campoLinha = document.getElementById('campoLinha');
+const campoEmpresa = document.getElementById('campoEmpresa');
+const stepSecao = document.getElementById('stepSecao');
+const mesesInput = document.getElementById('mesesInput');
+const optNao = document.getElementById('optNao');
+const optSim = document.getElementById('optSim');
+const processBtn = document.getElementById('processBtn');
+const resetBtn = document.getElementById('resetBtn');
+const feedback = document.getElementById('feedback');
+const result = document.getElementById('result');
+const copyBtn = document.getElementById('copyBtn');
+
+// ============================================================
+// FILE HANDLING
+// ============================================================
+function handleFile(file) {
+  if (!file) return;
+  if (!/\.csv$/i.test(file.name)) {
+    showFeedback('error', 'Arquivo precisa ter extensão .csv');
+    return;
+  }
+  state.file = file;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    state.csvText = e.target.result;
+    fileNameEl.textContent = file.name;
+    fileSizeEl.textContent = formatBytes(file.size);
+    dropzoneEmpty.style.display = 'none';
+    dropzoneLoaded.style.display = 'flex';
+    dropzone.classList.add('loaded');
+    populateEmpresas();
+    clearFeedback();
+    updateButton();
+  };
+  reader.onerror = () => showFeedback('error', 'Falha ao ler o arquivo.');
+  reader.readAsText(file, 'windows-1252');
+}
+
+function clearFile(e) {
+  if (e) e.preventDefault();
+  state.file = null;
+  state.csvText = null;
+  state.empresa = '';
+  fileInput.value = '';
+  dropzoneEmpty.style.display = 'block';
+  dropzoneLoaded.style.display = 'none';
+  dropzone.classList.remove('loaded');
+  empresaSelect.innerHTML = '<option value="">Carregue o arquivo primeiro</option>';
+  empresaSelect.disabled = true;
+  updateButton();
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+}
+
+fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+fileClear.addEventListener('click', clearFile);
+
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+// ============================================================
+// INPUTS
+// ============================================================
+codigoInput.addEventListener('input', (e) => {
+  e.target.value = e.target.value.replace(/\D/g, '');
+  state.codigo = e.target.value;
+  updateButton();
+});
+
+empresaSelect.addEventListener('change', (e) => {
+  state.empresa = e.target.value;
+  updateButton();
+});
+
+function setModo(modo) {
+  state.modo = modo;
+  modoLinha.classList.toggle('active', modo === 'linha');
+  modoEmpresa.classList.toggle('active', modo === 'empresa');
+  campoLinha.style.display = modo === 'linha' ? 'block' : 'none';
+  campoEmpresa.style.display = modo === 'empresa' ? 'block' : 'none';
+  stepSecao.style.display = modo === 'linha' ? 'grid' : 'none';
+  updateButton();
+}
+modoLinha.addEventListener('click', () => setModo('linha'));
+modoEmpresa.addEventListener('click', () => setModo('empresa'));
+
+mesesInput.addEventListener('input', (e) => {
+  let v = parseInt(e.target.value, 10);
+  if (isNaN(v)) v = 4;
+  if (v < 1) v = 1;
+  if (v > 12) v = 12;
+  state.numMeses = v;
+});
+mesesInput.addEventListener('blur', (e) => {
+  e.target.value = state.numMeses;
+});
+
+function setTipo(val) {
+  state.temSecao = val;
+  optNao.classList.toggle('active', !val);
+  optSim.classList.toggle('active', val);
+}
+optNao.addEventListener('click', () => setTipo(false));
+optSim.addEventListener('click', () => setTipo(true));
+
+function populateEmpresas() {
+  // Parse just headers + Empresa column for speed
+  const lines = state.csvText.split(/\r?\n/);
+  if (lines.length < 2) return;
+  const headers = lines[0].split(';').map(h => h.trim());
+  const empIdx = headers.indexOf('Empresa');
+  if (empIdx < 0) return;
+  const set = new Set();
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const cols = lines[i].split(';');
+    const emp = (cols[empIdx] || '').trim();
+    if (emp) set.add(emp);
+  }
+  const list = Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  empresaSelect.innerHTML = '<option value="">— Selecione uma empresa —</option>' +
+    list.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
+  empresaSelect.disabled = false;
+}
+
+function updateButton() {
+  const hasFile = !!state.csvText;
+  const hasTarget = state.modo === 'linha'
+    ? state.codigo.length > 0
+    : state.empresa.length > 0;
+  processBtn.disabled = !(hasFile && hasTarget);
+}
+
+// ============================================================
+// FEEDBACK
+// ============================================================
+function showFeedback(type, msg) {
+  feedback.className = 'feedback show ' + type;
+  feedback.textContent = msg;
+}
+function clearFeedback() {
+  feedback.className = 'feedback';
+  feedback.textContent = '';
+}
+
+// ============================================================
+// CSV PARSING
+// ============================================================
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (lines.length < 2) return { headers: [], rows: [] };
+  const headers = lines[0].split(';').map(h => h.trim());
+  const rows = lines.slice(1).map(line => {
+    const cols = line.split(';');
+    const row = {};
+    headers.forEach((h, i) => row[h] = (cols[i] || '').trim());
+    return row;
+  });
+  return { headers, rows };
+}
+
+// ============================================================
+// PROCESSING
+// ============================================================
+function sortMonthsAsc(arr) {
+  return arr.slice().sort((a, b) => {
+    const [ma, ya] = a.split('/');
+    const [mb, yb] = b.split('/');
+    return (ya + ma).localeCompare(yb + mb);
+  });
+}
+
+function processCSV() {
+  clearFeedback();
+  const { rows } = parseCSV(state.csvText);
+  if (rows.length === 0) {
+    showFeedback('error', 'Arquivo vazio ou inválido.');
+    return;
+  }
+  if (state.modo === 'linha') {
+    processLinha(rows);
+  } else {
+    processEmpresa(rows);
+  }
+}
+
+function processLinha(rows) {
+  // Filter by linha code
+  const filtered = rows.filter(r => r['Código da Linha'] === state.codigo);
+  if (filtered.length === 0) {
+    showFeedback('error', `Nenhum registro encontrado para o código ${state.codigo}. Confira se o código está correto e se a planilha contém essa linha.`);
+    result.classList.remove('show');
+    return;
+  }
+
+  const allMonths = sortMonthsAsc(Array.from(new Set(filtered.map(r => r['Mês de Referência']))));
+  if (allMonths.length === 0) {
+    showFeedback('error', 'Nenhum mês válido encontrado para essa linha.');
+    return;
+  }
+
+  const n = state.numMeses;
+  const lastN = allMonths.slice(-n);
+  const periodRecords = filtered.filter(r => lastN.includes(r['Mês de Referência']));
+
+  // Filter by section
+  const records = state.temSecao
+    ? periodRecords
+    : periodRecords.filter(r => r['Código da Seção'] === '00');
+
+  if (records.length === 0) {
+    showFeedback('error', 'Nenhum registro encontrado após filtro de seção.');
+    return;
+  }
+
+  // Group by section
+  const bySection = {};
+  records.forEach(r => {
+    const code = r['Código da Seção'];
+    if (!bySection[code]) {
+      bySection[code] = { codigo: code, nome: r['Nome da Seção'], records: [] };
+    }
+    bySection[code].records.push({
+      mes: r['Mês de Referência'],
+      ab: parseInt(r['Total Passageiros A-B'], 10) || 0,
+      ba: parseInt(r['Total Passageiros B-A'], 10) || 0
+    });
+  });
+
+  const periodLen = lastN.length;
+  const sections = Object.values(bySection).map(s => {
+    const sumAB = s.records.reduce((acc, r) => acc + r.ab, 0);
+    const sumBA = s.records.reduce((acc, r) => acc + r.ba, 0);
+    return {
+      codigo: s.codigo,
+      nome: s.nome,
+      avgAB: Math.round(sumAB / periodLen),
+      avgBA: Math.round(sumBA / periodLen),
+      monthsCovered: s.records.length
+    };
+  });
+  sections.sort((a, b) => a.codigo.localeCompare(b.codigo));
+
+  const meta = {
+    empresa: filtered[0]['Empresa'],
+    nomeLinha: filtered[0]['Nome da Linha'],
+    numeroLinha: filtered[0]['Número da Linha'],
+    tipoVeiculo: filtered[0]['Tipo de Veículo'],
+    capacidade: filtered[0]['Capacidade da Linha'],
+    codigo: state.codigo,
+    months: lastN,
+    periodLen,
+    requestedMonths: n,
+    availableMonths: allMonths.length
+  };
+
+  const warnings = buildWarnings(meta, sections);
+  renderResultLinha(meta, sections, warnings);
+}
+
+function processEmpresa(rows) {
+  const filtered = rows.filter(r => r['Empresa'] === state.empresa);
+  if (filtered.length === 0) {
+    showFeedback('error', `Nenhum registro encontrado para a empresa selecionada.`);
+    result.classList.remove('show');
+    return;
+  }
+
+  const allMonths = sortMonthsAsc(Array.from(new Set(filtered.map(r => r['Mês de Referência']))));
+  const n = state.numMeses;
+  const lastN = allMonths.slice(-n);
+  const periodRecords = filtered.filter(r => lastN.includes(r['Mês de Referência']));
+
+  // Group by Código da Linha — using only seção 00 (direta) for the overview
+  const directOnly = periodRecords.filter(r => r['Código da Seção'] === '00');
+
+  const byLine = {};
+  directOnly.forEach(r => {
+    const code = r['Código da Linha'];
+    if (!byLine[code]) {
+      byLine[code] = {
+        codigo: code,
+        nome: r['Nome da Linha'],
+        numero: r['Número da Linha'],
+        tipoVeiculo: r['Tipo de Veículo'],
+        capacidade: r['Capacidade da Linha'],
+        records: []
+      };
+    }
+    byLine[code].records.push({
+      mes: r['Mês de Referência'],
+      ab: parseInt(r['Total Passageiros A-B'], 10) || 0,
+      ba: parseInt(r['Total Passageiros B-A'], 10) || 0
+    });
+  });
+
+  const periodLen = lastN.length;
+  const lines = Object.values(byLine).map(l => {
+    const sumAB = l.records.reduce((acc, r) => acc + r.ab, 0);
+    const sumBA = l.records.reduce((acc, r) => acc + r.ba, 0);
+    return {
+      ...l,
+      avgAB: Math.round(sumAB / periodLen),
+      avgBA: Math.round(sumBA / periodLen),
+      monthsCovered: l.records.length
+    };
+  });
+  lines.sort((a, b) => a.codigo.localeCompare(b.codigo));
+
+  const meta = {
+    empresa: state.empresa,
+    months: lastN,
+    periodLen,
+    requestedMonths: n,
+    totalLines: lines.length
+  };
+
+  renderResultEmpresa(meta, lines);
+}
+
+function buildWarnings(meta, sections) {
+  const warnings = [];
+  if (meta.periodLen < meta.requestedMonths) {
+    warnings.push(`Foram solicitados ${meta.requestedMonths} meses, mas apenas ${meta.periodLen} disponível(is) na planilha. Médias divididas por ${meta.periodLen}.`);
+  }
+  const partial = sections.filter(s => s.monthsCovered < meta.periodLen);
+  if (partial.length > 0) {
+    warnings.push(`Seções com dados em menos de ${meta.periodLen} meses: ${partial.map(s => '[' + s.codigo + ']').join(', ')}. Médias dividiram por ${meta.periodLen} (zeros para meses faltantes).`);
+  }
+  return warnings;
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+function formatMonth(mmYYYY) {
+  const [m, y] = mmYYYY.split('/');
+  const names = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  return names[parseInt(m, 10) - 1] + '/' + y;
+}
+
+function formatNum(n) {
+  return n.toLocaleString('pt-BR');
+}
+
+function renderResultLinha(meta, sections, warnings) {
+  // Title
+  document.getElementById('resultTitle').textContent = `${meta.numeroLinha ? meta.numeroLinha + ' — ' : ''}${meta.nomeLinha}`;
+  document.getElementById('resultSectionTitle').firstChild.textContent = 'Médias de passageiros ';
+
+  // Meta grid
+  const periodStr = `${formatMonth(meta.months[0])} a ${formatMonth(meta.months[meta.months.length - 1])}`;
+  const monthsPills = meta.months.map(m => `<span class="month-pill">${formatMonth(m)}</span>`).join('');
+
+  document.getElementById('metaGrid').innerHTML = `
+    <div class="meta-cell">
+      <div class="k">Empresa</div>
+      <div class="v">${escapeHtml(meta.empresa)}</div>
+    </div>
+    <div class="meta-cell">
+      <div class="k">Código da linha</div>
+      <div class="v serif">${escapeHtml(meta.codigo)}</div>
+    </div>
+    <div class="meta-cell">
+      <div class="k">Tipo de veículo (BOM)</div>
+      <div class="v">${escapeHtml(meta.tipoVeiculo)}</div>
+    </div>
+    <div class="meta-cell">
+      <div class="k">Capacidade</div>
+      <div class="v serif">${escapeHtml(meta.capacidade)} <span style="font-size:12px;color:var(--muted);font-family:'Manrope',sans-serif;font-weight:500;">assentos</span></div>
+    </div>
+    <div class="meta-cell" style="grid-column: 1 / -1; border-right: none;">
+      <div class="k">Período analisado — ${periodStr}</div>
+      <div class="months-strip">${monthsPills}</div>
+    </div>
+  `;
+
+  // Table
+  document.getElementById('secCount').textContent = sections.length === 1 ? '1 seção' : sections.length + ' seções';
+  document.getElementById('resultHead').innerHTML = `
+    <tr>
+      <th style="width: 80px;">Seção</th>
+      <th>Trecho (nome BOM)</th>
+      <th style="width: 110px; text-align: right;">Média A-B</th>
+      <th style="width: 110px; text-align: right;">Média B-A</th>
+    </tr>
+  `;
+  const tbody = document.getElementById('resultBody');
+  tbody.innerHTML = sections.map(s => {
+    const isDirect = s.codigo === '00';
+    return `<tr class="${isDirect ? 'direct' : ''}">
+      <td class="code">${escapeHtml(s.codigo)}</td>
+      <td><span class="nome-secao">${escapeHtml(s.nome)}</span>${isDirect ? '<span class="badge-direct">Direta</span>' : ''}</td>
+      <td class="num">${formatNum(s.avgAB)}</td>
+      <td class="num">${formatNum(s.avgBA)}</td>
+    </tr>`;
+  }).join('');
+
+  // Output block
+  document.getElementById('outputBlock').textContent = buildOutputTextLinha(meta, sections);
+
+  // Warnings
+  if (warnings.length > 0) {
+    showFeedback('warn', warnings.join(' '));
+  } else {
+    showFeedback('ok', `Análise concluída — ${sections.length} ${sections.length === 1 ? 'seção processada' : 'seções processadas'} sobre ${meta.periodLen} ${meta.periodLen === 1 ? 'mês' : 'meses'}.`);
+  }
+
+  result.classList.add('show');
+  resetBtn.style.display = 'inline-block';
+  result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderResultEmpresa(meta, lines) {
+  document.getElementById('resultTitle').textContent = meta.empresa;
+  document.getElementById('resultSectionTitle').firstChild.textContent = 'Linhas da empresa ';
+
+  const periodStr = meta.months.length > 0
+    ? `${formatMonth(meta.months[0])} a ${formatMonth(meta.months[meta.months.length - 1])}`
+    : '—';
+  const monthsPills = meta.months.map(m => `<span class="month-pill">${formatMonth(m)}</span>`).join('');
+
+  document.getElementById('metaGrid').innerHTML = `
+    <div class="meta-cell">
+      <div class="k">Permissionária</div>
+      <div class="v">${escapeHtml(meta.empresa)}</div>
+    </div>
+    <div class="meta-cell">
+      <div class="k">Total de linhas</div>
+      <div class="v serif">${meta.totalLines}</div>
+    </div>
+    <div class="meta-cell" style="grid-column: 1 / -1; border-right: none; border-bottom: none;">
+      <div class="k">Período analisado — ${periodStr}</div>
+      <div class="months-strip">${monthsPills}</div>
+    </div>
+  `;
+
+  document.getElementById('secCount').textContent = meta.totalLines === 1 ? '1 linha' : meta.totalLines + ' linhas';
+  document.getElementById('resultHead').innerHTML = `
+    <tr>
+      <th style="width: 110px;">Código</th>
+      <th>Linha</th>
+      <th style="width: 70px; text-align: right;">Cap.</th>
+      <th style="width: 100px; text-align: right;">Média A-B</th>
+      <th style="width: 100px; text-align: right;">Média B-A</th>
+    </tr>
+  `;
+  const tbody = document.getElementById('resultBody');
+  tbody.innerHTML = lines.map(l => {
+    return `<tr>
+      <td class="code">${escapeHtml(l.codigo)}</td>
+      <td><span class="nome-secao">${escapeHtml(l.numero ? l.numero + ' — ' : '')}${escapeHtml(l.nome)}</span></td>
+      <td class="num">${escapeHtml(l.capacidade)}</td>
+      <td class="num">${formatNum(l.avgAB)}</td>
+      <td class="num">${formatNum(l.avgBA)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('outputBlock').textContent = buildOutputTextEmpresa(meta, lines);
+
+  const warnings = [];
+  if (meta.periodLen < meta.requestedMonths) {
+    warnings.push(`Foram solicitados ${meta.requestedMonths} meses, mas apenas ${meta.periodLen} disponível(is). Médias divididas por ${meta.periodLen}.`);
+  }
+  if (warnings.length > 0) {
+    showFeedback('warn', warnings.join(' '));
+  } else {
+    showFeedback('ok', `Análise concluída — ${lines.length} ${lines.length === 1 ? 'linha processada' : 'linhas processadas'} sobre ${meta.periodLen} ${meta.periodLen === 1 ? 'mês' : 'meses'}.`);
+  }
+
+  result.classList.add('show');
+  resetBtn.style.display = 'inline-block';
+  result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function buildOutputTextEmpresa(meta, lines) {
+  const periodStr = meta.months.length > 0
+    ? `${formatMonth(meta.months[0])} a ${formatMonth(meta.months[meta.months.length - 1])}`
+    : '—';
+  const out = [];
+  out.push(`EMPRESA: ${meta.empresa}`);
+  out.push(`Período: ${periodStr} (${meta.periodLen} ${meta.periodLen === 1 ? 'mês' : 'meses'})`);
+  out.push(`Total de linhas: ${lines.length}`);
+  out.push('');
+  out.push(`LINHAS (médias da ligação direta):`);
+  lines.forEach(l => {
+    const num = l.numero ? l.numero + ' ' : '';
+    out.push(`[${l.codigo}] ${num}${l.nome} — Cap. ${l.capacidade} — A-B: ${formatNum(l.avgAB)} | B-A: ${formatNum(l.avgBA)}`);
+  });
+  out.push('');
+  out.push(`Obs.: tabela apresenta apenas a ligação direta (seção 00). Para detalhe por seção, use o modo "Por linha".`);
+  return out.join('\n');
+}
+
+function buildOutputTextLinha(meta, sections) {
+  const periodStr = `${formatMonth(meta.months[0])} a ${formatMonth(meta.months[meta.months.length - 1])}`;
+  const lines = [];
+  lines.push(`LINHA ${meta.codigo} — ${meta.nomeLinha}`);
+  lines.push(`Empresa: ${meta.empresa}`);
+  lines.push(`Período: ${periodStr} (${meta.periodLen} ${meta.periodLen === 1 ? 'mês' : 'meses'})`);
+  lines.push(`Tipo de veículo (BOM): ${meta.tipoVeiculo}`);
+  lines.push(`Capacidade: ${meta.capacidade} assentos`);
+  lines.push('');
+  lines.push(`MÉDIAS DE PASSAGEIROS:`);
+  sections.forEach(s => {
+    const tag = s.codigo === '00' ? '[direta]' : `[seção ${s.codigo}]`;
+    lines.push(`${tag} ${s.nome} — A-B: ${formatNum(s.avgAB)} | B-A: ${formatNum(s.avgBA)}`);
+  });
+  lines.push('');
+  lines.push(`Obs.: característica do veículo (AC/A/SA/SAC) e nomes oficiais das seções devem ser confirmados no anexo do cadastro.`);
+  return lines.join('\n');
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ============================================================
+// ACTIONS
+// ============================================================
+processBtn.addEventListener('click', processCSV);
+
+resetBtn.addEventListener('click', () => {
+  clearFile();
+  codigoInput.value = '';
+  state.codigo = '';
+  state.empresa = '';
+  empresaSelect.value = '';
+  mesesInput.value = 4;
+  state.numMeses = 4;
+  setModo('linha');
+  setTipo(false);
+  result.classList.remove('show');
+  resetBtn.style.display = 'none';
+  clearFeedback();
+  updateButton();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+copyBtn.addEventListener('click', async () => {
+  const text = document.getElementById('outputBlock').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    copyBtn.textContent = 'Copiado';
+    copyBtn.classList.add('copied');
+    setTimeout(() => {
+      copyBtn.textContent = 'Copiar';
+      copyBtn.classList.remove('copied');
+    }, 1800);
+  } catch {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    copyBtn.textContent = 'Copiado';
+    setTimeout(() => copyBtn.textContent = 'Copiar', 1800);
+  }
+});
+
+// Enter key on codigo input
+codigoInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !processBtn.disabled) processCSV();
+});
+</script>
+
+</body>
+</html>
