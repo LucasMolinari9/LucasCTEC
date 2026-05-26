@@ -6,14 +6,14 @@
 // Lista de temas. Para adicionar um tema novo no futuro, basta
 // incluir mais um item neste array (nome + cor para os graficos).
 const TEMAS = [
-  { nome: "Quadro de horarios", cor: "#118dff" },
-  { nome: "Itinerarios", cor: "#12239e" },
-  { nome: "Oficios", cor: "#e66c37" },
-  { nome: "Reclamacao", cor: "#d13438" },
-  { nome: "Criacao de secao", cor: "#6b007b" },
-  { nome: "Criacao de linha", cor: "#1aab40" },
+  { nome: "Quadro de horários", cor: "#118dff" },
+  { nome: "Itinerários", cor: "#12239e" },
+  { nome: "Ofícios", cor: "#e66c37" },
+  { nome: "Reclamação", cor: "#d13438" },
+  { nome: "Criação de seção", cor: "#6b007b" },
+  { nome: "Criação de linha", cor: "#1aab40" },
   { nome: "Registro GPS", cor: "#13a4b4" },
-  { nome: "Suspensao de linha", cor: "#f2c811" },
+  { nome: "Suspensão de linha", cor: "#f2c811" },
 ];
 
 const corDoTema = (nome) => (TEMAS.find((t) => t.nome === nome) || {}).cor || "#9aa0a6";
@@ -30,9 +30,30 @@ let doughnutChart = null;
 const $ = (id) => document.getElementById(id);
 
 // ------------------------------------------------------------
+//  Tema escuro / claro
+// ------------------------------------------------------------
+function aplicarTema(escuro) {
+  document.documentElement.setAttribute("data-theme", escuro ? "dark" : "light");
+  const btn = $("theme-toggle");
+  if (btn) btn.title = escuro ? "Mudar para tema claro" : "Mudar para tema escuro";
+  localStorage.setItem("tema-escuro", escuro ? "1" : "0");
+  if (barChart || doughnutChart) atualizarGraficos();
+}
+
+function toggleTema() {
+  const escuroAtual = document.documentElement.getAttribute("data-theme") === "dark";
+  aplicarTema(!escuroAtual);
+}
+
+// ------------------------------------------------------------
 //  Inicializacao
 // ------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
+  // Restaurar preferência de tema salva
+  const temaSalvo = localStorage.getItem("tema-escuro");
+  const prefereEscuro = temaSalvo === "1" || (temaSalvo === null && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  aplicarTema(prefereEscuro);
+
   popularSelectsDeTema();
   registrarEventos();
   verificarSessao();
@@ -60,6 +81,9 @@ function registrarEventos() {
   $("add-form").addEventListener("submit", aoAdicionar);
   $("search-input").addEventListener("input", renderizarTabela);
   $("filter-tema").addEventListener("change", renderizarTabela);
+
+  // Alternar tema escuro/claro
+  $("theme-toggle").addEventListener("click", toggleTema);
 
   // Modal trocar senha
   $("change-pass-btn").addEventListener("click", () => abrirModalSenha(true));
@@ -140,14 +164,14 @@ async function aoTrocarSenha(e) {
   const nova = $("new-password").value;
   const conf = $("confirm-password").value;
   if (nova !== conf) {
-    msg.textContent = "As senhas nao conferem.";
+    msg.textContent = "As senhas não conferem.";
     msg.classList.remove("hidden");
     return;
   }
 
   const { error } = await sb.auth.updateUser({ password: nova });
   if (error) {
-    msg.textContent = "Nao foi possivel trocar a senha: " + error.message;
+    msg.textContent = "Não foi possível trocar a senha: " + error.message;
     msg.classList.remove("hidden");
     return;
   }

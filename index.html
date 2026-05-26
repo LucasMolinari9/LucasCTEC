@@ -37,6 +37,10 @@
       </div>
       <div class="topbar-right">
         <span id="user-email" class="user-email"></span>
+        <button id="theme-toggle" class="btn btn-ghost btn-icon" title="Mudar para tema escuro" aria-label="Alternar tema escuro">
+          <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
         <button id="change-pass-btn" class="btn btn-ghost">Trocar senha</button>
         <button id="logout-btn" class="btn btn-ghost">Sair</button>
       </div>
@@ -48,7 +52,7 @@
         <h2 class="card-title">Novo registro</h2>
         <div class="add-row">
           <label class="field grow">
-            <span>Numero do processo</span>
+            <span>Número do processo</span>
             <input id="numero-input" type="text" required placeholder="ex.: 2026/001234" />
           </label>
           <label class="field grow">
@@ -75,7 +79,7 @@
           <span id="kpi-top" class="kpi-value kpi-value-sm">&mdash;</span>
         </div>
         <div class="card kpi">
-          <span class="kpi-label">Registros este mes</span>
+          <span class="kpi-label">Registros este mês</span>
           <span id="kpi-mes" class="kpi-value">0</span>
         </div>
       </div>
@@ -87,7 +91,7 @@
           <div class="chart-wrap"><canvas id="bar-chart"></canvas></div>
         </div>
         <div class="card chart-card">
-          <h2 class="card-title">Distribuicao</h2>
+          <h2 class="card-title">Distribuição</h2>
           <div class="chart-wrap"><canvas id="doughnut-chart"></canvas></div>
         </div>
       </div>
@@ -97,7 +101,7 @@
         <div class="table-head">
           <h2 class="card-title">Registros</h2>
           <div class="table-filters">
-            <input id="search-input" type="search" placeholder="Buscar por numero..." />
+            <input id="search-input" type="search" placeholder="Buscar por número..." />
             <select id="filter-tema">
               <option value="">Todos os temas</option>
             </select>
@@ -107,10 +111,10 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>Numero do processo</th>
+                <th>Número do processo</th>
                 <th>Tema</th>
                 <th>Data</th>
-                <th class="col-acao">Acoes</th>
+                <th class="col-acao">Ações</th>
               </tr>
             </thead>
             <tbody id="table-body"></tbody>
@@ -127,7 +131,7 @@
       <h2>Trocar senha</h2>
       <form id="pass-form">
         <label class="field">
-          <span>Nova senha (minimo 6 caracteres)</span>
+          <span>Nova senha (mínimo 6 caracteres)</span>
           <input id="new-password" type="password" minlength="6" required placeholder="nova senha" />
         </label>
         <label class="field">
