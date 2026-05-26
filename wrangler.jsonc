@@ -2,6 +2,6 @@
   "name": "filtrobom",
   "compatibility_date": "2026-05-24",
   "assets": {
-    "directory": "./public"
+    "directory": "./filtrobom"
   }
 }
