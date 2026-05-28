@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Controle de Processos CTEC</title>
+  <title>Detro RJ — Linhas de Ônibus</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+
   <!-- ====================== TELA DE LOGIN ====================== -->
   <section id="login-view" class="login-view hidden">
     <form id="login-form" class="login-card" autocomplete="on">
-      <h1 class="login-title">Controle de Processos</h1>
-      <p class="login-sub">CTEC &middot; acesse com seu e-mail e senha</p>
+      <h1 class="login-title">Detro RJ</h1>
+      <p class="login-sub">Gerenciamento de Linhas de Ônibus</p>
 
       <label class="field">
         <span>E-mail</span>
         <input id="login-email" type="email" required autocomplete="username" placeholder="seu@email.com" />
       </label>
-
       <label class="field">
         <span>Senha</span>
         <input id="login-password" type="password" required autocomplete="current-password" placeholder="sua senha" />
@@ -28,104 +28,325 @@
     </form>
   </section>
 
-  <!-- ====================== DASHBOARD ====================== -->
+  <!-- ====================== APP ====================== -->
   <section id="app-view" class="app-view hidden">
     <header class="topbar">
       <div class="topbar-left">
         <span class="logo-dot"></span>
-        <h1>Controle de Processos <span class="muted">&middot; CTEC</span></h1>
+        <h1>Detro RJ <span class="muted">· Linhas de Ônibus</span></h1>
       </div>
       <div class="topbar-right">
         <span id="user-email" class="user-email"></span>
-        <button id="theme-toggle" class="btn btn-ghost btn-icon" title="Mudar para tema escuro" aria-label="Alternar tema escuro">
-          <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-          <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        </button>
         <button id="change-pass-btn" class="btn btn-ghost">Trocar senha</button>
         <button id="logout-btn" class="btn btn-ghost">Sair</button>
       </div>
     </header>
 
     <main class="dashboard">
-      <!-- Formulario de novo registro -->
-      <form id="add-form" class="card add-card">
-        <h2 class="card-title">Novo registro</h2>
-        <div class="add-row">
-          <label class="field grow">
-            <span>Número do processo</span>
-            <input id="numero-input" type="text" required placeholder="ex.: 2026/001234" />
-          </label>
-          <label class="field grow">
-            <span>Tema</span>
-            <select id="tema-input" required></select>
-          </label>
-          <button type="submit" class="btn btn-primary add-btn">Adicionar</button>
+      <!-- Barra de busca e filtros -->
+      <div class="toolbar card">
+        <div class="toolbar-left">
+          <input id="search-input" type="search" class="search-input" placeholder="Buscar por número ou nome da linha..." />
+          <select id="filter-empresa">
+            <option value="">Todas as empresas</option>
+          </select>
         </div>
-        <p id="add-error" class="error-msg hidden"></p>
-      </form>
-
-      <!-- Cartoes de indicadores (KPIs) -->
-      <div class="kpi-grid">
-        <div class="card kpi">
-          <span class="kpi-label">Total de processos</span>
-          <span id="kpi-total" class="kpi-value">0</span>
-        </div>
-        <div class="card kpi">
-          <span class="kpi-label">Temas com registros</span>
-          <span id="kpi-temas" class="kpi-value">0</span>
-        </div>
-        <div class="card kpi">
-          <span class="kpi-label">Tema mais frequente</span>
-          <span id="kpi-top" class="kpi-value kpi-value-sm">&mdash;</span>
-        </div>
-        <div class="card kpi">
-          <span class="kpi-label">Registros este mês</span>
-          <span id="kpi-mes" class="kpi-value">0</span>
-        </div>
+        <button id="nova-linha-btn" class="btn btn-primary admin-only hidden">+ Nova Linha</button>
       </div>
 
-      <!-- Graficos -->
-      <div class="charts-grid">
-        <div class="card chart-card">
-          <h2 class="card-title">Processos por tema</h2>
-          <div class="chart-wrap"><canvas id="bar-chart"></canvas></div>
-        </div>
-        <div class="card chart-card">
-          <h2 class="card-title">Distribuição</h2>
-          <div class="chart-wrap"><canvas id="doughnut-chart"></canvas></div>
-        </div>
-      </div>
-
-      <!-- Tabela de registros -->
+      <!-- Tabela de linhas -->
       <div class="card table-card">
-        <div class="table-head">
-          <h2 class="card-title">Registros</h2>
-          <div class="table-filters">
-            <input id="search-input" type="search" placeholder="Buscar por número..." />
-            <select id="filter-tema">
-              <option value="">Todos os temas</option>
-            </select>
-          </div>
-        </div>
         <div class="table-scroll">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Número do processo</th>
-                <th>Tema</th>
-                <th>Data</th>
-                <th class="col-acao">Ações</th>
+                <th>Número</th>
+                <th>Nome da Ligação</th>
+                <th>Empresa</th>
+                <th>Tipo</th>
+                <th>Frota Op.</th>
+                <th>Tarifa</th>
+                <th id="col-acoes-header" class="col-acao admin-only hidden">Ações</th>
               </tr>
             </thead>
-            <tbody id="table-body"></tbody>
+            <tbody id="linhas-tbody"></tbody>
           </table>
-          <p id="empty-msg" class="empty-msg hidden">Nenhum registro encontrado.</p>
+          <p id="linhas-empty" class="empty-msg hidden">Nenhuma linha encontrada.</p>
         </div>
       </div>
     </main>
   </section>
 
-  <!-- ====================== MODAL TROCAR SENHA ====================== -->
+  <!-- ====================== MODAL: DETALHES DA LINHA ====================== -->
+  <div id="detail-modal" class="modal hidden">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <div>
+          <h2 id="detail-numero" class="modal-title"></h2>
+          <p id="detail-nome" class="modal-sub"></p>
+        </div>
+        <div class="modal-header-actions">
+          <button id="detail-edit-btn" class="btn btn-sm btn-outline admin-only hidden">Editar linha</button>
+          <button id="detail-del-btn" class="btn btn-sm btn-danger admin-only hidden">Excluir linha</button>
+          <button id="detail-close" class="btn-close">✕</button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="horarios">Horários</button>
+        <button class="tab-btn" data-tab="itinerarios">Itinerários</button>
+        <button class="tab-btn" data-tab="historico">Histórico</button>
+      </div>
+
+      <!-- Tab: Horários -->
+      <div id="tab-horarios" class="tab-content">
+        <div class="tab-toolbar">
+          <span class="tab-count" id="horarios-count"></span>
+          <button id="novo-horario-btn" class="btn btn-sm btn-primary admin-only hidden">+ Novo Horário</button>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Origem</th>
+                <th>Dia da Semana</th>
+                <th>Hora Início</th>
+                <th>Hora Fim</th>
+                <th>Intervalo (min)</th>
+                <th class="col-acao admin-only hidden">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="horarios-tbody"></tbody>
+          </table>
+          <p id="horarios-empty" class="empty-msg hidden">Nenhum horário cadastrado.</p>
+        </div>
+      </div>
+
+      <!-- Tab: Itinerários -->
+      <div id="tab-itinerarios" class="tab-content hidden">
+        <div class="tab-toolbar">
+          <div class="sentido-filter">
+            <button class="sentido-btn active" data-sentido="ida">Ida</button>
+            <button class="sentido-btn" data-sentido="volta">Volta</button>
+          </div>
+          <button id="novo-itin-btn" class="btn btn-sm btn-primary admin-only hidden">+ Nova Parada</button>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:70px">Ordem</th>
+                <th>Ponto</th>
+                <th>Sentido</th>
+                <th class="col-acao admin-only hidden">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="itin-tbody"></tbody>
+          </table>
+          <p id="itin-empty" class="empty-msg hidden">Nenhuma parada cadastrada.</p>
+        </div>
+      </div>
+
+      <!-- Tab: Histórico -->
+      <div id="tab-historico" class="tab-content hidden">
+        <div class="tab-toolbar">
+          <span class="tab-count" id="historico-count"></span>
+          <button id="novo-hist-btn" class="btn btn-sm btn-primary admin-only hidden">+ Novo Registro</button>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:110px">Data</th>
+                <th style="width:180px">Tipo</th>
+                <th>Descrição</th>
+                <th class="col-acao admin-only hidden">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="historico-tbody"></tbody>
+          </table>
+          <p id="historico-empty" class="empty-msg hidden">Nenhum registro histórico.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================== MODAL: NOVA/EDITAR LINHA ====================== -->
+  <div id="linha-modal" class="modal hidden">
+    <div class="modal-card modal-md">
+      <h2 id="linha-modal-title">Nova Linha</h2>
+      <form id="linha-form">
+        <div class="form-grid">
+          <label class="field">
+            <span>Número da linha *</span>
+            <input id="f-numero-linha" type="text" required placeholder="ex.: 485" />
+          </label>
+          <label class="field">
+            <span>Registro</span>
+            <input id="f-registro" type="text" placeholder="ex.: RJ-001" />
+          </label>
+          <label class="field">
+            <span>Código da ligação *</span>
+            <input id="f-codigo-ligacao" type="text" required placeholder="ex.: C01" />
+          </label>
+          <label class="field">
+            <span>Nome da ligação *</span>
+            <input id="f-nome-ligacao" type="text" required placeholder="ex.: Central - Penha" />
+          </label>
+          <label class="field">
+            <span>Empresa *</span>
+            <input id="f-empresa" type="text" required placeholder="ex.: Real Auto Ônibus" />
+          </label>
+          <label class="field">
+            <span>Tipo</span>
+            <input id="f-tipo" type="text" placeholder="ex.: Convencional" />
+          </label>
+          <label class="field">
+            <span>Característica</span>
+            <input id="f-caracteristica" type="text" placeholder="ex.: Circular" />
+          </label>
+          <label class="field">
+            <span>Via</span>
+            <input id="f-via" type="text" placeholder="ex.: Av. Brasil" />
+          </label>
+          <label class="field">
+            <span>Hierarquização</span>
+            <input id="f-hierarquizacao" type="text" placeholder="ex.: Troncal" />
+          </label>
+          <label class="field">
+            <span>Frota operacional</span>
+            <input id="f-frota-operacional" type="number" min="0" placeholder="0" />
+          </label>
+          <label class="field">
+            <span>Frota reserva</span>
+            <input id="f-frota-reserva" type="number" min="0" placeholder="0" />
+          </label>
+          <label class="field">
+            <span>Tarifa (R$)</span>
+            <input id="f-tarifa" type="number" min="0" step="0.01" placeholder="0.00" />
+          </label>
+          <label class="field span-2">
+            <span>Data última alteração</span>
+            <input id="f-data-alteracao" type="date" />
+          </label>
+        </div>
+        <p id="linha-form-error" class="error-msg hidden"></p>
+        <div class="modal-actions">
+          <button type="button" id="linha-cancel" class="btn btn-ghost-dark">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ====================== MODAL: NOVO/EDITAR HORÁRIO ====================== -->
+  <div id="horario-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="horario-modal-title">Novo Horário</h2>
+      <form id="horario-form">
+        <label class="field">
+          <span>Origem *</span>
+          <input id="h-origem" type="text" required placeholder="ex.: Terminal Deodoro" />
+        </label>
+        <label class="field">
+          <span>Dia da semana *</span>
+          <select id="h-dia-semana" required>
+            <option value="">Selecione...</option>
+            <option>Útil</option>
+            <option>Sábado</option>
+            <option>Domingo</option>
+            <option>Sábado e Domingo</option>
+          </select>
+        </label>
+        <div class="form-row">
+          <label class="field">
+            <span>Hora início *</span>
+            <input id="h-hora-inicio" type="time" required />
+          </label>
+          <label class="field">
+            <span>Hora fim *</span>
+            <input id="h-hora-fim" type="time" required />
+          </label>
+          <label class="field">
+            <span>Intervalo (min) *</span>
+            <input id="h-intervalo" type="number" min="1" required placeholder="15" />
+          </label>
+        </div>
+        <p id="horario-form-error" class="error-msg hidden"></p>
+        <div class="modal-actions">
+          <button type="button" id="horario-cancel" class="btn btn-ghost-dark">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ====================== MODAL: NOVA/EDITAR PARADA ====================== -->
+  <div id="itin-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="itin-modal-title">Nova Parada</h2>
+      <form id="itin-form">
+        <label class="field">
+          <span>Sentido *</span>
+          <select id="i-sentido" required>
+            <option value="ida">Ida</option>
+            <option value="volta">Volta</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Ordem *</span>
+          <input id="i-ordem" type="number" min="1" required placeholder="1" />
+        </label>
+        <label class="field">
+          <span>Ponto *</span>
+          <input id="i-ponto" type="text" required placeholder="ex.: Rua XV de Novembro" />
+        </label>
+        <p id="itin-form-error" class="error-msg hidden"></p>
+        <div class="modal-actions">
+          <button type="button" id="itin-cancel" class="btn btn-ghost-dark">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ====================== MODAL: NOVO/EDITAR HISTÓRICO ====================== -->
+  <div id="hist-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="hist-modal-title">Novo Registro Histórico</h2>
+      <form id="hist-form">
+        <label class="field">
+          <span>Data *</span>
+          <input id="ht-data" type="date" required />
+        </label>
+        <label class="field">
+          <span>Tipo de alteração *</span>
+          <select id="ht-tipo" required>
+            <option value="">Selecione...</option>
+            <option>Criação</option>
+            <option>Modificação</option>
+            <option>Extinção</option>
+            <option>Renumeração</option>
+            <option>Alteração de itinerário</option>
+            <option>Alteração de horário</option>
+            <option>Alteração de empresa</option>
+            <option>Outro</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Descrição</span>
+          <textarea id="ht-descricao" rows="3" placeholder="Detalhes da alteração..."></textarea>
+        </label>
+        <p id="hist-form-error" class="error-msg hidden"></p>
+        <div class="modal-actions">
+          <button type="button" id="hist-cancel" class="btn btn-ghost-dark">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ====================== MODAL: TROCAR SENHA ====================== -->
   <div id="pass-modal" class="modal hidden">
     <div class="modal-card">
       <h2>Trocar senha</h2>
@@ -140,17 +361,14 @@
         </label>
         <p id="pass-msg" class="error-msg hidden"></p>
         <div class="modal-actions">
-          <button type="button" id="pass-cancel" class="btn btn-ghost">Cancelar</button>
+          <button type="button" id="pass-cancel" class="btn btn-ghost-dark">Cancelar</button>
           <button type="submit" class="btn btn-primary">Salvar</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Bibliotecas externas (CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-  <!-- Configuracao e app -->
   <script src="config.js"></script>
   <script src="app.js"></script>
 </body>

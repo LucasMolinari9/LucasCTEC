@@ -1,367 +1,657 @@
 // ============================================================
-//  Controle de Processos CTEC
-//  Frontend estatico que conversa com o Supabase (auth + dados)
+//  Detro RJ — Gerenciamento de Linhas de Ônibus
 // ============================================================
 
-// Lista de temas. Para adicionar um tema novo no futuro, basta
-// incluir mais um item neste array (nome + cor para os graficos).
-const TEMAS = [
-  { nome: "Quadro de horários", cor: "#118dff" },
-  { nome: "Itinerários", cor: "#12239e" },
-  { nome: "Ofícios", cor: "#e66c37" },
-  { nome: "Reclamação", cor: "#d13438" },
-  { nome: "Criação de seção", cor: "#6b007b" },
-  { nome: "Criação de linha", cor: "#1aab40" },
-  { nome: "Registro GPS", cor: "#13a4b4" },
-  { nome: "Suspensão de linha", cor: "#f2c811" },
-];
-
-const corDoTema = (nome) => (TEMAS.find((t) => t.nome === nome) || {}).cor || "#9aa0a6";
-
-// Cliente Supabase (o global "supabase" vem da biblioteca via CDN).
 const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
-
-// Estado em memoria
-let allRecords = [];
-let barChart = null;
-let doughnutChart = null;
-
-// Atalho para pegar elementos
 const $ = (id) => document.getElementById(id);
 
-// ------------------------------------------------------------
-//  Tema escuro / claro
-// ------------------------------------------------------------
-function aplicarTema(escuro) {
-  document.documentElement.setAttribute("data-theme", escuro ? "dark" : "light");
-  const btn = $("theme-toggle");
-  if (btn) btn.title = escuro ? "Mudar para tema claro" : "Mudar para tema escuro";
-  localStorage.setItem("tema-escuro", escuro ? "1" : "0");
-  if (barChart || doughnutChart) atualizarGraficos();
-}
+// Estado
+let currentUser = null;
+let isAdmin = false;
+let allLinhas = [];
+let currentLinha = null;
+let currentSentido = 'ida';
+let todosItinerarios = [];
+let editingLinhaId = null;
+let editingHorarioId = null;
+let editingItinId = null;
+let editingHistId = null;
 
-function toggleTema() {
-  const escuroAtual = document.documentElement.getAttribute("data-theme") === "dark";
-  aplicarTema(!escuroAtual);
-}
-
-// ------------------------------------------------------------
-//  Inicializacao
-// ------------------------------------------------------------
-document.addEventListener("DOMContentLoaded", () => {
-  // Restaurar preferência de tema salva
-  const temaSalvo = localStorage.getItem("tema-escuro");
-  const prefereEscuro = temaSalvo === "1" || (temaSalvo === null && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  aplicarTema(prefereEscuro);
-
-  popularSelectsDeTema();
+// ============================================================
+//  Init
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
   registrarEventos();
   verificarSessao();
 });
 
-function popularSelectsDeTema() {
-  const addSelect = $("tema-input");
-  const filterSelect = $("filter-tema");
-  for (const t of TEMAS) {
-    const o1 = document.createElement("option");
-    o1.value = t.nome;
-    o1.textContent = t.nome;
-    addSelect.appendChild(o1);
-
-    const o2 = document.createElement("option");
-    o2.value = t.nome;
-    o2.textContent = t.nome;
-    filterSelect.appendChild(o2);
-  }
-}
-
 function registrarEventos() {
-  $("login-form").addEventListener("submit", aoEntrar);
-  $("logout-btn").addEventListener("click", aoSair);
-  $("add-form").addEventListener("submit", aoAdicionar);
-  $("search-input").addEventListener("input", renderizarTabela);
-  $("filter-tema").addEventListener("change", renderizarTabela);
+  // Auth
+  $('login-form').addEventListener('submit', aoEntrar);
+  $('logout-btn').addEventListener('click', aoSair);
+  $('change-pass-btn').addEventListener('click', () => abrirModal('pass-modal'));
+  $('pass-cancel').addEventListener('click', () => fecharModal('pass-modal'));
+  $('pass-form').addEventListener('submit', aoTrocarSenha);
 
-  // Alternar tema escuro/claro
-  $("theme-toggle").addEventListener("click", toggleTema);
+  // Busca e filtros
+  $('search-input').addEventListener('input', renderLinhas);
+  $('filter-empresa').addEventListener('change', renderLinhas);
 
-  // Modal trocar senha
-  $("change-pass-btn").addEventListener("click", () => abrirModalSenha(true));
-  $("pass-cancel").addEventListener("click", () => abrirModalSenha(false));
-  $("pass-form").addEventListener("submit", aoTrocarSenha);
+  // Nova linha
+  $('nova-linha-btn').addEventListener('click', () => abrirLinhaForm(null));
+  $('linha-cancel').addEventListener('click', () => fecharModal('linha-modal'));
+  $('linha-form').addEventListener('submit', aoSalvarLinha);
+
+  // Detail modal
+  $('detail-close').addEventListener('click', () => fecharModal('detail-modal'));
+  $('detail-edit-btn').addEventListener('click', () => abrirLinhaForm(currentLinha));
+  $('detail-del-btn').addEventListener('click', aoExcluirLinhaAtual);
+
+  // Tabs
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => mudarTab(btn.dataset.tab));
+  });
+
+  // Sentido (ida / volta)
+  document.querySelectorAll('.sentido-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.sentido-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentSentido = btn.dataset.sentido;
+      renderItinerarios();
+    });
+  });
+
+  // Horário
+  $('novo-horario-btn').addEventListener('click', () => abrirHorarioForm(null));
+  $('horario-cancel').addEventListener('click', () => fecharModal('horario-modal'));
+  $('horario-form').addEventListener('submit', aoSalvarHorario);
+
+  // Itinerário
+  $('novo-itin-btn').addEventListener('click', () => abrirItinForm(null));
+  $('itin-cancel').addEventListener('click', () => fecharModal('itin-modal'));
+  $('itin-form').addEventListener('submit', aoSalvarItin);
+
+  // Histórico
+  $('novo-hist-btn').addEventListener('click', () => abrirHistForm(null));
+  $('hist-cancel').addEventListener('click', () => fecharModal('hist-modal'));
+  $('hist-form').addEventListener('submit', aoSalvarHist);
+
+  // Fechar modal ao clicar no overlay
+  ['detail-modal', 'linha-modal', 'horario-modal', 'itin-modal', 'hist-modal', 'pass-modal'].forEach(id => {
+    $(id).addEventListener('click', (e) => { if (e.target === $(id)) fecharModal(id); });
+  });
 }
 
-// ------------------------------------------------------------
-//  Autenticacao
-// ------------------------------------------------------------
+// ============================================================
+//  Auth
+// ============================================================
 async function verificarSessao() {
   const { data } = await sb.auth.getSession();
   if (data.session) {
-    mostrarApp(data.session.user);
+    await carregarApp(data.session.user);
   } else {
     mostrarLogin();
   }
 }
 
 function mostrarLogin() {
-  $("app-view").classList.add("hidden");
-  $("login-view").classList.remove("hidden");
+  $('app-view').classList.add('hidden');
+  $('login-view').classList.remove('hidden');
 }
 
-async function mostrarApp(user) {
-  $("login-view").classList.add("hidden");
-  $("app-view").classList.remove("hidden");
-  $("user-email").textContent = user.email;
-  await carregarProcessos();
+async function carregarApp(user) {
+  currentUser = user;
+  $('login-view').classList.add('hidden');
+  $('app-view').classList.remove('hidden');
+  $('user-email').textContent = user.email;
+
+  const { data: profile } = await sb.from('profiles').select('role').eq('id', user.id).single();
+  isAdmin = !!(profile && profile.role === 'admin');
+  aplicarRole();
+
+  await carregarLinhas();
+}
+
+function aplicarRole() {
+  document.querySelectorAll('.admin-only').forEach(el => {
+    el.classList.toggle('hidden', !isAdmin);
+  });
 }
 
 async function aoEntrar(e) {
   e.preventDefault();
-  const btn = $("login-btn");
-  const erro = $("login-error");
-  erro.classList.add("hidden");
+  const btn = $('login-btn');
+  const erro = $('login-error');
+  erro.classList.add('hidden');
   btn.disabled = true;
-  btn.textContent = "Entrando...";
+  btn.textContent = 'Entrando...';
 
-  const email = $("login-email").value.trim();
-  const password = $("login-password").value;
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  const { data, error } = await sb.auth.signInWithPassword({
+    email: $('login-email').value.trim(),
+    password: $('login-password').value,
+  });
 
   btn.disabled = false;
-  btn.textContent = "Entrar";
+  btn.textContent = 'Entrar';
 
   if (error) {
-    erro.textContent = "E-mail ou senha incorretos.";
-    erro.classList.remove("hidden");
+    erro.textContent = 'E-mail ou senha incorretos.';
+    erro.classList.remove('hidden');
     return;
   }
-  $("login-password").value = "";
-  mostrarApp(data.user);
+  $('login-password').value = '';
+  await carregarApp(data.user);
 }
 
 async function aoSair() {
   await sb.auth.signOut();
-  allRecords = [];
+  currentUser = null;
+  isAdmin = false;
+  allLinhas = [];
   mostrarLogin();
-}
-
-// ------------------------------------------------------------
-//  Trocar senha
-// ------------------------------------------------------------
-function abrirModalSenha(abrir) {
-  const modal = $("pass-modal");
-  $("pass-msg").classList.add("hidden");
-  $("pass-form").reset();
-  modal.classList.toggle("hidden", !abrir);
 }
 
 async function aoTrocarSenha(e) {
   e.preventDefault();
-  const msg = $("pass-msg");
-  msg.classList.add("hidden");
-  msg.style.color = "";
+  const msg = $('pass-msg');
+  msg.classList.add('hidden');
+  msg.style.color = '';
 
-  const nova = $("new-password").value;
-  const conf = $("confirm-password").value;
+  const nova = $('new-password').value;
+  const conf = $('confirm-password').value;
   if (nova !== conf) {
-    msg.textContent = "As senhas não conferem.";
-    msg.classList.remove("hidden");
+    msg.textContent = 'As senhas não conferem.';
+    msg.classList.remove('hidden');
     return;
   }
 
   const { error } = await sb.auth.updateUser({ password: nova });
   if (error) {
-    msg.textContent = "Não foi possível trocar a senha: " + error.message;
-    msg.classList.remove("hidden");
+    msg.textContent = 'Erro ao trocar senha: ' + error.message;
+    msg.classList.remove('hidden');
     return;
   }
-  msg.style.color = "#1aab40";
-  msg.textContent = "Senha alterada com sucesso!";
-  msg.classList.remove("hidden");
-  setTimeout(() => abrirModalSenha(false), 1200);
+  msg.style.color = '#1aab40';
+  msg.textContent = 'Senha alterada com sucesso!';
+  msg.classList.remove('hidden');
+  setTimeout(() => {
+    fecharModal('pass-modal');
+    $('pass-form').reset();
+  }, 1200);
 }
 
-// ------------------------------------------------------------
-//  Dados (CRUD)
-// ------------------------------------------------------------
-async function carregarProcessos() {
-  const { data, error } = await sb
-    .from("processos")
-    .select("*")
-    .order("created_at", { ascending: false });
+// ============================================================
+//  Modais
+// ============================================================
+function abrirModal(id) { $(id).classList.remove('hidden'); }
+function fecharModal(id) { $(id).classList.add('hidden'); }
 
-  if (error) {
-    console.error(error);
-    allRecords = [];
-  } else {
-    allRecords = data || [];
+// ============================================================
+//  Linhas
+// ============================================================
+async function carregarLinhas() {
+  const { data, error } = await sb.from('linhas').select('*').order('numero_linha');
+  if (error) { console.error(error); return; }
+  allLinhas = data || [];
+  popularFiltroEmpresas();
+  renderLinhas();
+}
+
+function popularFiltroEmpresas() {
+  const sel = $('filter-empresa');
+  while (sel.options.length > 1) sel.remove(1);
+  const empresas = [...new Set(allLinhas.map(l => l.empresa).filter(Boolean))].sort();
+  for (const e of empresas) {
+    const opt = document.createElement('option');
+    opt.value = e;
+    opt.textContent = e;
+    sel.appendChild(opt);
   }
-  atualizarDashboard();
 }
 
-async function aoAdicionar(e) {
-  e.preventDefault();
-  const erro = $("add-error");
-  erro.classList.add("hidden");
+function renderLinhas() {
+  const busca = $('search-input').value.trim().toLowerCase();
+  const empresa = $('filter-empresa').value;
 
-  const numero = $("numero-input").value.trim();
-  const tema = $("tema-input").value;
-  if (!numero || !tema) return;
+  const filtradas = allLinhas.filter(l => {
+    const okBusca = !busca ||
+      (l.numero_linha && l.numero_linha.toLowerCase().includes(busca)) ||
+      (l.nome_ligacao && l.nome_ligacao.toLowerCase().includes(busca));
+    const okEmpresa = !empresa || l.empresa === empresa;
+    return okBusca && okEmpresa;
+  });
 
-  const { data: sessionData } = await sb.auth.getSession();
-  const userId = sessionData.session && sessionData.session.user.id;
+  const tbody = $('linhas-tbody');
+  tbody.innerHTML = '';
 
-  const { error } = await sb
-    .from("processos")
-    .insert({ numero_processo: numero, tema, user_id: userId });
+  for (const l of filtradas) {
+    const tr = document.createElement('tr');
+    const acoesHtml = isAdmin
+      ? `<td class="col-acao">
+           <button class="btn-action btn-edit">Editar</button>
+           <button class="btn-action btn-del">Excluir</button>
+         </td>`
+      : '';
 
-  if (error) {
-    erro.textContent = "Erro ao salvar: " + error.message;
-    erro.classList.remove("hidden");
-    return;
-  }
-  $("numero-input").value = "";
-  $("tema-input").selectedIndex = 0;
-  await carregarProcessos();
-}
+    tr.innerHTML = `
+      <td><strong>${esc(l.numero_linha)}</strong></td>
+      <td>${esc(l.nome_ligacao)}</td>
+      <td>${esc(l.empresa)}</td>
+      <td>${esc(l.tipo) || '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${l.frota_operacional ?? '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${l.tarifa != null ? 'R$ ' + Number(l.tarifa).toFixed(2) : '<span style="color:var(--muted)">—</span>'}</td>
+      ${acoesHtml}
+    `;
 
-async function excluirProcesso(id) {
-  if (!confirm("Excluir este registro?")) return;
-  const { error } = await sb.from("processos").delete().eq("id", id);
-  if (error) {
-    alert("Erro ao excluir: " + error.message);
-    return;
-  }
-  await carregarProcessos();
-}
+    tr.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-action')) return;
+      abrirDetail(l);
+    });
 
-// ------------------------------------------------------------
-//  Renderizacao do dashboard
-// ------------------------------------------------------------
-function atualizarDashboard() {
-  atualizarKpis();
-  atualizarGraficos();
-  renderizarTabela();
-}
-
-function contagemPorTema() {
-  const contagem = {};
-  for (const t of TEMAS) contagem[t.nome] = 0;
-  for (const r of allRecords) {
-    contagem[r.tema] = (contagem[r.tema] || 0) + 1;
-  }
-  return contagem;
-}
-
-function atualizarKpis() {
-  const total = allRecords.length;
-  const contagem = contagemPorTema();
-  const temasComRegistro = Object.values(contagem).filter((n) => n > 0).length;
-
-  let topTema = "—";
-  let topQtd = 0;
-  for (const [nome, qtd] of Object.entries(contagem)) {
-    if (qtd > topQtd) {
-      topQtd = qtd;
-      topTema = nome;
+    if (isAdmin) {
+      tr.querySelector('.btn-edit').addEventListener('click', () => abrirLinhaForm(l));
+      tr.querySelector('.btn-del').addEventListener('click', () => excluirLinha(l.id));
     }
-  }
 
-  const agora = new Date();
-  const esteMes = allRecords.filter((r) => {
-    const d = new Date(r.created_at);
-    return d.getMonth() === agora.getMonth() && d.getFullYear() === agora.getFullYear();
-  }).length;
-
-  $("kpi-total").textContent = total;
-  $("kpi-temas").textContent = temasComRegistro;
-  $("kpi-top").textContent = topQtd > 0 ? `${topTema} (${topQtd})` : "—";
-  $("kpi-mes").textContent = esteMes;
-}
-
-function atualizarGraficos() {
-  const contagem = contagemPorTema();
-  const labels = TEMAS.map((t) => t.nome);
-  const valores = labels.map((l) => contagem[l]);
-  const cores = TEMAS.map((t) => t.cor);
-
-  // Grafico de barras
-  if (barChart) barChart.destroy();
-  barChart = new Chart($("bar-chart"), {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [{ label: "Processos", data: valores, backgroundColor: cores, borderRadius: 4 }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: true, ticks: { precision: 0 } },
-        x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 0, font: { size: 10 } } },
-      },
-    },
-  });
-
-  // Grafico de rosca
-  if (doughnutChart) doughnutChart.destroy();
-  doughnutChart = new Chart($("doughnut-chart"), {
-    type: "doughnut",
-    data: { labels, datasets: [{ data: valores, backgroundColor: cores }] },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
-    },
-  });
-}
-
-function renderizarTabela() {
-  const busca = $("search-input").value.trim().toLowerCase();
-  const temaFiltro = $("filter-tema").value;
-
-  const filtrados = allRecords.filter((r) => {
-    const okBusca = !busca || r.numero_processo.toLowerCase().includes(busca);
-    const okTema = !temaFiltro || r.tema === temaFiltro;
-    return okBusca && okTema;
-  });
-
-  const tbody = $("table-body");
-  tbody.innerHTML = "";
-
-  for (const r of filtrados) {
-    const tr = document.createElement("tr");
-
-    const tdNum = document.createElement("td");
-    tdNum.textContent = r.numero_processo;
-
-    const tdTema = document.createElement("td");
-    const badge = document.createElement("span");
-    badge.className = "tema-badge";
-    badge.style.background = corDoTema(r.tema);
-    badge.textContent = r.tema;
-    tdTema.appendChild(badge);
-
-    const tdData = document.createElement("td");
-    tdData.textContent = formatarData(r.created_at);
-
-    const tdAcao = document.createElement("td");
-    tdAcao.className = "col-acao";
-    const del = document.createElement("button");
-    del.className = "btn-del";
-    del.textContent = "Excluir";
-    del.addEventListener("click", () => excluirProcesso(r.id));
-    tdAcao.appendChild(del);
-
-    tr.append(tdNum, tdTema, tdData, tdAcao);
     tbody.appendChild(tr);
   }
 
-  $("empty-msg").classList.toggle("hidden", filtrados.length > 0);
+  $('linhas-empty').classList.toggle('hidden', filtradas.length > 0);
 }
 
+// ---- Detalhe da linha ----
+async function abrirDetail(linha) {
+  currentLinha = linha;
+  currentSentido = 'ida';
+  document.querySelectorAll('.sentido-btn').forEach(b => b.classList.toggle('active', b.dataset.sentido === 'ida'));
+  $('detail-numero').textContent = 'Linha ' + (linha.numero_linha || '');
+  $('detail-nome').textContent = [linha.nome_ligacao, linha.empresa].filter(Boolean).join(' · ');
+
+  mudarTab('horarios');
+  abrirModal('detail-modal');
+  await Promise.all([carregarHorarios(), carregarItinerarios(), carregarHistorico()]);
+}
+
+// ---- Form Nova/Editar Linha ----
+function abrirLinhaForm(linha) {
+  editingLinhaId = linha ? linha.id : null;
+  $('linha-modal-title').textContent = linha ? 'Editar Linha' : 'Nova Linha';
+  $('linha-form-error').classList.add('hidden');
+  $('f-numero-linha').value = linha?.numero_linha || '';
+  $('f-registro').value = linha?.registro || '';
+  $('f-codigo-ligacao').value = linha?.codigo_ligacao || '';
+  $('f-nome-ligacao').value = linha?.nome_ligacao || '';
+  $('f-empresa').value = linha?.empresa || '';
+  $('f-tipo').value = linha?.tipo || '';
+  $('f-caracteristica').value = linha?.caracteristica || '';
+  $('f-via').value = linha?.via || '';
+  $('f-hierarquizacao').value = linha?.hierarquizacao || '';
+  $('f-frota-operacional').value = linha?.frota_operacional ?? '';
+  $('f-frota-reserva').value = linha?.frota_reserva ?? '';
+  $('f-tarifa').value = linha?.tarifa ?? '';
+  $('f-data-alteracao').value = linha?.data_ultima_alteracao || '';
+  abrirModal('linha-modal');
+}
+
+async function aoSalvarLinha(e) {
+  e.preventDefault();
+  const err = $('linha-form-error');
+  err.classList.add('hidden');
+
+  const payload = {
+    numero_linha: $('f-numero-linha').value.trim(),
+    registro: $('f-registro').value.trim() || null,
+    codigo_ligacao: $('f-codigo-ligacao').value.trim(),
+    nome_ligacao: $('f-nome-ligacao').value.trim(),
+    empresa: $('f-empresa').value.trim(),
+    tipo: $('f-tipo').value.trim() || null,
+    caracteristica: $('f-caracteristica').value.trim() || null,
+    via: $('f-via').value.trim() || null,
+    hierarquizacao: $('f-hierarquizacao').value.trim() || null,
+    frota_operacional: $('f-frota-operacional').value !== '' ? parseInt($('f-frota-operacional').value) : null,
+    frota_reserva: $('f-frota-reserva').value !== '' ? parseInt($('f-frota-reserva').value) : null,
+    tarifa: $('f-tarifa').value !== '' ? parseFloat($('f-tarifa').value) : null,
+    data_ultima_alteracao: $('f-data-alteracao').value || null,
+  };
+
+  let error;
+  if (editingLinhaId) {
+    ({ error } = await sb.from('linhas').update(payload).eq('id', editingLinhaId));
+  } else {
+    ({ error } = await sb.from('linhas').insert(payload));
+  }
+
+  if (error) {
+    err.textContent = 'Erro ao salvar: ' + error.message;
+    err.classList.remove('hidden');
+    return;
+  }
+
+  fecharModal('linha-modal');
+  await carregarLinhas();
+
+  if (editingLinhaId && currentLinha?.id === editingLinhaId) {
+    const atualizada = allLinhas.find(l => l.id === editingLinhaId);
+    if (atualizada) {
+      currentLinha = atualizada;
+      $('detail-numero').textContent = 'Linha ' + (atualizada.numero_linha || '');
+      $('detail-nome').textContent = [atualizada.nome_ligacao, atualizada.empresa].filter(Boolean).join(' · ');
+    }
+  }
+}
+
+async function aoExcluirLinhaAtual() {
+  if (!currentLinha) return;
+  const id = currentLinha.id;
+  fecharModal('detail-modal');
+  await excluirLinha(id);
+}
+
+async function excluirLinha(id) {
+  if (!confirm('Excluir esta linha e todos os seus dados (horários, itinerários, histórico)?')) return;
+  const { error } = await sb.from('linhas').delete().eq('id', id);
+  if (error) { alert('Erro ao excluir: ' + error.message); return; }
+  await carregarLinhas();
+}
+
+// ============================================================
+//  Tabs
+// ============================================================
+function mudarTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  ['horarios', 'itinerarios', 'historico'].forEach(t => {
+    $('tab-' + t).classList.toggle('hidden', t !== tab);
+  });
+}
+
+// ============================================================
+//  Horários
+// ============================================================
+async function carregarHorarios() {
+  if (!currentLinha) return;
+  const { data, error } = await sb.from('quadro_horarios')
+    .select('*')
+    .eq('linha_id', currentLinha.id)
+    .order('dia_semana')
+    .order('hora_inicio');
+  if (error) { console.error(error); return; }
+  renderHorarios(data || []);
+}
+
+function renderHorarios(horarios) {
+  const tbody = $('horarios-tbody');
+  tbody.innerHTML = '';
+  $('horarios-count').textContent = `${horarios.length} registro(s)`;
+
+  for (const h of horarios) {
+    const tr = document.createElement('tr');
+    const acoesHtml = isAdmin
+      ? `<td class="col-acao">
+           <button class="btn-action btn-edit">Editar</button>
+           <button class="btn-action btn-del">Excluir</button>
+         </td>`
+      : '';
+
+    tr.innerHTML = `
+      <td>${esc(h.origem)}</td>
+      <td>${esc(h.dia_semana)}</td>
+      <td>${h.hora_inicio || '—'}</td>
+      <td>${h.hora_fim || '—'}</td>
+      <td>${h.intervalo_min ?? '—'}</td>
+      ${acoesHtml}
+    `;
+
+    if (isAdmin) {
+      tr.querySelector('.btn-edit').addEventListener('click', () => abrirHorarioForm(h));
+      tr.querySelector('.btn-del').addEventListener('click', () => excluirHorario(h.id));
+    }
+    tbody.appendChild(tr);
+  }
+  $('horarios-empty').classList.toggle('hidden', horarios.length > 0);
+}
+
+function abrirHorarioForm(h) {
+  editingHorarioId = h ? h.id : null;
+  $('horario-modal-title').textContent = h ? 'Editar Horário' : 'Novo Horário';
+  $('horario-form-error').classList.add('hidden');
+  $('h-origem').value = h?.origem || '';
+  $('h-dia-semana').value = h?.dia_semana || '';
+  $('h-hora-inicio').value = h?.hora_inicio?.slice(0, 5) || '';
+  $('h-hora-fim').value = h?.hora_fim?.slice(0, 5) || '';
+  $('h-intervalo').value = h?.intervalo_min ?? '';
+  abrirModal('horario-modal');
+}
+
+async function aoSalvarHorario(e) {
+  e.preventDefault();
+  const err = $('horario-form-error');
+  err.classList.add('hidden');
+
+  const payload = {
+    linha_id: currentLinha.id,
+    origem: $('h-origem').value.trim(),
+    dia_semana: $('h-dia-semana').value,
+    hora_inicio: $('h-hora-inicio').value,
+    hora_fim: $('h-hora-fim').value,
+    intervalo_min: parseInt($('h-intervalo').value),
+  };
+
+  let error;
+  if (editingHorarioId) {
+    ({ error } = await sb.from('quadro_horarios').update(payload).eq('id', editingHorarioId));
+  } else {
+    ({ error } = await sb.from('quadro_horarios').insert(payload));
+  }
+
+  if (error) {
+    err.textContent = 'Erro ao salvar: ' + error.message;
+    err.classList.remove('hidden');
+    return;
+  }
+  fecharModal('horario-modal');
+  await carregarHorarios();
+}
+
+async function excluirHorario(id) {
+  if (!confirm('Excluir este horário?')) return;
+  const { error } = await sb.from('quadro_horarios').delete().eq('id', id);
+  if (error) { alert('Erro ao excluir: ' + error.message); return; }
+  await carregarHorarios();
+}
+
+// ============================================================
+//  Itinerários
+// ============================================================
+async function carregarItinerarios() {
+  if (!currentLinha) return;
+  const { data, error } = await sb.from('itinerarios')
+    .select('*')
+    .eq('linha_id', currentLinha.id)
+    .order('sentido')
+    .order('ordem');
+  if (error) { console.error(error); return; }
+  todosItinerarios = data || [];
+  renderItinerarios();
+}
+
+function renderItinerarios() {
+  const filtrados = todosItinerarios.filter(i => i.sentido === currentSentido);
+  const tbody = $('itin-tbody');
+  tbody.innerHTML = '';
+
+  for (const i of filtrados) {
+    const tr = document.createElement('tr');
+    const acoesHtml = isAdmin
+      ? `<td class="col-acao">
+           <button class="btn-action btn-edit">Editar</button>
+           <button class="btn-action btn-del">Excluir</button>
+         </td>`
+      : '';
+
+    tr.innerHTML = `
+      <td>${i.ordem}</td>
+      <td>${esc(i.ponto)}</td>
+      <td><span class="badge-sentido badge-${i.sentido}">${i.sentido}</span></td>
+      ${acoesHtml}
+    `;
+
+    if (isAdmin) {
+      tr.querySelector('.btn-edit').addEventListener('click', () => abrirItinForm(i));
+      tr.querySelector('.btn-del').addEventListener('click', () => excluirItin(i.id));
+    }
+    tbody.appendChild(tr);
+  }
+  $('itin-empty').classList.toggle('hidden', filtrados.length > 0);
+}
+
+function abrirItinForm(i) {
+  editingItinId = i ? i.id : null;
+  $('itin-modal-title').textContent = i ? 'Editar Parada' : 'Nova Parada';
+  $('itin-form-error').classList.add('hidden');
+  $('i-sentido').value = i?.sentido || currentSentido;
+  $('i-ordem').value = i?.ordem ?? (todosItinerarios.filter(x => x.sentido === currentSentido).length + 1);
+  $('i-ponto').value = i?.ponto || '';
+  abrirModal('itin-modal');
+}
+
+async function aoSalvarItin(e) {
+  e.preventDefault();
+  const err = $('itin-form-error');
+  err.classList.add('hidden');
+
+  const payload = {
+    linha_id: currentLinha.id,
+    sentido: $('i-sentido').value,
+    ordem: parseInt($('i-ordem').value),
+    ponto: $('i-ponto').value.trim(),
+  };
+
+  let error;
+  if (editingItinId) {
+    ({ error } = await sb.from('itinerarios').update(payload).eq('id', editingItinId));
+  } else {
+    ({ error } = await sb.from('itinerarios').insert(payload));
+  }
+
+  if (error) {
+    err.textContent = 'Erro ao salvar: ' + error.message;
+    err.classList.remove('hidden');
+    return;
+  }
+  fecharModal('itin-modal');
+  await carregarItinerarios();
+}
+
+async function excluirItin(id) {
+  if (!confirm('Excluir esta parada?')) return;
+  const { error } = await sb.from('itinerarios').delete().eq('id', id);
+  if (error) { alert('Erro ao excluir: ' + error.message); return; }
+  await carregarItinerarios();
+}
+
+// ============================================================
+//  Histórico
+// ============================================================
+async function carregarHistorico() {
+  if (!currentLinha) return;
+  const { data, error } = await sb.from('historico_linha')
+    .select('*')
+    .eq('linha_id', currentLinha.id)
+    .order('data_alteracao', { ascending: false });
+  if (error) { console.error(error); return; }
+  renderHistorico(data || []);
+}
+
+function renderHistorico(historico) {
+  const tbody = $('historico-tbody');
+  tbody.innerHTML = '';
+  $('historico-count').textContent = `${historico.length} registro(s)`;
+
+  for (const h of historico) {
+    const tr = document.createElement('tr');
+    const acoesHtml = isAdmin
+      ? `<td class="col-acao">
+           <button class="btn-action btn-edit">Editar</button>
+           <button class="btn-action btn-del">Excluir</button>
+         </td>`
+      : '';
+
+    tr.innerHTML = `
+      <td>${formatarData(h.data_alteracao)}</td>
+      <td><span class="badge-tipo">${esc(h.tipo_alteracao)}</span></td>
+      <td>${esc(h.descricao) || '<span style="color:var(--muted)">—</span>'}</td>
+      ${acoesHtml}
+    `;
+
+    if (isAdmin) {
+      tr.querySelector('.btn-edit').addEventListener('click', () => abrirHistForm(h));
+      tr.querySelector('.btn-del').addEventListener('click', () => excluirHist(h.id));
+    }
+    tbody.appendChild(tr);
+  }
+  $('historico-empty').classList.toggle('hidden', historico.length > 0);
+}
+
+function abrirHistForm(h) {
+  editingHistId = h ? h.id : null;
+  $('hist-modal-title').textContent = h ? 'Editar Registro' : 'Novo Registro Histórico';
+  $('hist-form-error').classList.add('hidden');
+  $('ht-data').value = h?.data_alteracao || new Date().toISOString().split('T')[0];
+  $('ht-tipo').value = h?.tipo_alteracao || '';
+  $('ht-descricao').value = h?.descricao || '';
+  abrirModal('hist-modal');
+}
+
+async function aoSalvarHist(e) {
+  e.preventDefault();
+  const err = $('hist-form-error');
+  err.classList.add('hidden');
+
+  const payload = {
+    linha_id: currentLinha.id,
+    data_alteracao: $('ht-data').value,
+    tipo_alteracao: $('ht-tipo').value,
+    descricao: $('ht-descricao').value.trim() || null,
+  };
+
+  let error;
+  if (editingHistId) {
+    ({ error } = await sb.from('historico_linha').update(payload).eq('id', editingHistId));
+  } else {
+    ({ error } = await sb.from('historico_linha').insert(payload));
+  }
+
+  if (error) {
+    err.textContent = 'Erro ao salvar: ' + error.message;
+    err.classList.remove('hidden');
+    return;
+  }
+  fecharModal('hist-modal');
+  await carregarHistorico();
+}
+
+async function excluirHist(id) {
+  if (!confirm('Excluir este registro histórico?')) return;
+  const { error } = await sb.from('historico_linha').delete().eq('id', id);
+  if (error) { alert('Erro ao excluir: ' + error.message); return; }
+  await carregarHistorico();
+}
+
+// ============================================================
+//  Utilitários
+// ============================================================
 function formatarData(iso) {
-  const d = new Date(iso);
-  return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function esc(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
