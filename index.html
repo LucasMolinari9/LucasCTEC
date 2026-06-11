@@ -374,14 +374,6 @@
       </div>
       <button type="button" id="openLine">Abrir linha</button>
     </div>
-
-    <div class="route" aria-hidden="true">
-      <span class="stop live"></span><span class="seg"></span>
-      <span class="stop"></span><span class="seg"></span>
-      <span class="stop"></span><span class="seg"></span>
-      <span class="stop"></span><span class="seg"></span>
-      <span class="stop"></span>
-    </div>
   </div>
 </section>
 
@@ -393,6 +385,10 @@
       <button class="mt-btn" id="btnPrint" title="Imprimir / Salvar PDF">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
         Imprimir
+      </button>
+      <button class="mt-btn" id="btnPdf" title="Baixar em PDF">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6M9 17h4"/></svg>
+        PDF
       </button>
       <button class="modal-close" id="modalClose" title="Fechar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="16" height="16"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -421,6 +417,8 @@
 
 <!-- supabase-js: usado APENAS para o canal Realtime (as consultas usam REST/fetch) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- html2pdf: geração do PDF a partir do documento aberto -->
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 <script>
 /* ================================================================
    SUPABASE CONFIG
@@ -648,9 +646,30 @@ const modalBody  = document.getElementById('modalBody');
 const mtTitle    = document.getElementById('mtTitle');
 const mtLive     = document.getElementById('mtLive');
 document.getElementById('btnPrint').addEventListener('click', () => window.print());
+document.getElementById('btnPdf').addEventListener('click', baixarPdf);
 modalClose.addEventListener('click', closeModal);
 overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// Gera e baixa um PDF do documento aberto no modal
+function baixarPdf(){
+  const el = modalBody.querySelector('.doc') || modalBody;
+  const base = (mtTitle.textContent || 'documento')
+    .replace(/[^a-zA-Z0-9]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase() || 'documento';
+  const code = activeLine && activeLine.codlinha ? '-' + activeLine.codlinha : '';
+  const filename = `${base}${code}.pdf`;
+  // Fallback: se a biblioteca não carregar (ex.: offline), usa a impressão do navegador
+  if (typeof html2pdf === 'undefined'){ toast('Abrindo impressão (escolha "Salvar como PDF")', 'warn'); window.print(); return; }
+  toast('Gerando PDF…', 'info');
+  html2pdf().set({
+    margin: [8, 8, 10, 8],
+    filename,
+    image: { type: 'jpeg', quality: 0.96 },
+    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+  }).from(el).save().catch(() => { toast('Falha ao gerar PDF, usando impressão', 'warn'); window.print(); });
+}
 
 let currentView = null;
 function closeModal(){ overlay.classList.remove('open'); currentView = null; }
