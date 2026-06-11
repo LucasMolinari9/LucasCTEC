@@ -1,0 +1,15 @@
+# Netlify — site estático (sem build). Serve a raiz do repositório.
+[build]
+  publish = "."
+  command = ""
+
+# Cabeçalhos de segurança para o site público de consulta
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+    # CSP: só permite Supabase (REST + WebSocket do Realtime), o supabase-js da jsDelivr e o Google Fonts.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://lwzsxuaqqeoamukduhev.supabase.co wss://lwzsxuaqqeoamukduhev.supabase.co; frame-ancestors 'none'; base-uri 'self'"

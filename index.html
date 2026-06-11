@@ -1,375 +1,1145 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Detro RJ — Linhas de Ônibus</title>
-  <link rel="stylesheet" href="styles.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DIVAT · Cadastro de Linhas Regulares</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0a3a63;
+    --navy-deep:#072a49;
+    --blue:#1466a6;
+    --green:#1f9d57;
+    --ink:#14202b;
+    --muted:#5d6f80;
+    --bg:#eef2f6;
+    --surface:#ffffff;
+    --line:#dbe4ec;
+    --line-soft:#e9eff4;
+    /* códigos de família (wayfinding) */
+    --c-doc:#1466a6;
+    --c-emp:#1f9d57;
+    --c-lig:#c2700a;
+    --c-ger:#6d4aa8;
+    --radius:14px;
+    --shadow:0 1px 2px rgba(12,40,66,.06), 0 8px 24px -16px rgba(12,40,66,.28);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:'IBM Plex Sans',system-ui,sans-serif;
+    color:var(--ink);
+    background:var(--bg);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:'IBM Plex Mono',monospace}
+
+  /* ---------- Topbar ---------- */
+  .topbar{
+    background:linear-gradient(180deg,var(--navy) 0%,var(--navy-deep) 100%);
+    color:#fff;
+    border-bottom:3px solid var(--green);
+  }
+  .topbar-in{
+    max-width:1140px;margin:0 auto;padding:14px 24px;
+    display:flex;align-items:center;gap:16px;
+  }
+  .mark{
+    width:40px;height:40px;border-radius:9px;flex:0 0 auto;
+    background:#fff;display:grid;place-items:center;position:relative;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.4);
+  }
+  .mark svg{width:26px;height:26px}
+  .brand-txt{display:flex;flex-direction:column;line-height:1.15}
+  .brand-txt b{font-family:'Archivo';font-weight:800;letter-spacing:.04em;font-size:15px}
+  .brand-txt span{font-size:11.5px;color:#b9d4ea;letter-spacing:.06em;text-transform:uppercase}
+  .topbar-meta{margin-left:auto;text-align:right;font-size:12px;color:#cfe1f1}
+  .topbar-meta b{display:block;color:#fff;font-weight:600;font-size:12.5px}
+  /* indicador de conexão realtime */
+  .rt-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#9fb4c6;margin-left:6px;vertical-align:middle;transition:background .3s}
+  .rt-dot.live{background:#37d67a;box-shadow:0 0 0 3px rgba(55,214,122,.25)}
+
+  /* ---------- Hero / seletor de linha ---------- */
+  .hero{
+    background:linear-gradient(180deg,var(--navy-deep) 0%,var(--navy) 100%);
+    color:#fff;padding:30px 24px 40px;
+  }
+  .hero-in{max-width:1140px;margin:0 auto;text-align:center}
+  .eyebrow{
+    font-family:'Archivo';font-weight:700;font-size:12px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--green);margin-bottom:8px;
+  }
+  .hero h1{
+    font-family:'Archivo';font-weight:800;font-size:clamp(24px,3.6vw,38px);
+    letter-spacing:-.01em;line-height:1.05;
+  }
+  .hero p{color:#bcd5ea;max-width:54ch;margin:10px auto 0;font-size:14.5px}
+
+  .selector{
+    margin:24px auto 0;display:flex;gap:10px;flex-wrap:wrap;
+    background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);
+    padding:8px;border-radius:14px;max-width:640px;
+    backdrop-filter:blur(2px);
+  }
+  .selector .field{flex:1 1 280px;display:flex;align-items:center;gap:10px;padding:0 12px;text-align:left}
+  .selector .field svg{width:18px;height:18px;color:#9fc0dc;flex:0 0 auto}
+  .selector input{
+    flex:1;background:transparent;border:0;outline:0;color:#fff;
+    font-family:'IBM Plex Sans';font-size:15px;padding:12px 0;
+  }
+  .selector input::placeholder{color:#8fb0cc}
+  .selector button{
+    background:var(--green);color:#04341c;border:0;cursor:pointer;
+    font-family:'Archivo';font-weight:700;font-size:14px;letter-spacing:.02em;
+    padding:0 22px;border-radius:9px;transition:filter .15s,transform .15s;
+  }
+  .selector button:hover{filter:brightness(1.08)}
+  .selector button:active{transform:translateY(1px)}
+
+  /* faixa de "rota" decorativa */
+  .route{display:flex;align-items:center;gap:0;margin:28px auto 0;max-width:640px;opacity:.9}
+  .route .seg{height:3px;flex:1;background:rgba(255,255,255,.25);border-radius:2px}
+  .route .stop{width:11px;height:11px;border-radius:50%;flex:0 0 auto;
+    background:var(--navy-deep);box-shadow:0 0 0 3px rgba(255,255,255,.6)}
+  .route .stop.live{background:var(--green);box-shadow:0 0 0 3px var(--green)}
+
+  /* ---------- Conteúdo ---------- */
+  main{max-width:1140px;margin:0 auto;padding:30px 24px 64px;position:relative}
+
+  .section{margin-top:26px}
+  .section:first-child{margin-top:0}
+  .sec-head{margin-bottom:12px;padding-left:1px}
+  .sec-head h2{
+    font-family:'Archivo';font-weight:700;font-size:14px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--navy);display:flex;align-items:center;gap:10px;
+  }
+  .sec-head h2::before{content:"";width:4px;height:15px;border-radius:2px;background:var(--accent)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:12px}
+
+  .card{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;text-align:left;cursor:pointer;font:inherit;color:inherit;
+    display:flex;gap:13px;align-items:flex-start;position:relative;overflow:hidden;
+    box-shadow:var(--shadow);transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;
+  }
+  .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);opacity:.85}
+  .card:hover{transform:translateY(-3px);box-shadow:0 1px 2px rgba(12,40,66,.06),0 16px 34px -18px rgba(12,40,66,.4);border-color:#c6d4e1}
+  .card:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  .ico{
+    width:38px;height:38px;border-radius:10px;flex:0 0 auto;display:grid;place-items:center;
+    background:var(--accent-soft);color:var(--accent);
+  }
+  .ico svg{width:20px;height:20px}
+  .card-txt h3{font-family:'Archivo';font-weight:600;font-size:14.5px;line-height:1.25}
+  .card-txt p{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.4}
+  .card.needs-line::after{content:"linha";position:absolute;top:9px;right:10px;font-size:9px;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--line-soft);
+    padding:2px 6px;border-radius:5px;font-weight:600}
+
+  footer{
+    border-top:1px solid var(--line);background:var(--surface);
+    color:var(--muted);font-size:12.5px;
+  }
+  .footer-in{max-width:1140px;margin:0 auto;padding:18px 24px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .footer-in .pill{font-family:'IBM Plex Mono';background:var(--line-soft);padding:3px 9px;border-radius:6px;color:var(--blue)}
+  .footer-in .right{margin-left:auto}
+
+  @media (max-width:560px){
+    .selector button{flex:1 1 100%;padding:12px}
+    .topbar-meta{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important;scroll-behavior:auto}
+  }
+
+  /* ---------- Search dropdown ---------- */
+  .selector{position:relative}
+  .results-drop{
+    position:absolute;top:calc(100% + 8px);left:0;right:0;
+    background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+    box-shadow:0 8px 32px rgba(12,40,66,.22);z-index:200;
+    max-height:320px;overflow-y:auto;display:none;
+  }
+  .results-drop.open{display:block}
+  .result-item{
+    display:flex;align-items:center;gap:10px;padding:10px 14px;
+    cursor:pointer;border:0;background:none;width:100%;text-align:left;
+    border-bottom:1px solid var(--line-soft);font:inherit;color:inherit;
+    transition:background .1s;
+  }
+  .result-item:last-child{border-bottom:0}
+  .result-item:hover{background:var(--bg)}
+  .r-num{
+    font-family:'IBM Plex Mono';font-size:11.5px;font-weight:600;
+    color:var(--blue);background:#e7f0f8;padding:2px 8px;border-radius:5px;white-space:nowrap;
+  }
+  .r-name{flex:1;font-size:13px;font-weight:500;color:var(--ink)}
+  .r-emp{font-size:11.5px;color:var(--muted);white-space:nowrap}
+  .drop-empty{padding:14px 16px;font-size:13px;color:var(--muted);text-align:center}
+  .drop-error{padding:14px 16px;font-size:13px;color:#b33a2e;text-align:center}
+
+  /* ---------- Active line banner ---------- */
+  .line-banner{
+    background:linear-gradient(90deg,#eaf1f8 0%,#fff 100%);
+    border:1px solid #c8ddef;border-radius:var(--radius);
+    padding:13px 18px;display:flex;align-items:center;gap:14px;
+    margin-bottom:22px;flex-wrap:wrap;
+  }
+  .lb-num{
+    font-family:'IBM Plex Mono';font-size:12.5px;font-weight:600;
+    color:var(--blue);background:#deeaf5;padding:4px 12px;border-radius:6px;white-space:nowrap;
+  }
+  .lb-name{font-family:'Archivo';font-weight:700;font-size:15px;color:var(--navy)}
+  .lb-emp{font-size:12px;color:var(--muted);margin-top:2px}
+  .lb-clear{
+    margin-left:auto;background:none;border:1px solid var(--line);
+    border-radius:6px;padding:4px 12px;font-size:12px;color:var(--muted);
+    cursor:pointer;font:inherit;transition:background .12s;
+  }
+  .lb-clear:hover{background:var(--line-soft)}
+
+  /* ---------- Modal ---------- */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(7,25,42,.62);
+    z-index:1000;display:none;align-items:flex-start;justify-content:center;
+    padding:40px 16px 60px;overflow-y:auto;backdrop-filter:blur(3px);
+  }
+  .modal-overlay.open{display:flex}
+  .modal{
+    background:var(--surface);border-radius:var(--radius);width:100%;max-width:840px;
+    box-shadow:0 20px 60px rgba(7,25,42,.5);overflow:hidden;
+  }
+  .modal-doc{max-width:880px}
+  /* thin toolbar above the document */
+  .modal-toolbar{
+    background:var(--navy-deep);color:#fff;padding:10px 16px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .mt-label{font-family:'Archivo';font-weight:700;font-size:11.5px;letter-spacing:.08em;
+    text-transform:uppercase;color:#9fc0dc;margin-right:auto;display:flex;align-items:center;gap:8px}
+  .mt-live{font-size:9.5px;letter-spacing:.06em;color:#0a3a63;background:#37d67a;
+    padding:2px 7px;border-radius:5px;font-weight:700;display:none}
+  .mt-live.on{display:inline-block;animation:pulseLive 1.6s ease}
+  @keyframes pulseLive{0%{opacity:.4}50%{opacity:1}100%{opacity:.85}}
+  .mt-btn{
+    background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;
+    border-radius:6px;padding:5px 12px;font:inherit;font-size:12px;cursor:pointer;
+    display:flex;align-items:center;gap:6px;transition:background .12s;
+  }
+  .mt-btn:hover{background:rgba(255,255,255,.2)}
+  .modal-close{
+    background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+    color:#fff;width:30px;height:30px;border-radius:6px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .12s;
+  }
+  .modal-close:hover{background:rgba(255,255,255,.2)}
+  .modal-body{padding:0;background:#fff;max-height:none}
+
+  /* ===== Documento oficial (réplica do PDF) ===== */
+  .doc{
+    font-family:'IBM Plex Sans',serif;color:#111;padding:26px 30px 30px;
+  }
+  .doc-head{display:flex;align-items:center;gap:14px;border-bottom:3px solid var(--green);padding-bottom:12px}
+  .doc-logo{
+    width:46px;height:46px;border-radius:8px;flex:0 0 auto;display:grid;place-items:center;
+    background:var(--navy);
+  }
+  .doc-logo svg{width:30px;height:30px}
+  .doc-head h1{font-family:'Archivo';font-weight:800;font-size:16px;line-height:1.15;color:#0a3a63;letter-spacing:-.01em}
+  .doc-head .sub{font-family:'Archivo';font-weight:700;font-size:12.5px;color:#1f9d57;
+    letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
+  /* metadata block */
+  .doc-meta{
+    border-bottom:2px solid var(--navy);padding:12px 2px 10px;
+    display:grid;grid-template-columns:1fr 1fr;gap:3px 28px;font-size:12.5px;
+  }
+  .doc-meta .row{display:flex;gap:6px}
+  .doc-meta .row.full{grid-column:1 / -1}
+  .doc-meta b{font-weight:600;color:#000}
+  .doc-meta span{color:#222}
+  /* table */
+  .doc-table{width:100%;border-collapse:collapse;margin-top:6px;font-size:12px}
+  .doc-table thead th{
+    font-family:'Archivo';font-weight:700;font-size:11px;letter-spacing:.04em;
+    text-transform:uppercase;text-align:left;color:#0a3a63;
+    border-bottom:2px solid #0a3a63;padding:7px 8px;
+  }
+  .doc-table tbody td{padding:4.5px 8px;border-bottom:1px solid #e4e9ee;vertical-align:top}
+  .doc-table tbody tr:hover{background:#f4f8fb}
+  .doc-table tbody tr.clickable{cursor:pointer}
+  .td-sentido{font-weight:600;color:#0a3a63;white-space:nowrap}
+  .td-tipo{color:#444;white-space:nowrap}
+  .td-logr{font-weight:500}
+  .td-mun{color:#555;font-size:11px;white-space:nowrap}
+  .td-obs{color:#666;font-size:10.5px;text-align:right;font-style:italic;white-space:nowrap}
+  .td-num{font-family:'IBM Plex Mono';font-size:11px;color:var(--blue);white-space:nowrap}
+  /* separador entre grupos */
+  .sentido-sep td{
+    background:#eef4f9;font-family:'Archivo';font-weight:700;font-size:10.5px;
+    letter-spacing:.08em;text-transform:uppercase;color:#1466a6;padding:5px 8px;
+  }
+  .doc-obs{
+    margin-top:14px;border:1px solid #d4dde6;border-radius:6px;padding:8px 12px;
+    font-size:11.5px;color:#333;background:#fafcfe;
+  }
+  .doc-obs b{color:#0a3a63}
+  .doc-foot{margin-top:16px;text-align:right;font-size:10.5px;color:#888;
+    border-top:1px solid #e4e9ee;padding-top:8px}
+  /* KPIs gerenciais */
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:8px}
+  .kpi{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fafcfe}
+  .kpi b{display:block;font-family:'Archivo';font-weight:800;font-size:22px;color:var(--navy)}
+  .kpi span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  /* busca dentro do modal */
+  .doc-search{display:flex;gap:8px;margin:4px 0 14px;flex-wrap:wrap}
+  .doc-search input{flex:1;min-width:160px;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font:inherit;font-size:13px;outline:0}
+  .doc-search input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(20,102,166,.12)}
+  .doc-search button{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:0 16px;font:inherit;font-weight:600;font-size:13px;cursor:pointer}
+  .doc-search select{border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit;font-size:13px;background:#fff}
+  .chip{display:inline-block;font-size:10.5px;padding:2px 8px;border-radius:20px;font-weight:600}
+  .chip-on{background:#fde7e6;color:#b33a2e}
+  .chip-off{background:#e4f4ec;color:#1f7a45}
+  /* loading / empty */
+  .m-loading{text-align:center;padding:48px 0;color:var(--muted);font-size:14px}
+  .m-loading .spin{
+    width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--blue);
+    border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- Toast ---------- */
+  .toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    padding:10px 20px;border-radius:8px;font-size:13.5px;font-weight:500;
+    z-index:2000;box-shadow:0 4px 16px rgba(0,0,0,.2);
+    animation:slideUp .2s ease;pointer-events:none;white-space:nowrap;
+  }
+  .toast-info{background:var(--navy);color:#fff}
+  .toast-warn{background:#c2700a;color:#fff}
+  .toast-err{background:#b33a2e;color:#fff}
+  .toast-live{background:#1f9d57;color:#fff}
+  @keyframes slideUp{
+    from{opacity:0;transform:translateX(-50%) translateY(10px)}
+    to{opacity:1;transform:translateX(-50%) translateY(0)}
+  }
+
+  /* ---------- Print ---------- */
+  @media print{
+    body>*{display:none!important}
+    .modal-overlay{position:static!important;display:block!important;background:none!important;padding:0!important;backdrop-filter:none!important}
+    .modal{box-shadow:none!important;max-width:none!important;border-radius:0!important}
+    .modal-toolbar{display:none!important}
+    .doc-table tbody tr:hover{background:none!important}
+    .doc-search{display:none!important}
+  }
+</style>
 </head>
 <body>
 
-  <!-- ====================== TELA DE LOGIN ====================== -->
-  <section id="login-view" class="login-view hidden">
-    <form id="login-form" class="login-card" autocomplete="on">
-      <h1 class="login-title">Detro RJ</h1>
-      <p class="login-sub">Gerenciamento de Linhas de Ônibus</p>
-
-      <label class="field">
-        <span>E-mail</span>
-        <input id="login-email" type="email" required autocomplete="username" placeholder="seu@email.com" />
-      </label>
-      <label class="field">
-        <span>Senha</span>
-        <input id="login-password" type="password" required autocomplete="current-password" placeholder="sua senha" />
-      </label>
-
-      <button id="login-btn" type="submit" class="btn btn-primary btn-block">Entrar</button>
-      <p id="login-error" class="error-msg hidden"></p>
-    </form>
-  </section>
-
-  <!-- ====================== APP ====================== -->
-  <section id="app-view" class="app-view hidden">
-    <header class="topbar">
-      <div class="topbar-left">
-        <span class="logo-dot"></span>
-        <h1>Detro RJ <span class="muted">· Linhas de Ônibus</span></h1>
-      </div>
-      <div class="topbar-right">
-        <span id="user-email" class="user-email"></span>
-        <button id="change-pass-btn" class="btn btn-ghost">Trocar senha</button>
-        <button id="logout-btn" class="btn btn-ghost">Sair</button>
-      </div>
-    </header>
-
-    <main class="dashboard">
-      <!-- Barra de busca e filtros -->
-      <div class="toolbar card">
-        <div class="toolbar-left">
-          <input id="search-input" type="search" class="search-input" placeholder="Buscar por número ou nome da linha..." />
-          <select id="filter-empresa">
-            <option value="">Todas as empresas</option>
-          </select>
-        </div>
-        <button id="nova-linha-btn" class="btn btn-primary admin-only hidden">+ Nova Linha</button>
-      </div>
-
-      <!-- Tabela de linhas -->
-      <div class="card table-card">
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Número</th>
-                <th>Nome da Ligação</th>
-                <th>Empresa</th>
-                <th>Tipo</th>
-                <th>Frota Op.</th>
-                <th>Tarifa</th>
-                <th id="col-acoes-header" class="col-acao admin-only hidden">Ações</th>
-              </tr>
-            </thead>
-            <tbody id="linhas-tbody"></tbody>
-          </table>
-          <p id="linhas-empty" class="empty-msg hidden">Nenhuma linha encontrada.</p>
-        </div>
-      </div>
-    </main>
-  </section>
-
-  <!-- ====================== MODAL: DETALHES DA LINHA ====================== -->
-  <div id="detail-modal" class="modal hidden">
-    <div class="modal-card modal-lg">
-      <div class="modal-header">
-        <div>
-          <h2 id="detail-numero" class="modal-title"></h2>
-          <p id="detail-nome" class="modal-sub"></p>
-        </div>
-        <div class="modal-header-actions">
-          <button id="detail-edit-btn" class="btn btn-sm btn-outline admin-only hidden">Editar linha</button>
-          <button id="detail-del-btn" class="btn btn-sm btn-danger admin-only hidden">Excluir linha</button>
-          <button id="detail-close" class="btn-close">✕</button>
-        </div>
-      </div>
-
-      <div class="tabs">
-        <button class="tab-btn active" data-tab="horarios">Horários</button>
-        <button class="tab-btn" data-tab="itinerarios">Itinerários</button>
-        <button class="tab-btn" data-tab="historico">Histórico</button>
-      </div>
-
-      <!-- Tab: Horários -->
-      <div id="tab-horarios" class="tab-content">
-        <div class="tab-toolbar">
-          <span class="tab-count" id="horarios-count"></span>
-          <button id="novo-horario-btn" class="btn btn-sm btn-primary admin-only hidden">+ Novo Horário</button>
-        </div>
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Origem</th>
-                <th>Dia da Semana</th>
-                <th>Hora Início</th>
-                <th>Hora Fim</th>
-                <th>Intervalo (min)</th>
-                <th class="col-acao admin-only hidden">Ações</th>
-              </tr>
-            </thead>
-            <tbody id="horarios-tbody"></tbody>
-          </table>
-          <p id="horarios-empty" class="empty-msg hidden">Nenhum horário cadastrado.</p>
-        </div>
-      </div>
-
-      <!-- Tab: Itinerários -->
-      <div id="tab-itinerarios" class="tab-content hidden">
-        <div class="tab-toolbar">
-          <div class="sentido-filter">
-            <button class="sentido-btn active" data-sentido="ida">Ida</button>
-            <button class="sentido-btn" data-sentido="volta">Volta</button>
-          </div>
-          <button id="novo-itin-btn" class="btn btn-sm btn-primary admin-only hidden">+ Nova Parada</button>
-        </div>
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th style="width:70px">Ordem</th>
-                <th>Ponto</th>
-                <th>Sentido</th>
-                <th class="col-acao admin-only hidden">Ações</th>
-              </tr>
-            </thead>
-            <tbody id="itin-tbody"></tbody>
-          </table>
-          <p id="itin-empty" class="empty-msg hidden">Nenhuma parada cadastrada.</p>
-        </div>
-      </div>
-
-      <!-- Tab: Histórico -->
-      <div id="tab-historico" class="tab-content hidden">
-        <div class="tab-toolbar">
-          <span class="tab-count" id="historico-count"></span>
-          <button id="novo-hist-btn" class="btn btn-sm btn-primary admin-only hidden">+ Novo Registro</button>
-        </div>
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th style="width:110px">Data</th>
-                <th style="width:180px">Tipo</th>
-                <th>Descrição</th>
-                <th class="col-acao admin-only hidden">Ações</th>
-              </tr>
-            </thead>
-            <tbody id="historico-tbody"></tbody>
-          </table>
-          <p id="historico-empty" class="empty-msg hidden">Nenhum registro histórico.</p>
-        </div>
-      </div>
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <rect x="2" y="2" width="20" height="20" rx="4" fill="#0a3a63"/>
+        <path d="M6 7.5h12M12 7.5V17" stroke="#1f9d57" stroke-width="2.4" stroke-linecap="round"/>
+        <circle cx="12" cy="6" r="2.2" fill="#fff"/>
+      </svg>
+    </div>
+    <div class="brand-txt">
+      <b>DETRO/RJ</b>
+      <span>DIVAT · Divisão de Apoio Técnico</span>
+    </div>
+    <div class="topbar-meta">
+      <b>Coordenadoria Técnica</b>
+      Cadastro de Linhas Regulares<span id="rtDot" class="rt-dot" title="Conexão em tempo real"></span>
     </div>
   </div>
+</header>
 
-  <!-- ====================== MODAL: NOVA/EDITAR LINHA ====================== -->
-  <div id="linha-modal" class="modal hidden">
-    <div class="modal-card modal-md">
-      <h2 id="linha-modal-title">Nova Linha</h2>
-      <form id="linha-form">
-        <div class="form-grid">
-          <label class="field">
-            <span>Número da linha *</span>
-            <input id="f-numero-linha" type="text" required placeholder="ex.: 485" />
-          </label>
-          <label class="field">
-            <span>Registro</span>
-            <input id="f-registro" type="text" placeholder="ex.: RJ-001" />
-          </label>
-          <label class="field">
-            <span>Código da ligação *</span>
-            <input id="f-codigo-ligacao" type="text" required placeholder="ex.: C01" />
-          </label>
-          <label class="field">
-            <span>Nome da ligação *</span>
-            <input id="f-nome-ligacao" type="text" required placeholder="ex.: Central - Penha" />
-          </label>
-          <label class="field">
-            <span>Empresa *</span>
-            <input id="f-empresa" type="text" required placeholder="ex.: Real Auto Ônibus" />
-          </label>
-          <label class="field">
-            <span>Tipo</span>
-            <input id="f-tipo" type="text" placeholder="ex.: Convencional" />
-          </label>
-          <label class="field">
-            <span>Característica</span>
-            <input id="f-caracteristica" type="text" placeholder="ex.: Circular" />
-          </label>
-          <label class="field">
-            <span>Via</span>
-            <input id="f-via" type="text" placeholder="ex.: Av. Brasil" />
-          </label>
-          <label class="field">
-            <span>Hierarquização</span>
-            <input id="f-hierarquizacao" type="text" placeholder="ex.: Troncal" />
-          </label>
-          <label class="field">
-            <span>Frota operacional</span>
-            <input id="f-frota-operacional" type="number" min="0" placeholder="0" />
-          </label>
-          <label class="field">
-            <span>Frota reserva</span>
-            <input id="f-frota-reserva" type="number" min="0" placeholder="0" />
-          </label>
-          <label class="field">
-            <span>Tarifa (R$)</span>
-            <input id="f-tarifa" type="number" min="0" step="0.01" placeholder="0.00" />
-          </label>
-          <label class="field span-2">
-            <span>Data última alteração</span>
-            <input id="f-data-alteracao" type="date" />
-          </label>
-        </div>
-        <p id="linha-form-error" class="error-msg hidden"></p>
-        <div class="modal-actions">
-          <button type="button" id="linha-cancel" class="btn btn-ghost-dark">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Salvar</button>
-        </div>
-      </form>
+<section class="hero">
+  <div class="hero-in">
+    <div class="eyebrow">Relatórios e Consultas</div>
+    <h1>Cadastro de Linhas Regulares</h1>
+    <p>Selecione uma linha para abrir seus documentos, ou use as consultas para localizar ligações, empresas e seções.</p>
+
+    <div class="selector">
+      <div class="field">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="lineInput" type="text" placeholder="Buscar linha por número (ex. 132004001) ou nome" autocomplete="off">
+      </div>
+      <button type="button" id="openLine">Abrir linha</button>
+    </div>
+
+    <div class="route" aria-hidden="true">
+      <span class="stop live"></span><span class="seg"></span>
+      <span class="stop"></span><span class="seg"></span>
+      <span class="stop"></span><span class="seg"></span>
+      <span class="stop"></span><span class="seg"></span>
+      <span class="stop"></span>
     </div>
   </div>
+</section>
 
-  <!-- ====================== MODAL: NOVO/EDITAR HORÁRIO ====================== -->
-  <div id="horario-modal" class="modal hidden">
-    <div class="modal-card">
-      <h2 id="horario-modal-title">Novo Horário</h2>
-      <form id="horario-form">
-        <label class="field">
-          <span>Origem *</span>
-          <input id="h-origem" type="text" required placeholder="ex.: Terminal Deodoro" />
-        </label>
-        <label class="field">
-          <span>Dia da semana *</span>
-          <select id="h-dia-semana" required>
-            <option value="">Selecione...</option>
-            <option>Útil</option>
-            <option>Sábado</option>
-            <option>Domingo</option>
-            <option>Sábado e Domingo</option>
-          </select>
-        </label>
-        <div class="form-row">
-          <label class="field">
-            <span>Hora início *</span>
-            <input id="h-hora-inicio" type="time" required />
-          </label>
-          <label class="field">
-            <span>Hora fim *</span>
-            <input id="h-hora-fim" type="time" required />
-          </label>
-          <label class="field">
-            <span>Intervalo (min) *</span>
-            <input id="h-intervalo" type="number" min="1" required placeholder="15" />
-          </label>
-        </div>
-        <p id="horario-form-error" class="error-msg hidden"></p>
-        <div class="modal-actions">
-          <button type="button" id="horario-cancel" class="btn btn-ghost-dark">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Salvar</button>
-        </div>
-      </form>
+<!-- Modal genérico (documentos / consultas) -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal modal-doc">
+    <div class="modal-toolbar">
+      <span class="mt-label"><span id="mtTitle">Cadastro de Linhas</span><span class="mt-live" id="mtLive">● ao vivo</span></span>
+      <button class="mt-btn" id="btnPrint" title="Imprimir / Salvar PDF">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
+        Imprimir
+      </button>
+      <button class="modal-close" id="modalClose" title="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="16" height="16"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="modalBody">
+      <div class="m-loading"><div class="spin"></div>Carregando…</div>
     </div>
   </div>
+</div>
 
-  <!-- ====================== MODAL: NOVA/EDITAR PARADA ====================== -->
-  <div id="itin-modal" class="modal hidden">
-    <div class="modal-card">
-      <h2 id="itin-modal-title">Nova Parada</h2>
-      <form id="itin-form">
-        <label class="field">
-          <span>Sentido *</span>
-          <select id="i-sentido" required>
-            <option value="ida">Ida</option>
-            <option value="volta">Volta</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Ordem *</span>
-          <input id="i-ordem" type="number" min="1" required placeholder="1" />
-        </label>
-        <label class="field">
-          <span>Ponto *</span>
-          <input id="i-ponto" type="text" required placeholder="ex.: Rua XV de Novembro" />
-        </label>
-        <p id="itin-form-error" class="error-msg hidden"></p>
-        <div class="modal-actions">
-          <button type="button" id="itin-cancel" class="btn btn-ghost-dark">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Salvar</button>
-        </div>
-      </form>
-    </div>
+<!-- Banner linha ativa -->
+<div style="max-width:1140px;margin:0 auto;padding:0 24px">
+  <div id="lineBanner" class="line-banner" style="display:none;margin-top:20px"></div>
+</div>
+
+<main id="app"><!-- seções renderizadas via JS --></main>
+
+<footer>
+  <div class="footer-in">
+    <span>DIVAT — Cadastro de Linhas Regulares</span>
+    <span class="pill">consulta pública</span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span></span>
   </div>
+</footer>
 
-  <!-- ====================== MODAL: NOVO/EDITAR HISTÓRICO ====================== -->
-  <div id="hist-modal" class="modal hidden">
-    <div class="modal-card">
-      <h2 id="hist-modal-title">Novo Registro Histórico</h2>
-      <form id="hist-form">
-        <label class="field">
-          <span>Data *</span>
-          <input id="ht-data" type="date" required />
-        </label>
-        <label class="field">
-          <span>Tipo de alteração *</span>
-          <select id="ht-tipo" required>
-            <option value="">Selecione...</option>
-            <option>Criação</option>
-            <option>Modificação</option>
-            <option>Extinção</option>
-            <option>Renumeração</option>
-            <option>Alteração de itinerário</option>
-            <option>Alteração de horário</option>
-            <option>Alteração de empresa</option>
-            <option>Outro</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Descrição</span>
-          <textarea id="ht-descricao" rows="3" placeholder="Detalhes da alteração..."></textarea>
-        </label>
-        <p id="hist-form-error" class="error-msg hidden"></p>
-        <div class="modal-actions">
-          <button type="button" id="hist-cancel" class="btn btn-ghost-dark">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Salvar</button>
-        </div>
-      </form>
+<!-- supabase-js: usado APENAS para o canal Realtime (as consultas usam REST/fetch) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* ================================================================
+   SUPABASE CONFIG
+   ================================================================ */
+const SB_URL = 'https://lwzsxuaqqeoamukduhev.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3enN4dWFxcWVvYW11a2R1aGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTk4NjYsImV4cCI6MjA5NTQ5NTg2Nn0.90R-n9pu_gpDfmRr7O4DMAdjtIUkIDGyEKfG9zXXV1s';
+
+async function sbFetch(table, qs = '') {
+  const res = await fetch(`${SB_URL}/rest/v1/${table}?${qs}`, {
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// 101001001 → 101-001-001 (formato do código da ligação no PDF oficial)
+function fmtCode(code) {
+  if (!code) return '';
+  const s = String(code);
+  return s.length === 9 ? `${s.slice(0,3)}-${s.slice(3,6)}-${s.slice(6)}` : s;
+}
+// HH:MM:SS → HH:MM
+function fmtTime(t){ if(!t) return '—'; const m=String(t).match(/^(\d{2}):(\d{2})/); return m?`${m[1]}:${m[2]}`:t; }
+// data ISO (YYYY-MM-DD) → DD/MM/YYYY
+function fmtDate(d){ if(!d) return '—'; const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:d; }
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const enc = s => encodeURIComponent(s);
+const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
+const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
+
+/* ================================================================
+   ÍCONES
+   ================================================================ */
+const I = {
+  file:'<path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/>',
+  divider:'<path d="M4 5h16M4 12h10M4 19h16"/><path d="M16 9l3 3-3 3"/>',
+  history:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/>',
+  route:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h6.5"/>',
+  clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  ticket:'<path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2 2 2 0 0 0 0 6 2 2 0 0 1-2 2H5a2 2 0 0 1-2-2 2 2 0 0 0 0-6Z"/><path d="M13 7v10"/>',
+  bus:'<rect x="4" y="4" width="16" height="13" rx="2"/><path d="M4 11h16"/><circle cx="8" cy="19" r="1.4"/><circle cx="16" cy="19" r="1.4"/><path d="M4 17v2M20 17v2"/>',
+  structure:'<rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="15" width="6" height="5" rx="1"/><rect x="15" y="15" width="6" height="5" rx="1"/><path d="M12 8v3M6 15v-2h12v2"/>',
+  building:'<path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16"/><path d="M15 9h3a2 2 0 0 1 2 2v10"/><path d="M8 7h2M8 11h2M8 15h2M3 21h18"/>',
+  link:'<path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8"/>',
+  segments:'<path d="M3 12h4M10 12h4M17 12h4"/><circle cx="8.5" cy="12" r="1.2"/><circle cx="15.5" cy="12" r="1.2"/>',
+  alpha:'<path d="M4 18 7 9l3 9M5 15h4"/><path d="M14 9h5l-5 9h5"/>',
+  hash:'<path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16"/>',
+  signpost:'<path d="M12 3v18"/><path d="M5 6h11l3 2.5L16 11H5z"/>',
+  map:'<path d="m9 4 6 2 6-2v14l-6 2-6-2-6 2V6z"/><path d="M9 4v14M15 6v14"/>',
+  pin:'<path d="M12 21s7-6.5 7-11a7 7 0 1 0-14 0c0 4.5 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/>',
+  hub:'<circle cx="12" cy="12" r="2.5"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3M6.5 6.5 8.6 8.6M15.4 15.4l2.1 2.1M17.5 6.5 15.4 8.6M8.6 15.4l-2.1 2.1"/>',
+  chart:'<path d="M4 20V4M4 20h16"/><rect x="7" y="12" width="3" height="5"/><rect x="12" y="8" width="3" height="9"/><rect x="17" y="5" width="3" height="12"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'
+};
+
+/* ================================================================
+   SEÇÕES / CARDS  — [icone, titulo, descricao, view, precisaLinha]
+   ================================================================ */
+const SECTIONS = [
+  { key:'doc', name:'Documentos da Linha', color:'var(--c-doc)', soft:'#e7f0f8',
+    items:[
+      ['file','Folha de Rosto','Dados gerais e identificação da linha','folhaRosto',true],
+      ['divider','Folha Divisória','Página de separação do processo','folhaDivisoria',true],
+      ['history','Histórico da Linha','Alterações e eventos registrados','historicoLinha',true],
+      ['route','Itinerários','Trajeto de ida e volta com logradouros','itinerarios',true],
+      ['clock','Quadro de Horários','Horários e frequências por sentido','quadroHorarios',true],
+      ['ticket','Tarifas','Valores vigentes por seção','tarifas',true],
+      ['bus','Frota','Veículos vinculados à operação','frota',true],
+      ['structure','Estrutura Operacional','Seções, extensões e perfil operacional','estrutura',true],
+    ]},
+  { key:'emp', name:'Empresas', color:'var(--c-emp)', soft:'#e4f4ec',
+    items:[
+      ['building','Empresas Regulares','Operadoras com linhas regulares ativas','empresasRegulares',false],
+      ['history','Histórico da Empresa','Eventos e alterações por operadora','historicoEmpresa',false],
+      ['link','Ligações por Empresa','Linhas operadas por uma empresa','ligacoesPorEmpresa',false],
+      ['segments','Seções por Empresa','Seções atendidas por operadora','secoesPorEmpresa',false],
+    ]},
+  { key:'lig', name:'Consultas de Ligações', color:'var(--c-lig)', soft:'#f8efe0',
+    items:[
+      ['alpha','Ligações pelo Nome','Buscar em ordem alfabética crescente','ligacoesPorNome',false],
+      ['hash','Identificar pelo Número','Localizar uma linha pelo código','ligacoesPorNumero',false],
+      ['signpost','Ligações por Logradouro','Linhas que passam por uma via','ligacoesPorLogradouro',false],
+      ['map','Município e Região','Linhas por origem e destino','municipioRegiao',false],
+      ['pin','Entre Localidades','Localidades cadastradas','entreLocalidades',false],
+      ['hub','Ligações por Terminais','Linhas que atendem um terminal','ligacoesPorTerminal',false],
+      ['segments','Seções por Ligação','Seções que compõem uma linha','secoesPorLigacao',true],
+    ]},
+  { key:'ger', name:'Gerenciais e Pesquisa', color:'var(--c-ger)', soft:'#efe9f7',
+    items:[
+      ['chart','Relatórios Gerenciais','Indicadores e consolidados da DIVAT','relatoriosGerenciais',false],
+      ['search','Pesquisa de Evento','Buscar eventos por termo livre','pesquisaEvento',false],
+    ]},
+];
+
+/* ================================================================
+   RENDER CARDS
+   ================================================================ */
+const app = document.getElementById('app');
+const svg = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+
+SECTIONS.forEach(sec => {
+  const cards = sec.items.map(([ic, title, desc, view, needsLine]) => `
+    <button class="card${needsLine?' needs-line':''}" type="button"
+      style="--accent:${sec.color};--accent-soft:${sec.soft}"
+      data-view="${view}" data-needs-line="${needsLine?1:0}" data-title="${esc(title)}">
+      <span class="ico">${svg(I[ic])}</span>
+      <span class="card-txt"><h3>${title}</h3><p>${desc}</p></span>
+    </button>`).join('');
+  app.insertAdjacentHTML('beforeend', `
+    <section class="section">
+      <div class="sec-head" style="--accent:${sec.color}"><h2>${sec.name}</h2></div>
+      <div class="grid">${cards}</div>
+    </section>`);
+});
+
+/* ================================================================
+   STATE + CACHES
+   ================================================================ */
+let activeLine = null;   // { codlinha, numero_ligacao, nome_ligacao, codempresa, ... }
+let ibgeMap   = null;    // { [codibge]: {nome,regiao} }
+let origemMap = null;    // { [cod_origem]: nome_origem }
+let evEmpMap  = null;    // { [id]: evento_empresa }
+let evLinMap  = null;    // { [id]: evento_linha }
+
+async function getIbge() {
+  if (ibgeMap) return ibgeMap;
+  const rows = await sbFetch('cod_ibge_teste', 'select=codibge,nome_municipio,regiao,regiao_novo');
+  ibgeMap = {};
+  rows.forEach(r => { ibgeMap[r.codibge] = { nome:r.nome_municipio, regiao:r.regiao_novo||r.regiao }; });
+  return ibgeMap;
+}
+async function getOrigem() {
+  if (origemMap) return origemMap;
+  const rows = await sbFetch('tab_origem_teste', 'select=cod_origem,nome_origem&limit=2000');
+  origemMap = {}; rows.forEach(r => { origemMap[r.cod_origem] = r.nome_origem; });
+  return origemMap;
+}
+async function getEvLookups() {
+  if (!evEmpMap) { const r = await sbFetch('evento_empresa_teste','select=id,evento_empresa').catch(()=>[]); evEmpMap={}; r.forEach(x=>evEmpMap[x.id]=x.evento_empresa); }
+  if (!evLinMap) { const r = await sbFetch('evento_linha_teste','select=id,evento_linha').catch(()=>[]); evLinMap={}; r.forEach(x=>evLinMap[x.id]=x.evento_linha); }
+  return { emp:evEmpMap, lin:evLinMap };
+}
+
+/* ================================================================
+   BUSCA DE LINHAS (hero)
+   ================================================================ */
+const searchInput = document.getElementById('lineInput');
+const searchBtn   = document.getElementById('openLine');
+const selector    = document.querySelector('.selector');
+const dropdown = document.createElement('div');
+dropdown.className = 'results-drop';
+selector.appendChild(dropdown);
+function closeDropdown() { dropdown.classList.remove('open'); }
+
+const LINE_FIELDS = 'codlinha,numero_ligacao,nome_ligacao,nome_lig_cresc,via,codempresa,tipo,caracteristica,licitado,cancelado,paralisado,sub_judice,transferido,data_criacao,processo_criacao';
+
+async function doSearch() {
+  const term = searchInput.value.trim();
+  if (!term) { toast('Digite o número ou nome da linha.', 'warn'); return; }
+  searchBtn.textContent = '…'; searchBtn.disabled = true;
+  try {
+    const e1 = enc(term);
+    const encCode = enc(term.replace(/[-.\s]/g, ''));
+    const rows = await sbFetch('tabela_vista_teste',
+      `select=${LINE_FIELDS}` +
+      `&or=(numero_ligacao.ilike.*${e1}*,nome_ligacao.ilike.*${e1}*,codlinha.ilike.*${encCode}*)` +
+      `&limit=15`);
+    if (!rows.length) {
+      dropdown.innerHTML = '<div class="drop-empty">Nenhuma linha encontrada.</div>';
+    } else {
+      dropdown.innerHTML = rows.map(r => `
+        <button class="result-item" type="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
+          <span class="r-num">${esc(r.numero_ligacao || fmtCode(r.codlinha))}</span>
+          <span class="r-name">${esc(r.nome_ligacao || '—')}</span>
+          <span class="r-emp">${esc(fmtCode(r.codlinha))} · ${esc(r.codempresa || '')}</span>
+        </button>`).join('');
+    }
+    dropdown.classList.add('open');
+  } catch (e) {
+    dropdown.innerHTML = `<div class="drop-error">Erro: ${esc(e.message)}</div>`;
+    dropdown.classList.add('open');
+  } finally {
+    searchBtn.textContent = 'Abrir linha'; searchBtn.disabled = false;
+  }
+}
+searchBtn.addEventListener('click', doSearch);
+searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+dropdown.addEventListener('click', e => {
+  const item = e.target.closest('.result-item');
+  if (!item) return;
+  selectLine(JSON.parse(item.dataset.row));
+  closeDropdown(); searchInput.value = '';
+});
+document.addEventListener('click', e => { if (!selector.contains(e.target)) closeDropdown(); });
+
+/* ================================================================
+   LINHA ATIVA — BANNER
+   ================================================================ */
+const banner = document.getElementById('lineBanner');
+function selectLine(row) {
+  activeLine = row;
+  banner.style.display = 'flex';
+  banner.innerHTML = `
+    <span class="lb-num">${esc(row.numero_ligacao || row.codlinha)}</span>
+    <div>
+      <div class="lb-name">${esc(row.nome_ligacao || '—')}</div>
+      <div class="lb-emp">Empresa: ${esc(row.codempresa || '—')} · Cód.: ${esc(fmtCode(row.codlinha))}</div>
     </div>
-  </div>
+    <button class="lb-clear" id="btnClearLine">✕ Limpar</button>`;
+  document.getElementById('btnClearLine').addEventListener('click', () => {
+    activeLine = null; banner.style.display = 'none';
+  });
+}
 
-  <!-- ====================== MODAL: TROCAR SENHA ====================== -->
-  <div id="pass-modal" class="modal hidden">
-    <div class="modal-card">
-      <h2>Trocar senha</h2>
-      <form id="pass-form">
-        <label class="field">
-          <span>Nova senha (mínimo 6 caracteres)</span>
-          <input id="new-password" type="password" minlength="6" required placeholder="nova senha" />
-        </label>
-        <label class="field">
-          <span>Confirmar nova senha</span>
-          <input id="confirm-password" type="password" minlength="6" required placeholder="repita a senha" />
-        </label>
-        <p id="pass-msg" class="error-msg hidden"></p>
-        <div class="modal-actions">
-          <button type="button" id="pass-cancel" class="btn btn-ghost-dark">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Salvar</button>
-        </div>
-      </form>
+/* ================================================================
+   MODAL / SISTEMA DE VIEWS
+   currentView = { title, tables:[], lineFilter, loader, _panelRun }
+   ================================================================ */
+const overlay    = document.getElementById('modalOverlay');
+const modalClose = document.getElementById('modalClose');
+const modalBody  = document.getElementById('modalBody');
+const mtTitle    = document.getElementById('mtTitle');
+const mtLive     = document.getElementById('mtLive');
+document.getElementById('btnPrint').addEventListener('click', () => window.print());
+modalClose.addEventListener('click', closeModal);
+overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+let currentView = null;
+function closeModal(){ overlay.classList.remove('open'); currentView = null; }
+function setBody(html){ modalBody.innerHTML = html; }
+function loading(msg='Carregando…'){ return `<div class="m-loading"><div class="spin"></div>${esc(msg)}</div>`; }
+function emptyBox(msg){ return `<div class="m-loading">${esc(msg)}</div>`; }
+function errorBox(msg){ return `<div class="m-loading" style="color:#b33a2e">Erro ao carregar: ${esc(msg)}</div>`; }
+
+async function runView(view, { silent=false } = {}){
+  currentView = view;
+  mtTitle.textContent = view.title;
+  overlay.classList.add('open');
+  if (!silent) setBody(loading());
+  try { await view.loader(); }
+  catch(e){ setBody(errorBox(e.message)); }
+}
+
+// header institucional reutilizável
+function docHead(subtitle){
+  return `<div class="doc-head">
+    <div class="doc-logo"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="9" r="5" fill="#1f9d57"/><rect x="7" y="13" width="10" height="7" rx="2" fill="#fff"/></svg></div>
+    <div><h1>Departamento de Transportes Rodoviários<br>do Estado do Rio de Janeiro — DETRO/RJ</h1>
+    <div class="sub">DIVAT · ${esc(subtitle)}</div></div></div>`;
+}
+function metaRows(pairs){
+  return `<div class="doc-meta">${pairs.map(([k,v,full])=> k===''? '<div class="row"></div>' : `<div class="row${full?' full':''}"><b>${esc(k)}:</b><span>${v}</span></div>`).join('')}</div>`;
+}
+function tableHTML(cols, bodyRows, foot){
+  return `<table class="doc-table"><thead><tr>${cols.map(c=>`<th${c.w?` style="width:${c.w}"`:''}>${esc(c.t)}</th>`).join('')}</tr></thead>
+    <tbody>${bodyRows}</tbody></table>${foot?`<div class="doc-foot">${esc(foot)}</div>`:''}`;
+}
+
+/* ----------------------------------------------------------------
+   LOADERS POR CARD — cada um desenha em modalBody e é re-executável
+   ---------------------------------------------------------------- */
+const LOADERS = {};
+
+/* ---- Documentos da Linha (precisam de activeLine) ---- */
+LOADERS.folhaRosto = async () => {
+  const rows = await sbFetch('tabela_vista_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=${LINE_FIELDS}&limit=1`);
+  const L = rows[0] || activeLine;
+  const status = [ boolChip(L.cancelado,'Cancelada'), boolChip(L.paralisado,'Paralisada'), boolChip(L.sub_judice,'Sub judice'), boolChip(L.transferido,'Transferida') ].join(' ') || '<span class="chip chip-off">Ativa</span>';
+  setBody(`<div class="doc">${docHead('Cadastro de Linhas: Folha de Rosto')}
+    ${metaRows([
+      ['Ligação', esc(L.nome_ligacao||'—'), true],
+      ['Código da Ligação', esc(fmtCode(L.codlinha))],
+      ['Número da Ligação', esc(orDash(L.numero_ligacao))],
+      ['Empresa', 'código '+esc(orDash(L.codempresa))],
+      ['Característica', esc(orDash(L.caracteristica))],
+      ['Tipo', esc(orDash(L.tipo))],
+      ['Licitada', L.licitado?'Sim':'Não'],
+      ['Via', esc(orDash(L.via))],
+      ['Data de criação', fmtDate(L.data_criacao)],
+      ['Processo de criação', esc(orDash(L.processo_criacao))],
+      ['Situação', status, true],
+    ])}
+    <div class="doc-foot">Fonte: cadastro DETRO-RJ · tabela_vista_teste</div></div>`);
+};
+
+LOADERS.folhaDivisoria = async () => {
+  const L = activeLine;
+  setBody(`<div class="doc" style="text-align:center;padding:80px 30px">
+    ${docHead('Folha Divisória')}
+    <div style="margin-top:60px">
+      <div style="font-family:'Archivo';font-weight:800;font-size:28px;color:var(--navy)">${esc(L.nome_ligacao||'—')}</div>
+      <div class="mono" style="margin-top:10px;font-size:15px;color:var(--blue)">${esc(fmtCode(L.codlinha))} · Empresa ${esc(L.codempresa||'—')}</div>
+      <div style="margin-top:40px;color:var(--muted);font-size:13px">Página de separação do processo da linha</div>
+    </div></div>`);
+};
+
+LOADERS.historicoLinha = async () => {
+  const [rows, lk] = await Promise.all([
+    sbFetch('evento_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&order=data_registro.desc`),
+    getEvLookups()
+  ]);
+  if (!rows.length) { setBody(`<div class="doc">${docHead('Histórico da Linha')}${emptyBox('Nenhum evento registrado para esta linha.')}</div>`); return; }
+  const body = rows.map(r=>`<tr>
+    <td class="td-num">${esc(fmtDate(r.data_registro))}</td>
+    <td class="td-tipo">${esc(lk.lin[r.evento_linha]||lk.emp[r.evento_empresa]||orDash(r.tipo_evento))}</td>
+    <td class="td-num">${esc(orDash(r.numero_processo))}</td>
+    <td class="td-logr">${esc(orDash(r.descricao))}</td>
+    <td class="td-obs">${esc(r.observacao||'')}</td></tr>`).join('');
+  setBody(`<div class="doc">${docHead('Histórico da Linha')}
+    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))],['Empresa',esc(activeLine.codempresa||'—')]])}
+    ${tableHTML([{t:'Data',w:'82px'},{t:'Evento',w:'150px'},{t:'Processo',w:'110px'},{t:'Descrição'},{t:'Obs.',w:'120px'}], body, rows.length+' evento(s)')}</div>`);
+};
+
+const SENTIDO_ORDER = { 'Ida':1, 'Volta':2, 'Circular':3 };
+const normSentido = s => { const t=String(s||'').trim().toLowerCase(); if(t.startsWith('ida'))return'Ida'; if(t.startsWith('volta'))return'Volta'; if(t.startsWith('circ'))return'Circular'; return s?String(s):'—'; };
+
+LOADERS.itinerarios = async () => {
+  const [rows, ibge] = await Promise.all([
+    sbFetch('itinerario_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&order=id`),
+    getIbge()
+  ]);
+  if (!rows.length) { setBody(`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}${emptyBox('Nenhum itinerário encontrado para esta linha.')}</div>`); return; }
+  rows.forEach(r=>r._sn=normSentido(r.sentido));
+  rows.sort((a,b)=>{ const oa=SENTIDO_ORDER[a._sn]||9, ob=SENTIDO_ORDER[b._sn]||9; return oa!==ob?oa-ob:(a.id-b.id); });
+  const L = activeLine; const codEmp = rows[0]?.codempresa || L.codempresa || '';
+  let last=null;
+  const body = rows.map(r=>{
+    let sep=''; if(r._sn!==last){ sep=`<tr class="sentido-sep"><td colspan="5">Sentido: ${esc(r._sn)}</td></tr>`; last=r._sn; }
+    const mun = (ibge[r.codibge]?.nome) || (r.codibge?String(r.codibge):'');
+    return sep+`<tr><td class="td-sentido">${esc(r._sn||'')}</td><td class="td-tipo">${esc(r.tipo_logradouro||'')}</td>
+      <td class="td-logr">${esc(r.nome_logradouro||'—')}</td><td class="td-mun">${esc(mun)}</td><td class="td-obs">${esc(r.observacao||'')}</td></tr>`;
+  }).join('');
+  const obs=[...new Set(rows.map(r=>r.observacao).filter(o=>o&&/proc|reformul|análise|analise|decreto|portaria/i.test(o)))];
+  setBody(`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}
+    ${metaRows([['Registro','RJ-'+esc(codEmp)],['Característica',esc(L.tipo||'—')],['Empresa','código '+esc(codEmp),true],
+      ['Ligação',esc(L.nome_ligacao||'—'),true],['Código da Ligação',esc(fmtCode(L.codlinha))],['Número da Ligação',esc(orDash(L.numero_ligacao))],
+      ['Tipo da Ligação',esc(orDash(L.caracteristica))], L.via?['Via',esc(L.via)]:['','']])}
+    ${tableHTML([{t:'Sentido',w:'62px'},{t:'Tipo',w:'84px'},{t:'Nome do Logradouro'},{t:'Município',w:'110px'},{t:'Observação',w:'150px'}], body,
+      `${rows.length} logradouro(s) · cadastro DETRO-RJ`)}
+    ${obs.length?`<div class="doc-obs"><b>Obs:</b> ${obs.map(esc).join(' · ')}</div>`:''}</div>`);
+};
+
+LOADERS.quadroHorarios = async () => {
+  const [interv, predet, orig] = await Promise.all([
+    sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&order=ordem_importacao`),
+    sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&order=ordem_importacao`),
+    getOrigem()
+  ]);
+  if (!interv.length && !predet.length) { setBody(`<div class="doc">${docHead('Quadro de Horários')}${emptyBox('Nenhum quadro de horários cadastrado para esta linha.')}</div>`); return; }
+  let html = `<div class="doc">${docHead('Quadro de Horários')}
+    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))],['Empresa',esc(activeLine.codempresa||'—')]])}`;
+  if (interv.length){
+    const groups = groupBy(interv, r=>r.dia_semana||'—');
+    html += `<h3 style="font-family:'Archivo';font-size:13px;color:var(--navy);margin:14px 0 4px">Por intervalo / frequência</h3>`;
+    for (const [dia, list] of groups){
+      const body = list.map(r=>`<tr><td class="td-sentido">${esc(orig[r.cod_origem]||('Origem '+orDash(r.cod_origem)))}</td>
+        <td class="td-num">${esc(fmtTime(r.hor_inicio))}</td><td class="td-num">${esc(fmtTime(r.hor_fim))}</td>
+        <td class="td-tipo">${esc(orDash(r.intervalo_min))} min</td></tr>`).join('');
+      html += `<div style="margin-top:8px"><table class="doc-table"><thead><tr><th>${esc(dia)}</th><th style="width:80px">Início</th><th style="width:80px">Fim</th><th style="width:90px">Intervalo</th></tr></thead><tbody>${body}</tbody></table></div>`;
+    }
+  }
+  if (predet.length){
+    const groups = groupBy(predet, r=>r.dia_semana||'—');
+    html += `<h3 style="font-family:'Archivo';font-size:13px;color:var(--navy);margin:18px 0 4px">Horários predeterminados</h3>`;
+    for (const [dia, list] of groups){
+      const horas = list.map(r=>`<span class="mono" style="display:inline-block;background:#eef4f9;color:var(--blue);padding:2px 7px;border-radius:5px;margin:2px;font-size:11px">${esc(fmtTime(r.hor_saida))}</span>`).join('');
+      html += `<div style="margin-top:8px"><div class="sentido-sep" style="padding:5px 8px">${esc(dia)} · ${list.length} partida(s)</div><div style="padding:8px 4px">${horas}</div></div>`;
+    }
+  }
+  html += `</div>`; setBody(html);
+};
+
+LOADERS.tarifas = async () => {
+  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&order=secao`);
+  if (!rows.length) { setBody(`<div class="doc">${docHead('Tarifas')}${emptyBox('Nenhuma tarifa cadastrada para esta linha.')}</div>`); return; }
+  const body = rows.map(r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td>
+    <td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td><td class="td-num">R$ ${esc(fmtMoney(r.piso_i))}</td>
+    <td class="td-tipo">${esc(orDash(r.situacao))}</td></tr>`).join('');
+  setBody(`<div class="doc">${docHead('Tarifas Vigentes')}
+    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]])}
+    ${tableHTML([{t:'Seção',w:'70px'},{t:'Ligação'},{t:'Tarifa',w:'90px'},{t:'Piso I',w:'90px'},{t:'Situação',w:'100px'}], body, rows.length+' seção(ões)')}</div>`);
+};
+
+LOADERS.frota = async () => {
+  const rows = await sbFetch('qh_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&limit=1`);
+  if (!rows.length) { setBody(`<div class="doc">${docHead('Frota')}${emptyBox('Nenhuma frota cadastrada para esta linha.')}</div>`); return; }
+  const f = rows[0];
+  setBody(`<div class="doc">${docHead('Frota da Linha')}
+    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))],
+      ['Hierarquia',esc(orDash(f.hierarquia))],['Última alteração',fmtDate(f.ultima_alteracao)]])}
+    <div class="kpi-grid">
+      <div class="kpi"><b>${orDash(f.frota_operacional)}</b><span>Operacional</span></div>
+      <div class="kpi"><b>${orDash(f.frota_a)}</b><span>Comum (A)</span></div>
+      <div class="kpi"><b>${orDash(f.frota_sa)}</b><span>Comum (SA)</span></div>
+      <div class="kpi"><b>${orDash(f.frota_ac)}</b><span>Ar cond. (AC)</span></div>
+      <div class="kpi"><b>${orDash(f.frota_sac)}</b><span>Ar cond. (SAC)</span></div>
+      <div class="kpi"><b>${orDash(f.frota_micro_a)}</b><span>Micro (A)</span></div>
+      <div class="kpi"><b>${orDash(f.frota_micro_sa)}</b><span>Micro (SA)</span></div>
+      <div class="kpi"><b>${orDash(f.frota_e)}</b><span>Especial (E)</span></div>
+    </div></div>`);
+};
+
+LOADERS.estrutura = async () => {
+  const [qh, secoes] = await Promise.all([
+    sbFetch('qh_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=hierarquia,frota_operacional&limit=1`),
+    sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,codsecao,nome_ligacao&order=secao`)
+  ]);
+  const h = qh[0]||{};
+  const secBody = secoes.length ? tableHTML([{t:'Seção',w:'70px'},{t:'Cód. Seção',w:'100px'},{t:'Descrição'}],
+    secoes.map(s=>`<tr><td class="td-num">${esc(orDash(s.secao))}</td><td class="td-num">${esc(orDash(s.codsecao))}</td><td class="td-logr">${esc(orDash(s.nome_ligacao))}</td></tr>`).join(''))
+    : emptyBox('Sem seções cadastradas.');
+  setBody(`<div class="doc">${docHead('Estrutura Operacional')}
+    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Hierarquia',esc(orDash(h.hierarquia))],['Frota operacional',esc(orDash(h.frota_operacional))]])}
+    <h3 style="font-family:'Archivo';font-size:13px;color:var(--navy);margin:14px 0 4px">Seções</h3>${secBody}</div>`);
+};
+
+/* ---- Empresas ---- */
+LOADERS.empresasRegulares = async () => {
+  const rows = await sbFetch('tabela_vista_teste', `select=codempresa,cancelado&limit=3000`);
+  const map = {};
+  rows.forEach(r=>{ const k=r.codempresa||'—'; map[k]=map[k]||{total:0,ativas:0}; map[k].total++; if(!r.cancelado)map[k].ativas++; });
+  const list = Object.entries(map).sort((a,b)=>b[1].total-a[1].total);
+  const body = list.map(([cod,v])=>`<tr class="clickable" data-emp="${esc(cod)}"><td class="td-num">${esc(cod)}</td><td class="td-sentido">${v.total}</td><td class="td-tipo">${v.ativas}</td></tr>`).join('');
+  setBody(`<div class="doc">${docHead('Empresas Regulares')}
+    <p style="font-size:12px;color:var(--muted);margin-bottom:6px">${list.length} operadoras (por código). Clique para ver as ligações da empresa.</p>
+    ${tableHTML([{t:'Cód. Empresa',w:'120px'},{t:'Total de linhas',w:'130px'},{t:'Linhas ativas'}], body)}</div>`);
+  modalBody.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>openEmpresaLigacoes(tr.dataset.emp)));
+};
+
+function openEmpresaLigacoes(cod){
+  runView({ title:'Ligações por Empresa', tables:['tabela_vista_teste'], loader: async()=>{
+    const rows = await sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`);
+    setBody(`<div class="doc">${docHead('Ligações por Empresa')}
+      ${metaRows([['Empresa','código '+esc(cod),true],['Total',rows.length+' ligação(ões)']])}
+      ${linhasTable(rows)}</div>`);
+    bindLineRows();
+  }});
+}
+LOADERS.ligacoesPorEmpresa = async () => {
+  const pre = activeLine?.codempresa || '';
+  searchPanel({ title:'Ligações por Empresa', placeholder:'Código da empresa (ex. 101)', value:pre, onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Informe o código da empresa.'); return; }
+    const rows = await sbFetch('tabela_vista_teste', `codempresa=eq.${enc(term)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`);
+    host.innerHTML = rows.length? linhasTable(rows): emptyBox('Nenhuma ligação para a empresa '+term+'.');
+    bindLineRows(host);
+  }, tables:['tabela_vista_teste']});
+};
+LOADERS.secoesPorEmpresa = async () => {
+  const pre = activeLine?.codempresa || '';
+  searchPanel({ title:'Seções por Empresa', placeholder:'Código da empresa (ex. 101)', value:pre, onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Informe o código da empresa.'); return; }
+    const rows = await sbFetch('tarifa_atual_teste', `codempresa=eq.${enc(term)}&select=codlinha,secao,codsecao,nome_ligacao&order=codlinha&limit=1000`);
+    host.innerHTML = rows.length? tableHTML([{t:'Linha',w:'110px'},{t:'Seção',w:'70px'},{t:'Cód. Seção',w:'100px'},{t:'Descrição'}],
+      rows.map(r=>`<tr><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-num">${esc(orDash(r.codsecao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td></tr>`).join(''))
+      : emptyBox('Nenhuma seção cadastrada para a empresa '+term+'.');
+  }, tables:['tarifa_atual_teste']});
+};
+LOADERS.historicoEmpresa = async () => {
+  const pre = activeLine?.codempresa || '';
+  searchPanel({ title:'Histórico da Empresa', placeholder:'Código da empresa (ex. 101)', value:pre, onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Informe o código da empresa.'); return; }
+    const [rows, lk] = await Promise.all([
+      sbFetch('evento_teste', `codempresa=eq.${enc(term)}&select=*&order=data_registro.desc&limit=500`), getEvLookups() ]);
+    host.innerHTML = rows.length? tableHTML([{t:'Data',w:'82px'},{t:'Linha',w:'100px'},{t:'Evento',w:'140px'},{t:'Processo',w:'100px'},{t:'Descrição'}],
+      rows.map(r=>`<tr><td class="td-num">${esc(fmtDate(r.data_registro))}</td><td class="td-num">${esc(fmtCode(r.codlinha))}</td>
+        <td class="td-tipo">${esc(lk.emp[r.evento_empresa]||lk.lin[r.evento_linha]||orDash(r.tipo_evento))}</td>
+        <td class="td-num">${esc(orDash(r.numero_processo))}</td><td class="td-logr">${esc(orDash(r.descricao))}</td></tr>`).join(''))
+      : emptyBox('Nenhum evento para a empresa '+term+'.');
+  }, tables:['evento_teste']});
+};
+
+/* ---- Consultas de Ligações ---- */
+LOADERS.ligacoesPorNome = async () => {
+  searchPanel({ title:'Ligações pelo Nome', placeholder:'Parte do nome da ligação', onRun: async(term, host)=>{
+    const qs = term? `nome_ligacao=ilike.*${enc(term)}*&` : '';
+    const rows = await sbFetch('tabela_vista_teste', `${qs}select=${LINE_FIELDS}&order=nome_ligacao&limit=80`);
+    host.innerHTML = rows.length? linhasTable(rows): emptyBox('Nenhuma ligação encontrada.');
+    bindLineRows(host);
+  }, tables:['tabela_vista_teste'], auto:true});
+};
+LOADERS.ligacoesPorNumero = async () => {
+  searchPanel({ title:'Identificar pelo Número', placeholder:'Número ou código da linha', onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Digite o número ou código.'); return; }
+    const e1=enc(term), code=enc(term.replace(/[-.\s]/g,''));
+    const rows = await sbFetch('tabela_vista_teste', `or=(numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=codlinha&limit=80`);
+    host.innerHTML = rows.length? linhasTable(rows): emptyBox('Nenhuma linha com esse número/código.');
+    bindLineRows(host);
+  }, tables:['tabela_vista_teste']});
+};
+LOADERS.ligacoesPorLogradouro = async () => {
+  searchPanel({ title:'Ligações por Logradouro', placeholder:'Nome da via / logradouro', onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Digite o nome do logradouro.'); return; }
+    const it = await sbFetch('itinerario_teste', `nome_logradouro=ilike.*${enc(term)}*&select=codlinha&limit=2000`);
+    const cods=[...new Set(it.map(r=>r.codlinha).filter(Boolean))].slice(0,100);
+    if(!cods.length){ host.innerHTML=emptyBox('Nenhuma linha passa por esse logradouro.'); return; }
+    const rows = await sbFetch('tabela_vista_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=200`);
+    host.innerHTML = `<p style="font-size:12px;color:var(--muted);margin-bottom:6px">${cods.length} linha(s) passam por "${esc(term)}"</p>`+linhasTable(rows);
+    bindLineRows(host);
+  }, tables:['itinerario_teste']});
+};
+LOADERS.municipioRegiao = async () => {
+  const ibge = await getIbge();
+  const regioes = [...new Set(Object.values(ibge).map(x=>x.regiao).filter(Boolean))].sort();
+  searchPanel({ title:'Município e Região', placeholder:'Nome do município', selectOpts:[['','Todas as regiões'],...regioes.map(r=>[r,r])], onRun: async(term, host, region)=>{
+    let municipios = Object.entries(ibge).filter(([,v])=> (!region||v.regiao===region) && (!term||(v.nome||'').toLowerCase().includes(term.toLowerCase())) );
+    const body = municipios.sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>
+      `<tr class="clickable" data-ibge="${esc(cod)}"><td class="td-logr">${esc(v.nome)}</td><td class="td-tipo">${esc(orDash(v.regiao))}</td><td class="td-num">cód. ${esc(cod)}</td></tr>`).join('');
+    host.innerHTML = body? tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}], body, municipios.length+' município(s) · clique para ver as linhas'):emptyBox('Nenhum município.');
+    host.querySelectorAll('tr[data-ibge]').forEach(tr=>tr.addEventListener('click',()=>openLinhasPorIbge(tr.dataset.ibge, ibge[tr.dataset.ibge]?.nome)));
+  }, tables:['cod_ibge_teste'], auto:true});
+};
+function openLinhasPorIbge(codibge, nome){
+  runView({ title:'Linhas no Município', tables:['itinerario_teste'], loader: async()=>{
+    const it = await sbFetch('itinerario_teste', `codibge=eq.${enc(codibge)}&select=codlinha&limit=4000`);
+    const cods=[...new Set(it.map(r=>r.codlinha).filter(Boolean))].slice(0,150);
+    if(!cods.length){ setBody(`<div class="doc">${docHead('Linhas no Município')}${emptyBox('Nenhuma linha registrada em '+(nome||codibge)+'.')}</div>`); return; }
+    const rows = await sbFetch('tabela_vista_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=300`);
+    setBody(`<div class="doc">${docHead('Linhas no Município')}${metaRows([['Município',esc(nome||codibge),true],['Total',cods.length+' linha(s)']])}${linhasTable(rows)}</div>`);
+    bindLineRows();
+  }});
+}
+LOADERS.entreLocalidades = async () => {
+  searchPanel({ title:'Localidades cadastradas', placeholder:'Buscar localidade', onRun: async(term, host)=>{
+    const qs = term? `localidade=ilike.*${enc(term)}*&`:'';
+    const rows = await sbFetch('localidades_teste', `${qs}select=localidade&order=localidade&limit=200`);
+    host.innerHTML = rows.length? tableHTML([{t:'Localidade'}], rows.map(r=>`<tr><td class="td-logr">${esc(r.localidade)}</td></tr>`).join(''), rows.length+' localidade(s)') : emptyBox('Nenhuma localidade.');
+  }, tables:['localidades_teste'], auto:true, note:'Catálogo de localidades (sem vínculo direto com linhas neste cadastro).'});
+};
+LOADERS.ligacoesPorTerminal = async () => {
+  const orig = await getOrigem();
+  searchPanel({ title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Digite o nome do terminal/origem.'); return; }
+    const cods = Object.entries(orig).filter(([,n])=>(n||'').toLowerCase().includes(term.toLowerCase())).map(([c])=>c);
+    if(!cods.length){ host.innerHTML=emptyBox('Nenhuma origem com esse nome.'); return; }
+    const inList = cods.slice(0,50).map(enc).join(',');
+    const qi = await sbFetch('qh_intervalo_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`);
+    const lineCods=[...new Set(qi.map(r=>r.codlinha).filter(Boolean))].slice(0,120);
+    if(!lineCods.length){ host.innerHTML=emptyBox('Nenhuma linha vinculada a esse terminal.'); return; }
+    const rows = await sbFetch('tabela_vista_teste', `codlinha=in.(${lineCods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=200`);
+    host.innerHTML = `<p style="font-size:12px;color:var(--muted);margin-bottom:6px">${lineCods.length} linha(s) a partir de "${esc(term)}"</p>`+linhasTable(rows);
+    bindLineRows(host);
+  }, tables:['qh_intervalo_teste']});
+};
+LOADERS.secoesPorLigacao = async () => {
+  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,codsecao,nome_ligacao,tarifa&order=secao`);
+  setBody(`<div class="doc">${docHead('Seções por Ligação')}
+    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]])}
+    ${rows.length? tableHTML([{t:'Seção',w:'70px'},{t:'Cód. Seção',w:'100px'},{t:'Descrição'},{t:'Tarifa',w:'90px'}],
+      rows.map(r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-num">${esc(orDash(r.codsecao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td></tr>`).join(''))
+      : emptyBox('Nenhuma seção cadastrada para esta linha.')}</div>`);
+};
+
+/* ---- Gerenciais ---- */
+LOADERS.relatoriosGerenciais = async () => {
+  const rows = await sbFetch('tabela_vista_teste', `select=codempresa,tipo,cancelado,paralisado,sub_judice,transferido&limit=5000`);
+  const total=rows.length;
+  const ativas=rows.filter(r=>!r.cancelado&&!r.paralisado).length;
+  const canc=rows.filter(r=>r.cancelado).length, paral=rows.filter(r=>r.paralisado).length, sj=rows.filter(r=>r.sub_judice).length;
+  const empCount=new Set(rows.map(r=>r.codempresa)).size;
+  const porEmp = [...countBy(rows, r=>r.codempresa||'—')].sort((a,b)=>b[1]-a[1]).slice(0,15);
+  setBody(`<div class="doc">${docHead('Relatórios Gerenciais')}
+    <div class="kpi-grid">
+      <div class="kpi"><b>${total}</b><span>Linhas cadastradas</span></div>
+      <div class="kpi"><b>${ativas}</b><span>Ativas</span></div>
+      <div class="kpi"><b>${canc}</b><span>Canceladas</span></div>
+      <div class="kpi"><b>${paral}</b><span>Paralisadas</span></div>
+      <div class="kpi"><b>${sj}</b><span>Sub judice</span></div>
+      <div class="kpi"><b>${empCount}</b><span>Empresas</span></div>
     </div>
-  </div>
+    <h3 style="font-family:'Archivo';font-size:13px;color:var(--navy);margin:16px 0 4px">Top empresas por nº de linhas</h3>
+    ${tableHTML([{t:'Cód. Empresa',w:'140px'},{t:'Linhas'}], porEmp.map(([c,n])=>`<tr><td class="td-num">${esc(c)}</td><td class="td-sentido">${n}</td></tr>`).join(''))}
+    <div class="doc-foot">Consolidado sobre ${total} linhas · tabela_vista_teste</div></div>`);
+};
+LOADERS.pesquisaEvento = async () => {
+  searchPanel({ title:'Pesquisa de Evento', placeholder:'Termo livre (processo, descrição, observação)', onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Digite um termo para pesquisar eventos.'); return; }
+    const t=enc(term);
+    const rows = await sbFetch('evento_teste', `or=(descricao.ilike.*${t}*,observacao.ilike.*${t}*,numero_processo.ilike.*${t}*)&select=*&order=data_registro.desc&limit=200`);
+    host.innerHTML = rows.length? tableHTML([{t:'Data',w:'82px'},{t:'Linha',w:'100px'},{t:'Empresa',w:'80px'},{t:'Processo',w:'100px'},{t:'Descrição'}],
+      rows.map(r=>`<tr><td class="td-num">${esc(fmtDate(r.data_registro))}</td><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-num">${esc(orDash(r.codempresa))}</td>
+        <td class="td-num">${esc(orDash(r.numero_processo))}</td><td class="td-logr">${esc(orDash(r.descricao))}</td></tr>`).join(''))
+      : emptyBox('Nenhum evento encontrado para "'+term+'".');
+  }, tables:['evento_teste']});
+};
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+/* ================================================================
+   COMPONENTES AUXILIARES (tabela de linhas + painel de busca)
+   ================================================================ */
+function linhasTable(rows){
+  if(!rows.length) return emptyBox('Nenhuma ligação.');
+  const body = rows.map(r=>`<tr class="clickable" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
+    <td class="td-num">${esc(r.numero_ligacao||fmtCode(r.codlinha))}</td>
+    <td class="td-logr">${esc(r.nome_ligacao||'—')}</td>
+    <td class="td-num">${esc(r.codempresa||'')}</td>
+    <td>${esc(r.tipo||'')} ${boolChip(r.cancelado,'canc.')}</td></tr>`).join('');
+  return tableHTML([{t:'Número',w:'110px'},{t:'Ligação'},{t:'Empresa',w:'80px'},{t:'Tipo',w:'120px'}], body, rows.length+' ligação(ões) · clique para abrir');
+}
+function bindLineRows(host){
+  (host||modalBody).querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{
+    selectLine(JSON.parse(tr.dataset.row)); closeModal();
+    toast('Linha selecionada: '+(activeLine.nome_ligacao||activeLine.codlinha),'info');
+  }));
+}
+// painel com input de busca dentro do modal; o run() é re-executável (realtime)
+function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=false, note }){
+  const selHTML = selectOpts? `<select id="spSel">${selectOpts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`:'';
+  setBody(`<div class="doc">${docHead(title)}
+    ${note?`<div class="doc-obs" style="margin:0 0 10px"><b>Nota:</b> ${esc(note)}</div>`:''}
+    <div class="doc-search"><input id="spInput" type="text" placeholder="${esc(placeholder)}" value="${esc(value)}">${selHTML}<button id="spBtn">Buscar</button></div>
+    <div id="spHost"></div></div>`);
+  const input=modalBody.querySelector('#spInput'), btn=modalBody.querySelector('#spBtn'), host=modalBody.querySelector('#spHost'), sel=modalBody.querySelector('#spSel');
+  const run = async()=>{ host.innerHTML=loading(); try{ await onRun(input.value.trim(), host, sel?sel.value:undefined); }catch(e){ host.innerHTML=errorBox(e.message);} };
+  btn.addEventListener('click', run);
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
+  if(sel) sel.addEventListener('change', run);
+  // guarda o "run" para o realtime re-executar mantendo o termo digitado
+  if(currentView) currentView._panelRun = run;
+  if(auto || value) run();
+}
+
+/* ================================================================
+   CLIQUE NOS CARDS  → abre a view
+   ================================================================ */
+// tabelas que cada view consome (para o realtime saber quando recarregar)
+const VIEW_TABLES = {
+  folhaRosto:['tabela_vista_teste'], folhaDivisoria:['tabela_vista_teste'],
+  historicoLinha:['evento_teste'], itinerarios:['itinerario_teste'],
+  quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste'], tarifas:['tarifa_atual_teste'],
+  frota:['qh_teste'], estrutura:['qh_teste','tarifa_atual_teste'],
+  empresasRegulares:['tabela_vista_teste'], historicoEmpresa:['evento_teste'],
+  ligacoesPorEmpresa:['tabela_vista_teste'], secoesPorEmpresa:['tarifa_atual_teste'],
+  ligacoesPorNome:['tabela_vista_teste'], ligacoesPorNumero:['tabela_vista_teste'],
+  ligacoesPorLogradouro:['itinerario_teste'], municipioRegiao:['cod_ibge_teste'],
+  entreLocalidades:['localidades_teste'], ligacoesPorTerminal:['qh_intervalo_teste'],
+  secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste'],
+  pesquisaEvento:['evento_teste'],
+};
+
+app.addEventListener('click', e => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  const view = card.dataset.view;
+  const needsLine = card.dataset.needsLine === '1';
+  const title = card.dataset.title;
+  const loader = LOADERS[view];
+  if (!loader){ toast(`${title} — disponível em breve`, 'info'); return; }
+  if (needsLine && !activeLine){ toast('Selecione uma linha primeiro.', 'warn'); return; }
+  runView({ title, tables: VIEW_TABLES[view]||[], lineFilter: needsLine, loader });
+});
+
+/* ================================================================
+   UTILITÁRIOS
+   ================================================================ */
+function groupBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); if(!m.has(k))m.set(k,[]); m.get(k).push(x); } return m; }
+function countBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); m.set(k,(m.get(k)||0)+1); } return m; }
+function fmtMoney(v){ if(v===null||v===undefined||v==='') return '—'; const n=Number(v); return isNaN(n)?String(v):n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+/* ================================================================
+   TOAST
+   ================================================================ */
+function toast(msg, type = 'info') {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+/* ================================================================
+   REALTIME — atualiza o que está na tela quando o Supabase muda
+   ================================================================ */
+const RT_TABLES = ['tabela_vista_teste','itinerario_teste','qh_teste','qh_intervalo_teste',
+  'qh_predeterminado_teste','tarifa_atual_teste','cod_ibge_teste','tab_origem_teste',
+  'localidades_teste','evento_teste','evento_empresa_teste','evento_linha_teste'];
+const rtDot = document.getElementById('rtDot');
+let reloadTimer = null;
+
+function invalidateCaches(table){
+  if(table==='cod_ibge_teste') ibgeMap=null;
+  if(table==='tab_origem_teste') origemMap=null;
+  if(table==='evento_empresa_teste') evEmpMap=null;
+  if(table==='evento_linha_teste') evLinMap=null;
+}
+function scheduleReload(){
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(async ()=>{
+    if(!currentView) return;
+    try {
+      if(currentView._panelRun) await currentView._panelRun();   // painéis de busca
+      else await currentView.loader();                            // views diretas
+      mtLive.classList.remove('on'); void mtLive.offsetWidth; mtLive.classList.add('on');
+      toast('Atualizado ao vivo', 'live');
+    } catch(_){}
+  }, 350);
+}
+function rowMatchesActiveLine(payload){
+  // se a view depende da linha ativa, só recarrega se a mudança for da mesma linha
+  if(!currentView || !currentView.lineFilter || !activeLine) return true;
+  const cod = payload?.new?.codlinha ?? payload?.old?.codlinha;
+  if(cod===undefined || cod===null) return true; // sem como filtrar → recarrega
+  return String(cod) === String(activeLine.codlinha);
+}
+function onRealtime(table, payload){
+  invalidateCaches(table);
+  if(currentView && (currentView.tables||[]).includes(table) && rowMatchesActiveLine(payload)){
+    scheduleReload();
+  }
+}
+try {
+  const sbClient = supabase.createClient(SB_URL, SB_KEY, { realtime:{ params:{ eventsPerSecond:5 } } });
+  const channel = sbClient.channel('divat-rt');
+  RT_TABLES.forEach(t => channel.on('postgres_changes', { event:'*', schema:'public', table:t }, p => onRealtime(t, p)));
+  channel.subscribe(status => { rtDot.classList.toggle('live', status==='SUBSCRIBED'); });
+} catch(e){ console.warn('Realtime indisponível:', e); }
+</script>
 </body>
 </html>
