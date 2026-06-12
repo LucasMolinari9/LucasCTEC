@@ -13,7 +13,10 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
   Não há build, nem framework, nem `package.json`. É só servir o arquivo estático.
 - As consultas usam **REST do Supabase via `fetch`** (PostgREST). O **supabase-js** (CDN) é
   usado **só** para o canal **Realtime**.
-- `netlify.toml` define os cabeçalhos de segurança (CSP etc.) e `publish = "."`.
+- O **html2pdf** (CDN jsDelivr) gera o PDF do documento aberto (botão **PDF** na barra do modal,
+  ao lado de Imprimir; com fallback para `window.print()`).
+- `netlify.toml` define os cabeçalhos de segurança (CSP etc.), `Cache-Control: must-revalidate`
+  e `publish = "."`.
 
 ## Supabase
 - Projeto: **`bd_teste`** · ref **`lwzsxuaqqeoamukduhev`** · região sa-east-1.
@@ -46,19 +49,34 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
   linha ativa, o `loader()` (ou `_panelRun` dos painéis de busca) roda de novo, com debounce.
 - Atualiza **a tela aberta**. Quem não está com o card aberto vê o dado novo na próxima busca.
 
-## Como fazer mudanças
-1. Edite **`index.html`** (todo o código está nele).
-2. Faça commit e **push na branch `main`** (é a branch publicada).
-3. Se o Netlify estiver conectado ao GitHub (branch `main`, publish `.`), o deploy é
-   automático. Senão, gere um zip com `index.html` + `netlify.toml` e suba em
-   app.netlify.com/drop.
-4. Mudanças de **dados** NÃO exigem deploy — o site lê o Supabase ao vivo. Só mudanças de
-   **código** precisam republicar.
+## Publicação (Netlify) e atualização automática
+- **Site oficial:** `divatdetro.netlify.app` — projeto Netlify `divatdetro`, **conectado ao
+  GitHub na branch `main`** (publish `.`, sem build). **Push na `main` = deploy automático.**
+- Existiram outros sites de teste (banco-ctec, detro-rj, bancodivat, quiet-licorice) — não
+  são os oficiais; podem ser apagados.
+- **Atualização automática para todos os usuários** (sem limpar cache):
+  1. `Cache-Control: public, max-age=0, must-revalidate` no `netlify.toml` → cada visita revalida.
+  2. Detector de versão no JS (`checarNovaVersao`): compara o **ETag** do `index.html` a cada
+     ~3 min e ao focar a aba; se mudou, recarrega sozinho (espera fechar o modal aberto).
+- **Carimbo de versão** no rodapé (`#verTag`, ex.: `build 12/06-B`). Ao publicar algo que o
+  usuário precisa confirmar, **incremente esse texto** — serve para checar qual versão está no ar.
+- O deploy **não pode** ser feito pelo ambiente do Claude (a rede de saída bloqueia o upload do
+  Netlify e até `WebFetch`/`curl` ao site/Supabase). O caminho é **push na `main`** (deploy
+  automático) — não tente `npx netlify deploy` daqui.
 
-## Observações
+## Como fazer mudanças
+1. Edite **`index.html`** (todo o código está nele). Trabalhe na branch **`main`** (é a publicada).
+2. Valide a sintaxe do JS antes de publicar (extrair o `<script>` inline e rodar `node --check`).
+3. Commit e **push na `main`** → o `divatdetro` republica sozinho e as telas dos usuários se
+   atualizam (via detector de versão). Bumpe o carimbo de versão se quiser confirmar a chegada.
+4. Mudanças de **dados** NÃO exigem deploy — o site lê o Supabase ao vivo.
+
+## Armadilhas / observações
+- **CSS — dropdown da busca:** o dropdown de resultados é inserido **dentro de `.selector`**.
+  A regra do botão verde usa **`.selector > button`** (filho direto) de propósito — **não** use
+  `.selector button`, senão os `<button>` dos resultados herdam o fundo verde do "Abrir linha".
 - **Encoding dos dados**: há acentos corrompidos na origem (ex.: "Niter�i"). É problema da
-  importação no banco, não do frontend; só some reimportando os dados em UTF-8.
-- Validar sintaxe do JS antes de publicar (extrair o `<script>` inline e rodar
-  `node --check`).
-- A partir daqui, deploy não pode ser feito pelo ambiente do Claude (a rede de saída
-  bloqueia o upload do Netlify); por isso o caminho é GitHub conectado ou zip.
+  importação no banco (caractere U+FFFD, irrecuperável pelo banco); só some reimportando os
+  dados em UTF-8 no Supabase.
+- **Estética:** topo navy + faixa verde fina (identidade DETRO/DIVAT); banner da linha em navy
+  com faixa verde inferior. Manter esse idioma visual ao criar telas novas.
