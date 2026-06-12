@@ -673,7 +673,7 @@ function baixarPdf(){
 }
 
 let currentView = null;
-function closeModal(){ overlay.classList.remove('open'); currentView = null; }
+function closeModal(){ overlay.classList.remove('open'); currentView = null; if (window.__divatReload) location.reload(); }
 function setBody(html){ modalBody.innerHTML = html; }
 function loading(msg='Carregando…'){ return `<div class="m-loading"><div class="spin"></div>${esc(msg)}</div>`; }
 function emptyBox(msg){ return `<div class="m-loading">${esc(msg)}</div>`; }
@@ -1160,6 +1160,33 @@ try {
   RT_TABLES.forEach(t => channel.on('postgres_changes', { event:'*', schema:'public', table:t }, p => onRealtime(t, p)));
   channel.subscribe(status => { rtDot.classList.toggle('live', status==='SUBSCRIBED'); });
 } catch(e){ console.warn('Realtime indisponível:', e); }
+
+/* ================================================================
+   AUTO-ATUALIZAÇÃO — detecta novo deploy e recarrega sozinho,
+   sem ninguém precisar limpar cache. Compara o ETag do index.html.
+   ================================================================ */
+let _verTag = null;
+async function checarNovaVersao(){
+  try {
+    const r = await fetch('/index.html?_=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
+    const tag = r.headers.get('etag') || r.headers.get('last-modified');
+    if (!tag) return;                  // sem como comparar → não faz nada
+    if (_verTag === null) { _verTag = tag; return; }   // 1ª medição = referência
+    if (tag !== _verTag) {             // mudou no servidor → versão nova publicada
+      _verTag = tag;
+      if (overlay.classList.contains('open')) {
+        window.__divatReload = true;   // não interrompe quem está consultando
+        toast('Nova versão disponível — atualiza ao fechar', 'info');
+      } else {
+        location.reload();
+      }
+    }
+  } catch(_) { /* offline/erro → tenta de novo no próximo ciclo */ }
+}
+setInterval(checarNovaVersao, 3 * 60 * 1000);                     // a cada 3 min
+window.addEventListener('focus', checarNovaVersao);              // ao voltar pra aba
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checarNovaVersao(); });
+checarNovaVersao();                                              // referência inicial
 </script>
 </body>
 </html>
