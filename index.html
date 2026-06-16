@@ -469,7 +469,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-F</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-G</span></span>
   </div>
 </footer>
 
@@ -543,7 +543,7 @@ const SECTIONS = [
     items:[
       ['file','Folha de Rosto','Dados gerais e identificação da linha','folhaRosto',true],
       ['divider','Folha Divisória','Página de separação do processo','folhaDivisoria',true],
-      ['history','Histórico da Linha','Alterações e eventos registrados','historicoLinha',true],
+      ['history','Histórico da Linha','Alterações e eventos registrados','historicoLinha',false],
       ['route','Itinerários','Trajeto de ida e volta com logradouros','itinerarios',true],
       ['clock','Quadro de Horários','Horários e frequências por sentido','quadroHorarios',true],
       ['ticket','Tarifas','Valores vigentes por seção','tarifas',true],
@@ -862,10 +862,17 @@ function evBandHTML(r, tipoLabel, tipoVal, showLine){
     <div class="ev-cell"><span class="ev-h">${esc(tipoLabel)}</span><span class="ev-v">${esc(tipoVal)}</span></div>
     <div class="ev-cell"><span class="ev-h">Data da Publicação</span><span class="ev-v mono">${esc(fmtDate(r.data_publicacao))}</span></div></div>`;
 }
+function pagerHTML(total){
+  if (total <= 1) return '';
+  return `<div class="doc-pager">
+    <button class="pg-btn" type="button" data-pg="prev">‹ Evento anterior</button>
+    <span class="pg-info"></span>
+    <button class="pg-btn" type="button" data-pg="next">Próximo evento ›</button></div>`;
+}
 // Paginador genérico (um evento por vez) para um container qualquer
-function paginateEvents(container, rows, buildPage){
+function paginateEvents(container, rows, buildPage, headerHTML=''){
   let page = 1; const total = rows.length;
-  container.innerHTML = rows.map((r,i)=>`<div class="ev-page" data-idx="${i}">${buildPage(r)}</div>`).join('') + pagerHTML(total);
+  container.innerHTML = (headerHTML||'') + rows.map((r,i)=>`<div class="ev-page" data-idx="${i}">${buildPage(r)}</div>`).join('') + pagerHTML(total);
   const paint = ()=>{
     if (page > total) page = total; if (page < 1) page = 1;
     container.querySelectorAll('.ev-page[data-idx]').forEach(p=>p.classList.toggle('hid', (+p.dataset.idx) !== (page-1)));
@@ -879,53 +886,36 @@ function paginateEvents(container, rows, buildPage){
     container.scrollIntoView({block:'start'});
   }));
 }
-let _histPage = 1, _histKey = null, _histTotal = 0;
-function pagerHTML(total){
-  if (total <= 1) return '';
-  return `<div class="doc-pager">
-    <button class="pg-btn" type="button" data-pg="prev">‹ Evento anterior</button>
-    <span class="pg-info"></span>
-    <button class="pg-btn" type="button" data-pg="next">Próximo evento ›</button></div>`;
-}
-function paintHistPage(){
-  if (_histPage > _histTotal) _histPage = _histTotal;
-  if (_histPage < 1) _histPage = 1;
-  modalBody.querySelectorAll('.ev-page[data-idx]').forEach(p=>{
-    p.classList.toggle('hid', (+p.dataset.idx) !== (_histPage-1));
-  });
-  const info = modalBody.querySelector('.pg-info');
-  if (info) info.textContent = `Evento ${_histPage} de ${_histTotal}`;
-  const prev = modalBody.querySelector('[data-pg="prev"]');
-  const next = modalBody.querySelector('[data-pg="next"]');
-  if (prev) prev.disabled = _histPage <= 1;
-  if (next) next.disabled = _histPage >= _histTotal;
-}
-LOADERS.historicoLinha = async () => {
-  const key = String(activeLine.codlinha);
-  if (_histKey !== key){ _histKey = key; _histPage = 1; }   // mudou de linha → volta p/ 1º evento
+// Renderiza o histórico (paginado) de UMA linha dentro de um container
+async function renderLineHistory(host, line){
+  selectLine(line);   // sincroniza a linha ativa e o banner do topo
   const [rows, lk] = await Promise.all([
-    sbFetch('evento_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&order=data_registro.desc`),
+    sbFetch('evento_teste', `codlinha=eq.${enc(line.codlinha)}&select=*&order=data_registro.desc`),
     getEvLookups()
   ]);
-  if (!rows.length) { setBody(`<div class="doc">${docHead('Histórico da Linha')}${emptyBox('Nenhum evento registrado para esta linha.')}</div>`); if (currentView) currentView.pdfHTML = null; return; }
-  _histTotal = rows.length;
   const head = docHead('Histórico da Linha');
-  const meta = metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código da Ligação',esc(fmtCode(activeLine.codlinha))],['Empresa',esc(orDash(activeLine.codempresa))],['Número da Ligação',esc(orDash(activeLine.numero_ligacao))]]);
-  const band = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin[r.evento_linha] || lk.emp[r.evento_empresa] || '—', false);
-  const blocks = r => evBlocksHTML(r);
-  // tela: cabeçalho fixo no topo + um evento visível por vez
-  const screenPages = rows.map((r,i)=>`<div class="ev-page" data-idx="${i}">${band(r)}${blocks(r)}</div>`).join('');
-  setBody(`<div class="doc">${head}${meta}${screenPages}${pagerHTML(rows.length)}</div>`);
-  paintHistPage();
-  modalBody.querySelectorAll('.pg-btn').forEach(b=>b.addEventListener('click',()=>{
-    if (b.disabled) return;
-    _histPage += (b.dataset.pg === 'next' ? 1 : -1);
-    paintHistPage();
-    (modalBody.querySelector('.modal-body')||modalBody).scrollTop = 0;
-    modalBody.scrollIntoView({block:'start'});
-  }));
-  // PDF/impressão: cada evento é uma página completa (cabeçalho repetido)
-  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${rows.map(r=>`<div class="ev-page">${head}${meta}${band(r)}${blocks(r)}</div>`).join('')}</div>`;
+  const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código da Ligação',esc(fmtCode(line.codlinha))],['Empresa',esc(orDash(line.codempresa))],['Número da Ligação',esc(orDash(line.numero_ligacao))]]);
+  if (!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento registrado para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
+  const build = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin[r.evento_linha] || lk.emp[r.evento_empresa] || '—', false) + evBlocksHTML(r);
+  paginateEvents(host, rows, build, meta);
+  // PDF/impressão: todos os eventos da linha, um por página (cabeçalho repetido)
+  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${rows.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
+}
+LOADERS.historicoLinha = async () => {
+  const pre = activeLine ? (activeLine.numero_ligacao || activeLine.codlinha || '') : '';
+  searchPanel({ title:'Histórico da Linha', placeholder:'Nome, número ou código da linha', value:pre,
+    onRun: async (term, host) => {
+      term = (term||'').trim();
+      if (!term){ host.innerHTML = emptyBox('Busque pelo nome, número ou código da linha.'); if (currentView) currentView.pdfHTML = null; return; }
+      const e1 = enc(term), code = enc(term.replace(/[-.\s]/g,''));
+      const lines = await sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${e1}*,numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=40`);
+      if (!lines.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para “'+esc(term)+'”.'); if (currentView) currentView.pdfHTML = null; return; }
+      if (lines.length === 1){ await renderLineHistory(host, lines[0]); return; }
+      // várias linhas → escolher qual ver
+      host.innerHTML = `<p style="font-size:12px;color:var(--muted);margin:2px 0 8px">${lines.length} linha(s) encontradas — clique para ver o histórico:</p>` + linhasTable(lines);
+      host.querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>renderLineHistory(host, JSON.parse(tr.dataset.row))));
+      if (currentView) currentView.pdfHTML = null;
+    }, tables:['evento_teste'] });
 };
 
 const SENTIDO_ORDER = { 'Ida':1, 'Volta':2, 'Circular':3 };
