@@ -469,7 +469,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-G</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-H</span></span>
   </div>
 </footer>
 
@@ -1062,20 +1062,39 @@ LOADERS.secoesPorEmpresa = async () => {
       : emptyBox('Nenhuma seção cadastrada para a empresa '+term+'.');
   }, tables:['tarifa_atual_teste']});
 };
+// Renderiza o histórico (paginado) de UMA empresa dentro de um container
+async function renderEmpresaHistory(host, cod, nome){
+  const [rows, lk] = await Promise.all([
+    sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=*&order=data_registro.desc&limit=500`),
+    getEvLookups()
+  ]);
+  const head = docHead('Histórico da Empresa');
+  const meta = metaRows([['Empresa',esc(nome||'—'),true],['Código da Empresa',esc(cod)],['Total',rows.length+' evento(s)']]);
+  if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento para a empresa '+esc(cod)+'.'); if(currentView) currentView.pdfHTML=null; return; }
+  const build = r => evBandHTML(r, 'Tipo Evento Empresa', lk.emp[r.evento_empresa]||lk.lin[r.evento_linha]||'—', !!(r.codlinha)) + evBlocksHTML(r);
+  paginateEvents(host, rows, build, meta);
+  if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${rows.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
+}
 LOADERS.historicoEmpresa = async () => {
   const pre = activeLine?.codempresa || '';
-  searchPanel({ title:'Histórico da Empresa', placeholder:'Código da empresa (ex. 101)', value:pre, onRun: async(term, host)=>{
-    if(!term){ host.innerHTML=emptyBox('Informe o código da empresa.'); if(currentView) currentView.pdfHTML=null; return; }
-    const [rows, lk] = await Promise.all([
-      sbFetch('evento_teste', `codempresa=eq.${enc(term)}&select=*&order=data_registro.desc&limit=500`), getEvLookups() ]);
-    if(!rows.length){ host.innerHTML=emptyBox('Nenhum evento para a empresa '+term+'.'); if(currentView) currentView.pdfHTML=null; return; }
-    const build = r => evBandHTML(r, 'Tipo Evento Empresa', lk.emp[r.evento_empresa]||lk.lin[r.evento_linha]||'—', !!(r.codlinha)) + evBlocksHTML(r);
-    paginateEvents(host, rows, build);
-    // PDF/impressão: todos os eventos da empresa, um por página
-    const head = docHead('Histórico da Empresa');
-    const meta = metaRows([['Empresa','código '+esc(term),true],['Total',rows.length+' evento(s)']]);
-    if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${rows.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
-  }, tables:['evento_teste']});
+  searchPanel({ title:'Histórico da Empresa', placeholder:'Nome ou código da empresa (ex. 1001 ou AUTO VIAÇÃO)', value:pre,
+    onRun: async(term, host)=>{
+      term = (term||'').trim();
+      if(!term){ host.innerHTML=emptyBox('Busque pelo nome ou código da empresa.'); if(currentView) currentView.pdfHTML=null; return; }
+      const t = enc(term);
+      const emps = await sbFetch('codempresa_teste', `or=(codempresa.ilike.*${t}*,nome_empresa.ilike.*${t}*)&select=codempresa,nome_empresa&order=nome_empresa&limit=40`);
+      if(emps.length === 1){ await renderEmpresaHistory(host, emps[0].codempresa, emps[0].nome_empresa); return; }
+      if(emps.length > 1){
+        const list = emps.map(e=>`<tr class="clickable" data-emp="${esc(e.codempresa)}" data-nome="${esc(e.nome_empresa||'')}">
+          <td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td></tr>`).join('');
+        host.innerHTML = `<p style="font-size:12px;color:var(--muted);margin:2px 0 8px">${emps.length} empresa(s) encontradas — clique para ver o histórico:</p>`
+          + tableHTML([{t:'Código',w:'90px'},{t:'Empresa'}], list, emps.length+' empresa(s)');
+        host.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>renderEmpresaHistory(host, tr.dataset.emp, tr.dataset.nome)));
+        if(currentView) currentView.pdfHTML=null; return;
+      }
+      // não achou no cadastro de nomes → tenta o termo como código direto nos eventos
+      await renderEmpresaHistory(host, term, null);
+    }, tables:['evento_teste'] });
 };
 
 /* ---- Consultas de Ligações ---- */
@@ -1281,7 +1300,7 @@ function toast(msg, type = 'info') {
    ================================================================ */
 const RT_TABLES = ['tabela_vista_teste','itinerario_teste','qh_teste','qh_intervalo_teste',
   'qh_predeterminado_teste','tarifa_atual_teste','cod_ibge_teste','tab_origem_teste',
-  'localidades_teste','evento_teste','evento_empresa_teste','evento_linha_teste'];
+  'localidades_teste','evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste'];
 const rtDot = document.getElementById('rtDot');
 let reloadTimer = null;
 
