@@ -303,6 +303,29 @@
     min-width:200px;text-align:center}
   /* container oculto usado só para gerar o PDF completo */
   .pdf-export{position:absolute;left:-99999px;top:0;width:794px;background:#fff}
+  /* ===== Histórico: um evento por página ===== */
+  .ev-page{padding:2px 2px 8px}
+  .ev-grid{display:grid;grid-template-columns:1.05fr 1.5fr 2fr 1.05fr;gap:8px 18px;
+    border-top:3px double var(--green);border-bottom:3px double var(--green);
+    padding:11px 4px;margin-top:6px}
+  .ev-cell{display:flex;flex-direction:column;gap:3px}
+  .ev-h{font-family:'Archivo';font-weight:700;font-size:11px;letter-spacing:.03em;
+    text-transform:uppercase;color:#0a3a63}
+  .ev-v{font-size:13px;color:#111}
+  .ev-v.mono{font-family:'IBM Plex Mono';font-size:11.5px;color:var(--blue)}
+  .ev-block{margin-top:18px}
+  .ev-label{font-family:'Archivo';font-weight:700;font-size:13px;color:#0a3a63;margin-bottom:6px}
+  .ev-text{font-size:13px;line-height:1.55;color:#1a1a1a;white-space:pre-wrap;word-break:break-word}
+  .ev-text.empty{color:#9aa3ab;font-style:italic}
+  /* no PDF cada evento começa numa nova página */
+  .pdf-export .ev-page + .ev-page{page-break-before:always}
+  /* ===== Tela cheia do modal ===== */
+  .modal-overlay:fullscreen{padding:0;background:#fff;overflow-y:auto;align-items:stretch}
+  .modal-overlay:fullscreen .modal{max-width:1100px;border-radius:0;margin:0 auto;width:100%}
+  .modal-overlay:-webkit-full-screen{padding:0;background:#fff;overflow-y:auto}
+  .modal-overlay:-webkit-full-screen .modal{max-width:1100px;border-radius:0;margin:0 auto;width:100%}
+  .modal-overlay.fs-fallback{padding:0;background:#fff}
+  .modal-overlay.fs-fallback .modal{max-width:1100px;border-radius:0;margin:0 auto;width:100%}
   /* KPIs gerenciais */
   .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:8px}
   .kpi{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fafcfe}
@@ -351,6 +374,8 @@
     .doc-search{display:none!important}
     .doc-pager{display:none!important}
     .doc-table tbody tr.hid{display:table-row!important}
+    .ev-page.hid{display:block!important}
+    .ev-page + .ev-page{page-break-before:always}
   }
 </style>
 </head>
@@ -397,6 +422,10 @@
   <div class="modal modal-doc">
     <div class="modal-toolbar">
       <span class="mt-label"><span id="mtTitle">Cadastro de Linhas</span><span class="mt-live" id="mtLive">● ao vivo</span></span>
+      <button class="mt-btn" id="btnFull" title="Tela cheia">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3"/></svg>
+        <span class="mt-full-label">Tela cheia</span>
+      </button>
       <button class="mt-btn" id="btnPrint" title="Imprimir / Salvar PDF">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
         Imprimir
@@ -426,7 +455,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-A</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-B</span></span>
   </div>
 </footer>
 
@@ -664,7 +693,24 @@ document.getElementById('btnPrint').addEventListener('click', () => window.print
 document.getElementById('btnPdf').addEventListener('click', baixarPdf);
 modalClose.addEventListener('click', closeModal);
 overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !document.fullscreenElement) closeModal(); });
+
+// Tela cheia do modal (usa a Fullscreen API; sem suporte → expande via classe)
+const btnFull = document.getElementById('btnFull');
+btnFull.addEventListener('click', () => {
+  const req = overlay.requestFullscreen || overlay.webkitRequestFullscreen;
+  const exit = document.exitFullscreen || document.webkitExitFullscreen;
+  if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+    if (req) req.call(overlay).catch(()=>{}); else overlay.classList.toggle('fs-fallback');
+  } else if (exit) exit.call(document);
+});
+function syncFullLabel(){
+  const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const lbl = btnFull.querySelector('.mt-full-label');
+  if (lbl) lbl.textContent = on ? 'Sair da tela cheia' : 'Tela cheia';
+}
+document.addEventListener('fullscreenchange', syncFullLabel);
+document.addEventListener('webkitfullscreenchange', syncFullLabel);
 
 // Gera e baixa um PDF do documento aberto no modal
 function baixarPdf(){
@@ -702,7 +748,10 @@ function baixarPdf(){
 }
 
 let currentView = null;
-function closeModal(){ overlay.classList.remove('open'); currentView = null; if (window.__divatReload) location.reload(); }
+function closeModal(){
+  if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); }
+  overlay.classList.remove('open','fs-fallback'); currentView = null; if (window.__divatReload) location.reload();
+}
 function setBody(html){ modalBody.innerHTML = html; }
 function loading(msg='Carregando…'){ return `<div class="m-loading"><div class="spin"></div>${esc(msg)}</div>`; }
 function emptyBox(msg){ return `<div class="m-loading">${esc(msg)}</div>`; }
@@ -770,65 +819,62 @@ LOADERS.folhaDivisoria = async () => {
     </div></div>`);
 };
 
-/* Histórico paginado: cada descrição é longa, então mostramos poucos eventos por
-   página (Anterior/Próxima). A impressão e o PDF saem com o histórico completo. */
-const HIST_PAGE_SIZE = 6;
+/* Histórico: um evento por página (descrição/observação por extenso), com navegação
+   Anterior/Próxima. A impressão e o PDF saem com todos os eventos, um por página. */
 let _histPage = 1, _histKey = null, _histTotal = 0;
-function pagerHTML(totalPages){
-  if (totalPages <= 1) return '';
+function pagerHTML(total){
+  if (total <= 1) return '';
   return `<div class="doc-pager">
-    <button class="pg-btn" type="button" data-pg="prev">‹ Anterior</button>
+    <button class="pg-btn" type="button" data-pg="prev">‹ Evento anterior</button>
     <span class="pg-info"></span>
-    <button class="pg-btn" type="button" data-pg="next">Próxima ›</button></div>`;
+    <button class="pg-btn" type="button" data-pg="next">Próximo evento ›</button></div>`;
 }
 function paintHistPage(){
-  const totalPages = Math.max(1, Math.ceil(_histTotal / HIST_PAGE_SIZE));
-  if (_histPage > totalPages) _histPage = totalPages;
+  if (_histPage > _histTotal) _histPage = _histTotal;
   if (_histPage < 1) _histPage = 1;
-  const start = (_histPage-1)*HIST_PAGE_SIZE, end = start + HIST_PAGE_SIZE;
-  modalBody.querySelectorAll('.doc-table tbody tr[data-idx]').forEach(tr=>{
-    const i = +tr.dataset.idx;
-    tr.classList.toggle('hid', i < start || i >= end);
+  modalBody.querySelectorAll('.ev-page[data-idx]').forEach(p=>{
+    p.classList.toggle('hid', (+p.dataset.idx) !== (_histPage-1));
   });
   const info = modalBody.querySelector('.pg-info');
-  if (info) info.textContent = `Página ${_histPage} de ${totalPages} · ${_histTotal} evento(s)`;
+  if (info) info.textContent = `Evento ${_histPage} de ${_histTotal}`;
   const prev = modalBody.querySelector('[data-pg="prev"]');
   const next = modalBody.querySelector('[data-pg="next"]');
   if (prev) prev.disabled = _histPage <= 1;
-  if (next) next.disabled = _histPage >= totalPages;
+  if (next) next.disabled = _histPage >= _histTotal;
 }
 LOADERS.historicoLinha = async () => {
   const key = String(activeLine.codlinha);
-  if (_histKey !== key){ _histKey = key; _histPage = 1; }   // mudou de linha → volta p/ pág. 1
+  if (_histKey !== key){ _histKey = key; _histPage = 1; }   // mudou de linha → volta p/ 1º evento
   const [rows, lk] = await Promise.all([
     sbFetch('evento_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&order=data_registro.desc`),
     getEvLookups()
   ]);
   if (!rows.length) { setBody(`<div class="doc">${docHead('Histórico da Linha')}${emptyBox('Nenhum evento registrado para esta linha.')}</div>`); if (currentView) currentView.pdfHTML = null; return; }
   _histTotal = rows.length;
-  const cols = [{t:'Data',w:'82px'},{t:'Evento',w:'150px'},{t:'Processo',w:'110px'},{t:'Descrição'},{t:'Obs.',w:'120px'}];
-  const rowHTML = (r,i)=>`<tr data-idx="${i}">
-    <td class="td-num">${esc(fmtDate(r.data_registro))}</td>
-    <td class="td-tipo">${esc(lk.lin[r.evento_linha]||lk.emp[r.evento_empresa]||orDash(r.tipo_evento))}</td>
-    <td class="td-num">${esc(orDash(r.numero_processo))}</td>
-    <td class="td-logr">${esc(orDash(r.descricao))}</td>
-    <td class="td-obs">${esc(r.observacao||'')}</td></tr>`;
-  const body = rows.map(rowHTML).join('');
   const head = docHead('Histórico da Linha');
-  const meta = metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))],['Empresa',esc(activeLine.codempresa||'—')]]);
-  const totalPages = Math.max(1, Math.ceil(rows.length / HIST_PAGE_SIZE));
-  setBody(`<div class="doc">${head}${meta}
-    ${tableHTML(cols, body, null)}
-    ${pagerHTML(totalPages)}</div>`);
+  const meta = metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código da Ligação',esc(fmtCode(activeLine.codlinha))],['Empresa',esc(orDash(activeLine.codempresa))],['Número da Ligação',esc(orDash(activeLine.numero_ligacao))]]);
+  const tipoEvento = r => esc(lk.lin[r.evento_linha] || lk.emp[r.evento_empresa] || '—');
+  const band = r => `<div class="ev-grid">
+    <div class="ev-cell"><span class="ev-h">Data do Registro</span><span class="ev-v mono">${esc(fmtDate(r.data_registro))}</span></div>
+    <div class="ev-cell"><span class="ev-h">Nº do Processo/Doc.</span><span class="ev-v mono">${esc(orDash(r.numero_processo))}</span></div>
+    <div class="ev-cell"><span class="ev-h">Tipo Evento da Linha</span><span class="ev-v">${tipoEvento(r)}</span></div>
+    <div class="ev-cell"><span class="ev-h">Data da Publicação</span><span class="ev-v mono">${esc(fmtDate(r.data_publicacao))}</span></div></div>`;
+  const blocks = r => `
+    <div class="ev-block"><div class="ev-label">Descrição:</div><div class="ev-text${r.descricao?'':' empty'}">${r.descricao?esc(r.descricao):'—'}</div></div>
+    <div class="ev-block"><div class="ev-label">Observação:</div><div class="ev-text${r.observacao?'':' empty'}">${r.observacao?esc(r.observacao):'—'}</div></div>`;
+  // tela: cabeçalho fixo no topo + um evento visível por vez
+  const screenPages = rows.map((r,i)=>`<div class="ev-page" data-idx="${i}">${band(r)}${blocks(r)}</div>`).join('');
+  setBody(`<div class="doc">${head}${meta}${screenPages}${pagerHTML(rows.length)}</div>`);
   paintHistPage();
   modalBody.querySelectorAll('.pg-btn').forEach(b=>b.addEventListener('click',()=>{
     if (b.disabled) return;
     _histPage += (b.dataset.pg === 'next' ? 1 : -1);
     paintHistPage();
-    modalBody.querySelector('.doc-table')?.scrollIntoView({block:'start', behavior:'smooth'});
+    (modalBody.querySelector('.modal-body')||modalBody).scrollTop = 0;
+    modalBody.scrollIntoView({block:'start'});
   }));
-  // PDF/impressão completos: documento com todos os eventos
-  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${head}${meta}${tableHTML(cols, body, rows.length+' evento(s)')}</div>`;
+  // PDF/impressão: cada evento é uma página completa (cabeçalho repetido)
+  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${rows.map(r=>`<div class="ev-page">${head}${meta}${band(r)}${blocks(r)}</div>`).join('')}</div>`;
 };
 
 const SENTIDO_ORDER = { 'Ida':1, 'Volta':2, 'Circular':3 };
