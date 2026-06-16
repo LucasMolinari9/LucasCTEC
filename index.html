@@ -291,6 +291,18 @@
   .doc-obs b{color:#0a3a63}
   .doc-foot{margin-top:16px;text-align:right;font-size:10.5px;color:#888;
     border-top:1px solid #e4e9ee;padding-top:8px}
+  /* paginação de documentos longos (ex.: Histórico da Linha) */
+  .doc-table tbody tr.hid{display:none}
+  .doc-pager{display:flex;align-items:center;justify-content:center;gap:14px;
+    margin-top:18px;border-top:1px solid #e4e9ee;padding-top:14px;flex-wrap:wrap}
+  .pg-btn{background:var(--navy);color:#fff;border:0;border-radius:6px;padding:6px 14px;
+    font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background .12s}
+  .pg-btn:hover:not(:disabled){background:var(--navy-deep)}
+  .pg-btn:disabled{background:#c2ccd6;cursor:default}
+  .pg-info{font-size:12px;color:#444;font-family:'Archivo';font-weight:600;
+    min-width:200px;text-align:center}
+  /* container oculto usado só para gerar o PDF completo */
+  .pdf-export{position:absolute;left:-99999px;top:0;width:794px;background:#fff}
   /* KPIs gerenciais */
   .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:8px}
   .kpi{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fafcfe}
@@ -337,6 +349,8 @@
     .modal-toolbar{display:none!important}
     .doc-table tbody tr:hover{background:none!important}
     .doc-search{display:none!important}
+    .doc-pager{display:none!important}
+    .doc-table tbody tr.hid{display:table-row!important}
   }
 </style>
 </head>
@@ -412,7 +426,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 12/06-B</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-A</span></span>
   </div>
 </footer>
 
@@ -661,15 +675,30 @@ function baixarPdf(){
   const filename = `${base}${code}.pdf`;
   // Fallback: se a biblioteca não carregar (ex.: offline), usa a impressão do navegador
   if (typeof html2pdf === 'undefined'){ toast('Abrindo impressão (escolha "Salvar como PDF")', 'warn'); window.print(); return; }
+  // Documentos paginados na tela (ex.: Histórico) expõem pdfHTML() com o conteúdo completo,
+  // renderizado num container oculto só para o PDF não sair cortado.
+  const fullHTML = currentView && currentView.pdfHTML ? currentView.pdfHTML() : null;
+  let temp = null, src = el;
+  if (fullHTML){
+    temp = document.createElement('div');
+    temp.className = 'pdf-export';
+    temp.innerHTML = fullHTML;
+    document.body.appendChild(temp);
+    src = temp.querySelector('.doc') || temp;
+  }
+  const cleanup = () => { if (temp && temp.parentNode) temp.remove(); };
   toast('Gerando PDF…', 'info');
   html2pdf().set({
     margin: [8, 8, 10, 8],
     filename,
     image: { type: 'jpeg', quality: 0.96 },
-    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+    html2canvas: { scale: 1.6, useCORS: true, backgroundColor: '#ffffff' },
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-  }).from(el).save().catch(() => { toast('Falha ao gerar PDF, usando impressão', 'warn'); window.print(); });
+    // 'avoid-all' criava páginas gigantes/em branco com linhas longas; quebra por linha é mais robusta
+    pagebreak: { mode: ['css', 'legacy'], avoid: 'tr' }
+  }).from(src).save()
+    .then(cleanup)
+    .catch(() => { cleanup(); toast('Falha ao gerar PDF, usando impressão', 'warn'); window.print(); });
 }
 
 let currentView = null;
@@ -741,21 +770,65 @@ LOADERS.folhaDivisoria = async () => {
     </div></div>`);
 };
 
+/* Histórico paginado: cada descrição é longa, então mostramos poucos eventos por
+   página (Anterior/Próxima). A impressão e o PDF saem com o histórico completo. */
+const HIST_PAGE_SIZE = 6;
+let _histPage = 1, _histKey = null, _histTotal = 0;
+function pagerHTML(totalPages){
+  if (totalPages <= 1) return '';
+  return `<div class="doc-pager">
+    <button class="pg-btn" type="button" data-pg="prev">‹ Anterior</button>
+    <span class="pg-info"></span>
+    <button class="pg-btn" type="button" data-pg="next">Próxima ›</button></div>`;
+}
+function paintHistPage(){
+  const totalPages = Math.max(1, Math.ceil(_histTotal / HIST_PAGE_SIZE));
+  if (_histPage > totalPages) _histPage = totalPages;
+  if (_histPage < 1) _histPage = 1;
+  const start = (_histPage-1)*HIST_PAGE_SIZE, end = start + HIST_PAGE_SIZE;
+  modalBody.querySelectorAll('.doc-table tbody tr[data-idx]').forEach(tr=>{
+    const i = +tr.dataset.idx;
+    tr.classList.toggle('hid', i < start || i >= end);
+  });
+  const info = modalBody.querySelector('.pg-info');
+  if (info) info.textContent = `Página ${_histPage} de ${totalPages} · ${_histTotal} evento(s)`;
+  const prev = modalBody.querySelector('[data-pg="prev"]');
+  const next = modalBody.querySelector('[data-pg="next"]');
+  if (prev) prev.disabled = _histPage <= 1;
+  if (next) next.disabled = _histPage >= totalPages;
+}
 LOADERS.historicoLinha = async () => {
+  const key = String(activeLine.codlinha);
+  if (_histKey !== key){ _histKey = key; _histPage = 1; }   // mudou de linha → volta p/ pág. 1
   const [rows, lk] = await Promise.all([
     sbFetch('evento_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&order=data_registro.desc`),
     getEvLookups()
   ]);
-  if (!rows.length) { setBody(`<div class="doc">${docHead('Histórico da Linha')}${emptyBox('Nenhum evento registrado para esta linha.')}</div>`); return; }
-  const body = rows.map(r=>`<tr>
+  if (!rows.length) { setBody(`<div class="doc">${docHead('Histórico da Linha')}${emptyBox('Nenhum evento registrado para esta linha.')}</div>`); if (currentView) currentView.pdfHTML = null; return; }
+  _histTotal = rows.length;
+  const cols = [{t:'Data',w:'82px'},{t:'Evento',w:'150px'},{t:'Processo',w:'110px'},{t:'Descrição'},{t:'Obs.',w:'120px'}];
+  const rowHTML = (r,i)=>`<tr data-idx="${i}">
     <td class="td-num">${esc(fmtDate(r.data_registro))}</td>
     <td class="td-tipo">${esc(lk.lin[r.evento_linha]||lk.emp[r.evento_empresa]||orDash(r.tipo_evento))}</td>
     <td class="td-num">${esc(orDash(r.numero_processo))}</td>
     <td class="td-logr">${esc(orDash(r.descricao))}</td>
-    <td class="td-obs">${esc(r.observacao||'')}</td></tr>`).join('');
-  setBody(`<div class="doc">${docHead('Histórico da Linha')}
-    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))],['Empresa',esc(activeLine.codempresa||'—')]])}
-    ${tableHTML([{t:'Data',w:'82px'},{t:'Evento',w:'150px'},{t:'Processo',w:'110px'},{t:'Descrição'},{t:'Obs.',w:'120px'}], body, rows.length+' evento(s)')}</div>`);
+    <td class="td-obs">${esc(r.observacao||'')}</td></tr>`;
+  const body = rows.map(rowHTML).join('');
+  const head = docHead('Histórico da Linha');
+  const meta = metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))],['Empresa',esc(activeLine.codempresa||'—')]]);
+  const totalPages = Math.max(1, Math.ceil(rows.length / HIST_PAGE_SIZE));
+  setBody(`<div class="doc">${head}${meta}
+    ${tableHTML(cols, body, null)}
+    ${pagerHTML(totalPages)}</div>`);
+  paintHistPage();
+  modalBody.querySelectorAll('.pg-btn').forEach(b=>b.addEventListener('click',()=>{
+    if (b.disabled) return;
+    _histPage += (b.dataset.pg === 'next' ? 1 : -1);
+    paintHistPage();
+    modalBody.querySelector('.doc-table')?.scrollIntoView({block:'start', behavior:'smooth'});
+  }));
+  // PDF/impressão completos: documento com todos os eventos
+  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${head}${meta}${tableHTML(cols, body, rows.length+' evento(s)')}</div>`;
 };
 
 const SENTIDO_ORDER = { 'Ida':1, 'Volta':2, 'Circular':3 };
