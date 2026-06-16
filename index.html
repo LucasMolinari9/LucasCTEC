@@ -491,7 +491,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-J</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-K</span></span>
   </div>
 </footer>
 
@@ -1192,25 +1192,30 @@ LOADERS.entreLocalidades = async () => {
   const ibge = await getIbge();
   const nameOf = c => (ibge[c]?.nome) || ('Município '+c);
   const opts = Object.entries(ibge).map(([c,v])=>[c, v.nome||c]).sort((a,b)=>a[1].localeCompare(b[1]));
-  const optionsHTML = ph => `<option value="">${esc(ph)}</option>` + opts.map(([c,n])=>`<option value="${esc(c)}">${esc(n)}</option>`).join('');
+  // mapa nome(min.) → codibge para resolver o que o usuário digitar
+  const nameToCod = {}; opts.forEach(([c,n])=>{ nameToCod[String(n).trim().toLowerCase()] = c; });
+  const datalist = `<datalist id="munList">${opts.map(([,n])=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`;
   setBody(`<div class="doc">${docHead('Ligações entre Municípios')}
     <div class="doc-obs" style="margin:0 0 12px"><b>Nota:</b> a relação por <i>localidade</i> ainda não foi importada — por enquanto a consulta é por <b>município</b> (com base no itinerário das linhas).</div>
     <div class="loc-form">
-      <label>Município A<select id="munA">${optionsHTML('Selecione…')}</select></label>
-      <label>Município B<select id="munB">${optionsHTML('(opcional)')}</select></label>
-    </div>
+      <label>Município A<input id="munA" list="munList" placeholder="Digite o município…" autocomplete="off"></label>
+      <label>Município B<input id="munB" list="munList" placeholder="(opcional)" autocomplete="off"></label>
+    </div>${datalist}
     <div class="loc-actions">
       <button class="loc-btn" type="button" data-act="inA">Passam no Município A</button>
       <button class="loc-btn" type="button" data-act="aToB">De Município A → Município B</button>
       <button class="loc-btn" type="button" data-act="both">Trafegam em A e B</button>
     </div>
-    <div id="locHost">${emptyBox('Selecione os municípios e escolha uma consulta.')}</div></div>`);
+    <div id="locHost">${emptyBox('Digite os municípios e escolha uma consulta.')}</div></div>`);
   const munA = modalBody.querySelector('#munA'), munB = modalBody.querySelector('#munB'), host = modalBody.querySelector('#locHost');
-  if(activeLine){ /* sem pré-seleção confiável de município pela linha */ }
+  // resolve o texto digitado para um codibge ('' = vazio, null = não encontrado)
+  const resolve = v => { v = (v||'').trim(); if(!v) return ''; return nameToCod[v.toLowerCase()] ?? null; };
   const run = async (act)=>{
-    const a = munA.value, b = munB.value;
-    if(!a){ host.innerHTML = emptyBox('Selecione o Município A.'); return; }
-    if((act==='aToB'||act==='both') && !b){ host.innerHTML = emptyBox('Selecione também o Município B.'); return; }
+    const a = resolve(munA.value), b = resolve(munB.value);
+    if(a===null){ host.innerHTML = emptyBox('Município A não encontrado — escolha um nome da lista.'); return; }
+    if(b===null){ host.innerHTML = emptyBox('Município B não encontrado — escolha um nome da lista.'); return; }
+    if(!a){ host.innerHTML = emptyBox('Informe o Município A.'); return; }
+    if((act==='aToB'||act==='both') && !b){ host.innerHTML = emptyBox('Informe também o Município B.'); return; }
     host.innerHTML = loading();
     try{
       const linesA = await linhasNoMunicipio(a);
