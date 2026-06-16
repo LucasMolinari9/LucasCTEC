@@ -345,6 +345,14 @@
   .ev-text.empty{color:#9aa3ab;font-style:italic}
   /* no PDF cada evento começa numa nova página */
   .pdf-export .ev-page + .ev-page{page-break-before:always}
+  /* blocos que não podem ser cortados no meio entre páginas do PDF (raster) */
+  .pdf-export .doc-head,.pdf-export .doc-meta,.pdf-export .ev-grid,.pdf-export .ev-block,
+  .pdf-export .qh-sentido,.pdf-export .sentido-sep,.pdf-export tr,.pdf-export .kpi,
+  .pdf-export .doc-obs{break-inside:avoid}
+  /* cabeçalho de grupo não fica órfão no rodapé da página */
+  .pdf-export .qh-sentido,.pdf-export .sentido-sep{break-after:avoid}
+  /* a caixa de busca e o paginador nunca entram no PDF */
+  .pdf-export .doc-search,.pdf-export .doc-pager{display:none!important}
   /* ===== Tela cheia do modal (preenche a tela inteira) ===== */
   .modal-overlay.fs-fallback,
   .modal-overlay:fullscreen,
@@ -400,18 +408,29 @@
     to{opacity:1;transform:translateX(-50%) translateY(0)}
   }
 
-  /* ---------- Print ---------- */
+  /* ---------- Print / PDF vetorial ---------- */
   @media print{
+    @page{size:A4;margin:12mm 12mm 14mm}
+    html,body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;background:#fff!important}
     body>*{display:none!important}
     .modal-overlay{position:static!important;display:block!important;background:none!important;padding:0!important;backdrop-filter:none!important}
-    .modal{box-shadow:none!important;max-width:none!important;border-radius:0!important}
+    .modal{box-shadow:none!important;max-width:none!important;border-radius:0!important;width:auto!important;margin:0!important}
     .modal-toolbar{display:none!important}
+    .modal-body{padding:0!important}
+    /* modo exportação: imprime só o documento completo (container oculto) e esconde o modal */
+    html.exporting body>*{display:none!important}
+    html.exporting .pdf-export{display:block!important;position:static!important;left:auto!important;top:auto!important;width:auto!important}
+    /* documento: cores preservadas, quebras controladas e cabeçalho de tabela repetido por página */
+    .doc{padding:0!important}
+    .doc-head,.doc-meta,.doc-meta .row,.ev-grid,.ev-block,.qh-sentido,.sentido-sep,.kpi,.doc-obs,.doc-foot{break-inside:avoid}
+    .qh-sentido,.sentido-sep,.doc-table thead{break-after:avoid}
+    .doc-table thead{display:table-header-group}
+    .doc-table tr{break-inside:avoid}
     .doc-table tbody tr:hover{background:none!important}
-    .doc-search{display:none!important}
-    .doc-pager{display:none!important}
+    .doc-search,.doc-pager{display:none!important}
     .doc-table tbody tr.hid{display:table-row!important}
     .ev-page.hid{display:block!important}
-    .ev-page + .ev-page{page-break-before:always}
+    .ev-page + .ev-page{break-before:page}
   }
 </style>
 </head>
@@ -491,7 +510,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-K</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-L</span></span>
   </div>
 </footer>
 
@@ -764,38 +783,73 @@ document.addEventListener('fullscreenchange', onFsChange);
 document.addEventListener('webkitfullscreenchange', onFsChange);
 
 // Gera e baixa um PDF do documento aberto no modal
-function baixarPdf(){
-  const el = modalBody.querySelector('.doc') || modalBody;
+async function baixarPdf(){
+  const liveDoc = modalBody.querySelector('.doc');
   const base = (mtTitle.textContent || 'documento')
     .replace(/[^a-zA-Z0-9]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase() || 'documento';
   const code = activeLine && activeLine.codlinha ? '-' + activeLine.codlinha : '';
   const filename = `${base}${code}.pdf`;
-  // Fallback: se a biblioteca não carregar (ex.: offline), usa a impressão do navegador
-  if (typeof html2pdf === 'undefined'){ toast('Abrindo impressão (escolha "Salvar como PDF")', 'warn'); window.print(); return; }
-  // Documentos paginados na tela (ex.: Histórico) expõem pdfHTML() com o conteúdo completo,
-  // renderizado num container oculto só para o PDF não sair cortado.
-  const fullHTML = currentView && currentView.pdfHTML ? currentView.pdfHTML() : null;
-  let temp = null, src = el;
-  if (fullHTML){
-    temp = document.createElement('div');
-    temp.className = 'pdf-export';
-    temp.innerHTML = fullHTML;
-    document.body.appendChild(temp);
-    src = temp.querySelector('.doc') || temp;
+
+  // Monta o documento COMPLETO (sem a paginação de tela) num container oculto de largura A4 fixa,
+  // para o PDF não depender do tamanho da janela/tela cheia e não sair cortado.
+  // Painéis longos (ex.: Histórico) expõem pdfHTML() com todos os eventos; os demais clonam o .doc.
+  let inner;
+  if (currentView && currentView.pdfHTML) inner = currentView.pdfHTML();
+  else if (liveDoc) inner = liveDoc.outerHTML;
+  else inner = `<div class="doc">${modalBody.innerHTML}</div>`;
+  const temp = document.createElement('div');
+  temp.className = 'pdf-export';
+  temp.innerHTML = inner;
+  document.body.appendChild(temp);
+  const src = temp.querySelector('.doc') || temp;
+
+  // Caminho vetorial: imprime só este container pelo motor do navegador → texto nítido e
+  // selecionável, sem limite de tamanho. Usado p/ documentos longos e como fallback da html2pdf.
+  const cleanupPrint = () => { document.documentElement.classList.remove('exporting'); if (temp.parentNode) temp.remove(); };
+  const exportViaPrint = () => {
+    window.addEventListener('afterprint', cleanupPrint, { once:true });
+    document.documentElement.classList.add('exporting');
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{ try { window.print(); } catch(_){ cleanupPrint(); } }));
+    setTimeout(cleanupPrint, 60000);   // rede de segurança caso 'afterprint' não dispare (ex.: Safari)
+  };
+
+  // Sem a biblioteca (ex.: offline) → caminho vetorial direto
+  if (typeof html2pdf === 'undefined'){
+    toast('Abrindo impressão (escolha “Salvar como PDF”)', 'warn');
+    exportViaPrint();
+    return;
   }
-  const cleanup = () => { if (temp && temp.parentNode) temp.remove(); };
+
+  // Garante as fontes carregadas antes de medir/renderizar (evita fonte trocada e layout desalinhado)
+  try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch(_){}
+
+  // Escala adaptativa: quanto maior, mais nítido — limitada para não estourar o canvas do navegador
+  // (que geraria página em branco/cortada). Documentos curtos saem em alta (3×); longos vão p/ o vetor.
+  const W = 794;                                   // largura A4 @ 96dpi
+  const H = Math.max(src.scrollHeight, 1123);
+  const MAX = 14000;                               // lado máx. seguro de canvas (folga sob ~16k)
+  const pages = Math.ceil(H / 1123);
+  let scale = pages <= 3 ? 3 : pages <= 6 ? 2.5 : 2;
+  scale = Math.min(scale, MAX / W, MAX / H);
+  if (scale < 2){                                  // longo demais p/ raster nítido → vetorial
+    toast('Documento longo — abrindo impressão p/ salvar em PDF em alta qualidade (escolha “Salvar como PDF”)', 'info');
+    exportViaPrint();
+    return;
+  }
+
+  const cleanup = () => { if (temp.parentNode) temp.remove(); };
   toast('Gerando PDF…', 'info');
   html2pdf().set({
-    margin: [8, 8, 10, 8],
+    margin: [10, 10, 12, 10],
     filename,
-    image: { type: 'jpeg', quality: 0.96 },
-    html2canvas: { scale: 1.6, useCORS: true, backgroundColor: '#ffffff' },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    // 'avoid-all' criava páginas gigantes/em branco com linhas longas; quebra por linha é mais robusta
-    pagebreak: { mode: ['css', 'legacy'], avoid: 'tr' }
+    image: { type: 'png' },                        // PNG: texto e tabelas sem o "chuvisco" do JPEG
+    html2canvas: { scale, useCORS: true, backgroundColor: '#ffffff' },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+    // quebra por blocos lógicos: não corta linhas, grades de evento, cabeçalhos nem faixas no meio
+    pagebreak: { mode: ['css', 'legacy'], avoid: ['tr','.ev-grid','.ev-block','.doc-head','.doc-meta','.qh-sentido','.sentido-sep','.kpi','.doc-obs'] }
   }).from(src).save()
     .then(cleanup)
-    .catch(() => { cleanup(); toast('Falha ao gerar PDF, usando impressão', 'warn'); window.print(); });
+    .catch(() => { toast('Falha ao gerar PDF, usando impressão', 'warn'); exportViaPrint(); });
 }
 
 let currentView = null;
