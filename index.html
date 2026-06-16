@@ -304,7 +304,8 @@
   /* container oculto usado só para gerar o PDF completo */
   .pdf-export{position:absolute;left:-99999px;top:0;width:794px;background:#fff}
   /* ===== Histórico: um evento por página ===== */
-  .ev-page{padding:2px 2px 8px}
+  .ev-page.hid{display:none}
+  .ev-page{padding:2px 2px 8px;min-height:60vh}
   .ev-grid{display:grid;grid-template-columns:1.05fr 1.5fr 2fr 1.05fr;gap:8px 18px;
     border-top:3px double var(--green);border-bottom:3px double var(--green);
     padding:11px 4px;margin-top:6px}
@@ -455,7 +456,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-B</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-C</span></span>
   </div>
 </footer>
 
@@ -693,21 +694,32 @@ document.getElementById('btnPrint').addEventListener('click', () => window.print
 document.getElementById('btnPdf').addEventListener('click', baixarPdf);
 modalClose.addEventListener('click', closeModal);
 overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !document.fullscreenElement) closeModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (overlay.classList.contains('fs-fallback')) { exitFull(); return; }
+  if (!document.fullscreenElement && !document.webkitFullscreenElement) closeModal();
+});
 
-// Tela cheia do modal (usa a Fullscreen API; sem suporte → expande via classe)
+// Tela cheia do modal: tenta a Fullscreen API nativa; se o navegador recusar
+// (ex.: dentro de iframe/preview), cai para uma maximização via classe CSS.
 const btnFull = document.getElementById('btnFull');
-btnFull.addEventListener('click', () => {
-  const req = overlay.requestFullscreen || overlay.webkitRequestFullscreen;
+function isFull(){ return !!(document.fullscreenElement || document.webkitFullscreenElement) || overlay.classList.contains('fs-fallback'); }
+async function exitFull(){
+  overlay.classList.remove('fs-fallback');
   const exit = document.exitFullscreen || document.webkitExitFullscreen;
-  if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-    if (req) req.call(overlay).catch(()=>{}); else overlay.classList.toggle('fs-fallback');
-  } else if (exit) exit.call(document);
+  if (exit && (document.fullscreenElement || document.webkitFullscreenElement)) { try { await exit.call(document); } catch(_){} }
+  syncFullLabel();
+}
+btnFull.addEventListener('click', async () => {
+  if (isFull()) { exitFull(); return; }
+  const req = overlay.requestFullscreen || overlay.webkitRequestFullscreen;
+  if (req) { try { await req.call(overlay); } catch(_) { overlay.classList.add('fs-fallback'); } }
+  else { overlay.classList.add('fs-fallback'); }
+  syncFullLabel();
 });
 function syncFullLabel(){
-  const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
   const lbl = btnFull.querySelector('.mt-full-label');
-  if (lbl) lbl.textContent = on ? 'Sair da tela cheia' : 'Tela cheia';
+  if (lbl) lbl.textContent = isFull() ? 'Sair da tela cheia' : 'Tela cheia';
 }
 document.addEventListener('fullscreenchange', syncFullLabel);
 document.addEventListener('webkitfullscreenchange', syncFullLabel);
