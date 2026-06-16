@@ -294,7 +294,9 @@
   /* paginação de documentos longos (ex.: Histórico da Linha) */
   .doc-table tbody tr.hid{display:none}
   .doc-pager{display:flex;align-items:center;justify-content:center;gap:14px;
-    margin-top:18px;border-top:1px solid #e4e9ee;padding-top:14px;flex-wrap:wrap}
+    margin-top:18px;border-top:1px solid #e4e9ee;padding:14px 0 8px;flex-wrap:wrap;
+    position:sticky;bottom:0;background:#fff;z-index:3;
+    box-shadow:0 -6px 14px -10px rgba(7,25,42,.4)}
   .pg-btn{background:var(--navy);color:#fff;border:0;border-radius:6px;padding:6px 14px;
     font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background .12s}
   .pg-btn:hover:not(:disabled){background:var(--navy-deep)}
@@ -324,13 +326,14 @@
   .modal-overlay.fs-fallback,
   .modal-overlay:fullscreen,
   .modal-overlay:-webkit-full-screen{
-    padding:0!important;background:#fff;overflow-y:auto;align-items:stretch;
+    padding:0!important;background:#fff;overflow-y:auto;align-items:flex-start;
     inset:0;width:100vw;height:100vh;
   }
+  /* o modal cresce com o conteúdo (overflow visível) p/ a rolagem do overlay funcionar */
   .modal-overlay.fs-fallback .modal,
   .modal-overlay:fullscreen .modal,
   .modal-overlay:-webkit-full-screen .modal{
-    max-width:100%!important;width:100%;min-height:100vh;border-radius:0;margin:0;
+    max-width:100%!important;width:100%;min-height:100vh;border-radius:0;margin:0;overflow:visible;
   }
   /* texto continua legível: centraliza o conteúdo do documento */
   .modal-overlay.fs-fallback .doc,
@@ -465,7 +468,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-D</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-E</span></span>
   </div>
 </footer>
 
