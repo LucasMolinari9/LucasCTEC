@@ -320,13 +320,22 @@
   .ev-text.empty{color:#9aa3ab;font-style:italic}
   /* no PDF cada evento começa numa nova página */
   .pdf-export .ev-page + .ev-page{page-break-before:always}
-  /* ===== Tela cheia do modal ===== */
-  .modal-overlay:fullscreen{padding:0;background:#fff;overflow-y:auto;align-items:stretch}
-  .modal-overlay:fullscreen .modal{max-width:1100px;border-radius:0;margin:0 auto;width:100%}
-  .modal-overlay:-webkit-full-screen{padding:0;background:#fff;overflow-y:auto}
-  .modal-overlay:-webkit-full-screen .modal{max-width:1100px;border-radius:0;margin:0 auto;width:100%}
-  .modal-overlay.fs-fallback{padding:0;background:#fff}
-  .modal-overlay.fs-fallback .modal{max-width:1100px;border-radius:0;margin:0 auto;width:100%}
+  /* ===== Tela cheia do modal (preenche a tela inteira) ===== */
+  .modal-overlay.fs-fallback,
+  .modal-overlay:fullscreen,
+  .modal-overlay:-webkit-full-screen{
+    padding:0!important;background:#fff;overflow-y:auto;align-items:stretch;
+    inset:0;width:100vw;height:100vh;
+  }
+  .modal-overlay.fs-fallback .modal,
+  .modal-overlay:fullscreen .modal,
+  .modal-overlay:-webkit-full-screen .modal{
+    max-width:100%!important;width:100%;min-height:100vh;border-radius:0;margin:0;
+  }
+  /* texto continua legível: centraliza o conteúdo do documento */
+  .modal-overlay.fs-fallback .doc,
+  .modal-overlay:fullscreen .doc,
+  .modal-overlay:-webkit-full-screen .doc{max-width:1280px;margin:0 auto;width:100%}
   /* KPIs gerenciais */
   .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:8px}
   .kpi{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fafcfe}
@@ -456,7 +465,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-C</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-D</span></span>
   </div>
 </footer>
 
@@ -712,17 +721,21 @@ async function exitFull(){
 }
 btnFull.addEventListener('click', async () => {
   if (isFull()) { exitFull(); return; }
-  const req = overlay.requestFullscreen || overlay.webkitRequestFullscreen;
-  if (req) { try { await req.call(overlay); } catch(_) { overlay.classList.add('fs-fallback'); } }
-  else { overlay.classList.add('fs-fallback'); }
+  // 1) maximização por CSS — efeito garantido em qualquer contexto (inclusive iframe)
+  overlay.classList.add('fs-fallback');
   syncFullLabel();
+  // 2) fullscreen nativo do navegador como bônus, quando permitido
+  const req = overlay.requestFullscreen || overlay.webkitRequestFullscreen;
+  if (req) { try { await req.call(overlay); } catch(_){} }
 });
 function syncFullLabel(){
   const lbl = btnFull.querySelector('.mt-full-label');
   if (lbl) lbl.textContent = isFull() ? 'Sair da tela cheia' : 'Tela cheia';
 }
-document.addEventListener('fullscreenchange', syncFullLabel);
-document.addEventListener('webkitfullscreenchange', syncFullLabel);
+// Se o usuário sair do fullscreen nativo (Esc/botão do navegador), tira também a maximização
+function onFsChange(){ if (!(document.fullscreenElement || document.webkitFullscreenElement)) overlay.classList.remove('fs-fallback'); syncFullLabel(); }
+document.addEventListener('fullscreenchange', onFsChange);
+document.addEventListener('webkitfullscreenchange', onFsChange);
 
 // Gera e baixa um PDF do documento aberto no modal
 function baixarPdf(){
