@@ -289,6 +289,17 @@
     background:#eef4f9;font-family:'Archivo';font-weight:700;font-size:10.5px;
     letter-spacing:.08em;text-transform:uppercase;color:#1466a6;border-radius:4px;margin-top:6px;
   }
+  /* formulário "Entre Municípios" */
+  .loc-form{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:4px 0 12px}
+  .loc-form label{display:flex;flex-direction:column;gap:4px;font-family:'Archivo';font-weight:700;
+    font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#0a3a63}
+  .loc-form select{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;
+    font-size:13px;background:#fff;outline:0}
+  .loc-form select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(20,102,166,.12)}
+  .loc-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+  .loc-btn{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;
+    font-weight:600;font-size:12.5px;cursor:pointer;transition:background .12s}
+  .loc-btn:hover{background:var(--navy-deep)}
   /* faixa de SENTIDO (origem/terminal de partida) no Quadro de Horários */
   .qh-sentido{
     font-family:'Archivo';font-weight:800;font-size:12px;letter-spacing:.03em;
@@ -480,7 +491,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-I</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-J</span></span>
   </div>
 </footer>
 
@@ -574,7 +585,7 @@ const SECTIONS = [
       ['hash','Identificar pelo Número','Localizar uma linha pelo código','ligacoesPorNumero',false],
       ['signpost','Ligações por Logradouro','Linhas que passam por uma via','ligacoesPorLogradouro',false],
       ['map','Município e Região','Linhas por origem e destino','municipioRegiao',false],
-      ['pin','Entre Localidades','Localidades cadastradas','entreLocalidades',false],
+      ['pin','Entre Municípios','Linhas que passam ou trafegam entre municípios','entreLocalidades',false],
       ['hub','Ligações por Terminais','Linhas que atendem um terminal','ligacoesPorTerminal',false],
       ['segments','Seções por Ligação','Seções que compõem uma linha','secoesPorLigacao',true],
     ]},
@@ -1164,12 +1175,63 @@ function openLinhasPorIbge(codibge, nome){
     bindLineRows();
   }});
 }
+// linhas (codlinha distintos) cujo itinerário passa por um município (codibge)
+async function linhasNoMunicipio(codibge){
+  const rows = await sbFetch('itinerario_teste', `codibge=eq.${enc(codibge)}&select=codlinha&limit=8000`);
+  return [...new Set(rows.map(r=>r.codlinha).filter(Boolean))];
+}
+async function mostrarLinhasResultado(host, cods, titulo){
+  if(!cods.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para este critério.'); return; }
+  const slice = cods.slice(0,250);
+  const rows = await sbFetch('tabela_vista_teste', `codlinha=in.(${slice.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=250`);
+  const extra = cods.length>slice.length ? ` (mostrando ${slice.length})` : '';
+  host.innerHTML = `<p style="font-size:12px;color:var(--navy);font-weight:600;margin:2px 0 8px">${cods.length} linha(s) — ${esc(titulo)}${extra}</p>` + linhasTable(rows);
+  bindLineRows(host);
+}
 LOADERS.entreLocalidades = async () => {
-  searchPanel({ title:'Localidades cadastradas', placeholder:'Buscar localidade', onRun: async(term, host)=>{
-    const qs = term? `localidade=ilike.*${enc(term)}*&`:'';
-    const rows = await sbFetch('localidades_teste', `${qs}select=localidade&order=localidade&limit=200`);
-    host.innerHTML = rows.length? tableHTML([{t:'Localidade'}], rows.map(r=>`<tr><td class="td-logr">${esc(r.localidade)}</td></tr>`).join(''), rows.length+' localidade(s)') : emptyBox('Nenhuma localidade.');
-  }, tables:['localidades_teste'], auto:true, note:'Catálogo de localidades (sem vínculo direto com linhas neste cadastro).'});
+  const ibge = await getIbge();
+  const nameOf = c => (ibge[c]?.nome) || ('Município '+c);
+  const opts = Object.entries(ibge).map(([c,v])=>[c, v.nome||c]).sort((a,b)=>a[1].localeCompare(b[1]));
+  const optionsHTML = ph => `<option value="">${esc(ph)}</option>` + opts.map(([c,n])=>`<option value="${esc(c)}">${esc(n)}</option>`).join('');
+  setBody(`<div class="doc">${docHead('Ligações entre Municípios')}
+    <div class="doc-obs" style="margin:0 0 12px"><b>Nota:</b> a relação por <i>localidade</i> ainda não foi importada — por enquanto a consulta é por <b>município</b> (com base no itinerário das linhas).</div>
+    <div class="loc-form">
+      <label>Município A<select id="munA">${optionsHTML('Selecione…')}</select></label>
+      <label>Município B<select id="munB">${optionsHTML('(opcional)')}</select></label>
+    </div>
+    <div class="loc-actions">
+      <button class="loc-btn" type="button" data-act="inA">Passam no Município A</button>
+      <button class="loc-btn" type="button" data-act="aToB">De Município A → Município B</button>
+      <button class="loc-btn" type="button" data-act="both">Trafegam em A e B</button>
+    </div>
+    <div id="locHost">${emptyBox('Selecione os municípios e escolha uma consulta.')}</div></div>`);
+  const munA = modalBody.querySelector('#munA'), munB = modalBody.querySelector('#munB'), host = modalBody.querySelector('#locHost');
+  if(activeLine){ /* sem pré-seleção confiável de município pela linha */ }
+  const run = async (act)=>{
+    const a = munA.value, b = munB.value;
+    if(!a){ host.innerHTML = emptyBox('Selecione o Município A.'); return; }
+    if((act==='aToB'||act==='both') && !b){ host.innerHTML = emptyBox('Selecione também o Município B.'); return; }
+    host.innerHTML = loading();
+    try{
+      const linesA = await linhasNoMunicipio(a);
+      if(act==='inA'){ await mostrarLinhasResultado(host, linesA, `passam em ${nameOf(a)}`); return; }
+      const setB = new Set(await linhasNoMunicipio(b));
+      const inter = linesA.filter(c=>setB.has(c));
+      if(act==='both'){ await mostrarLinhasResultado(host, inter, `trafegam em ${nameOf(a)} e ${nameOf(b)}`); return; }
+      // A → B: dentro de um mesmo sentido, A aparece antes de B no itinerário
+      if(!inter.length){ host.innerHTML = emptyBox('Nenhuma linha passa pelos dois municípios.'); return; }
+      const it = await sbFetch('itinerario_teste', `codlinha=in.(${inter.slice(0,200).map(enc).join(',')})&select=codlinha,codibge,sentido&order=id&limit=30000`);
+      const seqs = groupBy(it, r=>r.codlinha+'¦'+(r.sentido||''));
+      const ok = new Set();
+      for(const [k, seq] of seqs){
+        const iA = seq.findIndex(r=>String(r.codibge)===String(a));
+        const iB = seq.findIndex(r=>String(r.codibge)===String(b));
+        if(iA>=0 && iB>=0 && iA<iB) ok.add(k.split('¦')[0]);
+      }
+      await mostrarLinhasResultado(host, [...ok], `de ${nameOf(a)} → ${nameOf(b)}`);
+    }catch(e){ host.innerHTML = errorBox(e.message); }
+  };
+  modalBody.querySelectorAll('.loc-btn').forEach(btn=>btn.addEventListener('click',()=>run(btn.dataset.act)));
 };
 LOADERS.ligacoesPorTerminal = async () => {
   const orig = await getOrigem();
@@ -1276,7 +1338,7 @@ const VIEW_TABLES = {
   ligacoesPorEmpresa:['tabela_vista_teste'], secoesPorEmpresa:['tarifa_atual_teste'],
   ligacoesPorNome:['tabela_vista_teste'], ligacoesPorNumero:['tabela_vista_teste'],
   ligacoesPorLogradouro:['itinerario_teste'], municipioRegiao:['cod_ibge_teste'],
-  entreLocalidades:['localidades_teste'], ligacoesPorTerminal:['qh_intervalo_teste'],
+  entreLocalidades:[], ligacoesPorTerminal:['qh_intervalo_teste'],
   secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste'],
   pesquisaEvento:['evento_teste'],
 };
