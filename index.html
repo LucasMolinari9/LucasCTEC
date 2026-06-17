@@ -544,7 +544,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-P</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-Q</span></span>
   </div>
 </footer>
 
@@ -650,7 +650,6 @@ const SECTIONS = [
   { key:'extra', name:'Extras (teste)', color:'var(--c-ger)', soft:'#efe9f7',
     items:[
       ['pin','Localidades','Lista de localidades cadastradas (teste)','localidades',false],
-      ['history','Eventos (base nova)','Base normalizada evento_dados + evento_textos (teste)','eventosBase',false],
     ]},
 ];
 
@@ -1436,26 +1435,6 @@ LOADERS.localidades = async () => {
         : emptyBox('Nenhuma localidade encontrada.');
     }, tables:['localidades_teste'] });
 };
-LOADERS.eventosBase = async () => {
-  searchPanel({ title:'Eventos (base nova) — teste', placeholder:'Termo livre (processo, descrição, observação)', auto:true,
-    note:'Base normalizada evento_dados + evento_textos (20.753 registros). Tela de teste — o Histórico oficial usa evento_teste.',
-    onRun: async(term, host)=>{
-      const lk = await getEvLookups();
-      term=(term||'').trim();
-      const t=enc(term);
-      const qsT = term? `or=(numero_processo.ilike.*${t}*,descricao.ilike.*${t}*,observacao.ilike.*${t}*)&` : '';
-      const textos = await sbFetch('evento_textos', `${qsT}select=id,numero_processo,descricao,observacao&order=id.desc&limit=80`);
-      if(!textos.length){ host.innerHTML=emptyBox('Nenhum evento encontrado na base nova.'); return; }
-      const ids = textos.map(r=>r.id);
-      const dados = await sbFetch('evento_dados', `id=in.(${ids.map(enc).join(',')})&select=id,codlinha,codempresa,data_registro,evento_linha,evento_empresa,data_publicacao&limit=200`);
-      const dmap={}; dados.forEach(d=>{ dmap[d.id]=d; });
-      const rows = textos.map(x=>Object.assign({}, dmap[x.id], x)).sort((a,b)=>String(b.data_registro||'').localeCompare(String(a.data_registro||'')));
-      const body = rows.map(r=>{ const tipo = lk.lin[r.evento_linha] || lk.emp[r.evento_empresa] || '—';
-        return `<tr><td class="td-num">${esc(fmtDate(r.data_registro))}</td><td class="td-num">${esc(r.codlinha?fmtCode(r.codlinha):'—')}</td><td class="td-num">${esc(orDash(r.codempresa))}</td><td class="td-tipo">${esc(tipo)}</td><td class="td-num">${esc(orDash(r.numero_processo))}</td><td class="td-logr">${esc(orDash(r.descricao))}</td></tr>`;
-      }).join('');
-      host.innerHTML = tableHTML([{t:'Data',w:'82px'},{t:'Linha',w:'90px'},{t:'Empresa',w:'70px'},{t:'Tipo'},{t:'Processo',w:'150px'},{t:'Descrição'}], body, rows.length+' evento(s) · base nova');
-    }, tables:['evento_dados','evento_textos'] });
-};
 
 /* ================================================================
    COMPONENTES AUXILIARES (tabela de linhas + painel de busca)
@@ -1508,7 +1487,7 @@ const VIEW_TABLES = {
   entreLocalidades:[], ligacoesPorTerminal:['qh_intervalo_teste'],
   secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste'],
   pesquisaEvento:['evento_teste'],
-  localidades:['localidades_teste'], eventosBase:['evento_dados','evento_textos'],
+  localidades:['localidades_teste'],
 };
 
 app.addEventListener('click', e => {
