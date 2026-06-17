@@ -190,7 +190,7 @@
   }
   .results-drop.open{display:block}
   .result-item{
-    display:flex;align-items:center;gap:10px;padding:10px 14px;
+    display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;padding:10px 14px;
     cursor:pointer;border:0;background:none;width:100%;text-align:left;
     border-bottom:1px solid var(--line-soft);font:inherit;color:inherit;
     transition:background .1s;
@@ -201,8 +201,8 @@
     font-family:'IBM Plex Mono';font-size:13px;font-weight:600;
     color:var(--blue);background:#e7f0f8;padding:2px 8px;border-radius:5px;white-space:nowrap;
   }
-  .r-name{flex:1;font-size:14.5px;font-weight:500;color:var(--ink)}
-  .r-emp{font-size:13px;color:var(--muted);white-space:nowrap}
+  .r-name{flex:1 1 auto;min-width:0;font-size:14.5px;font-weight:500;color:var(--ink)}
+  .r-emp{flex:1 1 100%;font-size:13px;color:var(--muted);white-space:normal}
   .drop-empty{padding:14px 16px;font-size:14.5px;color:var(--muted);text-align:center}
   .drop-error{padding:14px 16px;font-size:14.5px;color:#b33a2e;text-align:center}
 
@@ -556,7 +556,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 17/06-E</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 17/06-F</span></span>
   </div>
 </footer>
 
