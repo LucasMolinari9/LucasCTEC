@@ -560,7 +560,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 17/06-C</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 17/06-D</span></span>
   </div>
 </footer>
 
@@ -1330,17 +1330,26 @@ LOADERS.estrutura = async () => {
 
 /* ---- Empresas ---- */
 LOADERS.empresasRegulares = async () => {
-  const [rows] = await Promise.all([
-    sbFetch('tabela_vista_teste', `select=codempresa,cancelado&limit=3000`),
+  // lista TODAS as empresas do cadastro (codempresa_teste), inclusive sem linhas
+  const [lineRows] = await Promise.all([
+    sbFetch('tabela_vista_teste', `select=codempresa,cancelado&limit=5000`),
     getEmpresas()
   ]);
-  const map = {};
-  rows.forEach(r=>{ const k=r.codempresa||'—'; map[k]=map[k]||{total:0,ativas:0}; map[k].total++; if(!r.cancelado)map[k].ativas++; });
-  const list = Object.entries(map).sort((a,b)=>b[1].total-a[1].total);
-  const body = list.map(([cod,v])=>`<tr class="clickable" tabindex="0" role="button" data-emp="${esc(cod)}"><td class="td-num">${esc(cod)}</td><td class="td-logr">${esc(empNome(cod))}</td><td class="td-sentido">${v.total}</td><td class="td-tipo">${v.ativas}</td></tr>`).join('');
+  const cnt = {};
+  lineRows.forEach(r=>{ const k=r.codempresa||'—'; cnt[k]=cnt[k]||{total:0,ativas:0}; cnt[k].total++; if(!r.cancelado)cnt[k].ativas++; });
+  // dedup do cadastro por RJ (prioriza a entrada REGULAR/não cassada — resolve o RJ 103)
+  const best = {};
+  (empresaList||[]).forEach(e=>{ const k=e.codempresa; if(k==null) return;
+    const sc = (!e.cassada && String(e.situacao||'').toUpperCase()==='REGULAR')?2:(!e.cassada?1:0);
+    if(!(k in best) || sc>best[k]._s) best[k] = {...e, _s:sc}; });
+  const list = Object.values(best).map(e=>({ ...e, total:(cnt[e.codempresa]?.total)||0, ativas:(cnt[e.codempresa]?.ativas)||0 }));
+  list.sort((a,b)=> b.total-a.total || String(a.nome_empresa||'').localeCompare(String(b.nome_empresa||'')));
+  const semLinha = list.filter(e=>!e.total).length;
+  const statusCol = e => [boolChip(e.cassada,'Cassada'), boolChip(e.sob_intervencao,'Interv.')].filter(Boolean).join(' ') || `<span class="chip chip-off">${esc(orDash(e.situacao))}</span>`;
+  const body = list.map(e=>`<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}"><td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td><td class="td-tipo">${statusCol(e)}</td><td class="td-sentido">${e.total}</td><td class="td-tipo">${e.ativas}</td></tr>`).join('');
   setBody(`<div class="doc">${docHead('Empresas Regulares')}
-    <p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${list.length} operadoras. Clique para ver as ligações da empresa.</p>
-    ${tableHTML([{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Total de linhas',w:'130px'},{t:'Linhas ativas',w:'110px'}], body)}</div>`);
+    <p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${list.length} empresas no cadastro${semLinha?` · ${semLinha} sem linhas`:''}. Clique para ver as ligações da empresa.</p>
+    ${tableHTML([{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Situação',w:'150px'},{t:'Total de linhas',w:'120px'},{t:'Linhas ativas',w:'110px'}], body)}</div>`);
   modalBody.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>openEmpresaLigacoes(tr.dataset.emp)));
 };
 
