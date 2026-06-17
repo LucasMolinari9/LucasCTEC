@@ -67,6 +67,19 @@
     box-shadow:inset 0 0 0 1px rgba(255,255,255,.4);
   }
   .mark svg{width:26px;height:26px}
+  /* Logo DETRO (lockup recolorável: usa currentColor; seguro p/ PDF pois o texto é HTML) */
+  .detro-logo{display:inline-flex;flex-direction:column;line-height:1;gap:3px}
+  .detro-logo .dl-main{display:flex;align-items:center;gap:7px}
+  .detro-logo .dl-lines{width:21px;height:30px;flex:0 0 auto}
+  .detro-logo .dl-word{font-family:'Archivo',sans-serif;font-weight:800;font-style:italic;
+    letter-spacing:-1px;display:inline-flex;align-items:center;gap:2px;font-size:30px}
+  .detro-logo .dl-iconsvg{height:.82em;width:.82em;margin:0 1px;flex:0 0 auto}
+  .detro-logo .dl-tag{font-family:'Archivo',sans-serif;font-weight:600;letter-spacing:.01em;
+    white-space:nowrap;font-size:10px}
+  .dl-topbar{color:#fff}
+  .dl-topbar .dl-tag{color:#bcd6ea}
+  .doc-head .detro-logo{color:var(--navy)}
+  .doc-head .detro-logo .dl-tag{color:#1f9d57}
   .brand-txt{display:flex;flex-direction:column;line-height:1.15}
   .brand-txt b{font-family:'Archivo';font-weight:800;letter-spacing:.04em;font-size:17px}
   .brand-txt span{font-size:13px;color:#b9d4ea;letter-spacing:.06em;text-transform:uppercase}
@@ -268,12 +281,8 @@
   .doc{
     font-family:'IBM Plex Sans',serif;color:#111;padding:26px 30px 30px;
   }
-  .doc-head{display:flex;align-items:center;gap:14px;border-bottom:3px solid var(--green);padding-bottom:12px}
-  .doc-logo{
-    width:46px;height:46px;border-radius:8px;flex:0 0 auto;display:grid;place-items:center;
-    background:var(--navy);
-  }
-  .doc-logo svg{width:30px;height:30px}
+  .doc-head{display:flex;align-items:center;gap:16px;border-bottom:3px solid var(--green);padding-bottom:12px;flex-wrap:wrap}
+  .doc-head-titles{border-left:2px solid var(--line);padding-left:16px}
   .doc-head h1{font-family:'Archivo';font-weight:800;font-size:18px;line-height:1.15;color:#0a3a63;letter-spacing:-.01em}
   .doc-head .sub{font-family:'Archivo';font-weight:700;font-size:14px;color:#1f9d57;
     letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
@@ -484,17 +493,13 @@
 
 <header class="topbar">
   <div class="topbar-in">
-    <div class="mark" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none">
-        <rect x="2" y="2" width="20" height="20" rx="4" fill="#0a3a63"/>
-        <path d="M6 7.5h12M12 7.5V17" stroke="#1f9d57" stroke-width="2.4" stroke-linecap="round"/>
-        <circle cx="12" cy="6" r="2.2" fill="#fff"/>
-      </svg>
-    </div>
-    <div class="brand-txt">
-      <b>DETRO/RJ</b>
-      <span>DIVAT · Divisão de Apoio Técnico</span>
-    </div>
+    <span class="detro-logo dl-topbar" role="img" aria-label="DETRO — Departamento de Transportes Rodoviários do RJ">
+      <span class="dl-main">
+        <svg class="dl-lines" viewBox="0 0 24 34" aria-hidden="true"><g stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><line x1="2" y1="9" x2="20" y2="9"/><line x1="6" y1="17" x2="22" y2="17"/><line x1="2" y1="25" x2="20" y2="25"/></g></svg>
+        <span class="dl-word">DE<svg class="dl-iconsvg" viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="8" fill="none" stroke="currentColor" stroke-width="3.5"/><circle cx="20" cy="15" r="5.2" fill="currentColor"/><rect x="8.5" y="22" width="23" height="5.6" rx="2.2" fill="currentColor"/><rect x="17.2" y="22" width="5.6" height="12" rx="2.2" fill="currentColor"/></svg>RO</span>
+      </span>
+      <span class="dl-tag">Departamento de Transportes Rodoviários do RJ</span>
+    </span>
     <div class="topbar-meta">
       <b>Coordenadoria Técnica</b>
       Cadastro de Linhas Regulares<span id="rtDot" class="rt-dot" title="Conexão em tempo real"></span>
@@ -556,7 +561,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 17/06-F</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 17/06-G</span></span>
   </div>
 </footer>
 
@@ -977,9 +982,14 @@ async function runView(view, { silent=false } = {}){
 // header institucional reutilizável
 function docHead(subtitle){
   return `<div class="doc-head">
-    <div class="doc-logo"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="9" r="5" fill="#1f9d57"/><rect x="7" y="13" width="10" height="7" rx="2" fill="#fff"/></svg></div>
-    <div><h1>Departamento de Transportes Rodoviários<br>do Estado do Rio de Janeiro — DETRO/RJ</h1>
-    <div class="sub">DIVAT · ${esc(subtitle)}</div></div></div>`;
+    <span class="detro-logo" role="img" aria-label="DETRO — Departamento de Transportes Rodoviários do RJ">
+      <span class="dl-main">
+        <svg class="dl-lines" viewBox="0 0 24 34" aria-hidden="true"><g stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><line x1="2" y1="9" x2="20" y2="9"/><line x1="6" y1="17" x2="22" y2="17"/><line x1="2" y1="25" x2="20" y2="25"/></g></svg>
+        <span class="dl-word">DE<svg class="dl-iconsvg" viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="8" fill="none" stroke="currentColor" stroke-width="3.5"/><circle cx="20" cy="15" r="5.2" fill="currentColor"/><rect x="8.5" y="22" width="23" height="5.6" rx="2.2" fill="currentColor"/><rect x="17.2" y="22" width="5.6" height="12" rx="2.2" fill="currentColor"/></svg>RO</span>
+      </span>
+      <span class="dl-tag">Departamento de Transportes Rodoviários do RJ</span>
+    </span>
+    <div class="doc-head-titles"><div class="sub">DIVAT · ${esc(subtitle)}</div></div></div>`;
 }
 function metaRows(pairs){
   return `<div class="doc-meta">${pairs.map(([k,v,full])=> k===''? '<div class="row"></div>' : `<div class="row${full?' full':''}"><b>${esc(k)}:</b><span>${v}</span></div>`).join('')}</div>`;
