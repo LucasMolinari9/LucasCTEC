@@ -176,6 +176,8 @@
   @media screen and (max-width:480px){
     main,.hero,.topbar-in,.footer-in{padding-left:14px;padding-right:14px}
     .modal-body .loc-form{grid-template-columns:1fr}
+    .modal-body .ev-filters{grid-template-columns:1fr 1fr}
+    .modal-body .ev-filters .evf-wide{grid-column:span 2}
   }
   @media (prefers-reduced-motion:reduce){
     *{transition:none!important;scroll-behavior:auto}
@@ -354,6 +356,14 @@
   .pg-goto{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#444;font-family:'Archivo';font-weight:600}
   .pg-num{width:64px;padding:5px 6px;border:1px solid #c9d3dc;border-radius:6px;font:inherit;font-size:12px}
   .ev-search{margin:0 0 12px}
+  .ev-filters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px 10px;align-items:end;
+    background:#f3f7fb;border:1px solid #e1e9f1;border-radius:8px;padding:10px 12px;margin:0 0 14px}
+  .ev-filters .evf{display:flex;flex-direction:column;gap:3px;font:600 11px 'Archivo';color:#42566a}
+  .ev-filters .evf-wide{grid-column:span 2}
+  .ev-filters .evf input{padding:6px 8px;border:1px solid #c9d3dc;border-radius:6px;font:inherit;font-size:12px;font-weight:400}
+  .ev-filters .evf-clear{align-self:end;background:#fff;color:var(--navy);border:1px solid #c9d3dc;border-radius:6px;
+    padding:7px 12px;font:600 12px 'Archivo';cursor:pointer}
+  .ev-filters .evf-clear:hover{background:#eef4f9}
   .ev-empty{padding:30px 10px;text-align:center;color:var(--muted);font-size:13px}
   .ev-empty.hid{display:none}
   /* container oculto usado só para gerar o PDF completo */
@@ -383,7 +393,7 @@
   /* cabeçalho de grupo não fica órfão no rodapé da página */
   .pdf-export .qh-sentido,.pdf-export .sentido-sep{break-after:avoid}
   /* a caixa de busca e o paginador nunca entram no PDF */
-  .pdf-export .doc-search,.pdf-export .doc-pager,.pdf-export .ev-empty{display:none!important}
+  .pdf-export .doc-search,.pdf-export .doc-pager,.pdf-export .ev-empty,.pdf-export .ev-filters{display:none!important}
   /* o PDF/impressão nunca rola e usa a largura natural da tabela. O container .pdf-export
      fica fora do .modal-body, então as regras mobile já não o atingem — isto é defesa extra
      (o html2canvas rasteriza este container na largura real do dispositivo). */
@@ -466,7 +476,7 @@
     .doc-table thead{display:table-header-group}
     .doc-table tr{break-inside:avoid}
     .doc-table tbody tr:hover{background:none!important}
-    .doc-search,.doc-pager,.ev-empty{display:none!important}
+    .doc-search,.doc-pager,.ev-empty,.ev-filters{display:none!important}
     .doc-table tbody tr.hid{display:table-row!important}
     .ev-page.hid{display:block!important}
     .ev-page + .ev-page{break-before:page}
@@ -549,7 +559,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 17/06-A</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 17/06-B</span></span>
   </div>
 </footer>
 
@@ -1048,16 +1058,43 @@ function pagerHTML(total){
     <span class="pg-goto">ir p/ <input type="number" class="pg-num" min="1" max="${total}" aria-label="Ir para o evento nº"> <button class="pg-btn pg-go" type="button">Ir</button></span>
     <button class="pg-btn" type="button" data-pg="next">Próximo evento ›</button></div>`;
 }
-// Paginador genérico (um evento por vez) com busca interna e "ir para a página N"
-function paginateEvents(container, rows, buildPage, headerHTML=''){
+// barra de filtros do histórico (texto, nº processo, datas e período por ano)
+function eventFilterBarHTML(){
+  return `<div class="ev-filters">
+    <label class="evf evf-wide">Texto (descrição/observação)<input type="text" data-f="text" placeholder="ex.: reformulação"></label>
+    <label class="evf">Nº do processo<input type="text" data-f="proc" placeholder="ex.: 2.599/46"></label>
+    <label class="evf">Registro de<input type="date" data-f="regDe"></label>
+    <label class="evf">Registro até<input type="date" data-f="regAte"></label>
+    <label class="evf">Publicação de<input type="date" data-f="pubDe"></label>
+    <label class="evf">Publicação até<input type="date" data-f="pubAte"></label>
+    <label class="evf">Ano de<input type="number" data-f="anoDe" min="1900" max="2100" placeholder="aaaa"></label>
+    <label class="evf">Ano até<input type="number" data-f="anoAte" min="1900" max="2100" placeholder="aaaa"></label>
+    <button type="button" class="evf-clear">Limpar filtros</button>
+  </div>`;
+}
+const yearOf = d => d ? parseInt(String(d).slice(0,4),10) : null;
+function matchEvent(r, c){
+  if (c.text && !norm((r.descricao||'')+' '+(r.observacao||'')).includes(c.text)) return false;
+  if (c.proc && !norm(r.numero_processo||'').includes(c.proc)) return false;
+  if (c.regDe && !(r.data_registro && r.data_registro >= c.regDe)) return false;
+  if (c.regAte && !(r.data_registro && r.data_registro <= c.regAte)) return false;
+  if (c.pubDe && !(r.data_publicacao && r.data_publicacao >= c.pubDe)) return false;
+  if (c.pubAte && !(r.data_publicacao && r.data_publicacao <= c.pubAte)) return false;
+  if (c.anoDe!=null || c.anoAte!=null){
+    const y = yearOf(r.data_registro); if (y==null) return false;
+    if (c.anoDe!=null && y < c.anoDe) return false;
+    if (c.anoAte!=null && y > c.anoAte) return false;
+  }
+  return true;
+}
+// Paginador (um evento por vez) com filtros, "ir para a página N" e callback de filtro p/ PDF
+function paginateEvents(container, rows, buildPage, headerHTML='', opts={}){
   const total = rows.length;
-  // texto pesquisável de cada evento (insensível a maiúsc./minúsc. e acento)
-  const texts = rows.map(r => norm([fmtDate(r.data_registro), r.numero_processo, r.descricao, r.observacao, r.codlinha].join(' ')));
   let visible = rows.map((_,i)=>i);   // índices visíveis após o filtro
   let page = 1;
-  const searchHTML = total > 1 ? `<div class="doc-search ev-search"><input id="evSearch" type="text" placeholder="Buscar nos eventos (descrição, processo, data…)" aria-label="Buscar nos eventos"></div>` : '';
-  container.innerHTML = (headerHTML||'') + searchHTML
-    + `<div class="ev-empty hid">Nenhum evento corresponde à busca.</div>`
+  const filtersHTML = total > 1 ? eventFilterBarHTML() : '';
+  container.innerHTML = (headerHTML||'') + filtersHTML
+    + `<div class="ev-empty hid">Nenhum evento corresponde ao filtro.</div>`
     + rows.map((r,i)=>`<div class="ev-page" data-idx="${i}">${buildPage(r)}</div>`).join('') + pagerHTML(total);
   const pages = [...container.querySelectorAll('.ev-page[data-idx]')];
   const emptyMsg = container.querySelector('.ev-empty');
@@ -1082,12 +1119,23 @@ function paginateEvents(container, rows, buildPage, headerHTML=''){
   const doGo = ()=>{ const v = parseInt(num.value,10); if(!isNaN(v)){ page = v; paint(); container.scrollIntoView({block:'start'}); } };
   if (go) go.addEventListener('click', doGo);
   if (num) num.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); doGo(); } });
-  const sb = container.querySelector('#evSearch');
-  if (sb) sb.addEventListener('input', ()=>{
-    const q = norm(sb.value);
-    visible = q ? rows.map((_,i)=>i).filter(i=>texts[i].includes(q)) : rows.map((_,i)=>i);
+  // filtros
+  const fEls = [...container.querySelectorAll('.ev-filters [data-f]')];
+  const readCriteria = ()=>{
+    const g = k => (container.querySelector(`.ev-filters [data-f="${k}"]`)?.value || '').trim();
+    const aDe=g('anoDe'), aAte=g('anoAte');
+    return { text:norm(g('text')), proc:norm(g('proc')), regDe:g('regDe'), regAte:g('regAte'),
+      pubDe:g('pubDe'), pubAte:g('pubAte'), anoDe:aDe?parseInt(aDe,10):null, anoAte:aAte?parseInt(aAte,10):null };
+  };
+  const applyFilters = ()=>{
+    const c = readCriteria();
+    visible = rows.map((_,i)=>i).filter(i=>matchEvent(rows[i], c));
     page = 1; paint();
-  });
+    if (opts.onFilter) opts.onFilter(visible.map(i=>rows[i]));
+  };
+  fEls.forEach(el=>el.addEventListener('input', applyFilters));
+  const clear = container.querySelector('.evf-clear');
+  if (clear) clear.addEventListener('click', ()=>{ fEls.forEach(el=>el.value=''); applyFilters(); });
 }
 // Renderiza o histórico (paginado) de UMA linha dentro de um container
 async function renderLineHistory(host, line){
@@ -1100,9 +1148,10 @@ async function renderLineHistory(host, line){
   const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código da Ligação',esc(fmtCode(line.codlinha))],['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(orDash(line.codempresa))],['Número da Ligação',esc(orDash(line.numero_ligacao))]]);
   if (!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento registrado para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
   const build = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin[r.evento_linha] || lk.emp[r.evento_empresa] || '—', false) + evBlocksHTML(r);
-  paginateEvents(host, rows, build, meta);
-  // PDF/impressão: todos os eventos da linha, um por página (cabeçalho repetido)
-  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${rows.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
+  // PDF/impressão: um evento por página (cabeçalho repetido); segue o filtro aplicado na tela
+  const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
+  paginateEvents(host, rows, build, meta, { onFilter:(vis)=>{ if (currentView) currentView.pdfHTML = ()=>pdfFrom(vis); } });
+  if (currentView) currentView.pdfHTML = ()=>pdfFrom(rows);
 }
 LOADERS.historicoLinha = async () => {
   const pre = activeLine ? (activeLine.numero_ligacao || activeLine.codlinha || '') : '';
@@ -1125,15 +1174,22 @@ LOADERS.historicoLinha = async () => {
 const SENTIDO_ORDER = { 'Ida':1, 'Volta':2, 'Circular':3 };
 const normSentido = s => { const t=String(s||'').trim().toLowerCase(); if(t.startsWith('ida'))return'Ida'; if(t.startsWith('volta'))return'Volta'; if(t.startsWith('circ'))return'Circular'; return s?String(s):'—'; };
 
-LOADERS.itinerarios = async () => {
-  const [rows, ibge] = await Promise.all([
-    sbFetch('itinerario_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_origem,codempresa&order=id`),
-    getIbge(), getEmpresas()
-  ]);
-  if (!rows.length) { setBody(`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}${emptyBox('Nenhum itinerário encontrado para esta linha.')}</div>`); return; }
+/* ---- Builders reutilizáveis (usados pelos loaders e pela Estrutura Operacional) ---- */
+function secoesTarifasHTML(rows){
+  if(!rows.length) return emptyBox('Nenhuma seção/tarifa cadastrada para esta linha.');
+  const body = rows.map(r=>{
+    const st = [ boolChip(r.cancelado,'Canc.'), boolChip(r.paralisado,'Paral.'), boolChip(r.sub_judice,'Sub jud.'), boolChip(r.transferido,'Transf.') ].filter(Boolean).join(' ') || '<span class="chip chip-off">OK</span>';
+    return `<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-num">${esc(orDash(r.numero_linha))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td>
+    <td class="td-tipo">${esc(orDash(r.via))}</td><td class="td-tipo">${esc(orDash(r.caracteristica))}</td><td class="td-tipo">${esc(orDash(r.tipo_ligacao))}</td><td class="td-num">${esc(orDash(r.rm))}</td>
+    <td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td><td class="td-num">R$ ${esc(fmtMoney(r.piso_i))}</td>
+    <td class="td-tipo">${esc(orDash(r.situacao))}</td><td class="td-num">${fmtDate(r.data_criacao)}</td><td>${st}</td></tr>`;
+  }).join('');
+  return tableHTML([{t:'Seção',w:'60px'},{t:'Nº Linha',w:'80px'},{t:'Ligação'},{t:'Via',w:'90px'},{t:'Caract.',w:'90px'},{t:'Tipo',w:'90px'},{t:'RM',w:'55px'},{t:'Tarifa',w:'80px'},{t:'Piso I',w:'80px'},{t:'Situação',w:'90px'},{t:'Criação',w:'90px'},{t:'Status',w:'150px'}], body, rows.length+' seção(ões)');
+}
+function itinerarioTableHTML(rows, ibge){
+  if(!rows.length) return emptyBox('Nenhum itinerário cadastrado para esta linha.');
   rows.forEach(r=>r._sn=normSentido(r.sentido));
   rows.sort((a,b)=>{ const oa=SENTIDO_ORDER[a._sn]||9, ob=SENTIDO_ORDER[b._sn]||9; return oa!==ob?oa-ob:(a.id-b.id); });
-  const L = activeLine; const codEmp = rows[0]?.codempresa || L.codempresa || '';
   let last=null;
   const body = rows.map(r=>{
     let sep=''; if(r._sn!==last){ sep=`<tr class="sentido-sep"><td colspan="5">Sentido: ${esc(r._sn)}</td></tr>`; last=r._sn; }
@@ -1141,27 +1197,12 @@ LOADERS.itinerarios = async () => {
     return sep+`<tr><td class="td-sentido">${esc(r._sn||'')}</td><td class="td-tipo">${esc(r.tipo_logradouro||'')}</td>
       <td class="td-logr">${esc(r.nome_logradouro||'—')}</td><td class="td-mun">${esc(mun)}</td><td class="td-obs">${esc(r.observacao||'')}</td></tr>`;
   }).join('');
-  const obs=[...new Set(rows.map(r=>r.observacao).filter(o=>o&&/proc|reformul|análise|analise|decreto|portaria/i.test(o)))];
-  setBody(`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}
-    ${metaRows([['Registro','RJ-'+esc(codEmp)],['Característica',esc(L.tipo||'—')],['Empresa',esc(empNome(codEmp)),true],
-      ['Ligação',esc(L.nome_ligacao||'—'),true],['Código da Ligação',esc(fmtCode(L.codlinha))],['Número da Ligação',esc(orDash(L.numero_ligacao))],
-      ['Tipo da Ligação',esc(orDash(L.caracteristica))], L.via?['Via',esc(L.via)]:['','']])}
-    ${tableHTML([{t:'Sentido',w:'62px'},{t:'Tipo',w:'84px'},{t:'Nome do Logradouro'},{t:'Município',w:'110px'},{t:'Observação',w:'150px'}], body,
-      `${rows.length} logradouro(s) · cadastro DETRO-RJ`)}
-    ${obs.length?`<div class="doc-obs"><b>Obs:</b> ${obs.map(esc).join(' · ')}</div>`:''}</div>`);
-};
-
-LOADERS.quadroHorarios = async () => {
-  const [interv, predet, orig] = await Promise.all([
-    sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=cod_origen,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
-    sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=cod_origem,dia_semana,saida&order=id`),
-    getOrigem(), getEmpresas()
-  ]);
-  if (!interv.length && !predet.length) { setBody(`<div class="doc">${docHead('Quadro de Horários')}${emptyBox('Nenhum quadro de horários cadastrado para esta linha.')}</div>`); return; }
-  let html = `<div class="doc">${docHead('Quadro de Horários')}
-    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))],['Empresa',esc(empNome(activeLine.codempresa)),true],['Registro','RJ-'+esc(activeLine.codempresa||'—')]])}`;
-  // sentido = origem (terminal de partida); agrupa por sentido e, dentro, por dia
+  return tableHTML([{t:'Sentido',w:'62px'},{t:'Tipo',w:'84px'},{t:'Nome do Logradouro'},{t:'Município',w:'110px'},{t:'Observação',w:'150px'}], body, `${rows.length} logradouro(s) · cadastro DETRO-RJ`);
+}
+function quadroHorariosBodyHTML(interv, predet, orig){
+  if(!interv.length && !predet.length) return emptyBox('Nenhum quadro de horários cadastrado para esta linha.');
   const origLabel = c => esc(orig[c] || ('Origem '+orDash(c)));
+  let html='';
   if (interv.length){
     html += `<h3 style="font-family:'Archivo';font-size:13px;color:var(--navy);margin:14px 0 4px">Por intervalo / frequência</h3>`;
     for (const [cod, list] of groupBy(interv, r=>r.cod_origen ?? '—')){
@@ -1184,35 +1225,10 @@ LOADERS.quadroHorarios = async () => {
       }
     }
   }
-  html += `</div>`; setBody(html);
-};
-
-LOADERS.tarifas = async () => {
-  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao&order=secao`);
-  if (!rows.length) { setBody(`<div class="doc">${docHead('Tarifas')}${emptyBox('Nenhuma tarifa cadastrada para esta linha.')}</div>`); return; }
-  const body = rows.map(r=>{
-    const st = [ boolChip(r.cancelado,'Canc.'), boolChip(r.paralisado,'Paral.'), boolChip(r.sub_judice,'Sub jud.'), boolChip(r.transferido,'Transf.') ].filter(Boolean).join(' ') || '<span class="chip chip-off">OK</span>';
-    return `<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-num">${esc(orDash(r.numero_linha))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td>
-    <td class="td-tipo">${esc(orDash(r.via))}</td><td class="td-tipo">${esc(orDash(r.caracteristica))}</td><td class="td-tipo">${esc(orDash(r.tipo_ligacao))}</td><td class="td-num">${esc(orDash(r.rm))}</td>
-    <td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td><td class="td-num">R$ ${esc(fmtMoney(r.piso_i))}</td>
-    <td class="td-tipo">${esc(orDash(r.situacao))}</td><td class="td-num">${fmtDate(r.data_criacao)}</td><td>${st}</td></tr>`;
-  }).join('');
-  setBody(`<div class="doc">${docHead('Tarifas Vigentes')}
-    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]])}
-    ${tableHTML([{t:'Seção',w:'60px'},{t:'Nº Linha',w:'80px'},{t:'Ligação'},{t:'Via',w:'90px'},{t:'Caract.',w:'90px'},{t:'Tipo',w:'90px'},{t:'RM',w:'55px'},{t:'Tarifa',w:'80px'},{t:'Piso I',w:'80px'},{t:'Situação',w:'90px'},{t:'Criação',w:'90px'},{t:'Status',w:'150px'}], body, rows.length+' seção(ões)')}</div>`);
-};
-
-LOADERS.frota = async () => {
-  const [rows] = await Promise.all([
-    sbFetch('qh_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e&limit=1`),
-    getEmpresas()
-  ]);
-  if (!rows.length) { setBody(`<div class="doc">${docHead('Frota')}${emptyBox('Nenhuma frota cadastrada para esta linha.')}</div>`); return; }
-  const f = rows[0];
-  setBody(`<div class="doc">${docHead('Frota da Linha')}
-    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))],
-      ['Empresa',esc(empNome(f.codempresa)),true],['Registro','RJ-'+esc(orDash(f.codempresa))],['Hierarquia',esc(orDash(f.hierarquia))],['Última alteração',fmtDate(f.ultima_alteracao)]])}
-    <div class="kpi-grid">
+  return html;
+}
+function frotaBlockHTML(f){
+  return `<div class="kpi-grid">
       <div class="kpi"><b>${orDash(f.frota_operacional)}</b><span>Operacional</span></div>
       <div class="kpi"><b>${orDash(f.frota_a)}</b><span>Comum (A)</span></div>
       <div class="kpi"><b>${orDash(f.frota_sa)}</b><span>Comum (SA)</span></div>
@@ -1225,21 +1241,90 @@ LOADERS.frota = async () => {
       <div class="kpi"><b>${orDash(f.frota_micro_e)}</b><span>Micro (E)</span></div>
       <div class="kpi"><b>${orDash(f.frota_e)}</b><span>Especial (E)</span></div>
       <div class="kpi"><b>${orDash(f.reserva)}</b><span>Reserva</span></div>
-    </div></div>`);
+    </div>`;
+}
+
+LOADERS.itinerarios = async () => {
+  const [rows, ibge] = await Promise.all([
+    sbFetch('itinerario_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_origem,codempresa&order=id`),
+    getIbge(), getEmpresas()
+  ]);
+  if (!rows.length) { setBody(`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}${emptyBox('Nenhum itinerário encontrado para esta linha.')}</div>`); return; }
+  const L = activeLine; const codEmp = rows[0]?.codempresa || L.codempresa || '';
+  const obs=[...new Set(rows.map(r=>r.observacao).filter(o=>o&&/proc|reformul|análise|analise|decreto|portaria/i.test(o)))];
+  setBody(`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}
+    ${metaRows([['Registro','RJ-'+esc(codEmp)],['Característica',esc(L.tipo||'—')],['Empresa',esc(empNome(codEmp)),true],
+      ['Ligação',esc(L.nome_ligacao||'—'),true],['Código da Ligação',esc(fmtCode(L.codlinha))],['Número da Ligação',esc(orDash(L.numero_ligacao))],
+      ['Tipo da Ligação',esc(orDash(L.caracteristica))], L.via?['Via',esc(L.via)]:['','']])}
+    ${itinerarioTableHTML(rows, ibge)}
+    ${obs.length?`<div class="doc-obs"><b>Obs:</b> ${obs.map(esc).join(' · ')}</div>`:''}</div>`);
 };
 
-LOADERS.estrutura = async () => {
-  const [qh, secoes] = await Promise.all([
-    sbFetch('qh_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=hierarquia,frota_operacional&limit=1`),
-    sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,nome_ligacao&order=secao`)
+LOADERS.quadroHorarios = async () => {
+  const [interv, predet, orig] = await Promise.all([
+    sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=cod_origen,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
+    sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=cod_origem,dia_semana,saida&order=id`),
+    getOrigem(), getEmpresas()
   ]);
-  const h = qh[0]||{};
-  const secBody = secoes.length ? tableHTML([{t:'Seção',w:'70px'},{t:'Cód. Seção',w:'100px'},{t:'Descrição'}],
-    secoes.map(s=>`<tr><td class="td-num">${esc(orDash(s.secao))}</td><td class="td-num">${esc(orDash(s.codsecao))}</td><td class="td-logr">${esc(orDash(s.nome_ligacao))}</td></tr>`).join(''))
-    : emptyBox('Sem seções cadastradas.');
-  setBody(`<div class="doc">${docHead('Estrutura Operacional')}
-    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Hierarquia',esc(orDash(h.hierarquia))],['Frota operacional',esc(orDash(h.frota_operacional))]])}
-    <h3 style="font-family:'Archivo';font-size:13px;color:var(--navy);margin:14px 0 4px">Seções</h3>${secBody}</div>`);
+  if (!interv.length && !predet.length) { setBody(`<div class="doc">${docHead('Quadro de Horários')}${emptyBox('Nenhum quadro de horários cadastrado para esta linha.')}</div>`); return; }
+  setBody(`<div class="doc">${docHead('Quadro de Horários')}
+    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))],['Empresa',esc(empNome(activeLine.codempresa)),true],['Registro','RJ-'+esc(activeLine.codempresa||'—')]])}
+    ${quadroHorariosBodyHTML(interv, predet, orig)}</div>`);
+};
+
+LOADERS.tarifas = async () => {
+  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao&order=secao`);
+  if (!rows.length) { setBody(`<div class="doc">${docHead('Tarifas')}${emptyBox('Nenhuma tarifa cadastrada para esta linha.')}</div>`); return; }
+  setBody(`<div class="doc">${docHead('Tarifas Vigentes')}
+    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]])}
+    ${secoesTarifasHTML(rows)}</div>`);
+};
+
+LOADERS.frota = async () => {
+  const [rows] = await Promise.all([
+    sbFetch('qh_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e&limit=1`),
+    getEmpresas()
+  ]);
+  if (!rows.length) { setBody(`<div class="doc">${docHead('Frota')}${emptyBox('Nenhuma frota cadastrada para esta linha.')}</div>`); return; }
+  const f = rows[0];
+  setBody(`<div class="doc">${docHead('Frota da Linha')}
+    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))],
+      ['Empresa',esc(empNome(f.codempresa)),true],['Registro','RJ-'+esc(orDash(f.codempresa))],['Hierarquia',esc(orDash(f.hierarquia))],['Última alteração',fmtDate(f.ultima_alteracao)]])}
+    ${frotaBlockHTML(f)}</div>`);
+};
+
+// Documento consolidado (igual ao Relatório oficial): cadastro + Seções/Tarifas +
+// Itinerário + Quadro de Horários e Frota, num único .doc (também usado no PDF).
+LOADERS.estrutura = async () => {
+  const cod = enc(activeLine.codlinha);
+  const [lineRows, secoes, itin, interv, predet, qh, orig, ibge] = await Promise.all([
+    sbFetch('tabela_vista_teste', `codlinha=eq.${cod}&select=${LINE_FIELDS}&limit=1`),
+    sbFetch('tarifa_atual_teste', `codlinha=eq.${cod}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao&order=secao`),
+    sbFetch('itinerario_teste', `codlinha=eq.${cod}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_origem,codempresa&order=id`),
+    sbFetch('qh_intervalo_teste', `codlinha=eq.${cod}&select=cod_origen,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
+    sbFetch('qh_predeterminado_teste', `codlinha=eq.${cod}&select=cod_origem,dia_semana,saida&order=id`),
+    sbFetch('qh_teste', `codlinha=eq.${cod}&select=codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e&limit=1`),
+    getOrigem(), getIbge(), getEmpresas()
+  ]);
+  const L = lineRows[0] || activeLine;
+  const f = qh[0] || {};
+  const h3 = t => `<h3 style="font-family:'Archivo';font-size:14px;color:var(--navy);border-bottom:2px solid var(--green);padding-bottom:4px;margin:22px 0 6px">${t}</h3>`;
+  const frotaMeta = metaRows([['Hierarquização',esc(orDash(f.hierarquia))],['Frota operacional',esc(orDash(f.frota_operacional))],['Reserva',esc(orDash(f.reserva))],['Última alteração',fmtDate(f.ultima_alteracao)]]);
+  const html = `<div class="doc">${docHead('Cadastro de Linhas: Estrutura Operacional')}
+    ${metaRows([
+      ['Registro','RJ-'+esc(orDash(L.codempresa))],['Característica',esc(orDash(L.caracteristica))],
+      ['Empresa',esc(empNome(L.codempresa)),true],
+      ['Código da Ligação',esc(fmtCode(L.codlinha))],['Número da Ligação',esc(orDash(L.numero_ligacao))],
+      ['Tipo da Ligação',esc(orDash(L.tipo))],['Data de criação',fmtDate(L.data_criacao)],
+      ['Ligação',esc(L.nome_ligacao||'—'),true], L.via?['Via',esc(L.via)]:['',''],
+      ['Processo Nº',esc(orDash(L.processo_criacao)),true],
+    ])}
+    ${h3('Seções e Tarifas')}${secoesTarifasHTML(secoes)}
+    ${h3('Itinerário')}${itinerarioTableHTML(itin, ibge)}
+    ${h3('Quadro de Horários e Frota')}${frotaMeta}${f&&Object.keys(f).length?frotaBlockHTML(f):''}${quadroHorariosBodyHTML(interv, predet, orig)}
+    <div class="doc-foot">Fonte: cadastro DETRO-RJ · DIVAT</div></div>`;
+  setBody(html);
+  if (currentView) currentView.pdfHTML = ()=>html;
 };
 
 /* ---- Empresas ---- */
@@ -1305,8 +1390,9 @@ async function renderEmpresaHistory(host, cod, nome){
   const meta = metaRows([['Empresa',esc(nome||E.nome_empresa||'—'),true],['Código da Empresa',esc(cod)],['Situação',esc(orDash(E.situacao))],['Processo',esc(orDash(E.processo))],['Publicação',fmtDate(E.data_publicacao)],['Situação cadastral',empSit,true],['Total',rows.length+' evento(s)']]);
   if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento para a empresa '+esc(cod)+'.'); if(currentView) currentView.pdfHTML=null; return; }
   const build = r => evBandHTML(r, 'Tipo Evento Empresa', lk.emp[r.evento_empresa]||lk.lin[r.evento_linha]||'—', !!(r.codlinha)) + evBlocksHTML(r);
-  paginateEvents(host, rows, build, meta);
-  if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${rows.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
+  const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
+  paginateEvents(host, rows, build, meta, { onFilter:(vis)=>{ if(currentView) currentView.pdfHTML = ()=>pdfFrom(vis); } });
+  if(currentView) currentView.pdfHTML = ()=>pdfFrom(rows);
 }
 LOADERS.historicoEmpresa = async () => {
   const pre = activeLine?.codempresa || '';
