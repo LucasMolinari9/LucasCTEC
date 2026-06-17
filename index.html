@@ -41,6 +41,7 @@
   html{scroll-behavior:smooth}
   body{
     font-family:'IBM Plex Sans',system-ui,sans-serif;
+    font-size:18px;
     color:var(--ink);
     background:var(--bg);
     line-height:1.5;
@@ -67,10 +68,10 @@
   }
   .mark svg{width:26px;height:26px}
   .brand-txt{display:flex;flex-direction:column;line-height:1.15}
-  .brand-txt b{font-family:'Archivo';font-weight:800;letter-spacing:.04em;font-size:15px}
-  .brand-txt span{font-size:11.5px;color:#b9d4ea;letter-spacing:.06em;text-transform:uppercase}
-  .topbar-meta{margin-left:auto;text-align:right;font-size:12px;color:#cfe1f1}
-  .topbar-meta b{display:block;color:#fff;font-weight:600;font-size:12.5px}
+  .brand-txt b{font-family:'Archivo';font-weight:800;letter-spacing:.04em;font-size:17px}
+  .brand-txt span{font-size:13px;color:#b9d4ea;letter-spacing:.06em;text-transform:uppercase}
+  .topbar-meta{margin-left:auto;text-align:right;font-size:13.5px;color:#cfe1f1}
+  .topbar-meta b{display:block;color:#fff;font-weight:600;font-size:14px}
   /* indicador de conexão realtime */
   .rt-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#9fb4c6;margin-left:6px;vertical-align:middle;transition:background .3s}
   .rt-dot.live{background:#37d67a;box-shadow:0 0 0 3px rgba(55,214,122,.25)}
@@ -82,14 +83,14 @@
   }
   .hero-in{max-width:1140px;margin:0 auto;text-align:center}
   .eyebrow{
-    font-family:'Archivo';font-weight:700;font-size:12px;letter-spacing:.22em;
+    font-family:'Archivo';font-weight:700;font-size:13.5px;letter-spacing:.22em;
     text-transform:uppercase;color:var(--green);margin-bottom:8px;
   }
   .hero h1{
-    font-family:'Archivo';font-weight:800;font-size:clamp(24px,3.6vw,38px);
+    font-family:'Archivo';font-weight:800;font-size:clamp(27px,3.6vw,42.5px);
     letter-spacing:-.01em;line-height:1.05;
   }
-  .hero p{color:#bcd5ea;max-width:54ch;margin:10px auto 0;font-size:14.5px}
+  .hero p{color:#bcd5ea;max-width:54ch;margin:10px auto 0;font-size:16px}
 
   .selector{
     margin:24px auto 0;display:flex;gap:10px;flex-wrap:wrap;
@@ -101,12 +102,12 @@
   .selector .field svg{width:18px;height:18px;color:#9fc0dc;flex:0 0 auto}
   .selector input{
     flex:1;background:transparent;border:0;outline:0;color:#fff;
-    font-family:'IBM Plex Sans';font-size:15px;padding:12px 0;
+    font-family:'IBM Plex Sans';font-size:17px;padding:12px 0;
   }
   .selector input::placeholder{color:#8fb0cc}
   .selector > button{
     background:var(--green);color:#04341c;border:0;cursor:pointer;
-    font-family:'Archivo';font-weight:700;font-size:14px;letter-spacing:.02em;
+    font-family:'Archivo';font-weight:700;font-size:15.5px;letter-spacing:.02em;
     padding:0 22px;border-radius:9px;transition:filter .15s,transform .15s;
   }
   .selector > button:hover{filter:brightness(1.08)}
@@ -126,7 +127,7 @@
   .section:first-child{margin-top:0}
   .sec-head{margin-bottom:12px;padding-left:1px}
   .sec-head h2{
-    font-family:'Archivo';font-weight:700;font-size:14px;letter-spacing:.08em;
+    font-family:'Archivo';font-weight:700;font-size:15.5px;letter-spacing:.08em;
     text-transform:uppercase;color:var(--navy);display:flex;align-items:center;gap:10px;
   }
   .sec-head h2::before{content:"";width:4px;height:15px;border-radius:2px;background:var(--accent)}
@@ -147,15 +148,15 @@
     background:var(--accent-soft);color:var(--accent);
   }
   .ico svg{width:20px;height:20px}
-  .card-txt h3{font-family:'Archivo';font-weight:600;font-size:14.5px;line-height:1.25}
-  .card-txt p{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.4}
-  .card.needs-line::after{content:"linha";position:absolute;top:9px;right:10px;font-size:9px;
+  .card-txt h3{font-family:'Archivo';font-weight:600;font-size:16px;line-height:1.25}
+  .card-txt p{font-size:14px;color:var(--muted);margin-top:3px;line-height:1.4}
+  .card.needs-line::after{content:"linha";position:absolute;top:9px;right:10px;font-size:10px;
     letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--line-soft);
     padding:2px 6px;border-radius:5px;font-weight:600}
 
   footer{
     border-top:1px solid var(--line);background:var(--surface);
-    color:var(--muted);font-size:12.5px;
+    color:var(--muted);font-size:14px;
   }
   .footer-in{max-width:1140px;margin:0 auto;padding:18px 24px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
   .footer-in .pill{font-family:'IBM Plex Mono';background:var(--line-soft);padding:3px 9px;border-radius:6px;color:var(--blue)}
@@ -201,13 +202,13 @@
   .result-item:last-child{border-bottom:0}
   .result-item:hover{background:var(--bg)}
   .r-num{
-    font-family:'IBM Plex Mono';font-size:11.5px;font-weight:600;
+    font-family:'IBM Plex Mono';font-size:13px;font-weight:600;
     color:var(--blue);background:#e7f0f8;padding:2px 8px;border-radius:5px;white-space:nowrap;
   }
-  .r-name{flex:1;font-size:13px;font-weight:500;color:var(--ink)}
-  .r-emp{font-size:11.5px;color:var(--muted);white-space:nowrap}
-  .drop-empty{padding:14px 16px;font-size:13px;color:var(--muted);text-align:center}
-  .drop-error{padding:14px 16px;font-size:13px;color:#b33a2e;text-align:center}
+  .r-name{flex:1;font-size:14.5px;font-weight:500;color:var(--ink)}
+  .r-emp{font-size:13px;color:var(--muted);white-space:nowrap}
+  .drop-empty{padding:14px 16px;font-size:14.5px;color:var(--muted);text-align:center}
+  .drop-error{padding:14px 16px;font-size:14.5px;color:#b33a2e;text-align:center}
 
   /* ---------- Active line banner ---------- */
   .line-banner{
@@ -218,14 +219,14 @@
     margin-bottom:22px;flex-wrap:wrap;box-shadow:var(--shadow);
   }
   .lb-num{
-    font-family:'IBM Plex Mono';font-size:12.5px;font-weight:600;
+    font-family:'IBM Plex Mono';font-size:14px;font-weight:600;
     color:var(--navy);background:#fff;padding:4px 12px;border-radius:6px;white-space:nowrap;
   }
-  .lb-name{font-family:'Archivo';font-weight:700;font-size:15px;color:#fff}
-  .lb-emp{font-size:12px;color:#cfe1f1;margin-top:2px}
+  .lb-name{font-family:'Archivo';font-weight:700;font-size:17px;color:#fff}
+  .lb-emp{font-size:13.5px;color:#cfe1f1;margin-top:2px}
   .lb-clear{
     margin-left:auto;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.28);
-    border-radius:6px;padding:4px 12px;font-size:12px;color:#fff;
+    border-radius:6px;padding:4px 12px;font-size:13.5px;color:#fff;
     cursor:pointer;font:inherit;transition:background .12s;
   }
   .lb-clear:hover{background:rgba(255,255,255,.2)}
@@ -247,15 +248,15 @@
     background:var(--navy-deep);color:#fff;padding:10px 16px;
     display:flex;align-items:center;gap:10px;
   }
-  .mt-label{font-family:'Archivo';font-weight:700;font-size:11.5px;letter-spacing:.08em;
+  .mt-label{font-family:'Archivo';font-weight:700;font-size:13px;letter-spacing:.08em;
     text-transform:uppercase;color:#9fc0dc;margin-right:auto;display:flex;align-items:center;gap:8px}
-  .mt-live{font-size:9.5px;letter-spacing:.06em;color:#0a3a63;background:#37d67a;
+  .mt-live{font-size:10.5px;letter-spacing:.06em;color:#0a3a63;background:#37d67a;
     padding:2px 7px;border-radius:5px;font-weight:700;display:none}
   .mt-live.on{display:inline-block;animation:pulseLive 1.6s ease}
   @keyframes pulseLive{0%{opacity:.4}50%{opacity:1}100%{opacity:.85}}
   .mt-btn{
     background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;
-    border-radius:6px;padding:5px 12px;font:inherit;font-size:12px;cursor:pointer;
+    border-radius:6px;padding:5px 12px;font:inherit;font-size:13.5px;cursor:pointer;
     display:flex;align-items:center;gap:6px;transition:background .12s;
   }
   .mt-btn:hover{background:rgba(255,255,255,.2)}
@@ -277,24 +278,24 @@
     background:var(--navy);
   }
   .doc-logo svg{width:30px;height:30px}
-  .doc-head h1{font-family:'Archivo';font-weight:800;font-size:16px;line-height:1.15;color:#0a3a63;letter-spacing:-.01em}
-  .doc-head .sub{font-family:'Archivo';font-weight:700;font-size:12.5px;color:#1f9d57;
+  .doc-head h1{font-family:'Archivo';font-weight:800;font-size:18px;line-height:1.15;color:#0a3a63;letter-spacing:-.01em}
+  .doc-head .sub{font-family:'Archivo';font-weight:700;font-size:14px;color:#1f9d57;
     letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
   /* metadata block */
   .doc-meta{
     border-bottom:2px solid var(--navy);padding:12px 2px 10px;
-    display:grid;grid-template-columns:1fr 1fr;gap:3px 28px;font-size:12.5px;
+    display:grid;grid-template-columns:1fr 1fr;gap:3px 28px;font-size:14px;
   }
   .doc-meta .row{display:flex;gap:6px}
   .doc-meta .row.full{grid-column:1 / -1}
   .doc-meta b{font-weight:600;color:#000}
   .doc-meta span{color:#222}
   /* table */
-  .doc-table{width:100%;border-collapse:collapse;margin-top:6px;font-size:12px}
+  .doc-table{width:100%;border-collapse:collapse;margin-top:6px;font-size:13.5px}
   /* tabelas largas rolam na horizontal (qualquer tela) sem quebrar o layout */
   .doc-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .doc-table thead th{
-    font-family:'Archivo';font-weight:700;font-size:11px;letter-spacing:.04em;
+    font-family:'Archivo';font-weight:700;font-size:12.5px;letter-spacing:.04em;
     text-transform:uppercase;text-align:left;color:#0a3a63;
     border-bottom:2px solid #0a3a63;padding:7px 8px;
   }
@@ -304,42 +305,42 @@
   .td-sentido{font-weight:600;color:#0a3a63;white-space:nowrap}
   .td-tipo{color:#444;white-space:nowrap}
   .td-logr{font-weight:500}
-  .td-mun{color:#555;font-size:11px;white-space:nowrap}
-  .td-obs{color:#666;font-size:10.5px;text-align:right;font-style:italic;white-space:nowrap}
-  .td-num{font-family:'IBM Plex Mono';font-size:11px;color:var(--blue);white-space:nowrap}
+  .td-mun{color:#555;font-size:12.5px;white-space:nowrap}
+  .td-obs{color:#666;font-size:12px;text-align:right;font-style:italic;white-space:nowrap}
+  .td-num{font-family:'IBM Plex Mono';font-size:12.5px;color:var(--blue);white-space:nowrap}
   /* separador entre grupos */
   .sentido-sep td{
-    background:#eef4f9;font-family:'Archivo';font-weight:700;font-size:10.5px;
+    background:#eef4f9;font-family:'Archivo';font-weight:700;font-size:12px;
     letter-spacing:.08em;text-transform:uppercase;color:#1466a6;padding:5px 8px;
   }
   /* sub-cabeçalho de dia (div) dentro de um sentido */
   div.sentido-sep{
-    background:#eef4f9;font-family:'Archivo';font-weight:700;font-size:10.5px;
+    background:#eef4f9;font-family:'Archivo';font-weight:700;font-size:12px;
     letter-spacing:.08em;text-transform:uppercase;color:#1466a6;border-radius:4px;margin-top:6px;
   }
   /* formulário "Entre Municípios" */
   .loc-form{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:4px 0 12px}
   .loc-form label{display:flex;flex-direction:column;gap:4px;font-family:'Archivo';font-weight:700;
-    font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#0a3a63}
+    font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;color:#0a3a63}
   .loc-form select{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;
-    font-size:13px;background:#fff;outline:0}
+    font-size:14.5px;background:#fff;outline:0}
   .loc-form select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(20,102,166,.12)}
   .loc-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
   .loc-btn{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;
-    font-weight:600;font-size:12.5px;cursor:pointer;transition:background .12s}
+    font-weight:600;font-size:14px;cursor:pointer;transition:background .12s}
   .loc-btn:hover{background:var(--navy-deep)}
   /* faixa de SENTIDO (origem/terminal de partida) no Quadro de Horários */
   .qh-sentido{
-    font-family:'Archivo';font-weight:800;font-size:12px;letter-spacing:.03em;
+    font-family:'Archivo';font-weight:800;font-size:13.5px;letter-spacing:.03em;
     text-transform:uppercase;color:#fff;background:var(--navy);
     border-left:4px solid var(--green);padding:8px 11px;border-radius:5px;margin:16px 0 2px;
   }
   .doc-obs{
     margin-top:14px;border:1px solid #d4dde6;border-radius:6px;padding:8px 12px;
-    font-size:11.5px;color:#333;background:#fafcfe;
+    font-size:13px;color:#333;background:#fafcfe;
   }
   .doc-obs b{color:#0a3a63}
-  .doc-foot{margin-top:16px;text-align:right;font-size:10.5px;color:#888;
+  .doc-foot{margin-top:16px;text-align:right;font-size:12px;color:#888;
     border-top:1px solid #e4e9ee;padding-top:8px}
   /* paginação de documentos longos (ex.: Histórico da Linha) */
   .doc-table tbody tr.hid{display:none}
@@ -348,23 +349,23 @@
     position:sticky;bottom:0;background:#fff;z-index:3;
     box-shadow:0 -6px 14px -10px rgba(7,25,42,.4)}
   .pg-btn{background:var(--navy);color:#fff;border:0;border-radius:6px;padding:6px 14px;
-    font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background .12s}
+    font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;transition:background .12s}
   .pg-btn:hover:not(:disabled){background:var(--navy-deep)}
   .pg-btn:disabled{background:#c2ccd6;cursor:default}
-  .pg-info{font-size:12px;color:#444;font-family:'Archivo';font-weight:600;
+  .pg-info{font-size:13.5px;color:#444;font-family:'Archivo';font-weight:600;
     min-width:200px;text-align:center}
-  .pg-goto{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#444;font-family:'Archivo';font-weight:600}
-  .pg-num{width:64px;padding:5px 6px;border:1px solid #c9d3dc;border-radius:6px;font:inherit;font-size:12px}
+  .pg-goto{display:inline-flex;align-items:center;gap:5px;font-size:13.5px;color:#444;font-family:'Archivo';font-weight:600}
+  .pg-num{width:64px;padding:5px 6px;border:1px solid #c9d3dc;border-radius:6px;font:inherit;font-size:13.5px}
   .ev-search{margin:0 0 12px}
   .ev-filters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px 10px;align-items:end;
     background:#f3f7fb;border:1px solid #e1e9f1;border-radius:8px;padding:10px 12px;margin:0 0 14px}
-  .ev-filters .evf{display:flex;flex-direction:column;gap:3px;font:600 11px 'Archivo';color:#42566a}
+  .ev-filters .evf{display:flex;flex-direction:column;gap:3px;font:600 12.5px 'Archivo';color:#42566a}
   .ev-filters .evf-wide{grid-column:span 2}
-  .ev-filters .evf input{padding:6px 8px;border:1px solid #c9d3dc;border-radius:6px;font:inherit;font-size:12px;font-weight:400}
+  .ev-filters .evf input{padding:6px 8px;border:1px solid #c9d3dc;border-radius:6px;font:inherit;font-size:13.5px;font-weight:400}
   .ev-filters .evf-clear{align-self:end;background:#fff;color:var(--navy);border:1px solid #c9d3dc;border-radius:6px;
-    padding:7px 12px;font:600 12px 'Archivo';cursor:pointer}
+    padding:7px 12px;font:600 13.5px 'Archivo';cursor:pointer}
   .ev-filters .evf-clear:hover{background:#eef4f9}
-  .ev-empty{padding:30px 10px;text-align:center;color:var(--muted);font-size:13px}
+  .ev-empty{padding:30px 10px;text-align:center;color:var(--muted);font-size:14.5px}
   .ev-empty.hid{display:none}
   /* container oculto usado só para gerar o PDF completo */
   .pdf-export{position:absolute;left:-99999px;top:0;width:794px;background:#fff}
@@ -376,13 +377,13 @@
     padding:11px 4px;margin-top:6px}
   .ev-grid.ev5{grid-template-columns:.9fr .9fr 1.3fr 1.7fr .9fr}
   .ev-cell{display:flex;flex-direction:column;gap:3px}
-  .ev-h{font-family:'Archivo';font-weight:700;font-size:11px;letter-spacing:.03em;
+  .ev-h{font-family:'Archivo';font-weight:700;font-size:12.5px;letter-spacing:.03em;
     text-transform:uppercase;color:#0a3a63}
-  .ev-v{font-size:13px;color:#111}
-  .ev-v.mono{font-family:'IBM Plex Mono';font-size:11.5px;color:var(--blue)}
+  .ev-v{font-size:14.5px;color:#111}
+  .ev-v.mono{font-family:'IBM Plex Mono';font-size:13px;color:var(--blue)}
   .ev-block{margin-top:18px}
-  .ev-label{font-family:'Archivo';font-weight:700;font-size:13px;color:#0a3a63;margin-bottom:6px}
-  .ev-text{font-size:13px;line-height:1.55;color:#1a1a1a;white-space:pre-wrap;word-break:break-word}
+  .ev-label{font-family:'Archivo';font-weight:700;font-size:14.5px;color:#0a3a63;margin-bottom:6px}
+  .ev-text{font-size:14.5px;line-height:1.55;color:#1a1a1a;white-space:pre-wrap;word-break:break-word}
   .ev-text.empty{color:#9aa3ab;font-style:italic}
   /* no PDF cada evento começa numa nova página */
   .pdf-export .ev-page + .ev-page{page-break-before:always}
@@ -422,19 +423,19 @@
   /* KPIs gerenciais */
   .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:8px}
   .kpi{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fafcfe}
-  .kpi b{display:block;font-family:'Archivo';font-weight:800;font-size:22px;color:var(--navy)}
-  .kpi span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .kpi b{display:block;font-family:'Archivo';font-weight:800;font-size:24.5px;color:var(--navy)}
+  .kpi span{font-size:12.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
   /* busca dentro do modal */
   .doc-search{display:flex;gap:8px;margin:4px 0 14px;flex-wrap:wrap}
-  .doc-search input{flex:1;min-width:160px;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font:inherit;font-size:13px;outline:0}
+  .doc-search input{flex:1;min-width:160px;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font:inherit;font-size:14.5px;outline:0}
   .doc-search input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(20,102,166,.12)}
-  .doc-search button{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:0 16px;font:inherit;font-weight:600;font-size:13px;cursor:pointer}
-  .doc-search select{border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit;font-size:13px;background:#fff}
-  .chip{display:inline-block;font-size:10.5px;padding:2px 8px;border-radius:20px;font-weight:600}
+  .doc-search button{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:0 16px;font:inherit;font-weight:600;font-size:14.5px;cursor:pointer}
+  .doc-search select{border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit;font-size:14.5px;background:#fff}
+  .chip{display:inline-block;font-size:12px;padding:2px 8px;border-radius:20px;font-weight:600}
   .chip-on{background:#fde7e6;color:#b33a2e}
   .chip-off{background:#e4f4ec;color:#1f7a45}
   /* loading / empty */
-  .m-loading{text-align:center;padding:48px 0;color:var(--muted);font-size:14px}
+  .m-loading{text-align:center;padding:48px 0;color:var(--muted);font-size:15.5px}
   .m-loading .spin{
     width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--blue);
     border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px;
@@ -444,7 +445,7 @@
   /* ---------- Toast ---------- */
   .toast{
     position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-    padding:10px 20px;border-radius:8px;font-size:13.5px;font-weight:500;
+    padding:10px 20px;border-radius:8px;font-size:15px;font-weight:500;
     z-index:2000;box-shadow:0 4px 16px rgba(0,0,0,.2);
     animation:slideUp .2s ease;pointer-events:none;white-space:nowrap;
   }
@@ -559,7 +560,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 17/06-B</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 17/06-C</span></span>
   </div>
 </footer>
 
@@ -1030,9 +1031,9 @@ LOADERS.folhaDivisoria = async () => {
   setBody(`<div class="doc" style="text-align:center;padding:80px 30px">
     ${docHead('Folha Divisória')}
     <div style="margin-top:60px">
-      <div style="font-family:'Archivo';font-weight:800;font-size:28px;color:var(--navy)">${esc(L.nome_ligacao||'—')}</div>
-      <div class="mono" style="margin-top:10px;font-size:15px;color:var(--blue)">${esc(fmtCode(L.codlinha))} · ${esc(empNome(L.codempresa))} · RJ-${esc(L.codempresa||'—')}</div>
-      <div style="margin-top:40px;color:var(--muted);font-size:13px">Página de separação do processo da linha</div>
+      <div style="font-family:'Archivo';font-weight:800;font-size:31.5px;color:var(--navy)">${esc(L.nome_ligacao||'—')}</div>
+      <div class="mono" style="margin-top:10px;font-size:17px;color:var(--blue)">${esc(fmtCode(L.codlinha))} · ${esc(empNome(L.codempresa))} · RJ-${esc(L.codempresa||'—')}</div>
+      <div style="margin-top:40px;color:var(--muted);font-size:14.5px">Página de separação do processo da linha</div>
     </div></div>`);
 };
 
@@ -1165,7 +1166,7 @@ LOADERS.historicoLinha = async () => {
       if (lines.length === 1){ await renderLineHistory(host, lines[0]); return; }
       // várias linhas → escolher qual ver
       await getEmpresas();
-      host.innerHTML = `<p style="font-size:12px;color:var(--muted);margin:2px 0 8px">${lines.length} linha(s) encontradas — clique para ver o histórico:</p>` + linhasTable(lines);
+      host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin:2px 0 8px">${lines.length} linha(s) encontradas — clique para ver o histórico:</p>` + linhasTable(lines);
       host.querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>renderLineHistory(host, JSON.parse(tr.dataset.row))));
       if (currentView) currentView.pdfHTML = null;
     }, tables:['evento_teste'] });
@@ -1204,7 +1205,7 @@ function quadroHorariosBodyHTML(interv, predet, orig){
   const origLabel = c => esc(orig[c] || ('Origem '+orDash(c)));
   let html='';
   if (interv.length){
-    html += `<h3 style="font-family:'Archivo';font-size:13px;color:var(--navy);margin:14px 0 4px">Por intervalo / frequência</h3>`;
+    html += `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:14px 0 4px">Por intervalo / frequência</h3>`;
     for (const [cod, list] of groupBy(interv, r=>r.cod_origen ?? '—')){
       html += `<div class="qh-sentido">Sentido · partidas de ${origLabel(cod)}</div>`;
       for (const [dia, rows] of groupBy(list, r=>r.dia_semana||'—')){
@@ -1216,11 +1217,11 @@ function quadroHorariosBodyHTML(interv, predet, orig){
     }
   }
   if (predet.length){
-    html += `<h3 style="font-family:'Archivo';font-size:13px;color:var(--navy);margin:18px 0 4px">Horários predeterminados</h3>`;
+    html += `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:18px 0 4px">Horários predeterminados</h3>`;
     for (const [cod, list] of groupBy(predet, r=>r.cod_origem ?? '—')){
       html += `<div class="qh-sentido">Sentido · partidas de ${origLabel(cod)}</div>`;
       for (const [dia, rows] of groupBy(list, r=>r.dia_semana||'—')){
-        const horas = rows.map(r=>`<span class="mono" style="display:inline-block;background:#eef4f9;color:var(--blue);padding:2px 7px;border-radius:5px;margin:2px;font-size:11px">${esc(fmtTime(r.saida))}</span>`).join('');
+        const horas = rows.map(r=>`<span class="mono" style="display:inline-block;background:#eef4f9;color:var(--blue);padding:2px 7px;border-radius:5px;margin:2px;font-size:12.5px">${esc(fmtTime(r.saida))}</span>`).join('');
         html += `<div style="margin-top:6px"><div class="sentido-sep" style="padding:5px 8px">${esc(dia)} · ${rows.length} partida(s)</div><div style="padding:8px 4px">${horas}</div></div>`;
       }
     }
@@ -1308,7 +1309,7 @@ LOADERS.estrutura = async () => {
   ]);
   const L = lineRows[0] || activeLine;
   const f = qh[0] || {};
-  const h3 = t => `<h3 style="font-family:'Archivo';font-size:14px;color:var(--navy);border-bottom:2px solid var(--green);padding-bottom:4px;margin:22px 0 6px">${t}</h3>`;
+  const h3 = t => `<h3 style="font-family:'Archivo';font-size:15.5px;color:var(--navy);border-bottom:2px solid var(--green);padding-bottom:4px;margin:22px 0 6px">${t}</h3>`;
   const frotaMeta = metaRows([['Hierarquização',esc(orDash(f.hierarquia))],['Frota operacional',esc(orDash(f.frota_operacional))],['Reserva',esc(orDash(f.reserva))],['Última alteração',fmtDate(f.ultima_alteracao)]]);
   const html = `<div class="doc">${docHead('Cadastro de Linhas: Estrutura Operacional')}
     ${metaRows([
@@ -1338,7 +1339,7 @@ LOADERS.empresasRegulares = async () => {
   const list = Object.entries(map).sort((a,b)=>b[1].total-a[1].total);
   const body = list.map(([cod,v])=>`<tr class="clickable" tabindex="0" role="button" data-emp="${esc(cod)}"><td class="td-num">${esc(cod)}</td><td class="td-logr">${esc(empNome(cod))}</td><td class="td-sentido">${v.total}</td><td class="td-tipo">${v.ativas}</td></tr>`).join('');
   setBody(`<div class="doc">${docHead('Empresas Regulares')}
-    <p style="font-size:12px;color:var(--muted);margin-bottom:6px">${list.length} operadoras. Clique para ver as ligações da empresa.</p>
+    <p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${list.length} operadoras. Clique para ver as ligações da empresa.</p>
     ${tableHTML([{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Total de linhas',w:'130px'},{t:'Linhas ativas',w:'110px'}], body)}</div>`);
   modalBody.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>openEmpresaLigacoes(tr.dataset.emp)));
 };
@@ -1411,7 +1412,7 @@ LOADERS.historicoEmpresa = async () => {
       if(emps.length > 1){
         const list = emps.map(e=>`<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}" data-nome="${esc(e.nome_empresa||'')}">
           <td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td><td class="td-tipo">${esc(orDash(e.situacao))} ${boolChip(e.cassada,'cassada')}${boolChip(e.sob_intervencao,'interv.')}</td></tr>`).join('');
-        host.innerHTML = `<p style="font-size:12px;color:var(--muted);margin:2px 0 8px">${emps.length} empresa(s) encontradas — clique para ver o histórico:</p>`
+        host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin:2px 0 8px">${emps.length} empresa(s) encontradas — clique para ver o histórico:</p>`
           + tableHTML([{t:'Código',w:'90px'},{t:'Empresa'},{t:'Situação',w:'170px'}], list, emps.length+' empresa(s)');
         host.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>renderEmpresaHistory(host, tr.dataset.emp, tr.dataset.nome)));
         if(currentView) currentView.pdfHTML=null; return;
@@ -1455,7 +1456,7 @@ LOADERS.ligacoesPorLogradouro = async () => {
       sbFetch('tabela_vista_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=200`),
       getEmpresas()
     ]);
-    host.innerHTML = `<p style="font-size:12px;color:var(--muted);margin-bottom:6px">${cods.length} linha(s) passam por "${esc(term)}"</p>`+linhasTable(rows);
+    host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${cods.length} linha(s) passam por "${esc(term)}"</p>`+linhasTable(rows);
     bindLineRows(host);
   }, tables:['itinerario_teste']});
 };
@@ -1496,7 +1497,7 @@ async function mostrarLinhasResultado(host, cods, titulo){
     getEmpresas()
   ]);
   const extra = cods.length>slice.length ? ` (mostrando ${slice.length})` : '';
-  host.innerHTML = `<p style="font-size:12px;color:var(--navy);font-weight:600;margin:2px 0 8px">${cods.length} linha(s) — ${esc(titulo)}${extra}</p>` + linhasTable(rows);
+  host.innerHTML = `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${cods.length} linha(s) — ${esc(titulo)}${extra}</p>` + linhasTable(rows);
   bindLineRows(host);
 }
 LOADERS.entreLocalidades = async () => {
@@ -1563,7 +1564,7 @@ LOADERS.ligacoesPorTerminal = async () => {
       sbFetch('tabela_vista_teste', `codlinha=in.(${lineCods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=200`),
       getEmpresas()
     ]);
-    host.innerHTML = `<p style="font-size:12px;color:var(--muted);margin-bottom:6px">${lineCods.length} linha(s) a partir de "${esc(term)}"</p>`+linhasTable(rows);
+    host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${lineCods.length} linha(s) a partir de "${esc(term)}"</p>`+linhasTable(rows);
     bindLineRows(host);
   }, tables:['qh_intervalo_teste']});
 };
@@ -1596,7 +1597,7 @@ LOADERS.relatoriosGerenciais = async () => {
       <div class="kpi"><b>${sj}</b><span>Sub judice</span></div>
       <div class="kpi"><b>${empCount}</b><span>Empresas</span></div>
     </div>
-    <h3 style="font-family:'Archivo';font-size:13px;color:var(--navy);margin:16px 0 4px">Top empresas por nº de linhas</h3>
+    <h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:16px 0 4px">Top empresas por nº de linhas</h3>
     ${tableHTML([{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Linhas',w:'90px'}], porEmp.map(([c,n])=>`<tr><td class="td-num">${esc(c)}</td><td class="td-logr">${esc(empNome(c))}</td><td class="td-sentido">${n}</td></tr>`).join(''))}
     <div class="doc-foot">Consolidado sobre ${total} linhas · tabela_vista_teste</div></div>`);
 };
