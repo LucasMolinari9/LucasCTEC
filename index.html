@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DIVAT · Cadastro de Linhas Regulares</title>
+<meta name="description" content="Portal público de consulta do cadastro de linhas regulares de transporte rodoviário do DETRO/RJ — DIVAT. Itinerários, quadros de horários, tarifas, frota, empresas e histórico das linhas.">
+<meta name="robots" content="index,follow">
+<meta name="theme-color" content="#0a3a63">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect x='2' y='2' width='20' height='20' rx='4' fill='%230a3a63'/%3E%3Cpath d='M6 7.5h12M12 7.5V17' stroke='%231f9d57' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='6' r='2.2' fill='%23fff'/%3E%3C/svg%3E">
+<meta property="og:type" content="website">
+<meta property="og:title" content="DETRO/RJ · DIVAT — Cadastro de Linhas Regulares">
+<meta property="og:description" content="Consulta pública: itinerários, quadros de horários, tarifas, frota, empresas e histórico das linhas regulares do DETRO/RJ.">
+<meta property="og:url" content="https://divatdetro.netlify.app/">
+<meta property="og:locale" content="pt_BR">
+<meta name="twitter:card" content="summary">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -37,6 +47,8 @@
     -webkit-font-smoothing:antialiased;
   }
   .mono{font-family:'IBM Plex Mono',monospace}
+  /* rótulo só para leitores de tela */
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 
   /* ---------- Topbar ---------- */
   .topbar{
@@ -149,9 +161,21 @@
   .footer-in .pill{font-family:'IBM Plex Mono';background:var(--line-soft);padding:3px 9px;border-radius:6px;color:var(--blue)}
   .footer-in .right{margin-left:auto}
 
-  @media (max-width:560px){
+  /* tabelas largas: rolagem horizontal dentro do modal no mobile.
+     O escopo .modal-body isola do container .pdf-export (que fica fora do modal),
+     e o `screen` garante que o @media print não seja afetado. */
+  @media screen and (max-width:768px){
+    .modal-body .doc-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .modal-body .doc-table-wrap .doc-table{min-width:560px}
+  }
+  @media screen and (max-width:560px){
     .selector button{flex:1 1 100%;padding:12px}
     .topbar-meta{display:none}
+    .modal-body .ev-grid,.modal-body .ev-grid.ev5{grid-template-columns:1fr}
+  }
+  @media screen and (max-width:480px){
+    main,.hero,.topbar-in,.footer-in{padding-left:14px;padding-right:14px}
+    .modal-body .loc-form{grid-template-columns:1fr}
   }
   @media (prefers-reduced-motion:reduce){
     *{transition:none!important;scroll-behavior:auto}
@@ -353,6 +377,14 @@
   .pdf-export .qh-sentido,.pdf-export .sentido-sep{break-after:avoid}
   /* a caixa de busca e o paginador nunca entram no PDF */
   .pdf-export .doc-search,.pdf-export .doc-pager{display:none!important}
+  /* o PDF/impressão nunca rola e usa a largura natural da tabela. O container .pdf-export
+     fica fora do .modal-body, então as regras mobile já não o atingem — isto é defesa extra
+     (o html2canvas rasteriza este container na largura real do dispositivo). */
+  .pdf-export .doc-table-wrap{overflow:visible!important}
+  .pdf-export .doc-table{min-width:0!important}
+  .pdf-export .ev-grid{grid-template-columns:1.05fr 1.5fr 2fr 1.05fr!important}
+  .pdf-export .ev-grid.ev5{grid-template-columns:.9fr .9fr 1.3fr 1.7fr .9fr!important}
+  .pdf-export .loc-form{grid-template-columns:1fr 1fr!important}
   /* ===== Tela cheia do modal (preenche a tela inteira) ===== */
   .modal-overlay.fs-fallback,
   .modal-overlay:fullscreen,
@@ -465,7 +497,7 @@
     <div class="selector">
       <div class="field">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input id="lineInput" type="text" placeholder="Buscar linha por número (ex. 132004001) ou nome" autocomplete="off">
+        <input id="lineInput" type="text" placeholder="Buscar linha por número (ex. 132004001) ou nome" autocomplete="off" aria-label="Buscar linha por número ou nome">
       </div>
       <button type="button" id="openLine">Abrir linha</button>
     </div>
@@ -474,7 +506,7 @@
 
 <!-- Modal genérico (documentos / consultas) -->
 <div class="modal-overlay" id="modalOverlay">
-  <div class="modal modal-doc">
+  <div class="modal modal-doc" role="dialog" aria-modal="true" aria-labelledby="mtTitle">
     <div class="modal-toolbar">
       <span class="mt-label"><span id="mtTitle">Cadastro de Linhas</span><span class="mt-live" id="mtLive">● ao vivo</span></span>
       <button class="mt-btn" id="btnFull" title="Tela cheia">
@@ -489,7 +521,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6M9 17h4"/></svg>
         PDF
       </button>
-      <button class="modal-close" id="modalClose" title="Fechar">
+      <button class="modal-close" id="modalClose" title="Fechar" aria-label="Fechar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="16" height="16"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
     </div>
@@ -510,7 +542,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-L</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-M</span></span>
   </div>
 </footer>
 
@@ -647,7 +679,7 @@ let evLinMap  = null;    // { [id]: evento_linha }
 
 async function getIbge() {
   if (ibgeMap) return ibgeMap;
-  const rows = await sbFetch('cod_ibge_teste', 'select=codibge,nome_municipio,regiao,regiao_novo');
+  const rows = await sbFetch('cod_ibge_teste', 'select=codibge,nome_municipio,regiao,regiao_novo&limit=2000');
   ibgeMap = {};
   rows.forEach(r => { ibgeMap[r.codibge] = { nome:r.nome_municipio, regiao:r.regiao_novo||r.regiao }; });
   return ibgeMap;
@@ -753,6 +785,24 @@ document.addEventListener('keydown', e => {
   if (overlay.classList.contains('fs-fallback')) { exitFull(); return; }
   if (!document.fullscreenElement && !document.webkitFullscreenElement) closeModal();
 });
+// Mantém o foco preso dentro do modal enquanto ele está aberto (Tab/Shift+Tab)
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Tab' || !overlay.classList.contains('open')) return;
+  const f = overlay.querySelectorAll('button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])');
+  if (!f.length) return;
+  const first = f[0], last = f[f.length-1], a = document.activeElement;
+  if (!overlay.contains(a)) { e.preventDefault(); first.focus(); return; }   // foco escapou → traz de volta
+  if (e.shiftKey && a === first){ e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && a === last){ e.preventDefault(); first.focus(); }
+});
+// Linhas de tabela clicáveis: Enter/Espaço disparam o clique (reaproveita os handlers de click)
+modalBody.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const tr = e.target.closest('tr.clickable');
+  if (!tr) return;
+  e.preventDefault();   // Espaço não rola a página
+  tr.click();
+});
 
 // Tela cheia do modal: tenta a Fullscreen API nativa; se o navegador recusar
 // (ex.: dentro de iframe/preview), cai para uma maximização via classe CSS.
@@ -852,10 +902,13 @@ async function baixarPdf(){
     .catch(() => { toast('Falha ao gerar PDF, usando impressão', 'warn'); exportViaPrint(); });
 }
 
-let currentView = null;
+let currentView = null, lastFocused = null;
 function closeModal(){
   if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); }
-  overlay.classList.remove('open','fs-fallback'); currentView = null; if (window.__divatReload) location.reload();
+  overlay.classList.remove('open','fs-fallback'); currentView = null;
+  // devolve o foco ao elemento que abriu o modal (acessibilidade)
+  if (lastFocused && lastFocused.focus) { try { lastFocused.focus(); } catch(_){} lastFocused = null; }
+  if (window.__divatReload) location.reload();
 }
 function setBody(html){ modalBody.innerHTML = html; }
 function loading(msg='Carregando…'){ return `<div class="m-loading"><div class="spin"></div>${esc(msg)}</div>`; }
@@ -863,9 +916,11 @@ function emptyBox(msg){ return `<div class="m-loading">${esc(msg)}</div>`; }
 function errorBox(msg){ return `<div class="m-loading" style="color:#b33a2e">Erro ao carregar: ${esc(msg)}</div>`; }
 
 async function runView(view, { silent=false } = {}){
+  lastFocused = document.activeElement;   // guarda p/ devolver o foco ao fechar
   currentView = view;
   mtTitle.textContent = view.title;
   overlay.classList.add('open');
+  modalClose.focus();                     // move o foco p/ dentro do diálogo
   if (!silent) setBody(loading());
   try { await view.loader(); }
   catch(e){ setBody(errorBox(e.message)); }
@@ -882,8 +937,8 @@ function metaRows(pairs){
   return `<div class="doc-meta">${pairs.map(([k,v,full])=> k===''? '<div class="row"></div>' : `<div class="row${full?' full':''}"><b>${esc(k)}:</b><span>${v}</span></div>`).join('')}</div>`;
 }
 function tableHTML(cols, bodyRows, foot){
-  return `<table class="doc-table"><thead><tr>${cols.map(c=>`<th${c.w?` style="width:${c.w}"`:''}>${esc(c.t)}</th>`).join('')}</tr></thead>
-    <tbody>${bodyRows}</tbody></table>${foot?`<div class="doc-foot">${esc(foot)}</div>`:''}`;
+  return `<div class="doc-table-wrap"><table class="doc-table"><thead><tr>${cols.map(c=>`<th${c.w?` style="width:${c.w}"`:''}>${esc(c.t)}</th>`).join('')}</tr></thead>
+    <tbody>${bodyRows}</tbody></table></div>${foot?`<div class="doc-foot">${esc(foot)}</div>`:''}`;
 }
 
 /* ----------------------------------------------------------------
@@ -966,7 +1021,7 @@ function paginateEvents(container, rows, buildPage, headerHTML=''){
 async function renderLineHistory(host, line){
   selectLine(line);   // sincroniza a linha ativa e o banner do topo
   const [rows, lk] = await Promise.all([
-    sbFetch('evento_teste', `codlinha=eq.${enc(line.codlinha)}&select=*&order=data_registro.desc`),
+    sbFetch('evento_teste', `codlinha=eq.${enc(line.codlinha)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.desc&limit=2000`),
     getEvLookups()
   ]);
   const head = docHead('Histórico da Linha');
@@ -999,7 +1054,7 @@ const normSentido = s => { const t=String(s||'').trim().toLowerCase(); if(t.star
 
 LOADERS.itinerarios = async () => {
   const [rows, ibge] = await Promise.all([
-    sbFetch('itinerario_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&order=id`),
+    sbFetch('itinerario_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=id,sentido,tipo_logradouro,nome_logradouro,codibge,observacao,codempresa&order=id`),
     getIbge()
   ]);
   if (!rows.length) { setBody(`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}${emptyBox('Nenhum itinerário encontrado para esta linha.')}</div>`); return; }
@@ -1025,8 +1080,8 @@ LOADERS.itinerarios = async () => {
 
 LOADERS.quadroHorarios = async () => {
   const [interv, predet, orig] = await Promise.all([
-    sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&order=ordem_importacao`),
-    sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&order=ordem_importacao`),
+    sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=cod_origem,dia_semana,hor_inicio,hor_fim,intervalo_min,ordem_importacao&order=ordem_importacao`),
+    sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=cod_origem,dia_semana,hor_saida,ordem_importacao&order=ordem_importacao`),
     getOrigem()
   ]);
   if (!interv.length && !predet.length) { setBody(`<div class="doc">${docHead('Quadro de Horários')}${emptyBox('Nenhum quadro de horários cadastrado para esta linha.')}</div>`); return; }
@@ -1042,7 +1097,7 @@ LOADERS.quadroHorarios = async () => {
         const body = rows.map(r=>`<tr><td class="td-num">${esc(fmtTime(r.hor_inicio))}</td>
           <td class="td-num">${esc(fmtTime(r.hor_fim))}</td><td class="td-tipo">${esc(orDash(r.intervalo_min))} min</td></tr>`).join('');
         html += `<div style="margin-top:6px"><div class="sentido-sep" style="padding:5px 8px">${esc(dia)}</div>
-          <table class="doc-table"><thead><tr><th style="width:33%">Início</th><th style="width:33%">Fim</th><th>Intervalo</th></tr></thead><tbody>${body}</tbody></table></div>`;
+          <div class="doc-table-wrap"><table class="doc-table"><thead><tr><th style="width:33%">Início</th><th style="width:33%">Fim</th><th>Intervalo</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
       }
     }
   }
@@ -1060,7 +1115,7 @@ LOADERS.quadroHorarios = async () => {
 };
 
 LOADERS.tarifas = async () => {
-  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&order=secao`);
+  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,nome_ligacao,tarifa,piso_i,situacao&order=secao`);
   if (!rows.length) { setBody(`<div class="doc">${docHead('Tarifas')}${emptyBox('Nenhuma tarifa cadastrada para esta linha.')}</div>`); return; }
   const body = rows.map(r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td>
     <td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td><td class="td-num">R$ ${esc(fmtMoney(r.piso_i))}</td>
@@ -1071,7 +1126,7 @@ LOADERS.tarifas = async () => {
 };
 
 LOADERS.frota = async () => {
-  const rows = await sbFetch('qh_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=*&limit=1`);
+  const rows = await sbFetch('qh_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=hierarquia,ultima_alteracao,frota_operacional,frota_a,frota_sa,frota_ac,frota_sac,frota_micro_a,frota_micro_sa,frota_e&limit=1`);
   if (!rows.length) { setBody(`<div class="doc">${docHead('Frota')}${emptyBox('Nenhuma frota cadastrada para esta linha.')}</div>`); return; }
   const f = rows[0];
   setBody(`<div class="doc">${docHead('Frota da Linha')}
@@ -1109,7 +1164,7 @@ LOADERS.empresasRegulares = async () => {
   const map = {};
   rows.forEach(r=>{ const k=r.codempresa||'—'; map[k]=map[k]||{total:0,ativas:0}; map[k].total++; if(!r.cancelado)map[k].ativas++; });
   const list = Object.entries(map).sort((a,b)=>b[1].total-a[1].total);
-  const body = list.map(([cod,v])=>`<tr class="clickable" data-emp="${esc(cod)}"><td class="td-num">${esc(cod)}</td><td class="td-sentido">${v.total}</td><td class="td-tipo">${v.ativas}</td></tr>`).join('');
+  const body = list.map(([cod,v])=>`<tr class="clickable" tabindex="0" role="button" data-emp="${esc(cod)}"><td class="td-num">${esc(cod)}</td><td class="td-sentido">${v.total}</td><td class="td-tipo">${v.ativas}</td></tr>`).join('');
   setBody(`<div class="doc">${docHead('Empresas Regulares')}
     <p style="font-size:12px;color:var(--muted);margin-bottom:6px">${list.length} operadoras (por código). Clique para ver as ligações da empresa.</p>
     ${tableHTML([{t:'Cód. Empresa',w:'120px'},{t:'Total de linhas',w:'130px'},{t:'Linhas ativas'}], body)}</div>`);
@@ -1147,7 +1202,7 @@ LOADERS.secoesPorEmpresa = async () => {
 // Renderiza o histórico (paginado) de UMA empresa dentro de um container
 async function renderEmpresaHistory(host, cod, nome){
   const [rows, lk] = await Promise.all([
-    sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=*&order=data_registro.desc&limit=500`),
+    sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.desc&limit=500`),
     getEvLookups()
   ]);
   const head = docHead('Histórico da Empresa');
@@ -1167,7 +1222,7 @@ LOADERS.historicoEmpresa = async () => {
       const emps = await sbFetch('codempresa_teste', `or=(codempresa.ilike.*${t}*,nome_empresa.ilike.*${t}*)&select=codempresa,nome_empresa&order=nome_empresa&limit=40`);
       if(emps.length === 1){ await renderEmpresaHistory(host, emps[0].codempresa, emps[0].nome_empresa); return; }
       if(emps.length > 1){
-        const list = emps.map(e=>`<tr class="clickable" data-emp="${esc(e.codempresa)}" data-nome="${esc(e.nome_empresa||'')}">
+        const list = emps.map(e=>`<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}" data-nome="${esc(e.nome_empresa||'')}">
           <td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td></tr>`).join('');
         host.innerHTML = `<p style="font-size:12px;color:var(--muted);margin:2px 0 8px">${emps.length} empresa(s) encontradas — clique para ver o histórico:</p>`
           + tableHTML([{t:'Código',w:'90px'},{t:'Empresa'}], list, emps.length+' empresa(s)');
@@ -1214,7 +1269,7 @@ LOADERS.municipioRegiao = async () => {
   searchPanel({ title:'Município e Região', placeholder:'Nome do município', selectOpts:[['','Todas as regiões'],...regioes.map(r=>[r,r])], onRun: async(term, host, region)=>{
     let municipios = Object.entries(ibge).filter(([,v])=> (!region||v.regiao===region) && (!term||(v.nome||'').toLowerCase().includes(term.toLowerCase())) );
     const body = municipios.sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>
-      `<tr class="clickable" data-ibge="${esc(cod)}"><td class="td-logr">${esc(v.nome)}</td><td class="td-tipo">${esc(orDash(v.regiao))}</td><td class="td-num">cód. ${esc(cod)}</td></tr>`).join('');
+      `<tr class="clickable" tabindex="0" role="button" data-ibge="${esc(cod)}"><td class="td-logr">${esc(v.nome)}</td><td class="td-tipo">${esc(orDash(v.regiao))}</td><td class="td-num">cód. ${esc(cod)}</td></tr>`).join('');
     host.innerHTML = body? tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}], body, municipios.length+' município(s) · clique para ver as linhas'):emptyBox('Nenhum município.');
     host.querySelectorAll('tr[data-ibge]').forEach(tr=>tr.addEventListener('click',()=>openLinhasPorIbge(tr.dataset.ibge, ibge[tr.dataset.ibge]?.nome)));
   }, tables:['cod_ibge_teste'], auto:true});
@@ -1341,7 +1396,7 @@ LOADERS.pesquisaEvento = async () => {
   searchPanel({ title:'Pesquisa de Evento', placeholder:'Termo livre (processo, descrição, observação)', onRun: async(term, host)=>{
     if(!term){ host.innerHTML=emptyBox('Digite um termo para pesquisar eventos.'); return; }
     const t=enc(term);
-    const rows = await sbFetch('evento_teste', `or=(descricao.ilike.*${t}*,observacao.ilike.*${t}*,numero_processo.ilike.*${t}*)&select=*&order=data_registro.desc&limit=200`);
+    const rows = await sbFetch('evento_teste', `or=(descricao.ilike.*${t}*,observacao.ilike.*${t}*,numero_processo.ilike.*${t}*)&select=data_registro,codlinha,codempresa,numero_processo,descricao&order=data_registro.desc&limit=200`);
     host.innerHTML = rows.length? tableHTML([{t:'Data',w:'82px'},{t:'Linha',w:'100px'},{t:'Empresa',w:'80px'},{t:'Processo',w:'100px'},{t:'Descrição'}],
       rows.map(r=>`<tr><td class="td-num">${esc(fmtDate(r.data_registro))}</td><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-num">${esc(orDash(r.codempresa))}</td>
         <td class="td-num">${esc(orDash(r.numero_processo))}</td><td class="td-logr">${esc(orDash(r.descricao))}</td></tr>`).join(''))
@@ -1354,7 +1409,7 @@ LOADERS.pesquisaEvento = async () => {
    ================================================================ */
 function linhasTable(rows){
   if(!rows.length) return emptyBox('Nenhuma ligação.');
-  const body = rows.map(r=>`<tr class="clickable" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
+  const body = rows.map(r=>`<tr class="clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
     <td class="td-num">${esc(r.numero_ligacao||fmtCode(r.codlinha))}</td>
     <td class="td-logr">${esc(r.nome_ligacao||'—')}</td>
     <td class="td-num">${esc(r.codempresa||'')}</td>
@@ -1369,10 +1424,10 @@ function bindLineRows(host){
 }
 // painel com input de busca dentro do modal; o run() é re-executável (realtime)
 function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=false, note }){
-  const selHTML = selectOpts? `<select id="spSel">${selectOpts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`:'';
+  const selHTML = selectOpts? `<select id="spSel" aria-label="Filtro">${selectOpts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`:'';
   setBody(`<div class="doc">${docHead(title)}
     ${note?`<div class="doc-obs" style="margin:0 0 10px"><b>Nota:</b> ${esc(note)}</div>`:''}
-    <div class="doc-search"><input id="spInput" type="text" placeholder="${esc(placeholder)}" value="${esc(value)}">${selHTML}<button id="spBtn">Buscar</button></div>
+    <div class="doc-search"><input id="spInput" type="text" placeholder="${esc(placeholder)}" value="${esc(value)}" aria-label="${esc(placeholder)}">${selHTML}<button id="spBtn">Buscar</button></div>
     <div id="spHost"></div></div>`);
   const input=modalBody.querySelector('#spInput'), btn=modalBody.querySelector('#spBtn'), host=modalBody.querySelector('#spHost'), sel=modalBody.querySelector('#spSel');
   const run = async()=>{ host.innerHTML=loading(); try{ await onRun(input.value.trim(), host, sel?sel.value:undefined); }catch(e){ host.innerHTML=errorBox(e.message);} };
