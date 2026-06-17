@@ -289,6 +289,8 @@
   .doc-meta span{color:#222}
   /* table */
   .doc-table{width:100%;border-collapse:collapse;margin-top:6px;font-size:12px}
+  /* tabelas largas rolam na horizontal (qualquer tela) sem quebrar o layout */
+  .doc-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .doc-table thead th{
     font-family:'Archivo';font-weight:700;font-size:11px;letter-spacing:.04em;
     text-transform:uppercase;text-align:left;color:#0a3a63;
@@ -542,7 +544,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-N</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/06-O</span></span>
   </div>
 </footer>
 
@@ -956,6 +958,7 @@ LOADERS.folhaRosto = async () => {
       ['Ligação', esc(L.nome_ligacao||'—'), true],
       ['Código da Ligação', esc(fmtCode(L.codlinha))],
       ['Número da Ligação', esc(orDash(L.numero_ligacao))],
+      ['Nome (ordem crescente)', esc(orDash(L.nome_lig_cresc)), true],
       ['Empresa', 'código '+esc(orDash(L.codempresa))],
       ['Característica', esc(orDash(L.caracteristica))],
       ['Tipo', esc(orDash(L.tipo))],
@@ -1115,23 +1118,27 @@ LOADERS.quadroHorarios = async () => {
 };
 
 LOADERS.tarifas = async () => {
-  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,nome_ligacao,tarifa,piso_i,situacao&order=secao`);
+  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao&order=secao`);
   if (!rows.length) { setBody(`<div class="doc">${docHead('Tarifas')}${emptyBox('Nenhuma tarifa cadastrada para esta linha.')}</div>`); return; }
-  const body = rows.map(r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td>
+  const body = rows.map(r=>{
+    const st = [ boolChip(r.cancelado,'Canc.'), boolChip(r.paralisado,'Paral.'), boolChip(r.sub_judice,'Sub jud.'), boolChip(r.transferido,'Transf.') ].filter(Boolean).join(' ') || '<span class="chip chip-off">OK</span>';
+    return `<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-num">${esc(orDash(r.numero_linha))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td>
+    <td class="td-tipo">${esc(orDash(r.via))}</td><td class="td-tipo">${esc(orDash(r.caracteristica))}</td><td class="td-tipo">${esc(orDash(r.tipo_ligacao))}</td><td class="td-num">${esc(orDash(r.rm))}</td>
     <td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td><td class="td-num">R$ ${esc(fmtMoney(r.piso_i))}</td>
-    <td class="td-tipo">${esc(orDash(r.situacao))}</td></tr>`).join('');
+    <td class="td-tipo">${esc(orDash(r.situacao))}</td><td class="td-num">${fmtDate(r.data_criacao)}</td><td>${st}</td></tr>`;
+  }).join('');
   setBody(`<div class="doc">${docHead('Tarifas Vigentes')}
     ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]])}
-    ${tableHTML([{t:'Seção',w:'70px'},{t:'Ligação'},{t:'Tarifa',w:'90px'},{t:'Piso I',w:'90px'},{t:'Situação',w:'100px'}], body, rows.length+' seção(ões)')}</div>`);
+    ${tableHTML([{t:'Seção',w:'60px'},{t:'Nº Linha',w:'80px'},{t:'Ligação'},{t:'Via',w:'90px'},{t:'Caract.',w:'90px'},{t:'Tipo',w:'90px'},{t:'RM',w:'55px'},{t:'Tarifa',w:'80px'},{t:'Piso I',w:'80px'},{t:'Situação',w:'90px'},{t:'Criação',w:'90px'},{t:'Status',w:'150px'}], body, rows.length+' seção(ões)')}</div>`);
 };
 
 LOADERS.frota = async () => {
-  const rows = await sbFetch('qh_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=hierarquia,ultima_alteracao,frota_operacional,frota_a,frota_sa,frota_ac,frota_sac,frota_micro_a,frota_micro_sa,frota_e&limit=1`);
+  const rows = await sbFetch('qh_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e&limit=1`);
   if (!rows.length) { setBody(`<div class="doc">${docHead('Frota')}${emptyBox('Nenhuma frota cadastrada para esta linha.')}</div>`); return; }
   const f = rows[0];
   setBody(`<div class="doc">${docHead('Frota da Linha')}
     ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))],
-      ['Hierarquia',esc(orDash(f.hierarquia))],['Última alteração',fmtDate(f.ultima_alteracao)]])}
+      ['Empresa','código '+esc(orDash(f.codempresa))],['Hierarquia',esc(orDash(f.hierarquia))],['Última alteração',fmtDate(f.ultima_alteracao)]])}
     <div class="kpi-grid">
       <div class="kpi"><b>${orDash(f.frota_operacional)}</b><span>Operacional</span></div>
       <div class="kpi"><b>${orDash(f.frota_a)}</b><span>Comum (A)</span></div>
@@ -1140,7 +1147,11 @@ LOADERS.frota = async () => {
       <div class="kpi"><b>${orDash(f.frota_sac)}</b><span>Ar cond. (SAC)</span></div>
       <div class="kpi"><b>${orDash(f.frota_micro_a)}</b><span>Micro (A)</span></div>
       <div class="kpi"><b>${orDash(f.frota_micro_sa)}</b><span>Micro (SA)</span></div>
+      <div class="kpi"><b>${orDash(f.frota_micro_ac)}</b><span>Micro (AC)</span></div>
+      <div class="kpi"><b>${orDash(f.frota_micro_sac)}</b><span>Micro (SAC)</span></div>
+      <div class="kpi"><b>${orDash(f.frota_micro_e)}</b><span>Micro (E)</span></div>
       <div class="kpi"><b>${orDash(f.frota_e)}</b><span>Especial (E)</span></div>
+      <div class="kpi"><b>${orDash(f.reserva)}</b><span>Reserva</span></div>
     </div></div>`);
 };
 
@@ -1201,12 +1212,15 @@ LOADERS.secoesPorEmpresa = async () => {
 };
 // Renderiza o histórico (paginado) de UMA empresa dentro de um container
 async function renderEmpresaHistory(host, cod, nome){
-  const [rows, lk] = await Promise.all([
+  const [rows, lk, empRows] = await Promise.all([
     sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.desc&limit=500`),
-    getEvLookups()
+    getEvLookups(),
+    sbFetch('codempresa_teste', `codempresa=eq.${enc(cod)}&select=nome_empresa,situacao,processo,data_publicacao,cassada,sob_intervencao&limit=1`)
   ]);
+  const E = empRows[0] || {};
   const head = docHead('Histórico da Empresa');
-  const meta = metaRows([['Empresa',esc(nome||'—'),true],['Código da Empresa',esc(cod)],['Total',rows.length+' evento(s)']]);
+  const empSit = [ boolChip(E.cassada,'Cassada'), boolChip(E.sob_intervencao,'Sob intervenção') ].filter(Boolean).join(' ') || '<span class="chip chip-off">Regular</span>';
+  const meta = metaRows([['Empresa',esc(nome||E.nome_empresa||'—'),true],['Código da Empresa',esc(cod)],['Situação',esc(orDash(E.situacao))],['Processo',esc(orDash(E.processo))],['Publicação',fmtDate(E.data_publicacao)],['Situação cadastral',empSit,true],['Total',rows.length+' evento(s)']]);
   if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento para a empresa '+esc(cod)+'.'); if(currentView) currentView.pdfHTML=null; return; }
   const build = r => evBandHTML(r, 'Tipo Evento Empresa', lk.emp[r.evento_empresa]||lk.lin[r.evento_linha]||'—', !!(r.codlinha)) + evBlocksHTML(r);
   paginateEvents(host, rows, build, meta);
@@ -1219,13 +1233,13 @@ LOADERS.historicoEmpresa = async () => {
       term = (term||'').trim();
       if(!term){ host.innerHTML=emptyBox('Busque pelo nome ou código da empresa.'); if(currentView) currentView.pdfHTML=null; return; }
       const t = enc(term);
-      const emps = await sbFetch('codempresa_teste', `or=(codempresa.ilike.*${t}*,nome_empresa.ilike.*${t}*)&select=codempresa,nome_empresa&order=nome_empresa&limit=40`);
+      const emps = await sbFetch('codempresa_teste', `or=(codempresa.ilike.*${t}*,nome_empresa.ilike.*${t}*)&select=codempresa,nome_empresa,situacao,cassada,sob_intervencao&order=nome_empresa&limit=40`);
       if(emps.length === 1){ await renderEmpresaHistory(host, emps[0].codempresa, emps[0].nome_empresa); return; }
       if(emps.length > 1){
         const list = emps.map(e=>`<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}" data-nome="${esc(e.nome_empresa||'')}">
-          <td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td></tr>`).join('');
+          <td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td><td class="td-tipo">${esc(orDash(e.situacao))} ${boolChip(e.cassada,'cassada')}${boolChip(e.sob_intervencao,'interv.')}</td></tr>`).join('');
         host.innerHTML = `<p style="font-size:12px;color:var(--muted);margin:2px 0 8px">${emps.length} empresa(s) encontradas — clique para ver o histórico:</p>`
-          + tableHTML([{t:'Código',w:'90px'},{t:'Empresa'}], list, emps.length+' empresa(s)');
+          + tableHTML([{t:'Código',w:'90px'},{t:'Empresa'},{t:'Situação',w:'170px'}], list, emps.length+' empresa(s)');
         host.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>renderEmpresaHistory(host, tr.dataset.emp, tr.dataset.nome)));
         if(currentView) currentView.pdfHTML=null; return;
       }
