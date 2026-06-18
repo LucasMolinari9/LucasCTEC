@@ -202,12 +202,22 @@
     .selector button{flex:1 1 100%;padding:12px}
     .topbar-meta{display:none}
     .modal-body .ev-grid,.modal-body .ev-grid.ev5{grid-template-columns:1fr}
+    /* barra do modal: só ícones, sem rótulos, para caber na largura do celular */
+    .modal-overlay{padding:14px 8px 30px}
+    .modal-toolbar{padding:9px 10px;gap:6px}
+    .mt-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .mt-btn{padding:6px 9px}
+    .mt-btn-label{display:none}
+    /* documento e metadados em coluna única */
+    .doc{padding:18px 14px 22px}
+    .doc-meta{grid-template-columns:1fr;gap:6px 0}
+    .doc-head .brand-logo svg{height:44px}
+    .modal-body .ev-filters{grid-template-columns:1fr 1fr}
+    .modal-body .ev-filters .evf-wide{grid-column:span 2}
   }
   @media screen and (max-width:480px){
     main,.hero,.topbar-in,.footer-in{padding-left:14px;padding-right:14px}
     .modal-body .loc-form{grid-template-columns:1fr}
-    .modal-body .ev-filters{grid-template-columns:1fr 1fr}
-    .modal-body .ev-filters .evf-wide{grid-column:span 2}
   }
   @media (prefers-reduced-motion:reduce){
     *{transition:none!important;animation:none!important;scroll-behavior:auto}
@@ -353,9 +363,9 @@
   .loc-form{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:4px 0 12px}
   .loc-form label{display:flex;flex-direction:column;gap:4px;font-family:'Archivo';font-weight:700;
     font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;color:#0a3a63}
-  .loc-form select{border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;
-    font-size:14.5px;background:#fff;outline:0}
-  .loc-form select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(20,102,166,.12)}
+  .loc-form select,.loc-form input{border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;
+    font-size:14.5px;background:#fff;outline:0;width:100%}
+  .loc-form select:focus,.loc-form input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(20,102,166,.12)}
   .loc-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
   .loc-btn{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;
     font-weight:600;font-size:14px;cursor:pointer;transition:background .12s}
@@ -558,15 +568,15 @@
       <span class="mt-label"><span id="mtTitle">Cadastro de Linhas</span><span class="mt-live" id="mtLive">● ao vivo</span></span>
       <button class="mt-btn" id="btnFull" title="Tela cheia">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3"/></svg>
-        <span class="mt-full-label">Tela cheia</span>
+        <span class="mt-btn-label">Tela cheia</span>
       </button>
       <button class="mt-btn" id="btnPrint" title="Imprimir / Salvar PDF">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
-        Imprimir
+        <span class="mt-btn-label">Imprimir</span>
       </button>
       <button class="mt-btn" id="btnPdf" title="Baixar em PDF">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6M9 17h4"/></svg>
-        PDF
+        <span class="mt-btn-label">PDF</span>
       </button>
       <button class="modal-close" id="modalClose" title="Fechar" aria-label="Fechar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="16" height="16"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -589,7 +599,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 18/06-C</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 18/06-D</span></span>
   </div>
 </footer>
 
@@ -904,7 +914,7 @@ btnFull.addEventListener('click', async () => {
   if (req) { try { await req.call(overlay); } catch(_){} }
 });
 function syncFullLabel(){
-  const lbl = btnFull.querySelector('.mt-full-label');
+  const lbl = btnFull.querySelector('.mt-btn-label');
   if (lbl) lbl.textContent = isFull() ? 'Sair da tela cheia' : 'Tela cheia';
 }
 // Se o usuário sair do fullscreen nativo (Esc/botão do navegador), tira também a maximização
@@ -2038,26 +2048,26 @@ async function mostrarLinhasPorLocalidade(host, a, b){
 }
 LOADERS.localidades = async () => {
   const locs = await getLocalidades();
-  // mesma cara de "Município e Região": busca + lista clicável; "Cruzar com" (opcional) liga A ↔ B.
-  searchPanel({ title:'Linhas por Localidade', placeholder:'Nome da localidade', auto:true,
-    note:'A localidade é reconhecida no nome/itinerário das linhas (origem, destino ou "via"). Escolha "Cruzar com" para achar linhas entre duas localidades.',
-    selectOpts:[['','— mostrar linhas da localidade —'], ...locs.map(n=>[n, '+ '+n])],
-    onRun: async(term, host, dest)=>{
-      const t=(term||'').toLowerCase();
-      const lista = locs.filter(n=> !t || n.toLowerCase().includes(t));
-      if(!lista.length){ host.innerHTML=emptyBox('Nenhuma localidade com esse nome.'); return; }
-      const destino = dest||'';
-      const foot = destino? `clique na localidade de origem · cruzando com: ${destino}` : 'clique na localidade para ver as linhas';
-      host.innerHTML = tableHTML([{t:'Localidade'}],
-        lista.map(n=>`<tr class="clickable" tabindex="0" role="button" data-loc="${esc(n)}"><td class="td-logr">${esc(n)}</td></tr>`).join(''),
-        lista.length+' localidade(s) · '+foot);
-      host.querySelectorAll('tr[data-loc]').forEach(tr=>{
-        const a = tr.dataset.loc;
-        const go = ()=>{ if(String(a).toLowerCase()===String(destino).toLowerCase()){ host.innerHTML=emptyBox('Escolha uma localidade de origem diferente do destino.'); return; } mostrarLinhasPorLocalidade(host, a, destino); };
-        tr.addEventListener('click', go);
-        tr.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } });
-      });
-    }, tables:['tabela_vista_teste'] });
+  // dois campos pesquisáveis (autocomplete via datalist): A obrigatório, B opcional para cruzar.
+  const dl = `<datalist id="locList">${locs.map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`;
+  setBody(`<div class="doc">${docHead('Linhas por Localidade')}
+    <div class="doc-obs" style="margin:0 0 12px"><b>Dica:</b> a localidade é reconhecida no nome/itinerário das linhas (origem, destino ou "via"). Preencha a segunda para achar linhas entre duas localidades.</div>
+    <div class="loc-form">
+      <label>Localidade<input id="locA" list="locList" placeholder="Digite a localidade…" autocomplete="off"></label>
+      <label>Cruzar com (opcional)<input id="locB" list="locList" placeholder="Segunda localidade…" autocomplete="off"></label>
+    </div>${dl}
+    <div class="loc-actions"><button class="loc-btn" id="locGo" type="button">Buscar linhas</button></div>
+    <div id="locHost">${emptyBox('Digite uma localidade e clique em Buscar.')}</div></div>`);
+  const A=modalBody.querySelector('#locA'), B=modalBody.querySelector('#locB'), host=modalBody.querySelector('#locHost');
+  const run = async()=>{
+    const a=(A.value||'').trim(), b=(B.value||'').trim();
+    if(!a){ host.innerHTML=emptyBox('Informe ao menos a primeira localidade.'); return; }
+    if(b && a.toLowerCase()===b.toLowerCase()){ host.innerHTML=emptyBox('Use localidades diferentes nos dois campos.'); return; }
+    await mostrarLinhasPorLocalidade(host, a, b);
+  };
+  modalBody.querySelector('#locGo').addEventListener('click', run);
+  [A,B].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
+  if(currentView) currentView._panelRun = run;   // realtime re-executa mantendo o que foi digitado
 };
 
 /* ================================================================
