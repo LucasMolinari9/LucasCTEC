@@ -1518,7 +1518,7 @@ function itinerarioTableHTML(rows, ibge){
 function quadroHorariosBodyHTML(interv, predet, orig){
   if(!interv.length && !predet.length) return emptyBox('Nenhum quadro de horários cadastrado para esta linha.');
   // prefere o nome_origem que vem na própria linha; cai no lookup origem_teste e, por fim, no código
-  const origLabel = (c, list) => esc((list && list[0] && list[0].nome_origem) || orig[c] || ('Origem '+orDash(c)));
+  const origLabel = (c, list) => esc((list && list.find(x=>x.nome_origem)?.nome_origem) || orig[c] || ('Origem '+orDash(c)));
   let html='';
   if (interv.length){
     html += `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:14px 0 4px">Por intervalo / frequência</h3>`;
