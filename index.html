@@ -599,7 +599,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 18/06-D</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 18/06-E</span></span>
   </div>
 </footer>
 
@@ -1832,48 +1832,61 @@ async function mostrarLinhasResultado(host, cods, titulo){
 }
 LOADERS.entreLocalidades = async () => {
   const ibge = await getIbge();
-  const nameOf = c => (ibge[c]?.nome) || ('Município '+c);
-  const opts = Object.entries(ibge).map(([c,v])=>[c, v.nome||c]).sort((a,b)=>a[1].localeCompare(b[1]));
-  // mesma cara do card "Município e Região": busca + lista clicável.
-  // O seletor "Cruzar com" (opcional) mantém a consulta entre dois municípios (A → B).
-  searchPanel({ title:'Ligações entre Municípios', placeholder:'Nome do município', auto:true,
-    note:'Clique num município para ver suas linhas. Para as linhas que vão de um município a outro, escolha o destino em "Cruzar com".',
-    selectOpts:[['','— mostrar linhas do município —'], ...opts.map(([c,n])=>[c, '→ '+n])],
-    onRun: async(term, host, dest)=>{
-      const t=(term||'').toLowerCase();
-      const municipios = opts.filter(([,n])=> !t || n.toLowerCase().includes(t));
-      if(!municipios.length){ host.innerHTML=emptyBox('Nenhum município com esse nome.'); return; }
-      const destino = dest||'';
-      const foot = destino ? `clique no município de ORIGEM · destino: ${nameOf(destino)}` : 'clique no município para ver as linhas';
+  const nomes = [...new Set(Object.values(ibge).map(v=>v.nome).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const dl = `<datalist id="munList">${nomes.map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`;
+  setBody(`<div class="doc">${docHead('Ligações entre Municípios')}
+    <div class="doc-obs" style="margin:0 0 12px"><b>Dica:</b> preencha apenas o primeiro campo para ver as linhas de um município; preencha o segundo para achar linhas entre dois municípios.</div>
+    <div class="loc-form">
+      <label>Município<input id="munA" list="munList" placeholder="Nome do município…" autocomplete="off"></label>
+      <label>Cruzar com (opcional)<input id="munB" list="munList" placeholder="Segundo município…" autocomplete="off"></label>
+    </div>${dl}
+    <div class="loc-actions"><button class="loc-btn" id="munGo" type="button">Buscar linhas</button></div>
+    <div id="munHost">${emptyBox('Digite um município e clique em Buscar.')}</div></div>`);
+  const A=modalBody.querySelector('#munA'), B=modalBody.querySelector('#munB'), host=modalBody.querySelector('#munHost');
+  const nameOf = c => ibge[c]?.nome || c;
+  const findCods = t => Object.entries(ibge).filter(([,v])=>(v.nome||'').toLowerCase().includes(t.toLowerCase())).map(([c])=>c);
+  const run = async()=>{
+    const a=(A.value||'').trim(), b=(B.value||'').trim();
+    if(!a){ host.innerHTML=emptyBox('Informe ao menos o primeiro município.'); return; }
+    const codsA = findCods(a);
+    if(!codsA.length){ host.innerHTML=emptyBox(`Nenhum município com o nome "${esc(a)}".`); return; }
+    if(!b){
+      if(codsA.length===1){ openLinhasPorIbge(codsA[0], nameOf(codsA[0])); return; }
       host.innerHTML = tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}],
-        municipios.map(([c])=>`<tr class="clickable" tabindex="0" role="button" data-ibge="${esc(c)}"><td class="td-logr">${esc(ibge[c].nome)}</td><td class="td-tipo">${esc(orDash(ibge[c].regiao))}</td><td class="td-num">cód. ${esc(c)}</td></tr>`).join(''),
-        municipios.length+' município(s) · '+foot);
-      host.querySelectorAll('tr[data-ibge]').forEach(tr=>{
-        const a = tr.dataset.ibge;
-        const go = async ()=>{
-          if(!destino){ openLinhasPorIbge(a, ibge[a]?.nome); return; }
-          if(String(a)===String(destino)){ host.innerHTML=emptyBox('Escolha um município de origem diferente do destino.'); return; }
-          host.innerHTML = loading();
-          try{
-            const linesA = await linhasNoMunicipio(a);
-            const setB = new Set(await linhasNoMunicipio(destino));
-            const inter = linesA.filter(c=>setB.has(c));
-            if(!inter.length){ host.innerHTML=emptyBox(`Nenhuma linha entre ${nameOf(a)} e ${nameOf(destino)}.`); return; }
-            // A → B: no mesmo sentido, A aparece antes de B no itinerário
-            const it = await sbFetch('itinerario_teste', `codlinha=in.(${inter.slice(0,200).map(enc).join(',')})&select=codlinha,cod_origem,sentido&order=id&limit=30000`);
-            const ok = new Set();
-            for(const [k, seq] of groupBy(it, r=>r.codlinha+'¦'+(r.sentido||''))){
-              const iA = seq.findIndex(r=>String(r.cod_origem)===String(a));
-              const iB = seq.findIndex(r=>String(r.cod_origem)===String(destino));
-              if(iA>=0 && iB>=0 && iA<iB) ok.add(k.split('¦')[0]);
-            }
-            await mostrarLinhasResultado(host, [...ok], `de ${nameOf(a)} → ${nameOf(destino)}`);
-          }catch(e){ host.innerHTML=errorBox(e.message); }
-        };
-        tr.addEventListener('click', go);
-        tr.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); }});
-      });
-    }, tables:['municipio_teste'] });
+        codsA.map(c=>`<tr class="clickable" tabindex="0" role="button" data-ibge="${esc(c)}"><td class="td-logr">${esc(nameOf(c))}</td><td class="td-tipo">${esc(orDash(ibge[c].regiao))}</td><td class="td-num">cód. ${esc(c)}</td></tr>`).join(''),
+        codsA.length+' município(s) · clique para ver as linhas');
+      host.querySelectorAll('tr[data-ibge]').forEach(tr=>tr.addEventListener('click',()=>openLinhasPorIbge(tr.dataset.ibge, nameOf(tr.dataset.ibge))));
+      return;
+    }
+    if(a.toLowerCase()===b.toLowerCase()){ host.innerHTML=emptyBox('Use municípios diferentes nos dois campos.'); return; }
+    const codsB = findCods(b);
+    if(!codsB.length){ host.innerHTML=emptyBox(`Nenhum município com o nome "${esc(b)}".`); return; }
+    host.innerHTML = loading();
+    try{
+      const all = new Set();
+      for(const ca of codsA.slice(0,5)){
+        for(const cb of codsB.slice(0,5)){
+          if(ca===cb) continue;
+          const lA = await linhasNoMunicipio(ca);
+          const sB = new Set(await linhasNoMunicipio(cb));
+          const inter = lA.filter(c=>sB.has(c));
+          if(!inter.length) continue;
+          const it = await sbFetch('itinerario_teste', `codlinha=in.(${inter.slice(0,200).map(enc).join(',')})&select=codlinha,cod_origem,sentido&order=id&limit=30000`);
+          for(const [k,seq] of groupBy(it, r=>r.codlinha+'¦'+(r.sentido||''))){
+            const iA=seq.findIndex(r=>String(r.cod_origem)===String(ca));
+            const iB=seq.findIndex(r=>String(r.cod_origem)===String(cb));
+            if(iA>=0&&iB>=0&&iA<iB) all.add(k.split('¦')[0]);
+          }
+        }
+      }
+      const titA = codsA.length===1 ? nameOf(codsA[0]) : a;
+      const titB = codsB.length===1 ? nameOf(codsB[0]) : b;
+      await mostrarLinhasResultado(host, [...all], `de ${titA} → ${titB}`);
+    }catch(e){ host.innerHTML=errorBox(e.message); }
+  };
+  modalBody.querySelector('#munGo').addEventListener('click', run);
+  [A,B].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
+  if(currentView) currentView._panelRun = run;
 };
 LOADERS.ligacoesPorTerminal = async () => {
   const orig = await getOrigem();
@@ -2119,7 +2132,7 @@ const VIEW_TABLES = {
   ligacoesPorEmpresa:['tabela_vista_teste'], secoesPorEmpresa:['tarifa_atual_teste'],
   ligacoesPorNome:['tabela_vista_teste'], ligacoesPorNumero:['tabela_vista_teste'],
   ligacoesPorLogradouro:['itinerario_teste'], municipioRegiao:['municipio_teste'],
-  entreLocalidades:[], ligacoesPorTerminal:['qh_intervalo_teste'],
+  entreLocalidades:['municipio_teste','itinerario_teste'], ligacoesPorTerminal:['qh_intervalo_teste'],
   secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste'],
   pesquisaEvento:['evento_teste'], portarias:['portaria_teste'],
   localidades:['tabela_vista_teste'],
