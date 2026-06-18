@@ -589,7 +589,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 18/06-A</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 18/06-B</span></span>
   </div>
 </footer>
 
@@ -1827,51 +1827,46 @@ LOADERS.entreLocalidades = async () => {
   const ibge = await getIbge();
   const nameOf = c => (ibge[c]?.nome) || ('Município '+c);
   const opts = Object.entries(ibge).map(([c,v])=>[c, v.nome||c]).sort((a,b)=>a[1].localeCompare(b[1]));
-  // mapa nome(min.) → codibge para resolver o que o usuário digitar
-  const nameToCod = {}; opts.forEach(([c,n])=>{ nameToCod[String(n).trim().toLowerCase()] = c; });
-  const datalist = `<datalist id="munList">${opts.map(([,n])=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`;
-  setBody(`<div class="doc">${docHead('Ligações entre Municípios')}
-    <div class="doc-obs" style="margin:0 0 12px"><b>Nota:</b> a relação por <i>localidade</i> ainda não foi importada — por enquanto a consulta é por <b>município</b> (com base no itinerário das linhas).</div>
-    <div class="loc-form">
-      <label>Município A<input id="munA" list="munList" placeholder="Digite o município…" autocomplete="off"></label>
-      <label>Município B<input id="munB" list="munList" placeholder="(opcional)" autocomplete="off"></label>
-    </div>${datalist}
-    <div class="loc-actions">
-      <button class="loc-btn" type="button" data-act="inA">Passam no Município A</button>
-      <button class="loc-btn" type="button" data-act="aToB">De Município A → Município B</button>
-      <button class="loc-btn" type="button" data-act="both">Trafegam em A e B</button>
-    </div>
-    <div id="locHost">${emptyBox('Digite os municípios e escolha uma consulta.')}</div></div>`);
-  const munA = modalBody.querySelector('#munA'), munB = modalBody.querySelector('#munB'), host = modalBody.querySelector('#locHost');
-  // resolve o texto digitado para um codibge ('' = vazio, null = não encontrado)
-  const resolve = v => { v = (v||'').trim(); if(!v) return ''; return nameToCod[v.toLowerCase()] ?? null; };
-  const run = async (act)=>{
-    const a = resolve(munA.value), b = resolve(munB.value);
-    if(a===null){ host.innerHTML = emptyBox('Município A não encontrado — escolha um nome da lista.'); return; }
-    if(b===null){ host.innerHTML = emptyBox('Município B não encontrado — escolha um nome da lista.'); return; }
-    if(!a){ host.innerHTML = emptyBox('Informe o Município A.'); return; }
-    if((act==='aToB'||act==='both') && !b){ host.innerHTML = emptyBox('Informe também o Município B.'); return; }
-    host.innerHTML = loading();
-    try{
-      const linesA = await linhasNoMunicipio(a);
-      if(act==='inA'){ await mostrarLinhasResultado(host, linesA, `passam em ${nameOf(a)}`); return; }
-      const setB = new Set(await linhasNoMunicipio(b));
-      const inter = linesA.filter(c=>setB.has(c));
-      if(act==='both'){ await mostrarLinhasResultado(host, inter, `trafegam em ${nameOf(a)} e ${nameOf(b)}`); return; }
-      // A → B: dentro de um mesmo sentido, A aparece antes de B no itinerário
-      if(!inter.length){ host.innerHTML = emptyBox('Nenhuma linha passa pelos dois municípios.'); return; }
-      const it = await sbFetch('itinerario_teste', `codlinha=in.(${inter.slice(0,200).map(enc).join(',')})&select=codlinha,cod_origem,sentido&order=id&limit=30000`);
-      const seqs = groupBy(it, r=>r.codlinha+'¦'+(r.sentido||''));
-      const ok = new Set();
-      for(const [k, seq] of seqs){
-        const iA = seq.findIndex(r=>String(r.cod_origem)===String(a));
-        const iB = seq.findIndex(r=>String(r.cod_origem)===String(b));
-        if(iA>=0 && iB>=0 && iA<iB) ok.add(k.split('¦')[0]);
-      }
-      await mostrarLinhasResultado(host, [...ok], `de ${nameOf(a)} → ${nameOf(b)}`);
-    }catch(e){ host.innerHTML = errorBox(e.message); }
-  };
-  modalBody.querySelectorAll('.loc-btn').forEach(btn=>btn.addEventListener('click',()=>run(btn.dataset.act)));
+  // mesma cara do card "Município e Região": busca + lista clicável.
+  // O seletor "Cruzar com" (opcional) mantém a consulta entre dois municípios (A → B).
+  searchPanel({ title:'Ligações entre Municípios', placeholder:'Nome do município', auto:true,
+    note:'Clique num município para ver suas linhas. Para as linhas que vão de um município a outro, escolha o destino em "Cruzar com".',
+    selectOpts:[['','— mostrar linhas do município —'], ...opts.map(([c,n])=>[c, '→ '+n])],
+    onRun: async(term, host, dest)=>{
+      const t=(term||'').toLowerCase();
+      const municipios = opts.filter(([,n])=> !t || n.toLowerCase().includes(t));
+      if(!municipios.length){ host.innerHTML=emptyBox('Nenhum município com esse nome.'); return; }
+      const destino = dest||'';
+      const foot = destino ? `clique no município de ORIGEM · destino: ${nameOf(destino)}` : 'clique no município para ver as linhas';
+      host.innerHTML = tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}],
+        municipios.map(([c])=>`<tr class="clickable" tabindex="0" role="button" data-ibge="${esc(c)}"><td class="td-logr">${esc(ibge[c].nome)}</td><td class="td-tipo">${esc(orDash(ibge[c].regiao))}</td><td class="td-num">cód. ${esc(c)}</td></tr>`).join(''),
+        municipios.length+' município(s) · '+foot);
+      host.querySelectorAll('tr[data-ibge]').forEach(tr=>{
+        const a = tr.dataset.ibge;
+        const go = async ()=>{
+          if(!destino){ openLinhasPorIbge(a, ibge[a]?.nome); return; }
+          if(String(a)===String(destino)){ host.innerHTML=emptyBox('Escolha um município de origem diferente do destino.'); return; }
+          host.innerHTML = loading();
+          try{
+            const linesA = await linhasNoMunicipio(a);
+            const setB = new Set(await linhasNoMunicipio(destino));
+            const inter = linesA.filter(c=>setB.has(c));
+            if(!inter.length){ host.innerHTML=emptyBox(`Nenhuma linha entre ${nameOf(a)} e ${nameOf(destino)}.`); return; }
+            // A → B: no mesmo sentido, A aparece antes de B no itinerário
+            const it = await sbFetch('itinerario_teste', `codlinha=in.(${inter.slice(0,200).map(enc).join(',')})&select=codlinha,cod_origem,sentido&order=id&limit=30000`);
+            const ok = new Set();
+            for(const [k, seq] of groupBy(it, r=>r.codlinha+'¦'+(r.sentido||''))){
+              const iA = seq.findIndex(r=>String(r.cod_origem)===String(a));
+              const iB = seq.findIndex(r=>String(r.cod_origem)===String(destino));
+              if(iA>=0 && iB>=0 && iA<iB) ok.add(k.split('¦')[0]);
+            }
+            await mostrarLinhasResultado(host, [...ok], `de ${nameOf(a)} → ${nameOf(destino)}`);
+          }catch(e){ host.innerHTML=errorBox(e.message); }
+        };
+        tr.addEventListener('click', go);
+        tr.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); }});
+      });
+    }, tables:['municipio_teste'] });
 };
 LOADERS.ligacoesPorTerminal = async () => {
   const orig = await getOrigem();
