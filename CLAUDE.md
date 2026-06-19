@@ -49,26 +49,36 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
   linha ativa, o `loader()` (ou `_panelRun` dos painéis de busca) roda de novo, com debounce.
 - Atualiza **a tela aberta**. Quem não está com o card aberto vê o dado novo na próxima busca.
 
-## Publicação (Netlify) e atualização automática
-- **Site oficial:** `divatdetro.netlify.app` — projeto Netlify `divatdetro`, **conectado ao
-  GitHub na branch `main`** (publish `.`, sem build). **Push na `main` = deploy automático.**
-- Existiram outros sites de teste (banco-ctec, detro-rj, bancodivat, quiet-licorice) — não
-  são os oficiais; podem ser apagados.
+## Publicação (Vercel) e atualização automática
+- **Host oficial: Vercel.** A migração veio do Netlify, que **ficou sem créditos de build**
+  (plano Free) e parou de publicar — deploys ficavam pausados. O Vercel serve o site estático
+  sem esse limite. A ligação com o Supabase **não muda** com a troca de host (toda a comunicação
+  REST/Realtime é client-side, via `SB_URL`/`SB_KEY` no `index.html`; o host só serve o arquivo).
+- **Config do Vercel:** `vercel.json` (na raiz) replica os cabeçalhos de segurança que antes
+  viviam no `netlify.toml` — em especial a **CSP**, cujo `connect-src` **autoriza** o navegador a
+  falar com `lwzsxuaqqeoamukduhev.supabase.co` (REST) e `wss://…` (Realtime). Mexeu na CSP do
+  `vercel.json`? Replique a mesma mudança no `netlify.toml` (mantido só como fallback).
+- **Auto-deploy:** conectar o repo GitHub `LucasMolinari9/LucasCTEC` ao projeto Vercel pelo
+  **dashboard** (OAuth GitHub, ação única) → **push na `main` = deploy automático**, igual era no
+  Netlify. Sem essa conexão, publica-se rodando o MCP `deploy_to_vercel` (deploya o diretório atual)
+  após o push.
 - **Atualização automática para todos os usuários** (sem limpar cache):
-  1. `Cache-Control: public, max-age=0, must-revalidate` no `netlify.toml` → cada visita revalida.
+  1. `Cache-Control: public, max-age=0, must-revalidate` (no `vercel.json`) → cada visita revalida.
   2. Detector de versão no JS (`checarNovaVersao`): compara o **ETag** do `index.html` a cada
-     ~3 min e ao focar a aba; se mudou, recarrega sozinho (espera fechar o modal aberto).
-- **Carimbo de versão** no rodapé (`#verTag`, ex.: `build 12/06-B`). Ao publicar algo que o
+     ~3 min e ao focar a aba; se mudou, recarrega sozinho (espera fechar o modal aberto). O Vercel
+     devolve ETag em `HEAD /index.html`, então o detector continua funcionando.
+- **Carimbo de versão** no rodapé (`#verTag`, ex.: `build 19/06-A`). Ao publicar algo que o
   usuário precisa confirmar, **incremente esse texto** — serve para checar qual versão está no ar.
-- O deploy **não pode** ser feito pelo ambiente do Claude (a rede de saída bloqueia o upload do
-  Netlify e até `WebFetch`/`curl` ao site/Supabase). O caminho é **push na `main`** (deploy
-  automático) — não tente `npx netlify deploy` daqui.
+- O `npx netlify deploy`/`vercel` CLI **não** funciona pelo ambiente do Claude (rede de saída
+  bloqueia upload e `WebFetch`/`curl` ao site/Supabase). Os caminhos são: **push na `main`**
+  (se o auto-deploy git estiver conectado) ou o MCP **`deploy_to_vercel`**.
 
 ## Como fazer mudanças
 1. Edite **`index.html`** (todo o código está nele). Trabalhe na branch **`main`** (é a publicada).
 2. Valide a sintaxe do JS antes de publicar (extrair o `<script>` inline e rodar `node --check`).
-3. Commit e **push na `main`** → o `divatdetro` republica sozinho e as telas dos usuários se
-   atualizam (via detector de versão). Bumpe o carimbo de versão se quiser confirmar a chegada.
+3. Commit e **push na `main`** → se o auto-deploy git do Vercel estiver conectado, republica sozinho;
+   senão, rode o MCP `deploy_to_vercel`. As telas dos usuários se atualizam (via detector de versão).
+   Bumpe o carimbo de versão se quiser confirmar a chegada.
 4. Mudanças de **dados** NÃO exigem deploy — o site lê o Supabase ao vivo.
 
 ## Armadilhas / observações
