@@ -640,7 +640,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 19/06-C</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 19/06-E</span></span>
   </div>
 </footer>
 
@@ -771,7 +771,7 @@ const SECTIONS = [
       ['divider','Folha Divisória','Página de separação do processo','folhaDivisoria',true],
       ['history','Histórico da Linha','Alterações e eventos registrados','historicoLinha',false],
       ['route','Itinerários','Trajeto de ida e volta com logradouros','itinerarios',true],
-      ['clock','Quadro de Horários','Horários e frequências por sentido','quadroHorarios',true],
+      ['clock','Quadro de Horários','Por linha selecionada ou por empresa (PDF de todos)','quadroHorarios',false],
       ['ticket','Tarifas','Valores vigentes por seção','tarifas',true],
       ['bus','Frota','Veículos vinculados à operação','frota',true],
       ['structure','Estrutura Operacional','Seções, extensões e perfil operacional','estrutura',true],
@@ -1474,17 +1474,12 @@ function pagerHTML(total){
     <span class="pg-goto">ir p/ <input type="number" class="pg-num" min="1" max="${total}" aria-label="Ir para o evento nº"> <button class="pg-btn pg-go" type="button">Ir</button></span>
     <button class="pg-btn" type="button" data-pg="next">Próximo evento ›</button></div>`;
 }
-// barra de filtros do histórico (texto, nº processo, datas e período por ano)
+// barra de filtros do histórico (texto, nº do processo e ano)
 function eventFilterBarHTML(){
   return `<div class="ev-filters">
     <label class="evf evf-wide">Texto (descrição/observação)<input type="text" data-f="text" placeholder="ex.: reformulação"></label>
     <label class="evf">Nº do processo<input type="text" data-f="proc" placeholder="ex.: 2.599/46"></label>
-    <label class="evf">Registro de<input type="date" data-f="regDe"></label>
-    <label class="evf">Registro até<input type="date" data-f="regAte"></label>
-    <label class="evf">Publicação de<input type="date" data-f="pubDe"></label>
-    <label class="evf">Publicação até<input type="date" data-f="pubAte"></label>
-    <label class="evf">Ano de<input type="number" data-f="anoDe" min="1900" max="2100" placeholder="aaaa"></label>
-    <label class="evf">Ano até<input type="number" data-f="anoAte" min="1900" max="2100" placeholder="aaaa"></label>
+    <label class="evf">Ano<input type="number" data-f="ano" min="1900" max="2100" placeholder="aaaa"></label>
     <button type="button" class="evf-clear">Limpar filtros</button>
   </div>`;
 }
@@ -1492,14 +1487,9 @@ const yearOf = d => d ? parseInt(String(d).slice(0,4),10) : null;
 function matchEvent(r, c){
   if (c.text && !norm((r.descricao||'')+' '+(r.observacao||'')).includes(c.text)) return false;
   if (c.proc && !norm(r.numero_processo||'').includes(c.proc)) return false;
-  if (c.regDe && !(r.data_registro && r.data_registro >= c.regDe)) return false;
-  if (c.regAte && !(r.data_registro && r.data_registro <= c.regAte)) return false;
-  if (c.pubDe && !(r.data_publicacao && r.data_publicacao >= c.pubDe)) return false;
-  if (c.pubAte && !(r.data_publicacao && r.data_publicacao <= c.pubAte)) return false;
-  if (c.anoDe!=null || c.anoAte!=null){
-    const y = yearOf(r.data_registro); if (y==null) return false;
-    if (c.anoDe!=null && y < c.anoDe) return false;
-    if (c.anoAte!=null && y > c.anoAte) return false;
+  if (c.ano!=null){
+    // casa o ano com o registro OU a publicação (o que estiver preenchido)
+    if (yearOf(r.data_registro) !== c.ano && yearOf(r.data_publicacao) !== c.ano) return false;
   }
   return true;
 }
@@ -1539,9 +1529,8 @@ function paginateEvents(container, rows, buildPage, headerHTML='', opts={}){
   const fEls = [...container.querySelectorAll('.ev-filters [data-f]')];
   const readCriteria = ()=>{
     const g = k => (container.querySelector(`.ev-filters [data-f="${k}"]`)?.value || '').trim();
-    const aDe=g('anoDe'), aAte=g('anoAte');
-    return { text:norm(g('text')), proc:norm(g('proc')), regDe:g('regDe'), regAte:g('regAte'),
-      pubDe:g('pubDe'), pubAte:g('pubAte'), anoDe:aDe?parseInt(aDe,10):null, anoAte:aAte?parseInt(aAte,10):null };
+    const a=g('ano');
+    return { text:norm(g('text')), proc:norm(g('proc')), ano:a?parseInt(a,10):null };
   };
   const applyFilters = ()=>{
     const c = readCriteria();
@@ -1646,6 +1635,22 @@ function quadroHorariosBodyHTML(interv, predet, orig){
   }
   return html;
 }
+// Corpo de UM quadro (meta + tabelas) para uma linha qualquer — reusado na linha ativa,
+// no clique da lista por empresa e na montagem do PDF de todos os quadros.
+function quadroDocInner(line, interv, predet, orig){
+  return `${metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))],['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(line.codempresa||'—')]])}
+    ${quadroHorariosBodyHTML(interv, predet, orig)}`;
+}
+// Busca os quadros (intervalo + predeterminado) de várias linhas de uma vez e agrupa por codlinha.
+async function fetchQHByLines(codlinhas){
+  const inList = codlinhas.map(enc).join(',');
+  const [interv, predet] = await Promise.all([
+    sbFetch('qh_intervalo_teste', `codlinha=in.(${inList})&select=codlinha,cod_origen,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id&limit=20000`),
+    sbFetch('qh_predeterminado_teste', `codlinha=in.(${inList})&select=codlinha,cod_origem,nome_origem,dia_semana,saida&order=id&limit=30000`)
+  ]);
+  return { intervBy: groupBy(interv, r=>r.codlinha), predetBy: groupBy(predet, r=>r.codlinha),
+           trunc: !!(interv._trunc || predet._trunc) };
+}
 function frotaBlockHTML(f){
   return `<div class="kpi-grid">
       <div class="kpi"><b>${orDash(f.frota_operacional)}</b><span>Operacional</span></div>
@@ -1678,16 +1683,92 @@ LOADERS.itinerarios = async () => {
 };
 
 LOADERS.quadroHorarios = async () => {
-  const [interv, predet, orig] = await Promise.all([
-    sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=cod_origen,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
-    sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
+  searchPanel({
+    title:'Quadro de Horários',
+    placeholder:'Empresa: nome ou código — gera PDF de todos os quadros',
+    note: activeLine ? null : 'Selecione uma linha (mostra o quadro dela) ou pesquise uma empresa para baixar o PDF de todos os quadros.',
+    onRun: (term, host) => quadroEmpresaRun(term, host)
+  });
+  // prefill do campo com a empresa da linha ativa (sem auto-rodar a busca)
+  if (activeLine?.codempresa){ const i = modalBody.querySelector('#spInput'); if(i) i.value = activeLine.codempresa; }
+  // comportamento padrão: havendo linha ativa, mostra o quadro dela
+  if (activeLine){ await renderActiveLineQuadro(modalBody.querySelector('#spHost')); }
+};
+// Quadro da linha ativa (comportamento clássico do card)
+async function renderActiveLineQuadro(host){
+  if(!host) return;
+  host.innerHTML = loading();
+  try {
+    const [interv, predet, orig] = await Promise.all([
+      sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=cod_origen,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
+      sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
+      getOrigem(), getEmpresas()
+    ]);
+    if (!interv.length && !predet.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para esta linha.'); if(currentView) currentView.pdfHTML=null; return; }
+    host.innerHTML = quadroDocInner(activeLine, interv, predet, orig);
+    if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroDocInner(activeLine, interv, predet, orig)}</div>`;
+  } catch(e){ host.innerHTML = errorBox(e.message); }
+}
+// Modo empresa: resolve a empresa e lista as linhas com quadro
+async function quadroEmpresaRun(term, host){
+  term = (term||'').trim();
+  if(!term){
+    if(activeLine) return renderActiveLineQuadro(host);
+    host.innerHTML = emptyBox('Busque por uma empresa (nome ou código), ou selecione uma linha.');
+    if(currentView) currentView.pdfHTML=null; return;
+  }
+  await getEmpresas();
+  const nt = norm(term);
+  const emps = (empresaList||[])
+    .filter(e => norm(e.nome_empresa).includes(nt) || String(e.codempresa||'').includes(term))
+    .sort((a,b)=> String(a.nome_empresa||'').localeCompare(String(b.nome_empresa||'')))
+    .slice(0,40);
+  if(emps.length > 1){
+    const list = emps.map(e=>`<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}" data-nome="${esc(e.nome_empresa||'')}">
+      <td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td><td class="td-tipo">${esc(orDash(e.situacao))}</td></tr>`).join('');
+    host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin:2px 0 8px">${emps.length} empresa(s) encontradas — clique para abrir os quadros:</p>`
+      + tableHTML([{t:'Código',w:'90px'},{t:'Empresa'},{t:'Situação',w:'150px'}], list, emps.length+' empresa(s)');
+    host.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>renderEmpresaQuadros(host, tr.dataset.emp, tr.dataset.nome)));
+    if(currentView) currentView.pdfHTML=null; return;
+  }
+  const cod = emps.length===1 ? emps[0].codempresa : term;
+  const nome = emps.length===1 ? emps[0].nome_empresa : null;
+  await renderEmpresaQuadros(host, cod, nome);
+}
+// Lista as linhas (com quadro) de uma empresa e prepara o PDF de todos os quadros
+async function renderEmpresaQuadros(host, cod, nome){
+  host.innerHTML = loading();
+  const [linhas, orig] = await Promise.all([
+    sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`),
     getOrigem(), getEmpresas()
   ]);
-  if (!interv.length && !predet.length) { setBody(`<div class="doc">${docHead('Quadro de Horários')}${emptyBox('Nenhum quadro de horários cadastrado para esta linha.')}</div>`); return; }
-  setBody(`<div class="doc">${docHead('Quadro de Horários')}
-    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))],['Empresa',esc(empNome(activeLine.codempresa)),true],['Registro','RJ-'+esc(activeLine.codempresa||'—')]])}
-    ${quadroHorariosBodyHTML(interv, predet, orig)}</div>`);
-};
+  const nomeEmp = nome || empNome(cod);
+  if(!linhas.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para a empresa '+esc(nomeEmp)+'.'); if(currentView) currentView.pdfHTML=null; return; }
+  const { intervBy, predetBy, trunc } = await fetchQHByLines(linhas.map(l=>l.codlinha));
+  const comQuadro = linhas.filter(l => intervBy.has(l.codlinha) || predetBy.has(l.codlinha));
+  if(!comQuadro.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para as linhas da empresa '+esc(nomeEmp)+'.'); if(currentView) currentView.pdfHTML=null; return; }
+  // PDF: todos os quadros, um por página
+  if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${comQuadro.map(l=>
+    `<div class="ev-page">${docHead('Quadro de Horários')}${quadroDocInner(l, intervBy.get(l.codlinha)||[], predetBy.get(l.codlinha)||[], orig)}</div>`).join('')}</div>`;
+  const rowsHTML = comQuadro.map(l=>`<tr class="clickable" tabindex="0" role="button" data-cod="${esc(l.codlinha)}">
+    <td class="td-num" data-label="Número">${esc(l.numero_ligacao||fmtCode(l.codlinha))}</td>
+    <td class="td-logr" data-label="Ligação">${esc(l.nome_ligacao||'—')}</td>
+    <td class="td-num" data-label="Código">${esc(fmtCode(l.codlinha))}</td></tr>`).join('');
+  host.innerHTML = `<div class="doc-obs" style="margin:0 0 10px"><b>${esc(nomeEmp)}</b> · ${linhas.length} linha(s), ${comQuadro.length} com quadro de horários.
+      Use o botão <b>PDF</b> da barra acima para baixar todos os quadros (um por página).</div>`
+    + (trunc? `<div class="trunc-aviso"><b>Resultado parcial:</b> a empresa tem muitos horários e alguns podem não ter sido carregados.</div>`:'')
+    + tableHTML([{t:'Número',w:'110px'},{t:'Ligação'},{t:'Código',w:'130px'}], rowsHTML, comQuadro.length+' linha(s) com quadro · clique para ver o quadro');
+  // clique numa linha → quadro individual (com voltar)
+  host.querySelectorAll('tr[data-cod]').forEach(tr=>tr.addEventListener('click',()=>{
+    const l = comQuadro.find(x=>String(x.codlinha)===String(tr.dataset.cod));
+    if(!l) return;
+    const iv = intervBy.get(l.codlinha)||[], pd = predetBy.get(l.codlinha)||[];
+    host.innerHTML = `<button type="button" class="qh-back" style="background:none;border:0;color:var(--blue);font:inherit;font-weight:600;cursor:pointer;padding:4px 0;margin-bottom:6px">‹ Voltar à lista da empresa</button>`
+      + quadroDocInner(l, iv, pd, orig);
+    if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroDocInner(l, iv, pd, orig)}</div>`;
+    host.querySelector('.qh-back').addEventListener('click', ()=>renderEmpresaQuadros(host, cod, nome));
+  }));
+}
 
 LOADERS.tarifas = async () => {
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`);
