@@ -2112,7 +2112,7 @@ async function mostrarLinhasPorLocalidade(host, a, b){
       <td class="td-num">${esc(orDash(qhMap[r.codlinha]?.frota_operacional))}</td>
       <td class="td-tipo">${esc(orDash(qhMap[r.codlinha]?.hierarquia))}</td></tr>`).join('');
     const titulo = b? `${esc(a)} ↔ ${esc(b)}` : esc(a);
-    host.innerHTML = `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${list.length} linha(s) · ${titulo}</p>`
+    host.innerHTML = bannerTrunc(rows) + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${list.length} linha(s) · ${titulo}</p>`
       + tableHTML([{t:'Número',w:'110px'},{t:'Ligação'},{t:'Empresa'},{t:'Frota',w:'70px'},{t:'Hier.',w:'70px'}], body, 'clique para abrir a linha');
     bindLineRows(host);
   }catch(e){ host.innerHTML = errorBox(e.message); }
