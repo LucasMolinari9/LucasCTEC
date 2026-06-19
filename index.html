@@ -11,7 +11,7 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="DETRO/RJ · DIVAT — Cadastro de Linhas Regulares">
 <meta property="og:description" content="Consulta pública: itinerários, quadros de horários, tarifas, frota, empresas e histórico das linhas regulares do DETRO/RJ.">
-<meta property="og:url" content="https://divatdetro.netlify.app/">
+<meta property="og:url" content="https://divatdetro.vercel.app/">
 <meta property="og:locale" content="pt_BR">
 <meta name="twitter:card" content="summary">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -191,34 +191,9 @@
   .footer-in .pill{font-family:'IBM Plex Mono';font-size:12.5px;background:var(--line-soft);padding:3px 10px;border-radius:6px;color:var(--blue)}
   .footer-in .right{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 
-  /* tabelas largas: rolagem horizontal dentro do modal no mobile.
-     O escopo .modal-body isola do container .pdf-export (que fica fora do modal),
-     e o `screen` garante que o @media print não seja afetado. */
-  @media screen and (max-width:768px){
-    .modal-body .doc-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-    .modal-body .doc-table-wrap .doc-table{min-width:560px}
-  }
-  @media screen and (max-width:560px){
-    .selector button{flex:1 1 100%;padding:12px}
-    .topbar-meta{display:none}
-    .modal-body .ev-grid,.modal-body .ev-grid.ev5{grid-template-columns:1fr}
-    /* barra do modal: só ícones, sem rótulos, para caber na largura do celular */
-    .modal-overlay{padding:14px 8px 30px}
-    .modal-toolbar{padding:9px 10px;gap:6px}
-    .mt-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .mt-btn{padding:6px 9px}
-    .mt-btn-label{display:none}
-    /* documento e metadados em coluna única */
-    .doc{padding:18px 14px 22px}
-    .doc-meta{grid-template-columns:1fr;gap:6px 0}
-    .doc-head .brand-logo svg{height:44px}
-    .modal-body .ev-filters{grid-template-columns:1fr 1fr}
-    .modal-body .ev-filters .evf-wide{grid-column:span 2}
-  }
-  @media screen and (max-width:480px){
-    main,.hero,.topbar-in,.footer-in{padding-left:14px;padding-right:14px}
-    .modal-body .loc-form{grid-template-columns:1fr}
-  }
+  /* NOTA: os @media de responsividade mobile ficam no FINAL desta folha de estilo,
+     DEPOIS das regras-base dos componentes — senão as regras-base, por virem
+     depois, venceriam os overrides no cascade. */
   @media (prefers-reduced-motion:reduce){
     *{transition:none!important;animation:none!important;scroll-behavior:auto}
   }
@@ -535,6 +510,68 @@
     .ev-page.hid{display:block!important}
     .ev-page + .ev-page{break-before:page}
   }
+
+  /* ============================================================
+     RESPONSIVIDADE MOBILE — fica no FIM de propósito: vem depois das
+     regras-base dos componentes, então os overrides vencem no cascade.
+     (O `screen` evita afetar o @media print.)
+     ============================================================ */
+  /* tabelas largas rolam na horizontal dentro do modal (sem quebrar o layout) */
+  @media screen and (max-width:768px){
+    .modal-body .doc-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .modal-body .doc-table-wrap .doc-table{min-width:520px}
+  }
+  @media screen and (max-width:560px){
+    .selector button{flex:1 1 100%;padding:13px}
+    .topbar-meta{display:none}
+    .modal-body .ev-grid,.modal-body .ev-grid.ev5{grid-template-columns:1fr}
+    /* barra do modal: só ícones, sem rótulos, para caber na largura do celular */
+    .modal-overlay{padding:14px 8px 30px}
+    .modal-toolbar{padding:9px 10px;gap:6px}
+    .mt-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .mt-btn{padding:7px 9px}
+    .mt-btn-label{display:none}
+    /* documento e metadados em COLUNA ÚNICA, com menos padding */
+    .doc{padding:18px 14px 22px}
+    .doc-head{gap:12px}
+    .doc-head h1{font-size:16px}
+    .doc-meta{grid-template-columns:1fr;gap:7px 0;padding:14px}
+    .doc-head .brand-logo svg{height:44px}
+    .modal-body .ev-filters{grid-template-columns:1fr 1fr}
+    .modal-body .ev-filters .evf-wide{grid-column:span 2}
+    /* tabelas: fonte/padding menores e colunas de texto QUEBRAM (menos rolagem) */
+    .doc-table{font-size:13px}
+    .doc-table thead th{padding:9px;font-size:11px}
+    .doc-table tbody td{padding:9px}
+    .td-tipo,.td-mun,.td-sentido{white-space:normal}
+    .doc-table tbody tr.clickable td{padding-top:11px;padding-bottom:11px}
+    /* tabela de resultados de linhas (classe .stack) vira CARTÕES: sem rolagem lateral,
+       cada linha é um bloco e cada célula mostra seu rótulo (data-label) */
+    .modal-body .doc-table-wrap .doc-table.stack{min-width:0}
+    .doc-table.stack thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0)}
+    .doc-table.stack tbody tr{display:block;border:1px solid var(--line);border-radius:10px;
+      margin-bottom:10px;padding:5px 13px;background:#fff;box-shadow:0 1px 2px rgba(10,40,70,.05)}
+    .doc-table.stack tbody tr.clickable:hover{background:#f7fbff}
+    .doc-table.stack tbody td{display:flex;justify-content:space-between;align-items:baseline;gap:14px;
+      border:0;border-bottom:1px dashed #eef2f6;padding:9px 0;text-align:right;white-space:normal}
+    .doc-table.stack tbody tr td:last-child{border-bottom:0}
+    .doc-table.stack tbody td::before{content:attr(data-label);font-family:'Archivo';font-weight:700;
+      font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+      text-align:left;flex:0 0 auto;white-space:nowrap}
+    /* busca dentro do modal: input ocupa a linha; filtro/botão embaixo */
+    .doc-search{flex-wrap:wrap}
+    .doc-search input{flex:1 1 100%}
+    .doc-search select,.doc-search button{flex:1 1 auto}
+  }
+  @media screen and (max-width:480px){
+    main,.hero,.topbar-in,.footer-in{padding-left:14px;padding-right:14px}
+    .modal-body .loc-form{grid-template-columns:1fr}
+    .modal-body .doc-table-wrap .doc-table{min-width:460px}
+  }
+  @media screen and (max-width:380px){
+    .doc-table{font-size:12.5px}
+    .doc-table thead th,.doc-table tbody td{padding:8px 7px}
+  }
 </style>
 </head>
 <body>
@@ -603,7 +640,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 19/06-B</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 19/06-C</span></span>
   </div>
 </footer>
 
@@ -1366,8 +1403,8 @@ function docHead(subtitle){
 function metaRows(pairs){
   return `<div class="doc-meta">${pairs.map(([k,v,full])=> k===''? '<div class="row"></div>' : `<div class="row${full?' full':''}"><b>${esc(k)}:</b><span>${v}</span></div>`).join('')}</div>`;
 }
-function tableHTML(cols, bodyRows, foot){
-  return `<div class="doc-table-wrap"><table class="doc-table"><thead><tr>${cols.map(c=>`<th${c.w?` style="width:${c.w}"`:''}>${esc(c.t)}</th>`).join('')}</tr></thead>
+function tableHTML(cols, bodyRows, foot, cls=''){
+  return `<div class="doc-table-wrap"><table class="doc-table${cls?' '+cls:''}"><thead><tr>${cols.map(c=>`<th${c.w?` style="width:${c.w}"`:''}>${esc(c.t)}</th>`).join('')}</tr></thead>
     <tbody>${bodyRows}</tbody></table></div>${foot?`<div class="doc-foot">${esc(foot)}</div>`:''}`;
 }
 
@@ -2147,12 +2184,12 @@ LOADERS.localidades = async () => {
 function linhasTable(rows){
   if(!rows.length) return emptyBox('Nenhuma ligação.');
   const body = rows.map(r=>`<tr class="clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
-    <td class="td-num">${esc(r.numero_ligacao||fmtCode(r.codlinha))}</td>
-    <td class="td-logr">${esc(r.nome_ligacao||'—')}</td>
-    <td class="td-logr">${esc(empNome(r.codempresa))}</td>
-    <td class="td-num">${esc(r.codempresa||'')}</td>
-    <td>${esc(r.tipo||'')} ${boolChip(r.cancelado,'canc.')}</td></tr>`).join('');
-  return bannerTrunc(rows) + tableHTML([{t:'Número',w:'110px'},{t:'Ligação'},{t:'Empresa'},{t:'RJ',w:'60px'},{t:'Tipo',w:'120px'}], body, rows.length+' ligação(ões) · clique para abrir');
+    <td class="td-num" data-label="Número">${esc(r.numero_ligacao||fmtCode(r.codlinha))}</td>
+    <td class="td-logr" data-label="Ligação">${esc(r.nome_ligacao||'—')}</td>
+    <td class="td-logr" data-label="Empresa">${esc(empNome(r.codempresa))}</td>
+    <td class="td-num" data-label="RJ">${esc(r.codempresa||'')}</td>
+    <td data-label="Tipo">${esc(r.tipo||'')} ${boolChip(r.cancelado,'canc.')}</td></tr>`).join('');
+  return bannerTrunc(rows) + tableHTML([{t:'Número',w:'110px'},{t:'Ligação'},{t:'Empresa'},{t:'RJ',w:'60px'},{t:'Tipo',w:'120px'}], body, rows.length+' ligação(ões) · clique para abrir', 'stack');
 }
 function bindLineRows(host){
   (host||modalBody).querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{
