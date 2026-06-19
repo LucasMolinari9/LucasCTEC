@@ -607,6 +607,10 @@
   <div class="modal modal-doc" role="dialog" aria-modal="true" aria-labelledby="mtTitle">
     <div class="modal-toolbar">
       <span class="mt-label"><span id="mtTitle">Cadastro de Linhas</span><span class="mt-live" id="mtLive">● ao vivo</span></span>
+      <button class="mt-btn" id="btnBack" title="Voltar" aria-label="Voltar" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        <span class="mt-btn-label">Voltar</span>
+      </button>
       <button class="mt-btn" id="btnFull" title="Tela cheia">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3"/></svg>
         <span class="mt-btn-label">Tela cheia</span>
@@ -640,7 +644,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 19/06-E</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 19/06-F</span></span>
   </div>
 </footer>
 
@@ -1088,20 +1092,36 @@ async function baixarPdf(){
 }
 
 let currentView = null, lastFocused = null;
+let viewHistory = [];
+let _goingBack = false;
+const btnBack = document.getElementById('btnBack');
 function closeModal(){
   if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); }
   overlay.classList.remove('open','fs-fallback'); currentView = null;
+  viewHistory = []; btnBack.style.display = 'none';
   // devolve o foco ao elemento que abriu o modal (acessibilidade)
   if (lastFocused && lastFocused.focus) { try { lastFocused.focus(); } catch(_){} lastFocused = null; }
   if (window.__divatReload) location.reload();
 }
+btnBack.addEventListener('click', () => {
+  if (!viewHistory.length) return;
+  const prev = viewHistory.pop();
+  btnBack.style.display = viewHistory.length ? '' : 'none';
+  _goingBack = true;
+  runView(prev, { silent: false });
+});
 function setBody(html){ modalBody.innerHTML = html; }
 function loading(msg='Carregando…'){ return `<div class="m-loading"><div class="spin"></div>${esc(msg)}</div>`; }
 function emptyBox(msg){ return `<div class="m-loading">${esc(msg)}</div>`; }
 function errorBox(msg){ return `<div class="m-loading" style="color:#b33a2e">Erro ao carregar: ${esc(msg)}</div>`; }
 
 async function runView(view, { silent=false } = {}){
-  lastFocused = document.activeElement;   // guarda p/ devolver o foco ao fechar
+  if (!_goingBack && overlay.classList.contains('open') && currentView) {
+    viewHistory.push(currentView);
+    btnBack.style.display = '';
+  }
+  _goingBack = false;
+  if (!overlay.classList.contains('open')) lastFocused = document.activeElement;
   currentView = view;
   mtTitle.textContent = view.title;
   overlay.classList.add('open');
@@ -1415,24 +1435,28 @@ const LOADERS = {};
 
 /* ---- Documentos da Linha (precisam de activeLine) ---- */
 LOADERS.folhaRosto = async () => {
-  const [rows] = await Promise.all([
+  const [rows, , tarifas] = await Promise.all([
     sbFetch('tabela_vista_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=${LINE_FIELDS}&limit=1`),
-    getEmpresas()
+    getEmpresas(),
+    sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=tarifa,secao&order=secao&limit=1`)
   ]);
   const L = rows[0] || activeLine;
+  const tv = tarifas[0]?.tarifa;
+  const tarifa = tv != null ? 'R$ '+Number(tv).toFixed(2).replace('.',',') : '—';
   const status = [ boolChip(L.cancelado,'Cancelada'), boolChip(L.paralisado,'Paralisada'), boolChip(L.sub_judice,'Sub judice'), boolChip(L.transferido,'Transferida') ].join(' ') || '<span class="chip chip-off">Ativa</span>';
   setBody(`<div class="doc">${docHead('Cadastro de Linhas: Folha de Rosto')}
     ${metaRows([
-      ['Ligação', esc(L.nome_ligacao||'—'), true],
-      ['Código da Ligação', esc(fmtCode(L.codlinha))],
-      ['Número da Ligação', esc(orDash(L.numero_ligacao))],
-      ['Nome (ordem crescente)', esc(orDash(L.nome_lig_cresc)), true],
       ['Empresa', esc(empNome(L.codempresa)), true],
       ['Registro', 'RJ-'+esc(orDash(L.codempresa))],
+      ['Código da Ligação', esc(fmtCode(L.codlinha))],
+      ['Número da Ligação', esc(orDash(L.numero_ligacao))],
+      ['Ligação', esc(L.nome_ligacao||'—'), true],
+      ['Nome (ordem crescente)', esc(orDash(L.nome_lig_cresc)), true],
+      ['Via', esc(orDash(L.via))],
       ['Característica', esc(orDash(L.caracteristica))],
       ['Tipo', esc(orDash(L.tipo))],
+      ['Tarifa', tarifa],
       ['Licitada', L.licitado?'Sim':'Não'],
-      ['Via', esc(orDash(L.via))],
       ['Data de criação', fmtDate(L.data_criacao)],
       ['Processo de criação', esc(orDash(L.processo_criacao))],
       ['Situação', status, true],
@@ -1864,13 +1888,20 @@ function openEmpresaLigacoes(cod){
 }
 LOADERS.ligacoesPorEmpresa = async () => {
   const pre = activeLine?.codempresa || '';
-  searchPanel({ title:'Ligações por Empresa', placeholder:'Código da empresa (ex. 101)', value:pre, onRun: async(term, host)=>{
-    if(!term){ host.innerHTML=emptyBox('Informe o código da empresa.'); return; }
-    const [rows] = await Promise.all([
-      sbFetch('tabela_vista_teste', `codempresa=eq.${enc(term)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`),
-      getEmpresas()
-    ]);
-    host.innerHTML = rows.length? linhasTable(rows): emptyBox('Nenhuma ligação para a empresa '+term+'.');
+  searchPanel({ title:'Ligações por Empresa', placeholder:'Código (ex. 101) ou nome da empresa', value:pre, onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Informe o código ou nome da empresa.'); return; }
+    await getEmpresas();
+    let cods = [];
+    if(/^\d+$/.test(term.trim())){
+      cods = [term.trim()];
+    } else {
+      const t = norm(term);
+      cods = Object.entries(empresaMap).filter(([,n])=>norm(n||'').includes(t)).map(([c])=>c);
+      if(!cods.length){ host.innerHTML=emptyBox('Nenhuma empresa encontrada para "'+esc(term)+'".'); return; }
+    }
+    const filter = cods.length===1 ? `codempresa=eq.${enc(cods[0])}` : `codempresa=in.(${cods.map(enc).join(',')})`;
+    const rows = await sbFetch('tabela_vista_teste', `${filter}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`);
+    host.innerHTML = rows.length? linhasTable(rows): emptyBox('Nenhuma ligação encontrada.');
     bindLineRows(host);
   }, tables:['tabela_vista_teste']});
 };
@@ -2217,21 +2248,10 @@ async function mostrarLinhasPorLocalidade(host, a, b){
     let list = rows;
     if(b){ const bl=norm(b); list = rows.filter(r=> norm((r.nome_ligacao||'')+' '+(r.nome_lig_cresc||'')+' '+(r.via||'')).includes(bl)); }
     if(!list.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${a}" e "${b}".`:`Nenhuma linha encontrada para "${a}".`); return; }
-    const cods=[...new Set(list.map(r=>r.codlinha).filter(Boolean))].slice(0,300);
-    const [qh] = await Promise.all([
-      sbFetch('qh_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=codlinha,frota_operacional,hierarquia&limit=2000`).catch(()=>[]),
-      getEmpresas()
-    ]);
-    const qhMap={}; qh.forEach(q=>{ if(!(q.codlinha in qhMap)) qhMap[q.codlinha]=q; });
-    const body = list.slice(0,300).map(r=>`<tr class="clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
-      <td class="td-num">${esc(r.numero_ligacao||fmtCode(r.codlinha))}</td>
-      <td class="td-logr">${esc(r.nome_ligacao||'—')}</td>
-      <td class="td-logr">${esc(empNome(r.codempresa))}</td>
-      <td class="td-num">${esc(orDash(qhMap[r.codlinha]?.frota_operacional))}</td>
-      <td class="td-tipo">${esc(orDash(qhMap[r.codlinha]?.hierarquia))}</td></tr>`).join('');
+    await getEmpresas();
     const titulo = b? `${esc(a)} ↔ ${esc(b)}` : esc(a);
     host.innerHTML = bannerTrunc(rows) + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${list.length} linha(s) · ${titulo}</p>`
-      + tableHTML([{t:'Número',w:'110px'},{t:'Ligação'},{t:'Empresa'},{t:'Frota',w:'70px'},{t:'Hier.',w:'70px'}], body, 'clique para abrir a linha');
+      + linhasTable(list.slice(0,300));
     bindLineRows(host);
   }catch(e){ host.innerHTML = errorBox(e.message); }
 }
@@ -2265,12 +2285,15 @@ LOADERS.localidades = async () => {
 function linhasTable(rows){
   if(!rows.length) return emptyBox('Nenhuma ligação.');
   const body = rows.map(r=>`<tr class="clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
-    <td class="td-num" data-label="Número">${esc(r.numero_ligacao||fmtCode(r.codlinha))}</td>
-    <td class="td-logr" data-label="Ligação">${esc(r.nome_ligacao||'—')}</td>
     <td class="td-logr" data-label="Empresa">${esc(empNome(r.codempresa))}</td>
     <td class="td-num" data-label="RJ">${esc(r.codempresa||'')}</td>
+    <td class="td-num" data-label="Código">${esc(fmtCode(r.codlinha))}</td>
+    <td class="td-num" data-label="Número">${esc(r.numero_ligacao||'—')}</td>
+    <td class="td-logr" data-label="Nome">${esc(r.nome_ligacao||'—')}</td>
+    <td class="td-logr" data-label="Via">${esc(r.via||'—')}</td>
+    <td class="td-tipo" data-label="Característica">${esc(r.caracteristica||'—')}</td>
     <td data-label="Tipo">${esc(r.tipo||'')} ${boolChip(r.cancelado,'canc.')}</td></tr>`).join('');
-  return bannerTrunc(rows) + tableHTML([{t:'Número',w:'110px'},{t:'Ligação'},{t:'Empresa'},{t:'RJ',w:'60px'},{t:'Tipo',w:'120px'}], body, rows.length+' ligação(ões) · clique para abrir', 'stack');
+  return bannerTrunc(rows) + tableHTML([{t:'Empresa'},{t:'RJ',w:'55px'},{t:'Código',w:'120px'},{t:'Número',w:'90px'},{t:'Nome'},{t:'Via'},{t:'Característica',w:'115px'},{t:'Tipo',w:'110px'}], body, rows.length+' ligação(ões) · clique para abrir', 'stack');
 }
 function bindLineRows(host){
   (host||modalBody).querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{
