@@ -640,7 +640,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 19/06-C</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 19/06-D</span></span>
   </div>
 </footer>
 
@@ -1474,17 +1474,12 @@ function pagerHTML(total){
     <span class="pg-goto">ir p/ <input type="number" class="pg-num" min="1" max="${total}" aria-label="Ir para o evento nº"> <button class="pg-btn pg-go" type="button">Ir</button></span>
     <button class="pg-btn" type="button" data-pg="next">Próximo evento ›</button></div>`;
 }
-// barra de filtros do histórico (texto, nº processo, datas e período por ano)
+// barra de filtros do histórico (texto, nº do processo e ano)
 function eventFilterBarHTML(){
   return `<div class="ev-filters">
     <label class="evf evf-wide">Texto (descrição/observação)<input type="text" data-f="text" placeholder="ex.: reformulação"></label>
     <label class="evf">Nº do processo<input type="text" data-f="proc" placeholder="ex.: 2.599/46"></label>
-    <label class="evf">Registro de<input type="date" data-f="regDe"></label>
-    <label class="evf">Registro até<input type="date" data-f="regAte"></label>
-    <label class="evf">Publicação de<input type="date" data-f="pubDe"></label>
-    <label class="evf">Publicação até<input type="date" data-f="pubAte"></label>
-    <label class="evf">Ano de<input type="number" data-f="anoDe" min="1900" max="2100" placeholder="aaaa"></label>
-    <label class="evf">Ano até<input type="number" data-f="anoAte" min="1900" max="2100" placeholder="aaaa"></label>
+    <label class="evf">Ano<input type="number" data-f="ano" min="1900" max="2100" placeholder="aaaa"></label>
     <button type="button" class="evf-clear">Limpar filtros</button>
   </div>`;
 }
@@ -1492,14 +1487,9 @@ const yearOf = d => d ? parseInt(String(d).slice(0,4),10) : null;
 function matchEvent(r, c){
   if (c.text && !norm((r.descricao||'')+' '+(r.observacao||'')).includes(c.text)) return false;
   if (c.proc && !norm(r.numero_processo||'').includes(c.proc)) return false;
-  if (c.regDe && !(r.data_registro && r.data_registro >= c.regDe)) return false;
-  if (c.regAte && !(r.data_registro && r.data_registro <= c.regAte)) return false;
-  if (c.pubDe && !(r.data_publicacao && r.data_publicacao >= c.pubDe)) return false;
-  if (c.pubAte && !(r.data_publicacao && r.data_publicacao <= c.pubAte)) return false;
-  if (c.anoDe!=null || c.anoAte!=null){
-    const y = yearOf(r.data_registro); if (y==null) return false;
-    if (c.anoDe!=null && y < c.anoDe) return false;
-    if (c.anoAte!=null && y > c.anoAte) return false;
+  if (c.ano!=null){
+    // casa o ano com o registro OU a publicação (o que estiver preenchido)
+    if (yearOf(r.data_registro) !== c.ano && yearOf(r.data_publicacao) !== c.ano) return false;
   }
   return true;
 }
@@ -1539,9 +1529,8 @@ function paginateEvents(container, rows, buildPage, headerHTML='', opts={}){
   const fEls = [...container.querySelectorAll('.ev-filters [data-f]')];
   const readCriteria = ()=>{
     const g = k => (container.querySelector(`.ev-filters [data-f="${k}"]`)?.value || '').trim();
-    const aDe=g('anoDe'), aAte=g('anoAte');
-    return { text:norm(g('text')), proc:norm(g('proc')), regDe:g('regDe'), regAte:g('regAte'),
-      pubDe:g('pubDe'), pubAte:g('pubAte'), anoDe:aDe?parseInt(aDe,10):null, anoAte:aAte?parseInt(aAte,10):null };
+    const a=g('ano');
+    return { text:norm(g('text')), proc:norm(g('proc')), ano:a?parseInt(a,10):null };
   };
   const applyFilters = ()=>{
     const c = readCriteria();
