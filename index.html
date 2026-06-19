@@ -382,6 +382,10 @@
     padding:11px 15px;font-size:13px;color:#3a4a59;background:#fbfcfe;
   }
   .doc-obs b{color:#0a3a63}
+  /* aviso de resultado truncado (lista atingiu o limite da consulta) */
+  .trunc-aviso{margin:0 0 10px;border:1px solid #f0d9a8;border-left:3px solid #d9930b;border-radius:8px;
+    padding:9px 13px;font-size:13px;color:#7a5407;background:#fff8ec}
+  .trunc-aviso b{color:#7a5407}
   .doc-foot{margin-top:16px;text-align:right;font-size:12px;color:#888;
     border-top:1px solid #e4e9ee;padding-top:8px}
   /* paginação de documentos longos (ex.: Histórico da Linha) */
@@ -645,7 +649,7 @@ async function sbFetch(table, qs = '') {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || `HTTP ${res.status}`);
       }
-      return res.json();
+      return marcarTrunc(await res.json(), qs);
     } catch (e) {
       ultimoErro = e;
       const transitorio = (e.name === 'AbortError') || (e instanceof TypeError); // timeout ou falha de rede
@@ -655,6 +659,28 @@ async function sbFetch(table, qs = '') {
     }
   }
   throw ultimoErro;
+}
+
+// Marca (sem alterar o conteúdo) um array de resultados que provavelmente foi CORTADO:
+// só sinaliza quando a consulta tinha um limit "de lista" (>=50) e veio cheio até o teto.
+// A flag é não-enumerável → JSON.stringify/map/spread ignoram; só quem checa rows._trunc vê.
+function marcarTrunc(data, qs){
+  if (!Array.isArray(data)) return data;
+  const m = /(?:^|&)limit=(\d+)/.exec(qs || '');
+  if (m){
+    const lim = +m[1];
+    if (lim >= 50 && data.length >= lim){
+      Object.defineProperty(data, '_trunc',  { value:true, enumerable:false });
+      Object.defineProperty(data, '_limite', { value:lim,  enumerable:false });
+    }
+  }
+  return data;
+}
+// Banner de aviso quando a lista foi truncada (atingiu o limite da consulta).
+function bannerTrunc(rows){
+  return (rows && rows._trunc)
+    ? `<div class="trunc-aviso"><b>Resultado parcial:</b> mostrando os primeiros ${rows._limite}. Refine a busca para encontrar itens mais específicos.</div>`
+    : '';
 }
 
 // 101001001 → 101-001-001 (formato do código da ligação no PDF oficial)
@@ -1818,7 +1844,7 @@ LOADERS.ligacoesPorLogradouro = async () => {
       sbFetch('tabela_vista_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=200`),
       getEmpresas()
     ]);
-    host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${cods.length} linha(s) passam por "${esc(term)}"</p>`+linhasTable(rows);
+    host.innerHTML = bannerTrunc(it) + `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${cods.length} linha(s) passam por "${esc(term)}"</p>`+linhasTable(rows);
     bindLineRows(host);
   }, tables:['itinerario_teste']});
 };
@@ -2126,7 +2152,7 @@ function linhasTable(rows){
     <td class="td-logr">${esc(empNome(r.codempresa))}</td>
     <td class="td-num">${esc(r.codempresa||'')}</td>
     <td>${esc(r.tipo||'')} ${boolChip(r.cancelado,'canc.')}</td></tr>`).join('');
-  return tableHTML([{t:'Número',w:'110px'},{t:'Ligação'},{t:'Empresa'},{t:'RJ',w:'60px'},{t:'Tipo',w:'120px'}], body, rows.length+' ligação(ões) · clique para abrir');
+  return bannerTrunc(rows) + tableHTML([{t:'Número',w:'110px'},{t:'Ligação'},{t:'Empresa'},{t:'RJ',w:'60px'},{t:'Tipo',w:'120px'}], body, rows.length+' ligação(ões) · clique para abrir');
 }
 function bindLineRows(host){
   (host||modalBody).querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{
