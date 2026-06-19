@@ -22,10 +22,23 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
 - Projeto: **`bd_teste`** · ref **`lwzsxuaqqeoamukduhev`** · região sa-east-1.
 - `SB_URL` e `SB_KEY` ficam no topo do `<script>` em `index.html`. A chave é a **anon
   (publishable)** — pública por design; a segurança vem do **RLS**.
-- **RLS**: todas as tabelas têm RLS ligado. Há políticas **SELECT para `anon`** nas tabelas
-  de consulta. **NÃO existe nenhuma política de escrita para `anon`** → o público só lê.
-  Quem alimenta usa o painel do Supabase (service role, ignora RLS). **Nunca** adicionar
-  política de INSERT/UPDATE/DELETE para `anon`.
+- **RLS / segurança (LER COM ATENÇÃO — não dá pra confiar só no "é só leitura"):**
+  - Todas as tabelas têm RLS ligado. Cada tabela de consulta tem policy `anon_read_*` (SELECT) para `anon`.
+  - **ATENÇÃO 1 — grants perigosos:** a role `anon` recebeu GRANT de **INSERT/UPDATE/DELETE em todas as
+    tabelas** do schema `public` (idem `authenticated`). Hoje o `anon` **não escreve** só porque não há
+    policy de escrita pra ele (RLS sem policy = negado). **Isso é proteção de camada única:** se o RLS de
+    uma tabela for desligado por engano, os grants tornam os dados **publicamente apagáveis na hora**.
+    Os grants de escrita do `anon` deveriam ser **revogados** (`REVOKE INSERT,UPDATE,DELETE ... FROM anon`).
+    **NUNCA desligar RLS de uma tabela** enquanto esses grants existirem.
+  - **ATENÇÃO 2 — escrita total p/ `authenticated`:** existem policies `auth_all_*` (comando ALL,
+    `USING(true) WITH CHECK(true)`) em todas as tabelas. Logo, **qualquer usuário logado pode alterar/APAGAR
+    tudo**. Isso só é seguro porque o **signup do Auth deve ficar FECHADO** (Dashboard → Authentication →
+    Sign In/Providers → "Allow new users to sign up" = OFF). Há 1 usuário no Auth (o do dono). **Manter o
+    signup fechado é o item nº1 de segurança.**
+  - **Como o dono alimenta:** direto pelo **painel do Supabase** (service role, ignora RLS) — esse é o fluxo
+    real. Existe também um frontend logado (`authenticated`) que o dono **não usa** para alimentar; por isso
+    as policies `auth_all_*` estão dormentes no fluxo do dia a dia.
+  - **Nunca** adicionar política de INSERT/UPDATE/DELETE para `anon`.
 - **Realtime**: as tabelas usadas estão na publicação `supabase_realtime` e as tabelas sem
   PK têm `REPLICA IDENTITY FULL`. Ao criar um card que lê uma tabela nova, **adicione-a à
   publicação** (`alter publication supabase_realtime add table public.<tabela>;`).
@@ -90,3 +103,19 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
   dados em UTF-8 no Supabase.
 - **Estética:** topo navy + faixa verde fina (identidade DETRO/DIVAT); banner da linha em navy
   com faixa verde inferior. Manter esse idioma visual ao criar telas novas.
+- **Banco sem PK/índices (escalabilidade):** ~14 tabelas estão **sem chave primária e sem índice**, sendo
+  `itinerario_teste` a maior (~52k linhas). O front faz `ilike`/`eq`/`in.()` com `limit` alto (até 30000)
+  sobre elas → hoje são **varreduras completas**. Funciona porque o volume é pequeno; ao crescer, fica lento.
+  Antes de criar telas que filtram tabelas grandes, **criar índices** nas colunas filtradas (codlinha,
+  cod_origem, nome_logradouro, codempresa). Considerar `pg_trgm`+GIN para as buscas `ilike`.
+- **SEM BACKUP (risco máximo):** o projeto **não tem backup/PITR confirmado**. O git versiona só o CÓDIGO,
+  nunca os DADOS. **Não rodar nada destrutivo no banco (DROP/DELETE/TRUNCATE/REVOKE/migração)** sem antes
+  ligar backup (Dashboard → Database → Backups).
+- **Truncagem silenciosa:** vários loaders cortam resultados com `limit` e `slice(0,N)` **sem avisar**.
+  Ao crescer os dados, o portal pode mostrar listas incompletas sem erro visível. Ao mexer numa view,
+  considerar avisar o usuário quando o limite for atingido.
+- **Dependências CDN sem trava:** `@supabase/supabase-js@2` (qualquer 2.x) e html2pdf vêm da jsDelivr **sem
+  versão fixa nem SRI** (`integrity`). Ideal fixar versão exata + SRI (hash) ou fazer vendoring — mas só com
+  o hash REAL verificado, pois SRI errado **quebra o carregamento** do site.
+- **`sbFetch` tem timeout (20s) + retry** (backoff) para erros transitórios; erros definitivos (4xx) não
+  repetem. Não remover isso ao refatorar.
