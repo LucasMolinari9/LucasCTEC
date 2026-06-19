@@ -1,0 +1,134 @@
+'use strict';
+const H = require("./harness.js");
+
+let pass = 0, fail = 0;
+const fails = [];
+function ok(cond, name, detail){
+  if (cond){ pass++; console.log('  PASS', name); }
+  else { fail++; fails.push(name + (detail?(' — '+detail):'')); console.log('  FAIL', name, detail||''); }
+}
+
+// --- Mock fetch infra ---
+let calls = 0;
+function setFetch(fn){ calls = 0; global.fetch = async (url, opts) => { calls++; return fn(calls, url, opts); }; }
+function jsonResp(status, body){
+  return { ok: status>=200 && status<300, status, json: async () => body };
+}
+// a Response whose json() throws (to test 4xx with non-json body via .catch)
+function jsonRespBadBody(status){
+  return { ok:false, status, json: async () => { throw new Error('not json'); } };
+}
+
+(async () => {
+  // a) success
+  console.log('a) sucesso simples');
+  setFetch(() => jsonResp(200, [{id:1},{id:2}]));
+  let r = await H.sbFetch('t','select=*');
+  ok(Array.isArray(r) && r.length===2 && r[0].id===1, 'a returns array', JSON.stringify(r));
+  ok(calls===1, 'a one call', 'calls='+calls);
+
+  // b) retry on 503 then 200
+  console.log('b) retry em 5xx');
+  setFetch((n) => n===1 ? jsonResp(503,{}) : jsonResp(200,[{ok:true}]));
+  r = await H.sbFetch('t','select=*');
+  ok(Array.isArray(r) && r.length===1 && r[0].ok===true, 'b returns ok', JSON.stringify(r));
+  ok(calls===2, 'b two calls', 'calls='+calls);
+
+  // c) retry on 429 then 200
+  console.log('c) retry em 429');
+  setFetch((n) => n===1 ? jsonResp(429,{}) : jsonResp(200,[1,2,3]));
+  r = await H.sbFetch('t','select=*');
+  ok(Array.isArray(r) && r.length===3, 'c returns ok', JSON.stringify(r));
+  ok(calls===2, 'c two calls', 'calls='+calls);
+
+  // d) 4xx definitive (400) does not retry, throws body message
+  console.log('d) 4xx definitivo (400)');
+  setFetch(() => jsonResp(400, {message:'coluna inexistente'}));
+  let threw=null;
+  try { await H.sbFetch('t','select=*'); } catch(e){ threw=e; }
+  ok(threw && threw.message==='coluna inexistente', 'd throws body message', threw && threw.message);
+  ok(calls===1, 'd one call (no retry)', 'calls='+calls);
+
+  // d2) 4xx with non-json body -> falls back to HTTP status
+  console.log('d2) 4xx corpo não-json');
+  setFetch(() => jsonRespBadBody(404));
+  threw=null;
+  try { await H.sbFetch('t',''); } catch(e){ threw=e; }
+  ok(threw && threw.message==='HTTP 404', 'd2 fallback HTTP 404', threw && threw.message);
+  ok(calls===1, 'd2 one call', 'calls='+calls);
+
+  // e) network error (TypeError) retries then throws after SB_RETRIES+1 attempts
+  console.log('e) erro de rede (TypeError) repete');
+  setFetch(() => { throw new TypeError('Failed to fetch'); });
+  threw=null;
+  try { await H.sbFetch('t','select=*'); } catch(e){ threw=e; }
+  ok(threw instanceof TypeError, 'e throws TypeError eventually', threw && threw.name);
+  ok(calls === H.SB_RETRIES+1, 'e attempts = SB_RETRIES+1', 'calls='+calls+' expected='+(H.SB_RETRIES+1));
+
+  // f) timeout: fetch never resolves but honors abort signal
+  console.log('f) timeout');
+  H.SB_TIMEOUT_MS = 50; // shrink
+  setFetch((n, url, opts) => new Promise((resolve, reject) => {
+    const sig = opts && opts.signal;
+    if (sig){
+      sig.addEventListener('abort', () => {
+        const err = new DOMException('Aborted','AbortError');
+        reject(err);
+      });
+    }
+    // never resolves otherwise
+  }));
+  threw=null;
+  const tStart = Date.now();
+  try { await H.sbFetch('t','select=*'); } catch(e){ threw=e; }
+  const elapsed = Date.now()-tStart;
+  ok(threw && /Tempo de resposta esgotado/.test(threw.message), 'f throws timeout message', threw && threw.message);
+  ok(elapsed < 5000, 'f did not hang', 'elapsed='+elapsed+'ms');
+  // with retries: 3 attempts each ~50ms timeout + backoff 400+800; just sanity that it tried >1
+  ok(calls === H.SB_RETRIES+1, 'f attempts = SB_RETRIES+1', 'calls='+calls);
+  H.SB_TIMEOUT_MS = 20000; // restore
+
+  // g) marcarTrunc
+  console.log('g) marcarTrunc');
+  const a80 = Array.from({length:80}, (_,i)=>({i}));
+  const r80 = H.marcarTrunc(a80, 'select=*&limit=80');
+  ok(r80._trunc===true && r80._limite===80, 'g limit=80 len80 marked', '_trunc='+r80._trunc+' _limite='+r80._limite);
+
+  const a79 = Array.from({length:79}, (_,i)=>({i}));
+  const r79 = H.marcarTrunc(a79, 'select=*&limit=80');
+  ok(r79._trunc===undefined, 'g len79 not marked', '_trunc='+r79._trunc);
+
+  const a15 = Array.from({length:15}, (_,i)=>({i}));
+  const r15 = H.marcarTrunc(a15, 'limit=15');
+  ok(r15._trunc===undefined, 'g limit=15 (N<50) not marked', '_trunc='+r15._trunc);
+
+  const aNoLim = Array.from({length:100}, (_,i)=>({i}));
+  const rNoLim = H.marcarTrunc(aNoLim, 'select=*');
+  ok(rNoLim._trunc===undefined, 'g no limit not marked', '_trunc='+rNoLim._trunc);
+
+  const notArr = {foo:1};
+  const rNA = H.marcarTrunc(notArr, 'limit=80');
+  ok(rNA===notArr, 'g non-array returned as-is');
+
+  // non-enumerable checks
+  ok(!JSON.stringify(r80).includes('_trunc'), 'g _trunc not in JSON.stringify', JSON.stringify(r80).slice(0,40));
+  ok(!Object.keys(r80).includes('_trunc'), 'g _trunc not in Object.keys', JSON.stringify(Object.keys(r80).slice(0,3)));
+  // extra: spread/map ignore it
+  ok([...r80].length===80 && Object.keys(r80.map(x=>x)).includes('0'), 'g spread/map preserve length');
+
+  // g3) limit exactly 50 boundary, full
+  const a50 = Array.from({length:50},(_,i)=>i);
+  const r50 = H.marcarTrunc(a50, 'limit=50');
+  ok(r50._trunc===true && r50._limite===50, 'g limit=50 boundary marked', '_trunc='+r50._trunc);
+
+  // h) bannerTrunc
+  console.log('h) bannerTrunc');
+  const banner = H.bannerTrunc(r80);
+  ok(/Resultado parcial/.test(banner) && /80/.test(banner), 'h marked -> banner with number', banner);
+  ok(H.bannerTrunc(r79)==='', 'h unmarked -> empty');
+  ok(H.bannerTrunc(null)==='', 'h null -> empty');
+  ok(H.bannerTrunc([])==='', 'h plain array -> empty');
+
+  console.log('\n==== PLACAR:', pass+'/'+(pass+fail), '====');
+  if (fail){ console.log('FALHAS:'); fails.forEach(f=>console.log('  -',f)); process.exit(1); }
+})();
