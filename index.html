@@ -644,7 +644,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 19/06-G</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 19/06-H</span></span>
   </div>
 </footer>
 
@@ -1450,8 +1450,8 @@ LOADERS.folhaRosto = async () => {
       ['Registro', 'RJ-'+esc(orDash(L.codempresa))],
       ['Código da Ligação', esc(fmtCode(L.codlinha))],
       ['Número da Ligação', esc(orDash(L.numero_ligacao))],
-      ['Ligação', esc(L.nome_ligacao||'—'), true],
-      ['Nome (ordem crescente)', esc(orDash(L.nome_lig_cresc)), true],
+      ['Ligação', esc(L.nome_ligacao||'—')],
+      ['Nome (ordem crescente)', esc(orDash(L.nome_lig_cresc))],
       ['Via', esc(orDash(L.via))],
       ['Característica', esc(orDash(L.caracteristica))],
       ['Tipo', esc(orDash(L.tipo))],
@@ -1574,7 +1574,7 @@ async function renderLineHistory(host, line){
     getEvLookups(), getEmpresas()
   ]);
   const head = docHead('Histórico da Linha');
-  const meta = metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(orDash(line.codempresa))],['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—'),true]]);
+  const meta = metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(orDash(line.codempresa))],['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—')]]);
   if (!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento registrado para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
   const build = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin[r.evento_linha] || lk.emp[r.evento_empresa] || '—', false) + evBlocksHTML(r);
   // PDF/impressão: um evento por página (cabeçalho repetido); segue o filtro aplicado na tela
@@ -1662,7 +1662,7 @@ function quadroHorariosBodyHTML(interv, predet, orig){
 // Corpo de UM quadro (meta + tabelas) para uma linha qualquer — reusado na linha ativa,
 // no clique da lista por empresa e na montagem do PDF de todos os quadros.
 function quadroDocInner(line, interv, predet, orig){
-  return `${metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(line.codempresa||'—')],['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—'),true],line.via?['Via',esc(line.via)]:['',''],['Característica',esc(orDash(line.caracteristica))],['Tipo',esc(orDash(line.tipo))]])}
+  return `${metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(line.codempresa||'—')],['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—')],['Via',esc(orDash(line.via))],['Característica',esc(orDash(line.caracteristica))],['Tipo',esc(orDash(line.tipo))]])}
     ${quadroHorariosBodyHTML(interv, predet, orig)}`;
 }
 // Busca os quadros (intervalo + predeterminado) de várias linhas de uma vez e agrupa por codlinha.
@@ -1702,7 +1702,7 @@ LOADERS.itinerarios = async () => {
   setBody(`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}
     ${metaRows([['Empresa',esc(empNome(codEmp)),true],['Registro','RJ-'+esc(codEmp)],
       ['Código da Ligação',esc(fmtCode(L.codlinha))],['Número da Ligação',esc(orDash(L.numero_ligacao))],
-      ['Ligação',esc(L.nome_ligacao||'—'),true],L.via?['Via',esc(L.via)]:['',''],
+      ['Ligação',esc(L.nome_ligacao||'—')],['Via',esc(orDash(L.via))],
       ['Característica',esc(orDash(L.caracteristica))],['Tipo da Ligação',esc(orDash(L.tipo))]])}
     ${itinerarioTableHTML(rows, ibge)}</div>`);
 };
@@ -1813,7 +1813,7 @@ LOADERS.frota = async () => {
   setBody(`<div class="doc">${docHead('Frota da Linha')}
     ${metaRows([['Empresa',esc(empNome(f.codempresa)),true],['Registro','RJ-'+esc(orDash(f.codempresa))],
       ['Código',esc(fmtCode(activeLine.codlinha))],['Número da Ligação',esc(orDash(activeLine.numero_ligacao))],
-      ['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Hierarquia',esc(orDash(f.hierarquia))],['Última alteração',fmtDate(f.ultima_alteracao)]])}
+      ['Ligação',esc(activeLine.nome_ligacao||'—')],['Hierarquia',esc(orDash(f.hierarquia))],['Última alteração',fmtDate(f.ultima_alteracao)]])}
     ${frotaBlockHTML(f)}</div>`);
 };
 
@@ -1838,7 +1838,7 @@ LOADERS.estrutura = async () => {
     ${metaRows([
       ['Empresa',esc(empNome(L.codempresa)),true],['Registro','RJ-'+esc(orDash(L.codempresa))],
       ['Código da Ligação',esc(fmtCode(L.codlinha))],['Número da Ligação',esc(orDash(L.numero_ligacao))],
-      ['Ligação',esc(L.nome_ligacao||'—'),true],L.via?['Via',esc(L.via)]:['',''],
+      ['Ligação',esc(L.nome_ligacao||'—')],['Via',esc(orDash(L.via))],
       ['Característica',esc(orDash(L.caracteristica))],['Tipo da Ligação',esc(orDash(L.tipo))],
       ['Data de criação',fmtDate(L.data_criacao)],['Processo Nº',esc(orDash(L.processo_criacao)),true],
     ])}
