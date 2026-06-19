@@ -614,15 +614,47 @@
 const SB_URL = 'https://lwzsxuaqqeoamukduhev.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3enN4dWFxcWVvYW11a2R1aGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTk4NjYsImV4cCI6MjA5NTQ5NTg2Nn0.90R-n9pu_gpDfmRr7O4DMAdjtIUkIDGyEKfG9zXXV1s';
 
+const esperar = ms => new Promise(r => setTimeout(r, ms));
+
+const SB_TIMEOUT_MS = 20000;   // teto por requisição: evita a tela presa em "Carregando…" pra sempre
+const SB_RETRIES    = 2;       // tentativas extras só p/ erros transitórios (rede / 5xx / 429)
+
+// fetch com timeout via AbortController — cancela a requisição se passar do teto
+async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS){
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
+  finally { clearTimeout(t); }
+}
+
 async function sbFetch(table, qs = '') {
-  const res = await fetch(`${SB_URL}/rest/v1/${table}?${qs}`, {
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `HTTP ${res.status}`);
+  const url = `${SB_URL}/rest/v1/${table}?${qs}`;
+  let ultimoErro;
+  for (let tentativa = 0; tentativa <= SB_RETRIES; tentativa++) {
+    try {
+      const res = await fetchComTimeout(url, {
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+      });
+      if (!res.ok) {
+        // 5xx/429 são transitórios → vale repetir; demais 4xx são definitivos
+        if ((res.status >= 500 || res.status === 429) && tentativa < SB_RETRIES) {
+          ultimoErro = new Error(`HTTP ${res.status}`);
+          await esperar(400 * 2 ** tentativa);          // backoff: 400ms, 800ms
+          continue;
+        }
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `HTTP ${res.status}`);
+      }
+      return res.json();
+    } catch (e) {
+      ultimoErro = e;
+      const transitorio = (e.name === 'AbortError') || (e instanceof TypeError); // timeout ou falha de rede
+      if (transitorio && tentativa < SB_RETRIES) { await esperar(400 * 2 ** tentativa); continue; }
+      if (e.name === 'AbortError') throw new Error('Tempo de resposta esgotado — verifique a conexão e tente novamente.');
+      throw ultimoErro;
+    }
   }
-  return res.json();
+  throw ultimoErro;
 }
 
 // 101001001 → 101-001-001 (formato do código da ligação no PDF oficial)
@@ -2215,8 +2247,15 @@ try {
   const sbClient = supabase.createClient(SB_URL, SB_KEY, { realtime:{ params:{ eventsPerSecond:5 } } });
   const channel = sbClient.channel('divat-rt');
   RT_TABLES.forEach(t => channel.on('postgres_changes', { event:'*', schema:'public', table:t }, p => onRealtime(t, p)));
-  channel.subscribe(status => { rtDot.classList.toggle('live', status==='SUBSCRIBED'); });
-} catch(e){ console.warn('Realtime indisponível:', e); }
+  channel.subscribe(status => {
+    rtDot.classList.toggle('live', status==='SUBSCRIBED');
+    if (status==='CHANNEL_ERROR' || status==='TIMED_OUT') console.warn('Realtime status:', status);
+  });
+} catch(e){
+  console.warn('Realtime indisponível:', e);
+  // supabase-js (CDN) fora do ar/bloqueado → a consulta via REST segue funcionando, mas sem atualização ao vivo
+  if (typeof toast === 'function') toast('Atualização ao vivo indisponível no momento', 'warn');
+}
 
 // pré-carrega o cadastro de empresas (nome ↔ RJ) p/ os renderizadores síncronos (banner, listas)
 getEmpresas().catch(()=>{});
