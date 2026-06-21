@@ -62,6 +62,31 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
   linha ativa, o `loader()` (ou `_panelRun` dos painéis de busca) roda de novo, com debounce.
 - Atualiza **a tela aberta**. Quem não está com o card aberto vê o dado novo na próxima busca.
 
+## Mapa do código (`index.html`)
+O JS é um arquivo só (~1.800 linhas), mas está dividido em seções com marcas
+`/* ===== TÍTULO ===== */`. **Para achar algo, dê grep na marca da seção** (ela não
+muda de lugar como número de linha muda). Visão geral:
+
+| Seção (faça grep do título) | Funções-chave | O que faz |
+|---|---|---|
+| `SUPABASE CONFIG` | `sbFetch`, `fetchComTimeout`, `marcarTrunc`, `bannerTrunc`, `fmtCode/fmtTime/fmtDate`, `esc/enc/orDash` | Config SB + fetch com timeout/retry; helpers de formatação e escape (XSS). |
+| `ÍCONES` | objeto `I` | SVGs dos ícones. |
+| `SEÇÕES / CARDS` | array `SECTIONS` | Define os cards `[ícone, título, descrição, view, precisaLinha]`. |
+| `RENDER CARDS` | — | Monta os cards da home a partir de `SECTIONS`. |
+| `STATE + CACHES` | `activeLine`, `*Map`, `getIbge/getOrigem/getEmpresas/getEvLookups` | Estado global e caches dos lookups. |
+| `BUSCA DE LINHAS (hero)` | `doSearch`, `closeDropdown` | Busca do topo e dropdown de resultados. |
+| `LINHA ATIVA — BANNER` | `selectLine`, `bannerEmpHTML` | Banner navy da linha selecionada. |
+| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody/loading/errorBox`, `baixarPdf`, `docHead`, `tableHTML`, `paginateEvents`, `matchEvent`, todos os `render*` | **Maior bloco**: abre/preenche o modal e renderiza TODOS os documentos (itinerário, quadro, frota, tarifas, histórico, empresas, municípios, localidades). |
+| `COMPONENTES AUXILIARES` | `linhasTable`, `bindLineRows`, `searchPanel` | Tabela de linhas + painel de busca reutilizável. |
+| `CLIQUE NOS CARDS` | — | Liga o clique do card → abre a view. |
+| `UTILITÁRIOS` | `groupBy`, `countBy`, `fmtMoney` | Agregação dos relatórios e moeda pt-BR. |
+| `TOAST` | `toast` | Avisos transitórios. |
+| `REALTIME` | `RT_TABLES`, `invalidateCaches`, `scheduleReload`, `rowMatchesActiveLine`, `onRealtime` | Assina mudanças do Supabase e recarrega a tela aberta. |
+| `AUTO-ATUALIZAÇÃO` | `checarNovaVersao` | Detector de novo deploy (ETag) que recarrega sozinho. |
+
+A lógica **pura** dessas seções (formatação, busca, filtros, `sbFetch`) tem testes em
+`tests/` — veja a próxima seção. Render/DOM e PDF não têm teste (exigiriam navegador).
+
 ## Publicação (Vercel) e atualização automática
 - **Host oficial: Vercel.** A migração veio do Netlify, que **ficou sem créditos de build**
   (plano Free) e parou de publicar — deploys ficavam pausados. O Vercel serve o site estático
@@ -88,7 +113,9 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
 
 ## Como fazer mudanças
 1. Edite **`index.html`** (todo o código está nele). Trabalhe na branch **`main`** (é a publicada).
-2. Valide a sintaxe do JS antes de publicar (extrair o `<script>` inline e rodar `node --check`).
+2. **Antes de publicar, rode `node tests/check.js`** — valida a sintaxe do `<script>` inline,
+   confere as cópias de teste (guarda anti-drift) e roda todos os testes. Só publique se sair
+   tudo verde. (Ao alterar uma função que tem cópia em `tests/*.harness.js`, atualize a cópia.)
 3. Commit e **push na `main`** → se o auto-deploy git do Vercel estiver conectado, republica sozinho;
    senão, rode o MCP `deploy_to_vercel`. As telas dos usuários se atualizam (via detector de versão).
    Bumpe o carimbo de versão se quiser confirmar a chegada.
