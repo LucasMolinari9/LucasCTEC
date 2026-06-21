@@ -146,3 +146,43 @@ A lógica **pura** dessas seções (formatação, busca, filtros, `sbFetch`) tem
   o hash REAL verificado, pois SRI errado **quebra o carregamento** do site.
 - **`sbFetch` tem timeout (20s) + retry** (backoff) para erros transitórios; erros definitivos (4xx) não
   repetem. Não remover isso ao refatorar.
+
+# Coding Guidelines (Karpathy-inspired)
+
+Bias toward caution over speed on non-trivial work. For trivial tasks
+(typo fixes, obvious one-liners), use judgment — not every change needs the
+full rigor.
+
+## 1. Think Before Coding
+Don't assume. Don't hide confusion. Surface tradeoffs.
+- State assumptions explicitly — if uncertain, ask rather than guess.
+- Present multiple interpretations — don't pick silently when ambiguity exists.
+- Push back when warranted — if a simpler approach exists, say so.
+- Stop when confused — name what's unclear and ask.
+
+## 2. Simplicity First
+Minimum code that solves the problem. Nothing speculative.
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If 200 lines could be 50, rewrite it.
+- Test: would a senior engineer say this is overcomplicated? If yes, simplify.
+
+## 3. Surgical Changes
+Touch only what you must. Clean up only your own mess.
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it — don't delete it.
+- Remove imports/variables/functions that YOUR changes made unused.
+- Test: every changed line should trace directly to the request.
+
+## 4. Goal-Driven Execution
+Define success criteria. Loop until verified.
+- "Add validation" -> "Write tests for invalid inputs, then make them pass."
+- "Fix the bug" -> "Write a test that reproduces it, then make it pass."
+- "Refactor X" -> "Ensure tests pass before and after."
+- For multi-step tasks, state a brief plan with a verify step for each.
+- Strong success criteria let the model loop independently; weak ones
+  ("make it work") require constant clarification.
