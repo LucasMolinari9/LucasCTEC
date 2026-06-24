@@ -87,7 +87,9 @@
 
   /* ---------- Hero / seletor de linha ---------- */
   .hero{
-    position:relative;overflow:hidden;
+    /* overflow:visible para o dropdown de resultados da busca não ser cortado pela
+       borda inferior do hero; a textura ::before é inset:0 com mask, então fica contida. */
+    position:relative;overflow:visible;
     background:
       radial-gradient(120% 150% at 50% -25%, rgba(31,157,87,.18) 0%, rgba(31,157,87,0) 44%),
       linear-gradient(180deg,#0c3e69 0%, var(--navy-deep) 100%);
@@ -345,6 +347,16 @@
   .loc-btn{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;
     font-weight:600;font-size:14px;cursor:pointer;transition:background .12s}
   .loc-btn:hover{background:var(--navy-deep)}
+  /* barra de filtros sobre o resultado (situação / agrupar por empresa) */
+  .loc-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin:2px 0 12px;
+    padding:9px 12px;background:#f3f7fb;border:1px solid var(--line);border-radius:9px}
+  .loc-tools label{display:flex;align-items:center;gap:7px;font-family:'Archivo';font-weight:700;
+    font-size:12.5px;letter-spacing:.03em;text-transform:uppercase;color:#0a3a63}
+  .loc-tools select{border:1px solid var(--line);border-radius:7px;padding:5px 9px;font:inherit;
+    font-size:13.5px;background:#fff;outline:0;text-transform:none;letter-spacing:0}
+  .loc-emp-head{font-family:'Archivo';font-weight:800;font-size:14px;color:var(--navy);
+    margin:16px 0 6px;padding-bottom:4px;border-bottom:2px solid var(--green)}
+  .loc-emp-head .loc-emp-rj{font-weight:600;font-size:12.5px;color:var(--muted)}
   /* faixa de SENTIDO (origem/terminal de partida) no Quadro de Horários */
   .qh-sentido{
     font-family:'Archivo';font-weight:800;font-size:13px;letter-spacing:.06em;
@@ -418,8 +430,8 @@
   .pdf-export .doc-obs{break-inside:avoid}
   /* cabeçalho de grupo não fica órfão no rodapé da página */
   .pdf-export .qh-sentido,.pdf-export .sentido-sep{break-after:avoid}
-  /* a caixa de busca e o paginador nunca entram no PDF */
-  .pdf-export .doc-search,.pdf-export .doc-pager,.pdf-export .ev-empty,.pdf-export .ev-filters{display:none!important}
+  /* a caixa de busca, o paginador e as barras de filtro nunca entram no PDF */
+  .pdf-export .doc-search,.pdf-export .doc-pager,.pdf-export .ev-empty,.pdf-export .ev-filters,.pdf-export .loc-tools{display:none!important}
   /* o PDF/impressão nunca rola e usa a largura natural da tabela. O container .pdf-export
      fica fora do .modal-body, então as regras mobile já não o atingem — isto é defesa extra
      (o html2canvas rasteriza este container na largura real do dispositivo). */
@@ -428,6 +440,9 @@
   .pdf-export .ev-grid{grid-template-columns:1.05fr 1.5fr 2fr 1.05fr!important}
   .pdf-export .ev-grid.ev5{grid-template-columns:.9fr .9fr 1.3fr 1.7fr .9fr!important}
   .pdf-export .loc-form{grid-template-columns:1fr 1fr!important}
+  /* o html2canvas não resolve width:auto em SVG que só tem viewBox → o logo saía minúsculo.
+     Largura explícita (proporção 3200:847 ≈ 3.78) e tamanho maior p/ o cabeçalho do PDF. */
+  .pdf-export .doc-head .brand-logo svg{height:68px;width:257px}
   /* ===== Tela cheia do modal (preenche a tela inteira) ===== */
   .modal-overlay.fs-fallback,
   .modal-overlay:fullscreen,
@@ -644,7 +659,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 19/06-H</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 24/06-A</span></span>
   </div>
 </footer>
 
@@ -801,6 +816,7 @@ const SECTIONS = [
   { key:'ger', name:'Gerenciais e Pesquisa', color:'var(--c-ger)', soft:'#efe9f7',
     items:[
       ['chart','Relatórios Gerenciais','Indicadores e consolidados da DIVAT','relatoriosGerenciais',false],
+      ['bus','Frota por Empresa','Frota consolidada por operadora e hierarquia','frotaPorEmpresa',false],
       ['search','Pesquisa de Evento','Buscar eventos por termo livre','pesquisaEvento',false],
       ['law','Portarias / Legislação','Buscar portarias por número, assunto ou texto','portarias',false],
     ]},
@@ -1632,13 +1648,15 @@ function itinerarioTableHTML(rows, ibge){
 }
 function quadroHorariosBodyHTML(interv, predet, orig){
   if(!interv.length && !predet.length) return emptyBox('Nenhum quadro de horários cadastrado para esta linha.');
-  // prefere o nome_origem que vem na própria linha; cai no lookup origem_teste e, por fim, no código
-  const origLabel = (c, list) => esc((list && list.find(x=>x.nome_origem)?.nome_origem) || orig[c] || ('Origem '+orDash(c)));
+  // Rótulo do SENTIDO: a origem AUTORITATIVA (origem_teste, via `orig`) tem prioridade sobre o
+  // nome_origem denormalizado das tabelas de QH (que vem inconsistente/trocado na base). Agrupa
+  // pelo rótulo resolvido → códigos diferentes com a mesma origem não geram blocos repetidos.
+  const sentidoKey = (cod, nome) => orig[cod] || nome || ('Origem '+orDash(cod));
   let html='';
   if (interv.length){
     html += `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:14px 0 4px">Por intervalo / frequência</h3>`;
-    for (const [cod, list] of groupBy(interv, r=>r.cod_origen ?? '—')){
-      html += `<div class="qh-sentido">Sentido · partidas de ${origLabel(cod, list)}</div>`;
+    for (const [label, list] of groupBy(interv, r=>sentidoKey(r.cod_origen, r.nome_origem))){
+      html += `<div class="qh-sentido">Sentido · partidas de ${esc(label)}</div>`;
       for (const [dia, rows] of groupBy(list, r=>r.dia_semana||'—')){
         const body = rows.map(r=>`<tr><td class="td-num">${esc(fmtTime(r.hora_inicio))}</td>
           <td class="td-num">${esc(fmtTime(r.hora_fim))}</td><td class="td-tipo">${esc(orDash(r.intervalo))} min</td></tr>`).join('');
@@ -1649,8 +1667,8 @@ function quadroHorariosBodyHTML(interv, predet, orig){
   }
   if (predet.length){
     html += `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:18px 0 4px">Horários predeterminados</h3>`;
-    for (const [cod, list] of groupBy(predet, r=>r.cod_origem ?? '—')){
-      html += `<div class="qh-sentido">Sentido · partidas de ${origLabel(cod, list)}</div>`;
+    for (const [label, list] of groupBy(predet, r=>sentidoKey(r.cod_origem, r.nome_origem))){
+      html += `<div class="qh-sentido">Sentido · partidas de ${esc(label)}</div>`;
       for (const [dia, rows] of groupBy(list, r=>r.dia_semana||'—')){
         const horas = rows.map(r=>`<span class="mono" style="display:inline-block;background:#eef4f9;color:var(--blue);padding:2px 7px;border-radius:5px;margin:2px;font-size:12.5px">${esc(fmtTime(r.saida))}</span>`).join('');
         html += `<div style="margin-top:6px"><div class="sentido-sep" style="padding:5px 8px">${esc(dia)} · ${rows.length} partida(s)</div><div style="padding:8px 4px">${horas}</div></div>`;
@@ -1962,7 +1980,7 @@ LOADERS.historicoEmpresa = async () => {
 
 /* ---- Consultas de Ligações ---- */
 LOADERS.ligacoesPorNome = async () => {
-  searchPanel({ title:'Ligações pelo Nome', placeholder:'Parte do nome da ligação', onRun: async(term, host)=>{
+  searchPanel({ title:'Ligações pelo Nome', placeholder:'Parte do nome da ligação', note:'Esta consulta casa apenas o NOME da ligação (ordem alfabética). Para localizar por número ou código, use a busca do topo da página.', onRun: async(term, host)=>{
     const qs = term? `nome_ligacao=ilike.*${enc(term)}*&` : '';
     const [rows] = await Promise.all([
       sbFetch('tabela_vista_teste', `${qs}select=${LINE_FIELDS}&order=nome_ligacao&limit=80`),
@@ -2018,8 +2036,27 @@ function openLinhasPorIbge(codibge, nome){
       sbFetch('tabela_vista_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=300`),
       getEmpresas()
     ]);
-    setBody(`<div class="doc">${docHead('Linhas no Município')}${metaRows([['Município',esc(nome||codibge),true],['Total',cods.length+' linha(s)']])}${linhasTable(rows)}</div>`);
-    bindLineRows();
+    // operadoras presentes no resultado → filtro por operadora (item 12)
+    const emps = [...new Set(rows.map(r=>r.codempresa).filter(v=>v!=null && v!==''))]
+      .sort((x,y)=>(empNome(x)||'').localeCompare(empNome(y)||''));
+    const opts = ['<option value="">Todas as operadoras</option>']
+      .concat(emps.map(c=>`<option value="${esc(c)}">${esc(empNome(c))} (RJ-${esc(c)})</option>`)).join('');
+    setBody(`<div class="doc">${docHead('Linhas no Município')}
+      ${metaRows([['Município',esc(nome||codibge),true],['Total',cods.length+' linha(s)']])}
+      <div class="loc-tools"><label>Operadora <select id="munEmp">${opts}</select></label></div>
+      <div id="munResult"></div></div>`);
+    const result = modalBody.querySelector('#munResult'), sel = modalBody.querySelector('#munEmp');
+    const metaPdf = metaRows([['Município',esc(nome||codibge),true],['Total',cods.length+' linha(s)']]);
+    // PDF determinístico: lista completa, sem a barra de filtro (evita espaço em branco / subconjunto filtrado)
+    if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Linhas no Município')}${metaPdf}${linhasTable(rows)}</div>`;
+    const paint = ()=>{
+      const c = sel.value;
+      const f = c ? rows.filter(r=>String(r.codempresa)===String(c)) : rows;
+      result.innerHTML = f.length ? linhasTable(f) : emptyBox('Nenhuma linha dessa operadora.');
+      bindLineRows(result);
+    };
+    sel.addEventListener('change', paint);
+    paint();
   }});
 }
 // linhas (codlinha distintos) cujo itinerário passa por um município (codibge)
@@ -2147,6 +2184,41 @@ LOADERS.relatoriosGerenciais = async () => {
     ${tableHTML([{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Linhas',w:'90px'}], porEmp.map(([c,n])=>`<tr><td class="td-num">${esc(c)}</td><td class="td-logr">${esc(empNome(c))}</td><td class="td-sentido">${n}</td></tr>`).join(''))}
     <div class="doc-foot">Consolidado sobre ${total} linhas · tabela_vista_teste</div></div>`);
 };
+// Frota consolidada por empresa (total geral + quebra por hierarquia) — item 16
+LOADERS.frotaPorEmpresa = async () => {
+  const [rows] = await Promise.all([
+    sbFetch('qh_teste', `select=codempresa,hierarquia,frota_operacional,reserva&limit=10000`),
+    getEmpresas()
+  ]);
+  if(!rows.length){ setBody(`<div class="doc">${docHead('Frota por Empresa')}${emptyBox('Nenhuma frota cadastrada.')}</div>`); return; }
+  const num = v => { const n = Number(v); return isNaN(n) ? 0 : n; };
+  const sum = (arr,f) => arr.reduce((s,r)=>s+num(r[f]),0);
+  const fmtN = n => n.toLocaleString('pt-BR');
+  const totOp = sum(rows,'frota_operacional'), totRes = sum(rows,'reserva');
+  const porEmp = [...groupBy(rows, r=>r.codempresa||'—')]
+    .map(([cod,rs])=>({cod, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
+    .sort((a,b)=>b.op-a.op);
+  const porHier = [...groupBy(rows, r=>r.hierarquia||'—')]
+    .map(([h,rs])=>({h, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
+    .sort((a,b)=>b.op-a.op);
+  const h3 = t => `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:18px 0 4px">${t}</h3>`;
+  setBody(`<div class="doc">${docHead('Frota por Empresa')}
+    <div class="kpi-grid">
+      <div class="kpi"><b>${fmtN(totOp)}</b><span>Frota operacional</span></div>
+      <div class="kpi"><b>${fmtN(totRes)}</b><span>Reserva</span></div>
+      <div class="kpi"><b>${rows.length}</b><span>Linhas</span></div>
+      <div class="kpi"><b>${porEmp.length}</b><span>Empresas</span></div>
+      <div class="kpi"><b>${porHier.length}</b><span>Hierarquias</span></div>
+    </div>
+    ${h3('Frota por empresa')}
+    ${tableHTML([{t:'RJ',w:'62px'},{t:'Empresa'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}],
+      porEmp.map(e=>`<tr><td class="td-num">${esc(e.cod)}</td><td class="td-logr">${esc(empNome(e.cod))}</td><td class="td-num">${e.n}</td><td class="td-sentido">${fmtN(e.op)}</td><td class="td-num">${fmtN(e.res)}</td></tr>`).join(''),
+      `${porEmp.length} empresa(s) · total operacional ${fmtN(totOp)} · reserva ${fmtN(totRes)}`)}
+    ${h3('Frota por hierarquia')}
+    ${tableHTML([{t:'Hierarquia'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}],
+      porHier.map(x=>`<tr><td class="td-logr">${esc(orDash(x.h))}</td><td class="td-num">${x.n}</td><td class="td-sentido">${fmtN(x.op)}</td><td class="td-num">${fmtN(x.res)}</td></tr>`).join(''))}
+    <div class="doc-foot">Consolidado sobre ${rows.length} linhas · qh_teste</div></div>`);
+};
 LOADERS.pesquisaEvento = async () => {
   searchPanel({ title:'Pesquisa de Evento', placeholder:'Termo livre (processo, descrição, observação)', onRun: async(term, host)=>{
     if(!term){ host.innerHTML=emptyBox('Digite um termo para pesquisar eventos.'); return; }
@@ -2245,15 +2317,51 @@ async function mostrarLinhasPorLocalidade(host, a, b){
   host.innerHTML = loading();
   try{
     const ai = enc(a);
-    const rows = await sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${ai}*,nome_lig_cresc.ilike.*${ai}*,via.ilike.*${ai}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=400`);
-    let list = rows;
-    if(b){ const bl=norm(b); list = rows.filter(r=> norm((r.nome_ligacao||'')+' '+(r.nome_lig_cresc||'')+' '+(r.via||'')).includes(bl)); }
-    if(!list.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${a}" e "${b}".`:`Nenhuma linha encontrada para "${a}".`); return; }
+    // 1) linhas cujo nome/nome_cresc/via casa a localidade  2) linhas cujas SEÇÕES de tarifa
+    //    casam a localidade (item 13: as seções da Estrutura também entram na busca)
+    const [lineRows, secHits] = await Promise.all([
+      sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${ai}*,nome_lig_cresc.ilike.*${ai}*,via.ilike.*${ai}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=400`),
+      sbFetch('tarifa_atual_teste', `or=(nome_ligacao.ilike.*${ai}*,via.ilike.*${ai}*)&select=codlinha&limit=3000`)
+    ]);
+    const haveCods = new Set(lineRows.map(r=>r.codlinha));
+    const extraCods = [...new Set(secHits.map(r=>r.codlinha).filter(c=>c && !haveCods.has(c)))].slice(0,200);
+    let rows = lineRows;
+    if(extraCods.length){
+      const extra = await sbFetch('tabela_vista_teste', `codlinha=in.(${extraCods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=200`);
+      rows = lineRows.concat(extra);
+    }
+    const viaSecao = rows.length - lineRows.length;   // quantas entraram só pela seção
+    let base = rows;
+    if(b){ const bl=norm(b); base = rows.filter(r=> norm((r.nome_ligacao||'')+' '+(r.nome_lig_cresc||'')+' '+(r.via||'')).includes(bl)); }
+    if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${a}" e "${b}".`:`Nenhuma linha encontrada para "${a}".`); return; }
     await getEmpresas();
     const titulo = b? `${esc(a)} ↔ ${esc(b)}` : esc(a);
-    host.innerHTML = bannerTrunc(rows) + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${list.length} linha(s) · ${titulo}</p>`
-      + linhasTable(list.slice(0,300));
-    bindLineRows(host);
+    const secNote = (!b && viaSecao>0) ? ` · ${viaSecao} via seção de tarifa` : '';
+    host.innerHTML = bannerTrunc(rows)
+      + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${base.length} linha(s) · ${titulo}${secNote}</p>`
+      + `<div class="loc-tools">
+           <label>Situação <select id="locStatus"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="canceladas">Canceladas</option></select></label>
+           <label><input type="checkbox" id="locGroup"> Agrupar por empresa</label>
+         </div>
+         <div id="locResult"></div>`;
+    const result = host.querySelector('#locResult');
+    const statusSel = host.querySelector('#locStatus'), groupChk = host.querySelector('#locGroup');
+    const paint = ()=>{
+      const st = statusSel.value;
+      let f = st==='ativas' ? base.filter(r=>!r.cancelado && !r.paralisado)
+            : st==='canceladas' ? base.filter(r=>r.cancelado) : base;
+      if(!f.length){ result.innerHTML = emptyBox('Nenhuma linha com esse filtro.'); return; }
+      if(groupChk.checked){
+        const groups = [...groupBy(f, r=>r.codempresa||'—')].sort((x,y)=>(empNome(x[0])||'').localeCompare(empNome(y[0])||''));
+        result.innerHTML = groups.map(([cod,rs])=>`<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${rs.length} linha(s)</span></h3>${linhasTable(rs)}`).join('');
+      } else {
+        result.innerHTML = linhasTable(f.slice(0,300));
+      }
+      bindLineRows(result);
+    };
+    statusSel.addEventListener('change', paint);
+    groupChk.addEventListener('change', paint);
+    paint();
   }catch(e){ host.innerHTML = errorBox(e.message); }
 }
 LOADERS.localidades = async () => {
@@ -2294,7 +2402,9 @@ function linhasTable(rows){
     <td class="td-logr" data-label="Via">${esc(r.via||'—')}</td>
     <td class="td-tipo" data-label="Característica">${esc(r.caracteristica||'—')}</td>
     <td data-label="Tipo">${esc(r.tipo||'')} ${boolChip(r.cancelado,'canc.')}</td></tr>`).join('');
-  return bannerTrunc(rows) + tableHTML([{t:'Empresa'},{t:'RJ',w:'55px'},{t:'Código',w:'120px'},{t:'Número',w:'90px'},{t:'Nome'},{t:'Via'},{t:'Característica',w:'115px'},{t:'Tipo',w:'110px'}], body, rows.length+' ligação(ões) · clique para abrir', 'stack');
+  // "Nome" e "Empresa" ficam sem largura fixa (colunas flexíveis); as secundárias têm largura
+  // fixa e enxuta para sobrar mais espaço ao nome da linha.
+  return bannerTrunc(rows) + tableHTML([{t:'Empresa',w:'150px'},{t:'RJ',w:'52px'},{t:'Código',w:'108px'},{t:'Número',w:'82px'},{t:'Nome'},{t:'Via',w:'110px'},{t:'Característica',w:'100px'},{t:'Tipo',w:'95px'}], body, rows.length+' ligação(ões) · clique para abrir', 'stack');
 }
 function bindLineRows(host){
   (host||modalBody).querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{
@@ -2334,6 +2444,7 @@ const VIEW_TABLES = {
   ligacoesPorLogradouro:['itinerario_teste'], municipioRegiao:['municipio_teste'],
   entreLocalidades:['municipio_teste','itinerario_teste'], ligacoesPorTerminal:['qh_intervalo_teste'],
   secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste'],
+  frotaPorEmpresa:['qh_teste'],
   pesquisaEvento:['evento_teste'], portarias:['portaria_teste'],
   localidades:['tabela_vista_teste'],
 };
