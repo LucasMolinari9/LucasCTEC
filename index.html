@@ -1843,8 +1843,8 @@ LOADERS.estrutura = async () => {
     sbFetch('tabela_vista_teste', `codlinha=eq.${cod}&select=${LINE_FIELDS}&limit=1`),
     sbFetch('tarifa_atual_teste', `codlinha=eq.${cod}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`),
     sbFetch('itinerario_teste', `codlinha=eq.${cod}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_origem,codempresa&order=id`),
-    sbFetch('qh_intervalo_teste', `codlinha=eq.${cod}&select=cod_origen,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
-    sbFetch('qh_predeterminado_teste', `codlinha=eq.${cod}&select=cod_origem,dia_semana,saida&order=id`),
+    sbFetch('qh_intervalo_teste', `codlinha=eq.${cod}&select=cod_origen,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
+    sbFetch('qh_predeterminado_teste', `codlinha=eq.${cod}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
     sbFetch('qh_teste', `codlinha=eq.${cod}&select=codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e&limit=1`),
     getOrigem(), getIbge(), getEmpresas()
   ]);
@@ -2203,6 +2203,7 @@ LOADERS.frotaPorEmpresa = async () => {
     .sort((a,b)=>b.op-a.op);
   const h3 = t => `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:18px 0 4px">${t}</h3>`;
   setBody(`<div class="doc">${docHead('Frota por Empresa')}
+    ${bannerTrunc(rows)}
     <div class="kpi-grid">
       <div class="kpi"><b>${fmtN(totOp)}</b><span>Frota operacional</span></div>
       <div class="kpi"><b>${fmtN(totRes)}</b><span>Reserva</span></div>
