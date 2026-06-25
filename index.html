@@ -357,6 +357,13 @@
   .loc-emp-head{font-family:'Archivo';font-weight:800;font-size:14px;color:var(--navy);
     margin:16px 0 6px;padding-bottom:4px;border-bottom:2px solid var(--green)}
   .loc-emp-head .loc-emp-rj{font-weight:600;font-size:12.5px;color:var(--muted)}
+  /* chips de município (drill-down) na consulta por região */
+  .mun-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:2px 0 12px}
+  .mun-chips-lbl{font-family:'Archivo';font-weight:700;font-size:12px;letter-spacing:.03em;
+    text-transform:uppercase;color:#0a3a63;margin-right:4px}
+  .mun-chip{font:inherit;font-size:12.5px;border:1px solid var(--line);background:#fff;color:var(--navy);
+    border-radius:999px;padding:4px 11px;cursor:pointer;transition:background .12s,border-color .12s}
+  .mun-chip:hover{background:#eef5fb;border-color:var(--c-lig)}
   /* faixa de SENTIDO (origem/terminal de partida) no Quadro de Horários */
   .qh-sentido{
     font-family:'Archivo';font-weight:800;font-size:13px;letter-spacing:.06em;
@@ -659,7 +666,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 25/06-B</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 25/06-C</span></span>
   </div>
 </footer>
 
@@ -1993,8 +2000,7 @@ LOADERS.ligacoesPorEmpresa = async () => {
     }
     const filter = cods.length===1 ? `codempresa=eq.${enc(cods[0])}` : `codempresa=in.(${cods.map(enc).join(',')})`;
     const rows = await sbFetch('tabela_vista_teste', `${filter}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`);
-    host.innerHTML = rows.length? linhasTable(rows): emptyBox('Nenhuma ligação encontrada.');
-    bindLineRows(host);
+    lineResults(host, rows);
   }, tables:['tabela_vista_teste']});
 };
 LOADERS.secoesPorEmpresa = async () => {
@@ -2059,8 +2065,7 @@ LOADERS.ligacoesPorNome = async () => {
       sbFetch('tabela_vista_teste', `${qs}select=${LINE_FIELDS}&order=nome_ligacao&limit=80`),
       getEmpresas()
     ]);
-    host.innerHTML = rows.length? linhasTable(rows): emptyBox('Nenhuma ligação encontrada.');
-    bindLineRows(host);
+    lineResults(host, rows);
   }, tables:['tabela_vista_teste'], auto:true});
 };
 LOADERS.ligacoesPorNumero = async () => {
@@ -2071,8 +2076,7 @@ LOADERS.ligacoesPorNumero = async () => {
       sbFetch('tabela_vista_teste', `or=(numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=codlinha&limit=80`),
       getEmpresas()
     ]);
-    host.innerHTML = rows.length? linhasTable(rows): emptyBox('Nenhuma linha com esse número/código.');
-    bindLineRows(host);
+    lineResults(host, rows);
   }, tables:['tabela_vista_teste']});
 };
 LOADERS.ligacoesPorLogradouro = async () => {
@@ -2085,20 +2089,48 @@ LOADERS.ligacoesPorLogradouro = async () => {
       sbFetch('tabela_vista_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=200`),
       getEmpresas()
     ]);
-    host.innerHTML = bannerTrunc(it) + `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${cods.length} linha(s) passam por "${esc(term)}"</p>`+linhasTable(rows);
-    bindLineRows(host);
+    const prefix = bannerTrunc(it) + `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${cods.length} linha(s) passam por "${esc(term)}"</p>`;
+    lineResults(host, rows, { prefixHTML: prefix });
   }, tables:['itinerario_teste']});
 };
 LOADERS.municipioRegiao = async () => {
   const ibge = await getIbge();
   const regioes = [...new Set(Object.values(ibge).map(x=>x.regiao).filter(Boolean))].sort();
-  searchPanel({ title:'Município e Região', placeholder:'Nome do município', selectOpts:[['','Todas as regiões'],...regioes.map(r=>[r,r])], onRun: async(term, host, region)=>{
-    let municipios = Object.entries(ibge).filter(([,v])=> (!region||v.regiao===region) && (!term||(v.nome||'').toLowerCase().includes(term.toLowerCase())) );
-    const body = municipios.sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>
+  // tabela de municípios clicáveis (drill-down → openLinhasPorIbge)
+  const munTable = (entries, host)=>{
+    const body = entries.sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>
       `<tr class="clickable" tabindex="0" role="button" data-ibge="${esc(cod)}"><td class="td-logr">${esc(v.nome)}</td><td class="td-tipo">${esc(orDash(v.regiao))}</td><td class="td-num">cód. ${esc(cod)}</td></tr>`).join('');
-    host.innerHTML = body? tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}], body, municipios.length+' município(s) · clique para ver as linhas'):emptyBox('Nenhum município.');
+    host.innerHTML = body? tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}], body, entries.length+' município(s) · clique para ver as linhas'):emptyBox('Nenhum município.');
     host.querySelectorAll('tr[data-ibge]').forEach(tr=>tr.addEventListener('click',()=>openLinhasPorIbge(tr.dataset.ibge, ibge[tr.dataset.ibge]?.nome)));
-  }, tables:['municipio_teste'], auto:true});
+  };
+  searchPanel({ title:'Município e Região', placeholder:'Nome do município (ou escolha uma região)', selectOpts:[['','Todas as regiões'],...regioes.map(r=>[r,r])], onRun: async(term, host, region)=>{
+    await getEmpresas();
+    // 1) município digitado → vai pras linhas do município (lista se houver vários)
+    if(term){
+      const municipios = Object.entries(ibge).filter(([,v])=> (!region||v.regiao===region) && (v.nome||'').toLowerCase().includes(term.toLowerCase()) );
+      if(!municipios.length){ host.innerHTML = emptyBox('Nenhum município.'); return; }
+      if(municipios.length===1){ openLinhasPorIbge(municipios[0][0], municipios[0][1].nome); return; }
+      munTable(municipios, host); return;
+    }
+    // 2) região escolhida (sem município) → linhas da região inteira, agrupadas por empresa
+    if(region){
+      const cods = Object.entries(ibge).filter(([,v])=>v.regiao===region).map(([c])=>c);
+      const it = await sbFetch('itinerario_teste', `cod_origem=in.(${cods.map(enc).join(',')})&select=codlinha&limit=20000`);
+      const lc = [...new Set(it.map(r=>r.codlinha).filter(Boolean))].slice(0,500);
+      if(!lc.length){ host.innerHTML = emptyBox('Nenhuma linha na região '+esc(region)+'.'); return; }
+      const rows = await sbFetch('tabela_vista_teste', `codlinha=in.(${lc.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`);
+      const muns = Object.entries(ibge).filter(([,v])=>v.regiao===region).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||''));
+      const chips = muns.map(([cod,v])=>`<button type="button" class="mun-chip" data-ibge="${esc(cod)}">${esc(v.nome)}</button>`).join('');
+      const prefix = bannerTrunc(it)
+        + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${lc.length} linha(s) na região ${esc(region)}</p>`
+        + `<div class="mun-chips"><span class="mun-chips-lbl">Filtrar por município:</span>${chips}</div>`;
+      lineResults(host, rows, { prefixHTML: prefix });
+      host.querySelectorAll('.mun-chip').forEach(b=>b.addEventListener('click',()=>openLinhasPorIbge(b.dataset.ibge, ibge[b.dataset.ibge]?.nome)));
+      return;
+    }
+    // 3) nada informado → orienta
+    host.innerHTML = emptyBox('Escolha uma região para ver as linhas, ou digite o nome de um município.');
+  }, tables:['municipio_teste','itinerario_teste','tabela_vista_teste'], auto:true});
 };
 function openLinhasPorIbge(codibge, nome){
   runView({ title:'Linhas no Município', tables:['itinerario_teste'], loader: async()=>{
@@ -2109,27 +2141,14 @@ function openLinhasPorIbge(codibge, nome){
       sbFetch('tabela_vista_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=300`),
       getEmpresas()
     ]);
-    // operadoras presentes no resultado → filtro por operadora (item 12)
-    const emps = [...new Set(rows.map(r=>r.codempresa).filter(v=>v!=null && v!==''))]
-      .sort((x,y)=>(empNome(x)||'').localeCompare(empNome(y)||''));
-    const opts = ['<option value="">Todas as operadoras</option>']
-      .concat(emps.map(c=>`<option value="${esc(c)}">${esc(empNome(c))} (RJ-${esc(c)})</option>`)).join('');
     setBody(`<div class="doc">${docHead('Linhas no Município')}
       ${metaRows([['Município',esc(nome||codibge),true],['Total',cods.length+' linha(s)']])}
-      <div class="loc-tools"><label>Operadora <select id="munEmp">${opts}</select></label></div>
       <div id="munResult"></div></div>`);
-    const result = modalBody.querySelector('#munResult'), sel = modalBody.querySelector('#munEmp');
+    const result = modalBody.querySelector('#munResult');
     const metaPdf = metaRows([['Município',esc(nome||codibge),true],['Total',cods.length+' linha(s)']]);
     // PDF determinístico: lista completa, sem a barra de filtro (evita espaço em branco / subconjunto filtrado)
     if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Linhas no Município')}${metaPdf}${linhasTable(rows)}</div>`;
-    const paint = ()=>{
-      const c = sel.value;
-      const f = c ? rows.filter(r=>String(r.codempresa)===String(c)) : rows;
-      result.innerHTML = f.length ? linhasTable(f) : emptyBox('Nenhuma linha dessa operadora.');
-      bindLineRows(result);
-    };
-    sel.addEventListener('change', paint);
-    paint();
+    lineResults(result, rows);
   }});
 }
 // linhas (codlinha distintos) cujo itinerário passa por um município (codibge)
@@ -2145,8 +2164,8 @@ async function mostrarLinhasResultado(host, cods, titulo){
     getEmpresas()
   ]);
   const extra = cods.length>slice.length ? ` (mostrando ${slice.length})` : '';
-  host.innerHTML = `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${cods.length} linha(s) — ${esc(titulo)}${extra}</p>` + linhasTable(rows);
-  bindLineRows(host);
+  const prefix = `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${cods.length} linha(s) — ${esc(titulo)}${extra}</p>`;
+  lineResults(host, rows, { prefixHTML: prefix });
 }
 LOADERS.entreLocalidades = async () => {
   const ibge = await getIbge();
@@ -2411,31 +2430,9 @@ async function mostrarLinhasPorLocalidade(host, a, b){
     await getEmpresas();
     const titulo = b? `${esc(a)} ↔ ${esc(b)}` : esc(a);
     const secNote = (!b && viaSecao>0) ? ` · ${viaSecao} via seção de tarifa` : '';
-    host.innerHTML = bannerTrunc(rows)
-      + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${base.length} linha(s) · ${titulo}${secNote}</p>`
-      + `<div class="loc-tools">
-           <label>Situação <select id="locStatus"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="canceladas">Canceladas</option></select></label>
-           <label><input type="checkbox" id="locGroup"> Agrupar por empresa</label>
-         </div>
-         <div id="locResult"></div>`;
-    const result = host.querySelector('#locResult');
-    const statusSel = host.querySelector('#locStatus'), groupChk = host.querySelector('#locGroup');
-    const paint = ()=>{
-      const st = statusSel.value;
-      let f = st==='ativas' ? base.filter(r=>!r.cancelado && !r.paralisado)
-            : st==='canceladas' ? base.filter(r=>r.cancelado) : base;
-      if(!f.length){ result.innerHTML = emptyBox('Nenhuma linha com esse filtro.'); return; }
-      if(groupChk.checked){
-        const groups = [...groupBy(f, r=>r.codempresa||'—')].sort((x,y)=>(empNome(x[0])||'').localeCompare(empNome(y[0])||''));
-        result.innerHTML = groups.map(([cod,rs])=>`<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${rs.length} linha(s)</span></h3>${linhasTable(rs)}`).join('');
-      } else {
-        result.innerHTML = linhasTable(f.slice(0,300));
-      }
-      bindLineRows(result);
-    };
-    statusSel.addEventListener('change', paint);
-    groupChk.addEventListener('change', paint);
-    paint();
+    const prefix = bannerTrunc(rows)
+      + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${base.length} linha(s) · ${titulo}${secNote}</p>`;
+    lineResults(host, base, { prefixHTML: prefix });
   }catch(e){ host.innerHTML = errorBox(e.message); }
 }
 LOADERS.localidades = async () => {
@@ -2465,6 +2462,43 @@ LOADERS.localidades = async () => {
 /* ================================================================
    COMPONENTES AUXILIARES (tabela de linhas + painel de busca)
    ================================================================ */
+// ordena grupos de empresa pelo RJ (codempresa) numérico; sem código vai pro fim
+function rjOrder(a, b){
+  const na=parseInt(a,10), nb=parseInt(b,10);
+  if(isNaN(na)&&isNaN(nb)) return String(a).localeCompare(String(b));
+  if(isNaN(na)) return 1; if(isNaN(nb)) return -1;
+  return na-nb;
+}
+// Lista de linhas com barra de filtro (situação) + agrupamento por empresa LIGADO por padrão,
+// com os grupos ordenados pelo RJ (codempresa). Padrão de qualquer consulta que lista linhas.
+// `prefixHTML` entra antes da barra (contadores/banner). Requer getEmpresas() já carregado.
+function lineResults(host, rows, { prefixHTML='' } = {}){
+  if(!rows || !rows.length){ host.innerHTML = prefixHTML + emptyBox('Nenhuma ligação encontrada.'); return; }
+  host.innerHTML = prefixHTML
+    + `<div class="loc-tools">
+         <label>Situação <select id="lrStatus"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="canceladas">Canceladas</option></select></label>
+         <label><input type="checkbox" id="lrGroup" checked> Agrupar por empresa</label>
+       </div>
+       <div id="lrResult"></div>`;
+  const result = host.querySelector('#lrResult');
+  const statusSel = host.querySelector('#lrStatus'), groupChk = host.querySelector('#lrGroup');
+  const paint = ()=>{
+    const st = statusSel.value;
+    const f = st==='ativas' ? rows.filter(r=>!r.cancelado && !r.paralisado)
+            : st==='canceladas' ? rows.filter(r=>r.cancelado) : rows;
+    if(!f.length){ result.innerHTML = emptyBox('Nenhuma linha com esse filtro.'); return; }
+    if(groupChk.checked){
+      const groups = [...groupBy(f, r=>r.codempresa||'—')].sort((x,y)=>rjOrder(x[0],y[0]));
+      result.innerHTML = groups.map(([cod,rs])=>`<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${rs.length} linha(s)</span></h3>${linhasTable(rs)}`).join('');
+    } else {
+      result.innerHTML = linhasTable(f.slice(0,300));
+    }
+    bindLineRows(result);
+  };
+  statusSel.addEventListener('change', paint);
+  groupChk.addEventListener('change', paint);
+  paint();
+}
 function linhasTable(rows){
   if(!rows.length) return emptyBox('Nenhuma ligação.');
   const body = rows.map(r=>`<tr class="clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
@@ -2515,7 +2549,7 @@ const VIEW_TABLES = {
   empresasRegulares:['tabela_vista_teste'], historicoEmpresa:['evento_teste'],
   ligacoesPorEmpresa:['tabela_vista_teste'], secoesPorEmpresa:['tarifa_atual_teste'],
   ligacoesPorNome:['tabela_vista_teste'], ligacoesPorNumero:['tabela_vista_teste'],
-  ligacoesPorLogradouro:['itinerario_teste'], municipioRegiao:['municipio_teste'],
+  ligacoesPorLogradouro:['itinerario_teste'], municipioRegiao:['municipio_teste','itinerario_teste','tabela_vista_teste'],
   entreLocalidades:['municipio_teste','itinerario_teste'], ligacoesPorTerminal:['qh_intervalo_teste'],
   secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste'],
   frotaPorEmpresa:['qh_teste'],
