@@ -659,7 +659,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 25/06-A</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 25/06-B</span></span>
   </div>
 </footer>
 
@@ -790,7 +790,7 @@ const SECTIONS = [
       ['divider','Folha Divisória','Busque a linha por nome, código ou número','folhaDivisoria',false],
       ['history','Histórico da Linha','Alterações e eventos registrados','historicoLinha',false],
       ['route','Itinerários','Busque a linha por nome, código ou número','itinerarios',false],
-      ['clock','Quadro de Horários','Por linha selecionada ou por empresa (PDF de todos)','quadroHorarios',false],
+      ['clock','Quadro de Horários','Busque por linha (nº/nome/código) ou empresa (PDF de todos)','quadroHorarios',false],
       ['ticket','Tarifas','Busque a linha por nome, código ou número','tarifas',false],
       ['bus','Frota','Busque a linha por nome, código ou número','frota',false],
       ['structure','Estrutura Operacional','Busque a linha por nome, código ou número','estrutura',false],
@@ -1772,30 +1772,52 @@ async function renderItinerarios(host, line){
 LOADERS.quadroHorarios = async () => {
   searchPanel({
     title:'Quadro de Horários',
-    placeholder:'Empresa: nome ou código — gera PDF de todos os quadros',
-    note: activeLine ? null : 'Selecione uma linha (mostra o quadro dela) ou pesquise uma empresa para baixar o PDF de todos os quadros.',
-    onRun: (term, host) => quadroEmpresaRun(term, host)
+    placeholder:'Número, nome ou código da linha (ou empresa)',
+    selectOpts:[['linha','Por linha'],['empresa','Por empresa (PDF de todos)']],
+    note: 'Por linha: número, nome ou código → mostra o quadro dela. Por empresa: nome ou código → baixa o PDF de todos os quadros da operadora.',
+    onRun: (term, host, modo) => modo==='empresa' ? quadroEmpresaRun(term, host) : quadroLinhaRun(term, host)
   });
-  // prefill do campo com a empresa da linha ativa (sem auto-rodar a busca)
-  if (activeLine?.codempresa){ const i = modalBody.querySelector('#spInput'); if(i) i.value = activeLine.codempresa; }
-  // comportamento padrão: havendo linha ativa, mostra o quadro dela
-  if (activeLine){ await renderActiveLineQuadro(modalBody.querySelector('#spHost')); }
+  // havendo linha ativa, prefill com a linha e mostra o quadro dela (modo "Por linha", padrão)
+  if (activeLine){
+    const i = modalBody.querySelector('#spInput'); if(i) i.value = activeLine.numero_ligacao || activeLine.codlinha || '';
+    await renderLinhaQuadro(modalBody.querySelector('#spHost'), activeLine);
+  }
 };
-// Quadro da linha ativa (comportamento clássico do card)
-async function renderActiveLineQuadro(host){
-  if(!host) return;
+// Modo linha: resolve o termo (número, nome ou código) → 1 linha (mostra o quadro) ou várias (lista)
+async function quadroLinhaRun(term, host){
+  term = (term||'').trim();
+  if(!term){
+    if(activeLine) return renderLinhaQuadro(host, activeLine);
+    host.innerHTML = emptyBox('Busque a linha pelo número, nome ou código.');
+    if(currentView) currentView.pdfHTML=null; return;
+  }
+  if(activeLine && lineMatchesTerm(activeLine, term)) return renderLinhaQuadro(host, activeLine);
+  const e1 = enc(term), code = enc(term.replace(/[-.\s]/g,''));
+  const lines = await sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${e1}*,numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=40`);
+  if(!lines.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para “'+esc(term)+'”.'); if(currentView) currentView.pdfHTML=null; return; }
+  if(lines.length===1){ selectLine(lines[0]); return renderLinhaQuadro(host, lines[0]); }
+  await getEmpresas();
+  host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin:2px 0 8px">${lines.length} linha(s) encontradas — clique para ver o quadro:</p>` + linhasTable(lines);
+  host.querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{ const l=JSON.parse(tr.dataset.row); selectLine(l); renderLinhaQuadro(host, l); }));
+  if(currentView) currentView.pdfHTML=null;
+}
+// Quadro de UMA linha (comportamento clássico do card)
+async function renderLinhaQuadro(host, line){
+  if(!host || !line) return;
   host.innerHTML = loading();
   try {
     const [interv, predet, orig] = await Promise.all([
-      sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=cod_origen,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
-      sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
+      sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(line.codlinha)}&select=cod_origen,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
+      sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(line.codlinha)}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
       getOrigem(), getEmpresas()
     ]);
     if (!interv.length && !predet.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para esta linha.'); if(currentView) currentView.pdfHTML=null; return; }
-    host.innerHTML = quadroDocInner(activeLine, interv, predet, orig);
-    if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroDocInner(activeLine, interv, predet, orig)}</div>`;
+    host.innerHTML = quadroDocInner(line, interv, predet, orig);
+    if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroDocInner(line, interv, predet, orig)}</div>`;
   } catch(e){ host.innerHTML = errorBox(e.message); }
 }
+// compat: alguns caminhos chamam o quadro da linha ativa
+const renderActiveLineQuadro = host => renderLinhaQuadro(host, activeLine);
 // Modo empresa: resolve a empresa e lista as linhas com quadro
 async function quadroEmpresaRun(term, host){
   term = (term||'').trim();
