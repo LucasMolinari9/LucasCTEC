@@ -13,8 +13,9 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
   Não há build, nem framework, nem `package.json`. É só servir o arquivo estático.
 - As consultas usam **REST do Supabase via `fetch`** (PostgREST). O **supabase-js** (CDN) é
   usado **só** para o canal **Realtime**.
-- O **html2pdf** (CDN jsDelivr) gera o PDF do documento aberto (botão **PDF** na barra do modal,
-  ao lado de Imprimir; com fallback para `window.print()`).
+- O botão **PDF** (na barra do modal, ao lado de Imprimir) monta o documento **completo** (sem a
+  paginação de tela) num container oculto `.pdf-export` e usa a **impressão nativa** do navegador
+  (`window.print()`, vetorial) para o usuário "Salvar como PDF" — sem dependência externa de PDF.
 - `netlify.toml` define os cabeçalhos de segurança (CSP etc.), `Cache-Control: must-revalidate`
   e `publish = "."`.
 
@@ -141,7 +142,7 @@ A lógica **pura** dessas seções (formatação, busca, filtros, `sbFetch`) tem
 - **Truncagem silenciosa:** vários loaders cortam resultados com `limit` e `slice(0,N)` **sem avisar**.
   Ao crescer os dados, o portal pode mostrar listas incompletas sem erro visível. Ao mexer numa view,
   considerar avisar o usuário quando o limite for atingido.
-- **Dependências CDN sem trava:** `@supabase/supabase-js@2` (qualquer 2.x) e html2pdf vêm da jsDelivr **sem
+- **Dependências CDN sem trava:** `@supabase/supabase-js@2` (qualquer 2.x) vem da jsDelivr **sem
   versão fixa nem SRI** (`integrity`). Ideal fixar versão exata + SRI (hash) ou fazer vendoring — mas só com
   o hash REAL verificado, pois SRI errado **quebra o carregamento** do site.
 - **`sbFetch` tem timeout (20s) + retry** (backoff) para erros transitórios; erros definitivos (4xx) não

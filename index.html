@@ -431,7 +431,7 @@
   .ev-text.empty{color:#9aa3ab;font-style:italic}
   /* no PDF cada evento começa numa nova página */
   .pdf-export .ev-page + .ev-page{page-break-before:always}
-  /* blocos que não podem ser cortados no meio entre páginas do PDF (raster) */
+  /* blocos que não podem ser cortados no meio entre páginas do PDF/impressão */
   .pdf-export .doc-head,.pdf-export .doc-meta,.pdf-export .ev-grid,.pdf-export .ev-block,
   .pdf-export .qh-sentido,.pdf-export .sentido-sep,.pdf-export tr,.pdf-export .kpi,
   .pdf-export .doc-obs{break-inside:avoid}
@@ -440,15 +440,13 @@
   /* a caixa de busca, o paginador e as barras de filtro nunca entram no PDF */
   .pdf-export .doc-search,.pdf-export .doc-pager,.pdf-export .ev-empty,.pdf-export .ev-filters,.pdf-export .loc-tools{display:none!important}
   /* o PDF/impressão nunca rola e usa a largura natural da tabela. O container .pdf-export
-     fica fora do .modal-body, então as regras mobile já não o atingem — isto é defesa extra
-     (o html2canvas rasteriza este container na largura real do dispositivo). */
+     fica fora do .modal-body, então as regras mobile já não o atingem — isto é defesa extra. */
   .pdf-export .doc-table-wrap{overflow:visible!important}
   .pdf-export .doc-table{min-width:0!important}
   .pdf-export .ev-grid{grid-template-columns:1.05fr 1.5fr 2fr 1.05fr!important}
   .pdf-export .ev-grid.ev5{grid-template-columns:.9fr .9fr 1.3fr 1.7fr .9fr!important}
   .pdf-export .loc-form{grid-template-columns:1fr 1fr!important}
-  /* o html2canvas não resolve width:auto em SVG que só tem viewBox → o logo saía minúsculo.
-     Largura explícita (proporção 3200:847 ≈ 3.78) e tamanho maior p/ o cabeçalho do PDF. */
+  /* largura explícita do logo (proporção 3200:847 ≈ 3.78) e tamanho maior p/ o cabeçalho do PDF. */
   .pdf-export .doc-head .brand-logo svg{height:68px;width:257px}
   /* ===== Tela cheia do modal (preenche a tela inteira) ===== */
   .modal-overlay.fs-fallback,
@@ -666,14 +664,12 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 25/06-C</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 25/06-D</span></span>
   </div>
 </footer>
 
 <!-- supabase-js: usado APENAS para o canal Realtime (as consultas usam REST/fetch) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- html2pdf: geração do PDF a partir do documento aberto -->
-<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 <script>
 /* ================================================================
    SUPABASE CONFIG
@@ -1063,55 +1059,30 @@ async function baixarPdf(){
   temp.className = 'pdf-export';
   temp.innerHTML = inner;
   document.body.appendChild(temp);
-  const src = temp.querySelector('.doc') || temp;
 
-  // Caminho vetorial: imprime só este container pelo motor do navegador → texto nítido e
-  // selecionável, sem limite de tamanho. Usado p/ documentos longos e como fallback da html2pdf.
-  const cleanupPrint = () => { document.documentElement.classList.remove('exporting'); if (temp.parentNode) temp.remove(); };
+  // Caminho vetorial: imprime só este container pelo motor nativo do navegador → texto nítido,
+  // selecionável e sem limite de tamanho (qualidade do "Imprimir → Salvar como PDF").
+  // Trocamos o document.title pelo nome do arquivo p/ o diálogo "Salvar como PDF" sugeri-lo;
+  // restauramos no cleanup. (filename já vem com ".pdf"; o navegador adiciona a extensão sozinho.)
+  const tituloOriginal = document.title;
+  const cleanupPrint = () => {
+    document.documentElement.classList.remove('exporting');
+    document.title = tituloOriginal;
+    if (temp.parentNode) temp.remove();
+  };
   const exportViaPrint = () => {
     window.addEventListener('afterprint', cleanupPrint, { once:true });
+    document.title = filename.replace(/\.pdf$/i, '');
     document.documentElement.classList.add('exporting');
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ try { window.print(); } catch(_){ cleanupPrint(); } }));
     setTimeout(cleanupPrint, 60000);   // rede de segurança caso 'afterprint' não dispare (ex.: Safari)
   };
 
-  // Sem a biblioteca (ex.: offline) → caminho vetorial direto
-  if (typeof html2pdf === 'undefined'){
-    toast('Abrindo impressão (escolha “Salvar como PDF”)', 'warn');
-    exportViaPrint();
-    return;
-  }
-
-  // Garante as fontes carregadas antes de medir/renderizar (evita fonte trocada e layout desalinhado)
+  // Garante as fontes carregadas antes de imprimir (evita fonte trocada e layout desalinhado)
   try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch(_){}
 
-  // Escala adaptativa: quanto maior, mais nítido — limitada para não estourar o canvas do navegador
-  // (que geraria página em branco/cortada). Documentos curtos saem em alta (3×); longos vão p/ o vetor.
-  const W = 794;                                   // largura A4 @ 96dpi
-  const H = Math.max(src.scrollHeight, 1123);
-  const MAX = 14000;                               // lado máx. seguro de canvas (folga sob ~16k)
-  const pages = Math.ceil(H / 1123);
-  let scale = pages <= 3 ? 3 : pages <= 6 ? 2.5 : 2;
-  scale = Math.min(scale, MAX / W, MAX / H);
-  if (scale < 2){                                  // longo demais p/ raster nítido → vetorial
-    toast('Documento longo — abrindo impressão p/ salvar em PDF em alta qualidade (escolha “Salvar como PDF”)', 'info');
-    exportViaPrint();
-    return;
-  }
-
-  const cleanup = () => { if (temp.parentNode) temp.remove(); };
-  toast('Gerando PDF…', 'info');
-  html2pdf().set({
-    margin: [10, 10, 12, 10],
-    filename,
-    image: { type: 'png' },                        // PNG: texto e tabelas sem o "chuvisco" do JPEG
-    html2canvas: { scale, useCORS: true, backgroundColor: '#ffffff' },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-    // quebra por blocos lógicos: não corta linhas, grades de evento, cabeçalhos nem faixas no meio
-    pagebreak: { mode: ['css', 'legacy'], avoid: ['tr','.ev-grid','.ev-block','.doc-head','.doc-meta','.qh-sentido','.sentido-sep','.kpi','.doc-obs'] }
-  }).from(src).save()
-    .then(cleanup)
-    .catch(() => { toast('Falha ao gerar PDF, usando impressão', 'warn'); exportViaPrint(); });
+  toast('Abrindo impressão — escolha “Salvar como PDF”', 'info');
+  exportViaPrint();
 }
 
 let currentView = null, lastFocused = null;
