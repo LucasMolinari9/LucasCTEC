@@ -664,7 +664,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 25/06-D</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 25/06-E</span></span>
   </div>
 </footer>
 
@@ -1702,8 +1702,11 @@ function quadroHorariosBodyHTML(interv, predet, orig){
 }
 // Corpo de UM quadro (meta + tabelas) para uma linha qualquer — reusado na linha ativa,
 // no clique da lista por empresa e na montagem do PDF de todos os quadros.
+function quadroMetaHTML(line){
+  return metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(line.codempresa||'—')],['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—')],['Via',esc(orDash(line.via))],['Característica',esc(orDash(line.caracteristica))],['Tipo',esc(orDash(line.tipo))]]);
+}
 function quadroDocInner(line, interv, predet, orig){
-  return `${metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(line.codempresa||'—')],['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—')],['Via',esc(orDash(line.via))],['Característica',esc(orDash(line.caracteristica))],['Tipo',esc(orDash(line.tipo))]])}
+  return `${quadroMetaHTML(line)}
     ${quadroHorariosBodyHTML(interv, predet, orig)}`;
 }
 // Busca os quadros (intervalo + predeterminado) de várias linhas de uma vez e agrupa por codlinha.
@@ -1742,13 +1745,25 @@ async function renderItinerarios(host, line){
   ]);
   if (!rows.length) { host.innerHTML = emptyBox('Nenhum itinerário encontrado para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
   const codEmp = rows[0]?.codempresa || line.codempresa || '';
-  const inner = `${metaRows([['Empresa',esc(empNome(codEmp)),true],['Registro','RJ-'+esc(codEmp)],
+  const meta = metaRows([['Empresa',esc(empNome(codEmp)),true],['Registro','RJ-'+esc(codEmp)],
       ['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
       ['Ligação',esc(line.nome_ligacao||'—')],['Via',esc(orDash(line.via))],
-      ['Característica',esc(orDash(line.caracteristica))],['Tipo da Ligação',esc(orDash(line.tipo))]])}
-    ${itinerarioTableHTML(rows, ibge)}`;
-  host.innerHTML = inner;
+      ['Característica',esc(orDash(line.caracteristica))],['Tipo da Ligação',esc(orDash(line.tipo))]]);
+  const inner = `${meta}${itinerarioTableHTML(rows, ibge)}`;   // documento completo (p/ PDF)
   if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}${inner}</div>`;
+  // filtro por sentido — o PDF segue com os dois sentidos
+  rows.forEach(r=>r._sn=normSentido(r.sentido));
+  const sentidos = [...new Set(rows.map(r=>r._sn))].filter(Boolean).sort((a,b)=>(SENTIDO_ORDER[a]||9)-(SENTIDO_ORDER[b]||9));
+  const tools = sentidos.length>1 ? `<div class="loc-tools"><label>Sentido <select id="itiSent"><option value="">Todos</option>${sentidos.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select></label></div>` : '';
+  host.innerHTML = `${meta}${tools}<div id="itiResult"></div>`;
+  const result = host.querySelector('#itiResult'), sel = host.querySelector('#itiSent');
+  const paint = ()=>{
+    const s = sel?sel.value:'';
+    const f = s ? rows.filter(r=>r._sn===s) : rows;
+    result.innerHTML = itinerarioTableHTML(f, ibge);
+  };
+  if(sel) sel.addEventListener('change', paint);
+  paint();
 }
 
 LOADERS.quadroHorarios = async () => {
@@ -1794,8 +1809,25 @@ async function renderLinhaQuadro(host, line){
       getOrigem(), getEmpresas()
     ]);
     if (!interv.length && !predet.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para esta linha.'); if(currentView) currentView.pdfHTML=null; return; }
-    host.innerHTML = quadroDocInner(line, interv, predet, orig);
     if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroDocInner(line, interv, predet, orig)}</div>`;
+    // filtros por sentido (origem das partidas) e por dia — o PDF segue completo
+    const sentidoKey = (cod,nome)=> orig[cod] || nome || ('Origem '+orDash(cod));
+    const sentidos = [...new Set([...interv.map(r=>sentidoKey(r.cod_origen,r.nome_origem)), ...predet.map(r=>sentidoKey(r.cod_origem,r.nome_origem))])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+    const dias = [...new Set([...interv,...predet].map(r=>r.dia_semana||'—'))].filter(v=>v&&v!=='—').sort((a,b)=>a.localeCompare(b));
+    const sentSel = sentidos.length>1 ? `<label>Sentido <select id="qhSent"><option value="">Todos</option>${sentidos.map(s=>`<option value="${esc(s)}">de ${esc(s)}</option>`).join('')}</select></label>` : '';
+    const diaSel  = dias.length>1 ? `<label>Dia <select id="qhDia"><option value="">Todos</option>${dias.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('')}</select></label>` : '';
+    const tools = (sentSel||diaSel) ? `<div class="loc-tools">${sentSel}${diaSel}</div>` : '';
+    host.innerHTML = `${quadroMetaHTML(line)}${tools}<div id="qhResult"></div>`;
+    const result = host.querySelector('#qhResult'), ss = host.querySelector('#qhSent'), ds = host.querySelector('#qhDia');
+    const paint = ()=>{
+      const s = ss?ss.value:'', d = ds?ds.value:'';
+      const fi = interv.filter(r=>(!s||sentidoKey(r.cod_origen,r.nome_origem)===s)&&(!d||(r.dia_semana||'—')===d));
+      const fp = predet.filter(r=>(!s||sentidoKey(r.cod_origem,r.nome_origem)===s)&&(!d||(r.dia_semana||'—')===d));
+      result.innerHTML = quadroHorariosBodyHTML(fi, fp, orig);
+    };
+    if(ss) ss.addEventListener('change', paint);
+    if(ds) ds.addEventListener('change', paint);
+    paint();
   } catch(e){ host.innerHTML = errorBox(e.message); }
 }
 // compat: alguns caminhos chamam o quadro da linha ativa
@@ -1866,10 +1898,22 @@ async function renderTarifas(host, line){
   host.innerHTML = loading();
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`);
   if (!rows.length) { host.innerHTML = emptyBox('Nenhuma tarifa cadastrada para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
-  const inner = `${metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]])}
-    ${secoesTarifasHTML(rows)}`;
-  host.innerHTML = inner;
+  const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]]);
+  const inner = `${meta}${secoesTarifasHTML(rows)}`;            // documento completo (p/ PDF)
   if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Tarifas Vigentes')}${inner}</div>`;
+  // filtro por situação da seção (vigente = sem cancelamento/paralisação/sub judice/transferência)
+  const vigente = r => !r.cancelado && !r.paralisado && !r.sub_judice && !r.transferido;
+  const temInativa = rows.some(r=>!vigente(r));
+  const tools = temInativa ? `<div class="loc-tools"><label>Situação <select id="tarSit"><option value="todas">Todas</option><option value="vigentes">Vigentes</option><option value="inativas">Canceladas/inativas</option></select></label></div>` : '';
+  host.innerHTML = `${meta}${tools}<div id="tarResult"></div>`;
+  const result = host.querySelector('#tarResult'), sel = host.querySelector('#tarSit');
+  const paint = ()=>{
+    const s = sel?sel.value:'todas';
+    const f = s==='vigentes' ? rows.filter(vigente) : s==='inativas' ? rows.filter(r=>!vigente(r)) : rows;
+    result.innerHTML = f.length ? secoesTarifasHTML(f) : emptyBox('Nenhuma seção com esse filtro.');
+  };
+  if(sel) sel.addEventListener('change', paint);
+  paint();
 }
 
 LOADERS.frota = () => lineDocView({ subtitle:'Frota da Linha', render:renderFrota });
