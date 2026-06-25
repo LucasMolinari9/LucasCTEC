@@ -664,7 +664,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 25/06-E</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 25/06-F</span></span>
   </div>
 </footer>
 
@@ -2051,9 +2051,18 @@ LOADERS.secoesPorEmpresa = async () => {
   searchPanel({ title:'Seções por Empresa', placeholder:'Código da empresa (ex. 101)', value:pre, onRun: async(term, host)=>{
     if(!term){ host.innerHTML=emptyBox('Informe o código da empresa.'); return; }
     const rows = await sbFetch('tarifa_atual_teste', `codempresa=eq.${enc(term)}&select=codlinha,secao,nome_ligacao&order=codlinha&limit=1000`);
-    host.innerHTML = rows.length? tableHTML([{t:'Linha',w:'110px'},{t:'Seção',w:'70px'},{t:'Descrição'}],
-      rows.map(r=>`<tr><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td></tr>`).join(''))
-      : emptyBox('Nenhuma seção cadastrada para a empresa '+term+'.');
+    if(!rows.length){ host.innerHTML=emptyBox('Nenhuma seção cadastrada para a empresa '+esc(term)+'.'); return; }
+    const cols = [{t:'Linha',w:'110px'},{t:'Seção',w:'70px'},{t:'Descrição'}];
+    const rowHTML = r=>`<tr><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td></tr>`;
+    host.innerHTML = `<div class="loc-tools"><label>Filtrar <input type="text" id="secF" placeholder="seção, linha ou descrição" autocomplete="off"></label></div><div id="secResult"></div>`;
+    const result = host.querySelector('#secResult'), inp = host.querySelector('#secF');
+    const paint = ()=>{
+      const q = norm(inp.value.trim());
+      const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${fmtCode(r.codlinha)} ${r.codlinha} ${r.nome_ligacao||''}`).includes(q)) : rows;
+      result.innerHTML = f.length ? tableHTML(cols, f.map(rowHTML).join(''), f.length+' seção(ões)') : emptyBox('Nenhuma seção com esse filtro.');
+    };
+    inp.addEventListener('input', paint);
+    paint();
   }, tables:['tarifa_atual_teste']});
 };
 // Renderiza o histórico (paginado) de UMA empresa dentro de um container
@@ -2288,11 +2297,21 @@ LOADERS.ligacoesPorTerminal = async () => {
 };
 LOADERS.secoesPorLigacao = async () => {
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,nome_ligacao,tarifa&order=secao`);
-  setBody(`<div class="doc">${docHead('Seções por Ligação')}
-    ${metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]])}
-    ${rows.length? tableHTML([{t:'Seção',w:'70px'},{t:'Descrição'},{t:'Tarifa',w:'90px'}],
-      rows.map(r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td></tr>`).join(''))
-      : emptyBox('Nenhuma seção cadastrada para esta linha.')}</div>`);
+  const meta = metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]]);
+  if(!rows.length){ setBody(`<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyBox('Nenhuma seção cadastrada para esta linha.')}</div>`); return; }
+  const cols = [{t:'Seção',w:'70px'},{t:'Descrição'},{t:'Tarifa',w:'90px'}];
+  const rowHTML = r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td></tr>`;
+  setBody(`<div class="doc">${docHead('Seções por Ligação')}${meta}
+    <div class="loc-tools"><label>Filtrar <input type="text" id="secF" placeholder="seção ou descrição" autocomplete="off"></label></div>
+    <div id="secResult"></div></div>`);
+  const result = modalBody.querySelector('#secResult'), inp = modalBody.querySelector('#secF');
+  const paint = ()=>{
+    const q = norm(inp.value.trim());
+    const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${r.nome_ligacao||''}`).includes(q)) : rows;
+    result.innerHTML = f.length ? tableHTML(cols, f.map(rowHTML).join(''), f.length+' seção(ões)') : emptyBox('Nenhuma seção com esse filtro.');
+  };
+  inp.addEventListener('input', paint);
+  paint();
 };
 
 /* ---- Gerenciais ---- */
