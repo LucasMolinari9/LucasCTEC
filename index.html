@@ -352,7 +352,7 @@
     padding:9px 12px;background:#f3f7fb;border:1px solid var(--line);border-radius:9px}
   .loc-tools label{display:flex;align-items:center;gap:7px;font-family:'Archivo';font-weight:700;
     font-size:12.5px;letter-spacing:.03em;text-transform:uppercase;color:#0a3a63}
-  .loc-tools select{border:1px solid var(--line);border-radius:7px;padding:5px 9px;font:inherit;
+  .loc-tools select,.loc-tools input[type=text]{border:1px solid var(--line);border-radius:7px;padding:5px 9px;font:inherit;
     font-size:13.5px;background:#fff;outline:0;text-transform:none;letter-spacing:0}
   .loc-emp-head{font-family:'Archivo';font-weight:800;font-size:14px;color:var(--navy);
     margin:16px 0 6px;padding-bottom:4px;border-bottom:2px solid var(--green)}
@@ -1941,11 +1941,35 @@ LOADERS.empresasRegulares = async () => {
   list.sort((a,b)=> b.total-a.total || String(a.nome_empresa||'').localeCompare(String(b.nome_empresa||'')));
   const semLinha = list.filter(e=>!e.total).length;
   const statusCol = e => [boolChip(e.cassada,'Cassada'), boolChip(e.sob_intervencao,'Interv.')].filter(Boolean).join(' ') || `<span class="chip chip-off">${esc(orDash(e.situacao))}</span>`;
-  const body = list.map(e=>`<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}"><td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td><td class="td-tipo">${statusCol(e)}</td><td class="td-sentido">${e.total}</td><td class="td-tipo">${e.ativas}</td></tr>`).join('');
+  const rowHTML = e => `<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}"><td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td><td class="td-tipo">${statusCol(e)}</td><td class="td-sentido">${e.total}</td><td class="td-tipo">${e.ativas}</td></tr>`;
+  const cols = [{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Situação',w:'150px'},{t:'Total de linhas',w:'120px'},{t:'Linhas ativas',w:'110px'}];
   setBody(`<div class="doc">${docHead('Empresas Regulares')}
     <p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${list.length} empresas no cadastro${semLinha?` · ${semLinha} sem linhas`:''}. Clique para ver as ligações da empresa.</p>
-    ${tableHTML([{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Situação',w:'150px'},{t:'Total de linhas',w:'120px'},{t:'Linhas ativas',w:'110px'}], body)}</div>`);
-  modalBody.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>openEmpresaLigacoes(tr.dataset.emp)));
+    <div class="loc-tools">
+      <label>Situação <select id="empSit"><option value="todas">Todas</option><option value="regular">Regulares</option><option value="cassada">Cassadas</option><option value="interv">Sob intervenção</option></select></label>
+      <label>Buscar <input type="text" id="empBusca" placeholder="nome ou RJ" autocomplete="off"></label>
+    </div>
+    <div id="empResult"></div></div>`);
+  const result = modalBody.querySelector('#empResult');
+  const sel = modalBody.querySelector('#empSit'), inp = modalBody.querySelector('#empBusca');
+  const paint = ()=>{
+    const s = sel.value, termo = inp.value.trim(), q = norm(termo);
+    const f = list.filter(e=>{
+      const cass = !!e.cassada, interv = !!e.sob_intervencao, reg = !cass && !interv;
+      if(s==='cassada' && !cass) return false;
+      if(s==='interv'  && !interv) return false;
+      if(s==='regular' && !reg) return false;
+      if(q && !(norm(e.nome_empresa||'').includes(q) || String(e.codempresa||'').includes(termo))) return false;
+      return true;
+    });
+    result.innerHTML = f.length
+      ? tableHTML(cols, f.map(rowHTML).join(''), f.length+' empresa(s)')
+      : emptyBox('Nenhuma empresa com esse filtro.');
+    result.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>openEmpresaLigacoes(tr.dataset.emp)));
+  };
+  sel.addEventListener('change', paint);
+  inp.addEventListener('input', paint);
+  paint();
 };
 
 function openEmpresaLigacoes(cod){
@@ -1956,8 +1980,8 @@ function openEmpresaLigacoes(cod){
     ]);
     setBody(`<div class="doc">${docHead('Ligações por Empresa')}
       ${metaRows([['Empresa',esc(empNome(cod)),true],['Registro','RJ-'+esc(cod)],['Total',rows.length+' ligação(ões)']])}
-      ${linhasTable(rows)}</div>`);
-    bindLineRows();
+      <div id="empLigResult"></div></div>`);
+    lineResults(modalBody.querySelector('#empLigResult'), rows);
   }});
 }
 LOADERS.ligacoesPorEmpresa = async () => {
@@ -2214,8 +2238,8 @@ LOADERS.ligacoesPorTerminal = async () => {
       sbFetch('tabela_vista_teste', `codlinha=in.(${lineCods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=200`),
       getEmpresas()
     ]);
-    host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${lineCods.length} linha(s) a partir de "${esc(term)}"</p>`+linhasTable(rows);
-    bindLineRows(host);
+    const prefix = `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${lineCods.length} linha(s) a partir de "${esc(term)}"</p>`;
+    lineResults(host, rows, { prefixHTML: prefix });
   }, tables:['qh_intervalo_teste']});
 };
 LOADERS.secoesPorLigacao = async () => {
