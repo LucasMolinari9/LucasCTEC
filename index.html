@@ -1040,8 +1040,10 @@ function onFsChange(){ if (!(document.fullscreenElement || document.webkitFullsc
 document.addEventListener('fullscreenchange', onFsChange);
 document.addEventListener('webkitfullscreenchange', onFsChange);
 
-// Gera e baixa um PDF do documento aberto no modal
+// Gera o PDF do documento aberto via impressão nativa do navegador
+let _exportandoPdf = false;
 async function baixarPdf(){
+  if (_exportandoPdf) return;          // evita 2º clique com o diálogo aberto (título preso / containers duplicados)
   const liveDoc = modalBody.querySelector('.doc');
   const base = (mtTitle.textContent || 'documento')
     .replace(/[^a-zA-Z0-9]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase() || 'documento';
@@ -1069,8 +1071,10 @@ async function baixarPdf(){
     document.documentElement.classList.remove('exporting');
     document.title = tituloOriginal;
     if (temp.parentNode) temp.remove();
+    _exportandoPdf = false;
   };
   const exportViaPrint = () => {
+    _exportandoPdf = true;             // a partir daqui o título muda → trava reentrância até o cleanup
     window.addEventListener('afterprint', cleanupPrint, { once:true });
     document.title = filename.replace(/\.pdf$/i, '');
     document.documentElement.classList.add('exporting');
