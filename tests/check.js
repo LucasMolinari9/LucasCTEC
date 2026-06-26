@@ -42,6 +42,26 @@ if (!m){
   }
 }
 
+// ---------- [1b] nenhuma chave service_role embutida no HTML servido ----------
+// A chave anon (role=anon) é pública por design; a service_role IGNORA o RLS e
+// jamais pode ir para um arquivo entregue ao cliente. Decodifica cada JWT do
+// index.html e falha se algum tiver role=service_role (sem falso-positivo na
+// palavra "service_role" de comentários/docs).
+console.log('\n[1b] Segredo: nenhuma JWT service_role no index.html');
+{
+  const jwts = html.match(/eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+/g) || [];
+  let vazou = false;
+  for (const tok of jwts){
+    try {
+      const b64 = tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+      if (payload && payload.role === 'service_role') vazou = true;
+    } catch (_) { /* token não-JWT: ignora */ }
+  }
+  if (vazou) fail('CHAVE service_role embutida no index.html — ignora o RLS, NÃO publicar.');
+  else okline(`ok (${jwts.length} token(s) JWT no HTML, nenhum service_role)`);
+}
+
 // ---------- [2] guarda anti-drift ----------
 console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o index.html)');
 // trecho distintivo de cada função copiada nos harness; se sumir do index.html,
