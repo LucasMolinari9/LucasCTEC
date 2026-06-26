@@ -22,24 +22,29 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
 ## Supabase
 - Projeto: **`bd_teste`** · ref **`lwzsxuaqqeoamukduhev`** · região sa-east-1.
 - `SB_URL` e `SB_KEY` ficam no topo do `<script>` em `index.html`. A chave é a **anon
-  (publishable)** — pública por design; a segurança vem do **RLS**.
-- **RLS / segurança (LER COM ATENÇÃO — não dá pra confiar só no "é só leitura"):**
+  (publishable)** — pública por design; a segurança vem do **RLS + privilégio mínimo** (anon só lê).
+- **RLS / segurança (LER COM ATENÇÃO):**
   - Todas as tabelas têm RLS ligado. Cada tabela de consulta tem policy `anon_read_*` (SELECT) para `anon`.
-  - **ATENÇÃO 1 — grants perigosos:** a role `anon` recebeu GRANT de **INSERT/UPDATE/DELETE em todas as
-    tabelas** do schema `public` (idem `authenticated`). Hoje o `anon` **não escreve** só porque não há
-    policy de escrita pra ele (RLS sem policy = negado). **Isso é proteção de camada única:** se o RLS de
-    uma tabela for desligado por engano, os grants tornam os dados **publicamente apagáveis na hora**.
-    Os grants de escrita do `anon` deveriam ser **revogados** (`REVOKE INSERT,UPDATE,DELETE ... FROM anon`).
-    **NUNCA desligar RLS de uma tabela** enquanto esses grants existirem.
-  - **ATENÇÃO 2 — escrita total p/ `authenticated`:** existem policies `auth_all_*` (comando ALL,
-    `USING(true) WITH CHECK(true)`) em todas as tabelas. Logo, **qualquer usuário logado pode alterar/APAGAR
-    tudo**. Isso só é seguro porque o **signup do Auth deve ficar FECHADO** (Dashboard → Authentication →
-    Sign In/Providers → "Allow new users to sign up" = OFF). Há 1 usuário no Auth (o do dono). **Manter o
-    signup fechado é o item nº1 de segurança.**
-  - **Como o dono alimenta:** direto pelo **painel do Supabase** (service role, ignora RLS) — esse é o fluxo
-    real. Existe também um frontend logado (`authenticated`) que o dono **não usa** para alimentar; por isso
-    as policies `auth_all_*` estão dormentes no fluxo do dia a dia.
-  - **Nunca** adicionar política de INSERT/UPDATE/DELETE para `anon`.
+  - **Postura atual — endurecida em 26/06/2026 (auditoria de segurança):** o portal é **read-only de
+    verdade**. `anon` e `authenticated` têm **apenas SELECT** — toda escrita (INSERT/UPDATE/DELETE/TRUNCATE/
+    REFERENCES/TRIGGER) foi **revogada** desses papéis, e um `ALTER DEFAULT PRIVILEGES` garante que **tabelas
+    novas não voltem a conceder escrita** a eles. **Não há mais caminho de escrita pela API pública.**
+  - **Defesa em profundidade:** mesmo que o RLS de uma tabela caia por engano, não existe grant de escrita
+    para o público explorar. Ainda assim, **mantenha o RLS ligado** e **NUNCA conceda escrita (GRANT nem
+    policy de INSERT/UPDATE/DELETE) a `anon`/`authenticated`** — foi exatamente o que se removeu nesta auditoria.
+  - **`auth_all_*` REMOVIDAS:** as 16 policies `auth_all_*` (ALL `USING(true) WITH CHECK(true)`) que davam
+    escrita total a qualquer usuário logado foram **dropadas** na mesma auditoria. Logo, `authenticated`
+    também não escreve mais via API. Se um dia precisar de edição logada legítima, crie policy **restrita por
+    tabela/coluna** — nunca `ALL USING(true)`.
+  - **Signup do Auth:** manter **FECHADO** (Dashboard → Authentication → Sign In/Providers → "Allow new users
+    to sign up" = OFF) segue sendo boa prática (1 usuário, o do dono), mas **já não é a única barreira** — com
+    as `auth_all_*` removidas, nem um usuário logado escreve. Pendente (só dashboard): ligar **Leaked Password
+    Protection** (Authentication → Password).
+  - **Como o dono alimenta:** direto pelo **painel do Supabase** (service role, ignora RLS e **não** foi
+    afetado pela remediação) — esse é o fluxo real. O frontend logado (`authenticated`) **não** é usado para
+    alimentar e, após a remoção das `auth_all_*`, tampouco teria permissão de escrita.
+  - **Rollback:** o snapshot `divat_security_snapshot_2026-06-26.sql` (gerado na auditoria) reconstrói o
+    estado anterior de grants/policies, se algum dia for necessário.
 - **Realtime**: as tabelas usadas estão na publicação `supabase_realtime` e as tabelas sem
   PK têm `REPLICA IDENTITY FULL`. Ao criar um card que lê uma tabela nova, **adicione-a à
   publicação** (`alter publication supabase_realtime add table public.<tabela>;`).
