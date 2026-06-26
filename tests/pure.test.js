@@ -45,6 +45,13 @@ ok(P.esc('<img src=x onerror=alert(1)>').indexOf('<') === -1, 'esc neutraliza ta
 // --- enc ---
 eq(P.enc('a b/c'), 'a%20b%2Fc', 'enc encodeURIComponent');
 
+// --- ilikeTerm (saneamento p/ filtro PostgREST) ---
+eq(P.ilikeTerm('500'),        '500',        'ilikeTerm termo simples inalterado');
+eq(P.ilikeTerm('a)*b'),       'a%20%20b',   'ilikeTerm neutraliza ) e * (sem quebrar or=())');
+eq(P.ilikeTerm('x(y)'),       'x%20y%20',   'ilikeTerm neutraliza parênteses');
+ok(P.ilikeTerm('*),(.ilike.*').indexOf('(') === -1 && P.ilikeTerm('*),(.ilike.*').indexOf(')') === -1 && P.ilikeTerm('*),(.ilike.*').indexOf('*') === -1, 'ilikeTerm remove ( ) * de payload de injeção');
+eq(P.ilikeTerm(null),         '',           'ilikeTerm null → vazio');
+
 // --- orDash ---
 console.log('orDash');
 eq(P.orDash(''),        '—', 'orDash vazio → travessão');

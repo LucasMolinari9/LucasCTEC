@@ -11,7 +11,9 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+    # Força HTTPS nas próximas visitas (sem includeSubDomains/preload por cautela — reversível)
+    Strict-Transport-Security = "max-age=31536000"
     # Sempre revalidar o HTML para que mudanças apareçam na hora (sem cache antigo)
     Cache-Control = "public, max-age=0, must-revalidate"
     # CSP: só permite Supabase (REST + WebSocket do Realtime), o supabase-js da jsDelivr e o Google Fonts.
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://lwzsxuaqqeoamukduhev.supabase.co wss://lwzsxuaqqeoamukduhev.supabase.co; frame-ancestors 'none'; base-uri 'self'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://lwzsxuaqqeoamukduhev.supabase.co wss://lwzsxuaqqeoamukduhev.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'"

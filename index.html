@@ -754,6 +754,10 @@ function fmtTime(t){ if(!t) return '—'; const m=String(t).match(/^(\d{2}):(\d{
 function fmtDate(d){ if(!d) return '—'; const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:d; }
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
 const enc = s => encodeURIComponent(s);
+// Sanitiza um termo do usuário para uso DENTRO de um padrão ilike do PostgREST.
+// encodeURIComponent não escapa ( ) * — que delimitam o grupo or=(...) e são curinga;
+// neutralizá-los impede que o termo quebre o filtro ou injete curingas. Depois codifica.
+const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));
 const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
 const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
 
@@ -915,8 +919,8 @@ async function doSearch() {
   if (!term) { toast('Digite o número ou nome da linha.', 'warn'); return; }
   searchBtn.textContent = '…'; searchBtn.disabled = true;
   try {
-    const e1 = enc(term);
-    const encCode = enc(term.replace(/[-.\s]/g, ''));
+    const e1 = ilikeTerm(term);
+    const encCode = ilikeTerm(term.replace(/[-.\s]/g, ''));
     const rows = await sbFetch('tabela_vista_teste',
       `select=${LINE_FIELDS}` +
       `&or=(numero_ligacao.ilike.*${e1}*,nome_ligacao.ilike.*${e1}*,codlinha.ilike.*${encCode}*)` +
@@ -1459,7 +1463,7 @@ async function lineDocRun(term, host, render){
     if (currentView) currentView.pdfHTML = null; return;
   }
   if (activeLine && lineMatchesTerm(activeLine, term)) return render(host, activeLine);
-  const e1 = enc(term), code = enc(term.replace(/[-.\s]/g,''));
+  const e1 = ilikeTerm(term), code = ilikeTerm(term.replace(/[-.\s]/g,''));
   const lines = await sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${e1}*,numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=40`);
   if (!lines.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para “'+esc(term)+'”.'); if (currentView) currentView.pdfHTML = null; return; }
   if (lines.length === 1){ selectLine(lines[0]); return render(host, lines[0]); }
@@ -1627,7 +1631,7 @@ LOADERS.historicoLinha = async () => {
     onRun: async (term, host) => {
       term = (term||'').trim();
       if (!term){ host.innerHTML = emptyBox('Busque pelo nome, número ou código da linha.'); if (currentView) currentView.pdfHTML = null; return; }
-      const e1 = enc(term), code = enc(term.replace(/[-.\s]/g,''));
+      const e1 = ilikeTerm(term), code = ilikeTerm(term.replace(/[-.\s]/g,''));
       const lines = await sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${e1}*,numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=40`);
       if (!lines.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para “'+esc(term)+'”.'); if (currentView) currentView.pdfHTML = null; return; }
       if (lines.length === 1){ await renderLineHistory(host, lines[0]); return; }
@@ -1721,18 +1725,18 @@ async function fetchQHByLines(codlinhas){
 }
 function frotaBlockHTML(f){
   return `<div class="kpi-grid">
-      <div class="kpi"><b>${orDash(f.frota_operacional)}</b><span>Operacional</span></div>
-      <div class="kpi"><b>${orDash(f.frota_a)}</b><span>Comum (A)</span></div>
-      <div class="kpi"><b>${orDash(f.frota_sa)}</b><span>Comum (SA)</span></div>
-      <div class="kpi"><b>${orDash(f.frota_ac)}</b><span>Ar cond. (AC)</span></div>
-      <div class="kpi"><b>${orDash(f.frota_sac)}</b><span>Ar cond. (SAC)</span></div>
-      <div class="kpi"><b>${orDash(f.frota_micro_a)}</b><span>Micro (A)</span></div>
-      <div class="kpi"><b>${orDash(f.frota_micro_sa)}</b><span>Micro (SA)</span></div>
-      <div class="kpi"><b>${orDash(f.frota_micro_ac)}</b><span>Micro (AC)</span></div>
-      <div class="kpi"><b>${orDash(f.frota_micro_sac)}</b><span>Micro (SAC)</span></div>
-      <div class="kpi"><b>${orDash(f.frota_micro_e)}</b><span>Micro (E)</span></div>
-      <div class="kpi"><b>${orDash(f.frota_e)}</b><span>Especial (E)</span></div>
-      <div class="kpi"><b>${orDash(f.reserva)}</b><span>Reserva</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_operacional))}</b><span>Operacional</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_a))}</b><span>Comum (A)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_sa))}</b><span>Comum (SA)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_ac))}</b><span>Ar cond. (AC)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_sac))}</b><span>Ar cond. (SAC)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_a))}</b><span>Micro (A)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_sa))}</b><span>Micro (SA)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_ac))}</b><span>Micro (AC)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_sac))}</b><span>Micro (SAC)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_e))}</b><span>Micro (E)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_e))}</b><span>Especial (E)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.reserva))}</b><span>Reserva</span></div>
     </div>`;
 }
 
@@ -1789,7 +1793,7 @@ async function quadroLinhaRun(term, host){
     if(currentView) currentView.pdfHTML=null; return;
   }
   if(activeLine && lineMatchesTerm(activeLine, term)) return renderLinhaQuadro(host, activeLine);
-  const e1 = enc(term), code = enc(term.replace(/[-.\s]/g,''));
+  const e1 = ilikeTerm(term), code = ilikeTerm(term.replace(/[-.\s]/g,''));
   const lines = await sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${e1}*,numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=40`);
   if(!lines.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para “'+esc(term)+'”.'); if(currentView) currentView.pdfHTML=null; return; }
   if(lines.length===1){ selectLine(lines[0]); return renderLinhaQuadro(host, lines[0]); }
@@ -2112,7 +2116,7 @@ LOADERS.historicoEmpresa = async () => {
 /* ---- Consultas de Ligações ---- */
 LOADERS.ligacoesPorNome = async () => {
   searchPanel({ title:'Ligações pelo Nome', placeholder:'Parte do nome da ligação', note:'Esta consulta casa apenas o NOME da ligação (ordem alfabética). Para localizar por número ou código, use a busca do topo da página.', onRun: async(term, host)=>{
-    const qs = term? `nome_ligacao=ilike.*${enc(term)}*&` : '';
+    const qs = term? `nome_ligacao=ilike.*${ilikeTerm(term)}*&` : '';
     const [rows] = await Promise.all([
       sbFetch('tabela_vista_teste', `${qs}select=${LINE_FIELDS}&order=nome_ligacao&limit=80`),
       getEmpresas()
@@ -2123,7 +2127,7 @@ LOADERS.ligacoesPorNome = async () => {
 LOADERS.ligacoesPorNumero = async () => {
   searchPanel({ title:'Identificar pelo Número', placeholder:'Número ou código da linha', onRun: async(term, host)=>{
     if(!term){ host.innerHTML=emptyBox('Digite o número ou código.'); return; }
-    const e1=enc(term), code=enc(term.replace(/[-.\s]/g,''));
+    const e1=ilikeTerm(term), code=ilikeTerm(term.replace(/[-.\s]/g,''));
     const [rows] = await Promise.all([
       sbFetch('tabela_vista_teste', `or=(numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=codlinha&limit=80`),
       getEmpresas()
@@ -2134,7 +2138,7 @@ LOADERS.ligacoesPorNumero = async () => {
 LOADERS.ligacoesPorLogradouro = async () => {
   searchPanel({ title:'Ligações por Logradouro', placeholder:'Nome da via / logradouro', onRun: async(term, host)=>{
     if(!term){ host.innerHTML=emptyBox('Digite o nome do logradouro.'); return; }
-    const it = await sbFetch('itinerario_teste', `nome_logradouro=ilike.*${enc(term)}*&select=codlinha&limit=2000`);
+    const it = await sbFetch('itinerario_teste', `nome_logradouro=ilike.*${ilikeTerm(term)}*&select=codlinha&limit=2000`);
     const cods=[...new Set(it.map(r=>r.codlinha).filter(Boolean))].slice(0,100);
     if(!cods.length){ host.innerHTML=emptyBox('Nenhuma linha passa por esse logradouro.'); return; }
     const [rows] = await Promise.all([
@@ -2377,7 +2381,7 @@ LOADERS.frotaPorEmpresa = async () => {
 LOADERS.pesquisaEvento = async () => {
   searchPanel({ title:'Pesquisa de Evento', placeholder:'Termo livre (processo, descrição, observação)', onRun: async(term, host)=>{
     if(!term){ host.innerHTML=emptyBox('Digite um termo para pesquisar eventos.'); return; }
-    const t=enc(term);
+    const t=ilikeTerm(term);
     const [rows] = await Promise.all([
       sbFetch('evento_teste', `or=(descricao.ilike.*${t}*,observacao.ilike.*${t}*,numero_processo.ilike.*${t}*)&select=data_registro,codlinha,codempresa,numero_processo,descricao,observacao&order=data_registro.desc&limit=200`),
       getEmpresas()
@@ -2417,10 +2421,10 @@ LOADERS.portarias = async () => {
     host.innerHTML = loading();
     try{
       let qs='';
-      const n=num.value.trim(); if(n) qs+=`numero_portaria=ilike.*${enc(n)}*&`;
+      const n=num.value.trim(); if(n) qs+=`numero_portaria=ilike.*${ilikeTerm(n)}*&`;
       if(ano.value) qs+=`data_portaria=gte.${ano.value}-01-01&data_portaria=lte.${ano.value}-12-31&`;
       if(vig.value==='vigor') qs+='vigor=is.true&'; else if(vig.value==='revog') qs+='vigor=is.false&';
-      const tx=txt.value.trim(); if(tx){ const e=enc(tx); qs+=`or=(assunto.ilike.*${e}*,conteudo.ilike.*${e}*)&`; }
+      const tx=txt.value.trim(); if(tx){ const e=ilikeTerm(tx); qs+=`or=(assunto.ilike.*${e}*,conteudo.ilike.*${e}*)&`; }
       const rows = await sbFetch('portaria_teste', `${qs}select=numero_portaria,data_portaria,data_publicacao,tipo_portaria,tipo_legislacao,assunto,conteudo,vigor,portaria_anterior&order=data_portaria.desc.nullslast&limit=300`);
       if(!rows.length){ host.innerHTML=emptyBox('Nenhuma portaria para os filtros informados.'); return; }
       host.innerHTML = tableHTML(
@@ -2471,7 +2475,7 @@ async function getLocalidades(){
 async function mostrarLinhasPorLocalidade(host, a, b){
   host.innerHTML = loading();
   try{
-    const ai = enc(a);
+    const ai = ilikeTerm(a);
     // 1) linhas cujo nome/nome_cresc/via casa a localidade  2) linhas cujas SEÇÕES de tarifa
     //    casam a localidade (item 13: as seções da Estrutura também entram na busca)
     const [lineRows, secHits] = await Promise.all([

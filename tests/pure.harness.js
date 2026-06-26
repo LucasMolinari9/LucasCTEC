@@ -20,6 +20,8 @@ function fmtDate(d){ if(!d) return '—'; const m=String(d).match(/^(\d{4})-(\d{
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
 // index.html:738
 const enc = s => encodeURIComponent(s);
+// index.html:760 — sanitiza termo p/ uso dentro de padrão ilike do PostgREST
+const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));
 // index.html:739
 const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
 // index.html:740
@@ -59,7 +61,7 @@ function rowMatchesActiveLine(payload){
 }
 
 module.exports = {
-  fmtCode, fmtTime, fmtDate, esc, enc, orDash, boolChip, norm,
+  fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, boolChip, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney,
   setRTState, rowMatchesActiveLine,
 };
