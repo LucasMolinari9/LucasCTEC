@@ -2126,12 +2126,9 @@ LOADERS.ligacoesPorLogradouro = async () => {
   searchPanel({ title:'Ligações por Logradouro', placeholder:'Nome da via / logradouro', onRun: async(term, host)=>{
     if(!term){ host.innerHTML=emptyBox('Digite o nome do logradouro.'); return; }
     const it = await sbFetch('itinerario_teste', `nome_logradouro=ilike.*${ilikeTerm(term)}*&select=codlinha&limit=2000`);
-    const cods=[...new Set(it.map(r=>r.codlinha).filter(Boolean))].slice(0,100);
+    const cods=distinctCods(it,100);
     if(!cods.length){ host.innerHTML=emptyBox('Nenhuma linha passa por esse logradouro.'); return; }
-    const [rows] = await Promise.all([
-      sbFetch('tabela_vista_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=200`),
-      getEmpresas()
-    ]);
+    const rows = await fetchLinesByCods(cods,{limit:200});
     const prefix = bannerTrunc(it) + `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${cods.length} linha(s) passam por "${esc(term)}"</p>`;
     lineResults(host, rows, { prefixHTML: prefix });
   }, tables:['itinerario_teste']});
@@ -2159,9 +2156,9 @@ LOADERS.municipioRegiao = async () => {
     if(region){
       const cods = Object.entries(ibge).filter(([,v])=>v.regiao===region).map(([c])=>c);
       const it = await sbFetch('itinerario_teste', `cod_origem=in.(${cods.map(enc).join(',')})&select=codlinha&limit=20000`);
-      const lc = [...new Set(it.map(r=>r.codlinha).filter(Boolean))].slice(0,500);
+      const lc = distinctCods(it,500);
       if(!lc.length){ host.innerHTML = emptyBox('Nenhuma linha na região '+esc(region)+'.'); return; }
-      const rows = await sbFetch('tabela_vista_teste', `codlinha=in.(${lc.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`);
+      const rows = await fetchLinesByCods(lc,{limit:500});
       const muns = Object.entries(ibge).filter(([,v])=>v.regiao===region).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||''));
       const chips = muns.map(([cod,v])=>`<button type="button" class="mun-chip" data-ibge="${esc(cod)}">${esc(v.nome)}</button>`).join('');
       const prefix = bannerTrunc(it)
@@ -2178,12 +2175,9 @@ LOADERS.municipioRegiao = async () => {
 function openLinhasPorIbge(codibge, nome){
   runView({ title:'Linhas no Município', tables:['itinerario_teste'], loader: async()=>{
     const it = await sbFetch('itinerario_teste', `cod_origem=eq.${enc(codibge)}&select=codlinha&limit=4000`);
-    const cods=[...new Set(it.map(r=>r.codlinha).filter(Boolean))].slice(0,150);
+    const cods=distinctCods(it,150);
     if(!cods.length){ setBody(`<div class="doc">${docHead('Linhas no Município')}${emptyBox('Nenhuma linha registrada em '+(nome||codibge)+'.')}</div>`); return; }
-    const [rows] = await Promise.all([
-      sbFetch('tabela_vista_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=300`),
-      getEmpresas()
-    ]);
+    const rows = await fetchLinesByCods(cods,{limit:300});
     setBody(`<div class="doc">${docHead('Linhas no Município')}
       ${metaRows([['Município',esc(nome||codibge),true],['Total',cods.length+' linha(s)']])}
       <div id="munResult"></div></div>`);
@@ -2197,15 +2191,12 @@ function openLinhasPorIbge(codibge, nome){
 // linhas (codlinha distintos) cujo itinerário passa por um município (codibge)
 async function linhasNoMunicipio(codibge){
   const rows = await sbFetch('itinerario_teste', `cod_origem=eq.${enc(codibge)}&select=codlinha&limit=8000`);
-  return [...new Set(rows.map(r=>r.codlinha).filter(Boolean))];
+  return distinctCods(rows);
 }
 async function mostrarLinhasResultado(host, cods, titulo){
   if(!cods.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para este critério.'); return; }
   const slice = cods.slice(0,250);
-  const [rows] = await Promise.all([
-    sbFetch('tabela_vista_teste', `codlinha=in.(${slice.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=250`),
-    getEmpresas()
-  ]);
+  const rows = await fetchLinesByCods(slice,{limit:250});
   const extra = cods.length>slice.length ? ` (mostrando ${slice.length})` : '';
   const prefix = `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${cods.length} linha(s) — ${esc(titulo)}${extra}</p>`;
   lineResults(host, rows, { prefixHTML: prefix });
@@ -2276,12 +2267,9 @@ LOADERS.ligacoesPorTerminal = async () => {
     if(!cods.length){ host.innerHTML=emptyBox('Nenhuma origem com esse nome.'); return; }
     const inList = cods.slice(0,50).map(enc).join(',');
     const qi = await sbFetch('qh_intervalo_teste', `cod_origen=in.(${inList})&select=codlinha&limit=3000`);
-    const lineCods=[...new Set(qi.map(r=>r.codlinha).filter(Boolean))].slice(0,120);
+    const lineCods=distinctCods(qi,120);
     if(!lineCods.length){ host.innerHTML=emptyBox('Nenhuma linha vinculada a esse terminal.'); return; }
-    const [rows] = await Promise.all([
-      sbFetch('tabela_vista_teste', `codlinha=in.(${lineCods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=200`),
-      getEmpresas()
-    ]);
+    const rows = await fetchLinesByCods(lineCods,{limit:200});
     const prefix = `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${lineCods.length} linha(s) a partir de "${esc(term)}"</p>`;
     lineResults(host, rows, { prefixHTML: prefix });
   }, tables:['qh_intervalo_teste']});
@@ -2531,6 +2519,16 @@ LOADERS.localidades = async () => {
 /* ================================================================
    COMPONENTES AUXILIARES (tabela de linhas + painel de busca)
    ================================================================ */
+// codlinhas distintos (descarta vazios); `limit` opcional corta a lista
+const distinctCods = (rows, limit) => [...new Set(rows.map(r=>r.codlinha).filter(Boolean))].slice(0, limit);
+// busca as linhas (tabela_vista) de uma lista de codlinha + garante o cache de empresas
+async function fetchLinesByCods(cods, { limit = 300 } = {}){
+  const [rows] = await Promise.all([
+    sbFetch('tabela_vista_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=${limit}`),
+    getEmpresas()
+  ]);
+  return rows;
+}
 // ordena grupos de empresa pelo RJ (codempresa) numérico; sem código vai pro fim
 function rjOrder(a, b){
   const na=parseInt(a,10), nb=parseInt(b,10);
