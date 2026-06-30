@@ -152,6 +152,13 @@ A lógica **pura** dessas seções (formatação, busca, filtros, `sbFetch`) tem
   o hash REAL verificado, pois SRI errado **quebra o carregamento** do site.
 - **`sbFetch` tem timeout (20s) + retry** (backoff) para erros transitórios; erros definitivos (4xx) não
   repetem. Não remover isso ao refatorar.
+- **NÃO duplicar busca/listagem — reusar os helpers.** Antes de colar um bloco de busca de linha,
+  busca de empresa ou listagem de linhas, **reuse** os helpers existentes em vez de recriar:
+  `searchLines`/`lineSearchRun` (resolve termo → linha ativa / 1 / N), `searchEmpresas` +
+  `empresaChooserHTML`/`bindEmpresaRows` (busca e tabela de escolha de empresa) e
+  `distinctCods`/`fetchLinesByCods` (codlinhas distintos → buscar linhas + empresas). Copiar esses
+  blocos cria cópias que divergem: uma correção futura acerta uma e esquece as outras (bug que
+  reaparece só em alguns cards).
 
 # Coding Guidelines (Karpathy-inspired)
 
