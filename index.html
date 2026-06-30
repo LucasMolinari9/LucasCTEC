@@ -1454,23 +1454,31 @@ function lineDocView({ subtitle, render }){
 }
 // o termo casa exatamente a linha já ativa? (evita re-buscar ao recarregar ao vivo)
 const lineMatchesTerm = (line, term) => { const t=norm(term); return !!t && (norm(line.codlinha)===t || norm(line.numero_ligacao)===t || norm(fmtCode(line.codlinha))===t); };
-// resolve o termo → 1 linha (renderiza o documento) ou várias (lista p/ escolher)
-async function lineDocRun(term, host, render){
+// Busca linhas por nome/número/código (query única usada por todos os cards de linha).
+async function searchLines(term){
+  const e1 = ilikeTerm(term), code = ilikeTerm(term.replace(/[-.\s]/g,''));
+  return sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${e1}*,numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=40`);
+}
+// Resolve o termo → renderiza a linha ativa, 1 resultado, ou lista p/ escolher (N).
+// `render(host, line)` desenha o documento; `useActive` liga o atalho da linha já selecionada.
+async function lineSearchRun(term, host, { render, emptyMsg, prompt, useActive = true }){
   term = (term||'').trim();
   if (!term){
-    if (activeLine) return render(host, activeLine);
-    host.innerHTML = emptyBox('Busque a linha pelo nome, número ou código.');
-    if (currentView) currentView.pdfHTML = null; return;
+    if (useActive && activeLine) return render(host, activeLine);
+    host.innerHTML = emptyBox(emptyMsg); if (currentView) currentView.pdfHTML = null; return;
   }
-  if (activeLine && lineMatchesTerm(activeLine, term)) return render(host, activeLine);
-  const e1 = ilikeTerm(term), code = ilikeTerm(term.replace(/[-.\s]/g,''));
-  const lines = await sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${e1}*,numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=40`);
+  if (useActive && activeLine && lineMatchesTerm(activeLine, term)) return render(host, activeLine);
+  const lines = await searchLines(term);
   if (!lines.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para “'+esc(term)+'”.'); if (currentView) currentView.pdfHTML = null; return; }
   if (lines.length === 1){ selectLine(lines[0]); return render(host, lines[0]); }
   await getEmpresas();
-  host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin:2px 0 8px">${lines.length} linha(s) encontradas — clique para abrir o documento:</p>` + linhasTable(lines);
+  host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin:2px 0 8px">${lines.length} linha(s) encontradas — ${prompt}:</p>` + linhasTable(lines);
   host.querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{ const l=JSON.parse(tr.dataset.row); selectLine(l); render(host, l); }));
   if (currentView) currentView.pdfHTML = null;
+}
+// resolve o termo → 1 linha (renderiza o documento) ou várias (lista p/ escolher)
+function lineDocRun(term, host, render){
+  return lineSearchRun(term, host, { render, emptyMsg:'Busque a linha pelo nome, número ou código.', prompt:'clique para abrir o documento' });
 }
 
 LOADERS.folhaRosto = () => lineDocView({ subtitle:'Cadastro de Linhas: Folha de Rosto', render:renderFolhaRosto });
@@ -1628,19 +1636,9 @@ async function renderLineHistory(host, line){
 LOADERS.historicoLinha = async () => {
   const pre = activeLine ? (activeLine.numero_ligacao || activeLine.codlinha || '') : '';
   searchPanel({ title:'Histórico da Linha', placeholder:'Nome, número ou código da linha', value:pre,
-    onRun: async (term, host) => {
-      term = (term||'').trim();
-      if (!term){ host.innerHTML = emptyBox('Busque pelo nome, número ou código da linha.'); if (currentView) currentView.pdfHTML = null; return; }
-      const e1 = ilikeTerm(term), code = ilikeTerm(term.replace(/[-.\s]/g,''));
-      const lines = await sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${e1}*,numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=40`);
-      if (!lines.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para “'+esc(term)+'”.'); if (currentView) currentView.pdfHTML = null; return; }
-      if (lines.length === 1){ await renderLineHistory(host, lines[0]); return; }
-      // várias linhas → escolher qual ver
-      await getEmpresas();
-      host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin:2px 0 8px">${lines.length} linha(s) encontradas — clique para ver o histórico:</p>` + linhasTable(lines);
-      host.querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>renderLineHistory(host, JSON.parse(tr.dataset.row))));
-      if (currentView) currentView.pdfHTML = null;
-    }, tables:['evento_teste'] });
+    onRun: (term, host) => lineSearchRun(term, host, { render:renderLineHistory,
+      emptyMsg:'Busque pelo nome, número ou código da linha.', prompt:'clique para ver o histórico', useActive:false }),
+    tables:['evento_teste'] });
 };
 
 const SENTIDO_ORDER = { 'Ida':1, 'Volta':2, 'Circular':3 };
@@ -1787,22 +1785,8 @@ LOADERS.quadroHorarios = async () => {
   }
 };
 // Modo linha: resolve o termo (número, nome ou código) → 1 linha (mostra o quadro) ou várias (lista)
-async function quadroLinhaRun(term, host){
-  term = (term||'').trim();
-  if(!term){
-    if(activeLine) return renderLinhaQuadro(host, activeLine);
-    host.innerHTML = emptyBox('Busque a linha pelo número, nome ou código.');
-    if(currentView) currentView.pdfHTML=null; return;
-  }
-  if(activeLine && lineMatchesTerm(activeLine, term)) return renderLinhaQuadro(host, activeLine);
-  const e1 = ilikeTerm(term), code = ilikeTerm(term.replace(/[-.\s]/g,''));
-  const lines = await sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${e1}*,numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=40`);
-  if(!lines.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para “'+esc(term)+'”.'); if(currentView) currentView.pdfHTML=null; return; }
-  if(lines.length===1){ selectLine(lines[0]); return renderLinhaQuadro(host, lines[0]); }
-  await getEmpresas();
-  host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin:2px 0 8px">${lines.length} linha(s) encontradas — clique para ver o quadro:</p>` + linhasTable(lines);
-  host.querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{ const l=JSON.parse(tr.dataset.row); selectLine(l); renderLinhaQuadro(host, l); }));
-  if(currentView) currentView.pdfHTML=null;
+function quadroLinhaRun(term, host){
+  return lineSearchRun(term, host, { render:renderLinhaQuadro, emptyMsg:'Busque a linha pelo número, nome ou código.', prompt:'clique para ver o quadro' });
 }
 // Quadro de UMA linha (comportamento clássico do card)
 async function renderLinhaQuadro(host, line){
