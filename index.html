@@ -1490,8 +1490,8 @@ async function renderFolhaRosto(host, line){
       ['Registro', 'RJ-'+esc(orDash(L.codempresa))],
       ['Código da Ligação', esc(fmtCode(L.codlinha))],
       ['Número da Ligação', esc(orDash(L.numero_ligacao))],
-      ['Ligação', esc(L.nome_ligacao||'—')],
-      ['Nome (ordem crescente)', esc(orDash(L.nome_lig_cresc))],
+      ['Ligação', esc(L.nome_ligacao||'—'), true],
+      ['Nome (ordem crescente)', esc(orDash(L.nome_lig_cresc)), true],
       ['Via', esc(orDash(L.via))],
       ['Característica', esc(orDash(L.caracteristica))],
       ['Tipo', esc(orDash(L.tipo))],
@@ -1617,7 +1617,7 @@ async function renderLineHistory(host, line){
     getEvLookups(), getEmpresas()
   ]);
   const head = docHead('Histórico da Linha');
-  const meta = metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(orDash(line.codempresa))],['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—')]]);
+  const meta = metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(orDash(line.codempresa))],['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—'),true]]);
   if (!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento registrado para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
   const build = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin[r.evento_linha] || lk.emp[r.evento_empresa] || '—', false) + evBlocksHTML(r);
   // PDF/impressão: um evento por página (cabeçalho repetido); segue o filtro aplicado na tela
@@ -1707,7 +1707,7 @@ function quadroHorariosBodyHTML(interv, predet, orig){
 // Corpo de UM quadro (meta + tabelas) para uma linha qualquer — reusado na linha ativa,
 // no clique da lista por empresa e na montagem do PDF de todos os quadros.
 function quadroMetaHTML(line, ultimaAlteracao){
-  const pares = [['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(line.codempresa||'—')],['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—')],['Via',esc(orDash(line.via))],['Característica',esc(orDash(line.caracteristica))],['Tipo',esc(orDash(line.tipo))]];
+  const pares = [['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(line.codempresa||'—')],['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—'),true],['Via',esc(orDash(line.via))],['Característica',esc(orDash(line.caracteristica))],['Tipo',esc(orDash(line.tipo))]];
   if(ultimaAlteracao!==undefined) pares.push(['Última alteração',fmtDate(ultimaAlteracao)]);
   return metaRows(pares);
 }
@@ -1753,7 +1753,7 @@ async function renderItinerarios(host, line){
   const codEmp = rows[0]?.codempresa || line.codempresa || '';
   const meta = metaRows([['Empresa',esc(empNome(codEmp)),true],['Registro','RJ-'+esc(codEmp)],
       ['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
-      ['Ligação',esc(line.nome_ligacao||'—')],['Via',esc(orDash(line.via))],
+      ['Ligação',esc(line.nome_ligacao||'—'),true],['Via',esc(orDash(line.via))],
       ['Característica',esc(orDash(line.caracteristica))],['Tipo da Ligação',esc(orDash(line.tipo))]]);
   const inner = `${meta}${itinerarioTableHTML(rows, ibge)}`;   // documento completo (p/ PDF)
   if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}${inner}</div>`;
@@ -1939,7 +1939,7 @@ async function renderFrota(host, line){
   const f = rows[0];
   const inner = `${metaRows([['Empresa',esc(empNome(f.codempresa)),true],['Registro','RJ-'+esc(orDash(f.codempresa))],
       ['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
-      ['Ligação',esc(line.nome_ligacao||'—')],['Hierarquia',esc(orDash(f.hierarquia))],['Última alteração',fmtDate(f.ultima_alteracao)]])}
+      ['Ligação',esc(line.nome_ligacao||'—'),true],['Hierarquia',esc(orDash(f.hierarquia))],['Última alteração',fmtDate(f.ultima_alteracao)]])}
     ${frotaBlockHTML(f)}`;
   host.innerHTML = inner;
   if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Frota da Linha')}${inner}</div>`;
@@ -1967,7 +1967,7 @@ async function renderEstrutura(host, line){
   const inner = `${metaRows([
       ['Empresa',esc(empNome(L.codempresa)),true],['Registro','RJ-'+esc(orDash(L.codempresa))],
       ['Código da Ligação',esc(fmtCode(L.codlinha))],['Número da Ligação',esc(orDash(L.numero_ligacao))],
-      ['Ligação',esc(L.nome_ligacao||'—')],['Via',esc(orDash(L.via))],
+      ['Ligação',esc(L.nome_ligacao||'—'),true],['Via',esc(orDash(L.via))],
       ['Característica',esc(orDash(L.caracteristica))],['Tipo da Ligação',esc(orDash(L.tipo))],
       ['Data de criação',fmtDate(L.data_criacao)],['Processo Nº',esc(orDash(L.processo_criacao)),true],
     ])}
