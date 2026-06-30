@@ -664,7 +664,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 26/06-A</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 30/06-A</span></span>
   </div>
 </footer>
 
@@ -1706,8 +1706,10 @@ function quadroHorariosBodyHTML(interv, predet, orig){
 }
 // Corpo de UM quadro (meta + tabelas) para uma linha qualquer — reusado na linha ativa,
 // no clique da lista por empresa e na montagem do PDF de todos os quadros.
-function quadroMetaHTML(line){
-  return metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(line.codempresa||'—')],['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—')],['Via',esc(orDash(line.via))],['Característica',esc(orDash(line.caracteristica))],['Tipo',esc(orDash(line.tipo))]]);
+function quadroMetaHTML(line, ultimaAlteracao){
+  const pares = [['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(line.codempresa||'—')],['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—')],['Via',esc(orDash(line.via))],['Característica',esc(orDash(line.caracteristica))],['Tipo',esc(orDash(line.tipo))]];
+  if(ultimaAlteracao!==undefined) pares.push(['Última alteração',fmtDate(ultimaAlteracao)]);
+  return metaRows(pares);
 }
 function quadroDocInner(line, interv, predet, orig){
   return `${quadroMetaHTML(line)}
@@ -1807,13 +1809,19 @@ async function renderLinhaQuadro(host, line){
   if(!host || !line) return;
   host.innerHTML = loading();
   try {
-    const [interv, predet, orig] = await Promise.all([
+    const [interv, predet, qh, secoes, orig] = await Promise.all([
       sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(line.codlinha)}&select=cod_origen,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
       sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(line.codlinha)}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
+      sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=ultima_alteracao&limit=1`),
+      sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`),
       getOrigem(), getEmpresas()
     ]);
     if (!interv.length && !predet.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para esta linha.'); if(currentView) currentView.pdfHTML=null; return; }
-    if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroDocInner(line, interv, predet, orig)}</div>`;
+    const ultima = qh[0]?.ultima_alteracao;
+    // bloco de Seções e Tarifas da linha (mesma tabela/builder da Estrutura), fora do #qhResult
+    const h3sec = `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:18px 0 4px">Seções e Tarifas</h3>`;
+    const secBlock = secoes.length ? `${h3sec}${secoesTarifasHTML(secoes)}` : '';
+    if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroMetaHTML(line, ultima)}${quadroHorariosBodyHTML(interv, predet, orig)}${secBlock}</div>`;
     // filtros por sentido (origem das partidas) e por dia — o PDF segue completo
     const sentidoKey = (cod,nome)=> orig[cod] || nome || ('Origem '+orDash(cod));
     const sentidos = [...new Set([...interv.map(r=>sentidoKey(r.cod_origen,r.nome_origem)), ...predet.map(r=>sentidoKey(r.cod_origem,r.nome_origem))])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
@@ -1821,7 +1829,7 @@ async function renderLinhaQuadro(host, line){
     const sentSel = sentidos.length>1 ? `<label>Sentido <select id="qhSent"><option value="">Todos</option>${sentidos.map(s=>`<option value="${esc(s)}">de ${esc(s)}</option>`).join('')}</select></label>` : '';
     const diaSel  = dias.length>1 ? `<label>Dia <select id="qhDia"><option value="">Todos</option>${dias.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('')}</select></label>` : '';
     const tools = (sentSel||diaSel) ? `<div class="loc-tools">${sentSel}${diaSel}</div>` : '';
-    host.innerHTML = `${quadroMetaHTML(line)}${tools}<div id="qhResult"></div>`;
+    host.innerHTML = `${quadroMetaHTML(line, ultima)}${tools}<div id="qhResult"></div>${secBlock}`;
     const result = host.querySelector('#qhResult'), ss = host.querySelector('#qhSent'), ds = host.querySelector('#qhDia');
     const paint = ()=>{
       const s = ss?ss.value:'', d = ds?ds.value:'';
@@ -2472,7 +2480,7 @@ async function getLocalidades(){
   _localidadesList = out;
   return out;
 }
-async function mostrarLinhasPorLocalidade(host, a, b){
+async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
   host.innerHTML = loading();
   try{
     const ai = ilikeTerm(a);
@@ -2491,7 +2499,15 @@ async function mostrarLinhasPorLocalidade(host, a, b){
     }
     const viaSecao = rows.length - lineRows.length;   // quantas entraram só pela seção
     let base = rows;
-    if(b){ const bl=norm(b); base = rows.filter(r=> norm((r.nome_ligacao||'')+' '+(r.nome_lig_cresc||'')+' '+(r.via||'')).includes(bl)); }
+    if(b && bTipo==='municipio'){
+      // cruzamento localidade A × MUNICÍPIO B: interseção com as linhas que passam pelo município
+      const ibge = await getIbge();
+      const cods = Object.entries(ibge).filter(([,v])=>(v.nome||'').toLowerCase().includes(b.toLowerCase())).map(([c])=>c);
+      if(!cods.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(b)}".`); return; }
+      const munSet = new Set();
+      for(const c of cods.slice(0,5)){ (await linhasNoMunicipio(c)).forEach(cl=>munSet.add(cl)); }
+      base = rows.filter(r=> munSet.has(r.codlinha));
+    } else if(b){ const bl=norm(b); base = rows.filter(r=> norm((r.nome_ligacao||'')+' '+(r.nome_lig_cresc||'')+' '+(r.via||'')).includes(bl)); }
     if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${a}" e "${b}".`:`Nenhuma linha encontrada para "${a}".`); return; }
     await getEmpresas();
     const titulo = b? `${esc(a)} ↔ ${esc(b)}` : esc(a);
@@ -2502,23 +2518,31 @@ async function mostrarLinhasPorLocalidade(host, a, b){
   }catch(e){ host.innerHTML = errorBox(e.message); }
 }
 LOADERS.localidades = async () => {
-  const locs = await getLocalidades();
+  const [locs, ibge] = await Promise.all([getLocalidades(), getIbge()]);
+  const muns = [...new Set(Object.values(ibge).map(v=>v.nome).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   // dois campos pesquisáveis (autocomplete via datalist): A obrigatório, B opcional para cruzar.
-  const dl = `<datalist id="locList">${locs.map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`;
+  // O segundo campo pode ser outra localidade OU um município (cruzamento por interseção).
+  const dl = `<datalist id="locList">${locs.map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`
+    + `<datalist id="munLocList">${muns.map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`;
   setBody(`<div class="doc">${docHead('Linhas por Localidade')}
-    <div class="doc-obs" style="margin:0 0 12px"><b>Dica:</b> a localidade é reconhecida no nome/itinerário das linhas (origem, destino ou "via"). Preencha a segunda para achar linhas entre duas localidades.</div>
+    <div class="doc-obs" style="margin:0 0 12px"><b>Dica:</b> a localidade é reconhecida no nome/itinerário das linhas (origem, destino ou "via"). Use o segundo campo para cruzar com outra localidade ou com um município.</div>
     <div class="loc-form">
       <label>Localidade<input id="locA" list="locList" placeholder="Digite a localidade…" autocomplete="off"></label>
-      <label>Cruzar com (opcional)<input id="locB" list="locList" placeholder="Segunda localidade…" autocomplete="off"></label>
+      <label>Cruzar com (opcional)<select id="locBTipo"><option value="localidade">Localidade</option><option value="municipio">Município</option></select><input id="locB" list="locList" placeholder="Segunda localidade…" autocomplete="off"></label>
     </div>${dl}
     <div class="loc-actions"><button class="loc-btn" id="locGo" type="button">Buscar linhas</button></div>
     <div id="locHost">${emptyBox('Digite uma localidade e clique em Buscar.')}</div></div>`);
-  const A=modalBody.querySelector('#locA'), B=modalBody.querySelector('#locB'), host=modalBody.querySelector('#locHost');
+  const A=modalBody.querySelector('#locA'), B=modalBody.querySelector('#locB'), BT=modalBody.querySelector('#locBTipo'), host=modalBody.querySelector('#locHost');
+  BT.addEventListener('change', ()=>{
+    const mun = BT.value==='municipio';
+    B.setAttribute('list', mun?'munLocList':'locList');
+    B.placeholder = mun?'Nome do município…':'Segunda localidade…';
+  });
   const run = async()=>{
-    const a=(A.value||'').trim(), b=(B.value||'').trim();
+    const a=(A.value||'').trim(), b=(B.value||'').trim(), bTipo=BT.value;
     if(!a){ host.innerHTML=emptyBox('Informe ao menos a primeira localidade.'); return; }
-    if(b && a.toLowerCase()===b.toLowerCase()){ host.innerHTML=emptyBox('Use localidades diferentes nos dois campos.'); return; }
-    await mostrarLinhasPorLocalidade(host, a, b);
+    if(b && bTipo==='localidade' && a.toLowerCase()===b.toLowerCase()){ host.innerHTML=emptyBox('Use localidades diferentes nos dois campos.'); return; }
+    await mostrarLinhasPorLocalidade(host, a, b, bTipo);
   };
   modalBody.querySelector('#locGo').addEventListener('click', run);
   [A,B].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
@@ -2610,7 +2634,7 @@ function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=fal
 const VIEW_TABLES = {
   folhaRosto:['tabela_vista_teste'], folhaDivisoria:['tabela_vista_teste'],
   historicoLinha:['evento_teste'], itinerarios:['itinerario_teste'],
-  quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste'], tarifas:['tarifa_atual_teste'],
+  quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste','qh_teste','tarifa_atual_teste'], tarifas:['tarifa_atual_teste'],
   frota:['qh_teste'], estrutura:['qh_teste','tarifa_atual_teste'],
   empresasRegulares:['tabela_vista_teste'], historicoEmpresa:['evento_teste'],
   ligacoesPorEmpresa:['tabela_vista_teste'], secoesPorEmpresa:['tarifa_atual_teste'],
@@ -2620,7 +2644,7 @@ const VIEW_TABLES = {
   secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste'],
   frotaPorEmpresa:['qh_teste'],
   pesquisaEvento:['evento_teste'], portarias:['portaria_teste'],
-  localidades:['tabela_vista_teste'],
+  localidades:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','municipio_teste'],
 };
 
 app.addEventListener('click', e => {
