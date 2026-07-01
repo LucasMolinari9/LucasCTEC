@@ -1,9 +1,10 @@
 # Análise de Separação Lógica × Apresentação — Portal DIVAT
 
-> **Tipo:** relatório de análise (somente leitura). **Nenhuma linha do `index.html` foi alterada**,
-> nenhuma operação de banco foi executada e nenhuma funcionalidade foi tocada. As referências
-> `index.html:NNN` são do estado atual do arquivo; como o JS é um único bloco, os números deslocam
-> a cada edição — confira sempre pelo **trecho de código citado**, não só pela linha.
+> **Tipo:** relatório de análise. O diagnóstico é somente leitura; a **única exceção é o S1**, que
+> foi **corrigido a pedido do dono** (ver a marca ✅ na seção) — os demais itens seguem apenas
+> diagnóstico. Nenhuma operação de banco foi executada. As referências `index.html:NNN` são de antes
+> da correção do S1; como o JS é um único bloco, os números deslocam a cada edição — confira sempre
+> pelo **trecho de código citado**, não só pela linha.
 
 ## Contexto e escopo
 
@@ -87,6 +88,14 @@ card, com critérios divergentes** — cada tela olhava um conjunto diferente de
 separa a lógica do render e vira teste (o critério fica num lugar só). É o caso em que a extração
 paga o próprio custo: **Relatórios e Empresas passam a chamar a mesma função**, e a Folha de Rosto
 pode reusá-la só para decidir se acrescenta o "Ativa".
+
+**✅ Status: CORRIGIDO.** Foi extraída a função pura `const isLinhaAtiva = r => !r.cancelado &&
+!r.paralisado;` (junto aos utils, logo após `boolChip`), com teste em `tests/pure.test.js` (8 casos,
+incluindo sub judice/transferida = ativas) e cópia guardada pelo anti-drift do `check.js`.
+`empresasRegulares` passou a usá-la — **e o SELECT agora traz `paralisado`, que antes não era
+buscado** (sem isso a correção seria um no-op) — e `relatoriosGerenciais` também aponta para a mesma
+função. `node tests/check.js` verde (69/69). A **Folha de Rosto não foi tocada** (segue com o rótulo
+de status detalhado; ajustar para exibir "Ativa · Sub judice" fica como decisão de UX futura).
 
 ---
 

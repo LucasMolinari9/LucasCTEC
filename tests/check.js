@@ -74,6 +74,7 @@ const canon = [
   ['enc',                  'const enc = s => encodeURIComponent(s);'],
   ['orDash',               "==='') ? '—'"],
   ['boolChip',             'chip chip-on'],
+  ['isLinhaAtiva',         'const isLinhaAtiva = r => !r.cancelado && !r.paralisado;'],
   ['norm',                 "normalize('NFD')"],
   ['yearOf',               'parseInt(String(d).slice(0,4),10)'],
   ['matchEvent',           'function matchEvent(r, c){'],

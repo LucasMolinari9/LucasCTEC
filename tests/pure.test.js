@@ -65,6 +65,17 @@ console.log('boolChip');
 ok(P.boolChip(true,'X').includes('chip-on') && P.boolChip(true,'X').includes('X'), 'boolChip true → chip');
 eq(P.boolChip(false,'X'), '', 'boolChip false → vazio');
 
+// --- isLinhaAtiva (ativa = não cancelada e não paralisada; sub judice/transferida contam como ativas) ---
+console.log('isLinhaAtiva');
+ok(P.isLinhaAtiva({}) === true,                                    'isLinhaAtiva sem flags → ativa');
+ok(P.isLinhaAtiva({cancelado:true}) === false,                     'isLinhaAtiva cancelada → inativa');
+ok(P.isLinhaAtiva({paralisado:true}) === false,                    'isLinhaAtiva paralisada → inativa');
+ok(P.isLinhaAtiva({sub_judice:true}) === true,                     'isLinhaAtiva sub judice → ativa');
+ok(P.isLinhaAtiva({transferido:true}) === true,                    'isLinhaAtiva transferida → ativa');
+ok(P.isLinhaAtiva({sub_judice:true,transferido:true}) === true,    'isLinhaAtiva sub judice + transferida → ativa');
+ok(P.isLinhaAtiva({cancelado:true,paralisado:true}) === false,     'isLinhaAtiva cancelada + paralisada → inativa');
+ok(P.isLinhaAtiva({paralisado:true,sub_judice:true}) === false,    'isLinhaAtiva paralisada vence sub judice → inativa');
+
 // --- norm ---
 console.log('norm');
 eq(P.norm('Niterói '),    'niteroi',     'norm acento + caixa + trim');

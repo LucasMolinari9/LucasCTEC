@@ -664,7 +664,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 30/06-B</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 01/07-A</span></span>
   </div>
 </footer>
 
@@ -760,6 +760,10 @@ const enc = s => encodeURIComponent(s);
 const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));
 const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
 const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
+// Uma linha está ATIVA quando está operando: não cancelada e não paralisada.
+// Sub judice (pendência só na Justiça) e transferida (mudou de operadora) seguem
+// operando → contam como ativas. Critério único usado por Empresas e Relatórios.
+const isLinhaAtiva = r => !r.cancelado && !r.paralisado;
 
 /* ================================================================
    ÍCONES
@@ -1968,11 +1972,11 @@ async function renderEstrutura(host, line){
 LOADERS.empresasRegulares = async () => {
   // lista TODAS as empresas do cadastro (codempresa_teste), inclusive sem linhas
   const [lineRows] = await Promise.all([
-    sbFetch('tabela_vista_teste', `select=codempresa,cancelado&limit=5000`),
+    sbFetch('tabela_vista_teste', `select=codempresa,cancelado,paralisado&limit=5000`),
     getEmpresas()
   ]);
   const cnt = {};
-  lineRows.forEach(r=>{ const k=r.codempresa||'—'; cnt[k]=cnt[k]||{total:0,ativas:0}; cnt[k].total++; if(!r.cancelado)cnt[k].ativas++; });
+  lineRows.forEach(r=>{ const k=r.codempresa||'—'; cnt[k]=cnt[k]||{total:0,ativas:0}; cnt[k].total++; if(isLinhaAtiva(r))cnt[k].ativas++; });
   // dedup do cadastro por RJ (prioriza a entrada REGULAR/não cassada — resolve o RJ 103)
   const best = {};
   (empresaList||[]).forEach(e=>{ const k=e.codempresa; if(k==null) return;
@@ -2300,7 +2304,7 @@ LOADERS.relatoriosGerenciais = async () => {
     getEmpresas()
   ]);
   const total=rows.length;
-  const ativas=rows.filter(r=>!r.cancelado&&!r.paralisado).length;
+  const ativas=rows.filter(isLinhaAtiva).length;
   const canc=rows.filter(r=>r.cancelado).length, paral=rows.filter(r=>r.paralisado).length, sj=rows.filter(r=>r.sub_judice).length;
   const empCount=new Set(rows.map(r=>r.codempresa)).size;
   const porEmp = [...countBy(rows, r=>r.codempresa||'—')].sort((a,b)=>b[1]-a[1]).slice(0,15);

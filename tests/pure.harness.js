@@ -26,6 +26,9 @@ const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));
 const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
 // index.html:740
 const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
+// index.html:763 — linha ATIVA = operando (não cancelada e não paralisada). Sub judice e
+// transferida contam como ativas. Critério único de Empresas e Relatórios.
+const isLinhaAtiva = r => !r.cancelado && !r.paralisado;
 // index.html:842 — normaliza acento/caixa para busca
 const norm = s => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 // index.html:1510
@@ -61,7 +64,7 @@ function rowMatchesActiveLine(payload){
 }
 
 module.exports = {
-  fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, boolChip, norm,
+  fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, boolChip, isLinhaAtiva, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney,
   setRTState, rowMatchesActiveLine,
 };
