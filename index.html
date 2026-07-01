@@ -2706,6 +2706,8 @@ const CACHE_INVALIDATORS = {
   evento_empresa_teste: () => { evEmpMap = null; },
   evento_linha_teste:   () => { evLinMap = null; },
   codempresa_teste:     () => { empresaMap = null; empresaList = null; getEmpresas().catch(()=>{}); },
+  portaria_teste:       () => { _portariaAnos = null; },
+  localidades_teste:    () => { _localidadesList = null; },
 };
 function invalidateCaches(table){
   const fn = CACHE_INVALIDATORS[table];
