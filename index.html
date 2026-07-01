@@ -2680,12 +2680,19 @@ const RT_TABLES = ['tabela_vista_teste','itinerario_teste','qh_teste','qh_interv
 const rtDot = document.getElementById('rtDot');
 let reloadTimer = null;
 
+// tabela → como invalidar o cache derivado dela (ver STATE + CACHES). Declarativo em vez de
+// cadeia de if: deixa o conjunto de caches invalidáveis visível num lugar só. Ao criar um cache
+// novo derivado de uma tabela do Realtime, adicione a entrada aqui.
+const CACHE_INVALIDATORS = {
+  municipio_teste:      () => { ibgeMap = null; },
+  origem_teste:         () => { origemMap = null; },
+  evento_empresa_teste: () => { evEmpMap = null; },
+  evento_linha_teste:   () => { evLinMap = null; },
+  codempresa_teste:     () => { empresaMap = null; empresaList = null; getEmpresas().catch(()=>{}); },
+};
 function invalidateCaches(table){
-  if(table==='municipio_teste') ibgeMap=null;
-  if(table==='origem_teste') origemMap=null;
-  if(table==='evento_empresa_teste') evEmpMap=null;
-  if(table==='evento_linha_teste') evLinMap=null;
-  if(table==='codempresa_teste'){ empresaMap=null; empresaList=null; getEmpresas().catch(()=>{}); }
+  const fn = CACHE_INVALIDATORS[table];
+  if (fn) fn();
 }
 function scheduleReload(){
   clearTimeout(reloadTimer);
