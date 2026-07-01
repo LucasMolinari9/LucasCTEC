@@ -24,6 +24,8 @@ const enc = s => encodeURIComponent(s);
 const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));
 // index.html:739
 const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
+// index.html — nome "Origem - Destino": quebra só no " - ", cada lado inteiro (&nbsp;)
+const fmtLineName = nome => nome ? esc(nome).split(' - ').map(p => p.replace(/ /g, '&nbsp;')).join(' - ') : '—';
 // index.html:740
 const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
 // index.html:763 — linha ATIVA = operando (não cancelada e não paralisada). Sub judice e
@@ -92,7 +94,7 @@ function resumoFrota(rows){
 }
 
 module.exports = {
-  fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, boolChip, isLinhaAtiva, norm,
+  fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, boolChip, isLinhaAtiva, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney,
   setRTState, rowMatchesActiveLine,
   resumoRelatorio, resumoFrota,

@@ -759,6 +759,10 @@ const enc = s => encodeURIComponent(s);
 // neutralizá-los impede que o termo quebre o filtro ou injete curingas. Depois codifica.
 const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));
 const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
+// Nome de ligação "Origem - Destino": só permite quebra de linha no separador " - ",
+// mantendo cada lado inteiro (não pica "Rio de Janeiro" palavra a palavra). Escapa e
+// devolve HTML pronto (&nbsp; nos espaços internos) — NÃO re-escapar quem usa.
+const fmtLineName = nome => nome ? esc(nome).split(' - ').map(p => p.replace(/ /g, '&nbsp;')).join(' - ') : '—';
 const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
 // Uma linha está ATIVA quando está operando: não cancelada e não paralisada.
 // Sub judice (pendência só na Justiça) e transferida (mudou de operadora) seguem
@@ -1876,7 +1880,7 @@ async function renderEmpresaQuadros(host, cod, nome){
     `<div class="ev-page">${docHead('Quadro de Horários')}${quadroDocInner(l, intervBy.get(l.codlinha)||[], predetBy.get(l.codlinha)||[], orig)}</div>`).join('')}</div>`;
   const rowsHTML = comQuadro.map(l=>`<tr class="clickable" tabindex="0" role="button" data-cod="${esc(l.codlinha)}">
     <td class="td-num" data-label="Número">${esc(l.numero_ligacao||fmtCode(l.codlinha))}</td>
-    <td class="td-logr" data-label="Ligação">${esc(l.nome_ligacao||'—')}</td>
+    <td class="td-logr" data-label="Ligação">${fmtLineName(l.nome_ligacao)}</td>
     <td class="td-num" data-label="Código">${esc(fmtCode(l.codlinha))}</td></tr>`).join('');
   host.innerHTML = `<div class="doc-obs" style="margin:0 0 10px"><b>${esc(nomeEmp)}</b> · ${linhas.length} linha(s), ${comQuadro.length} com quadro de horários.
       Use o botão <b>PDF</b> da barra acima para baixar todos os quadros (um por página).</div>`
@@ -2594,7 +2598,7 @@ function linhasTable(rows){
     <td class="td-num" data-label="RJ">${esc(r.codempresa||'')}</td>
     <td class="td-num" data-label="Código">${esc(fmtCode(r.codlinha))}</td>
     <td class="td-num" data-label="Número">${esc(r.numero_ligacao||'—')}</td>
-    <td class="td-logr" data-label="Nome">${esc(r.nome_ligacao||'—')}</td>
+    <td class="td-logr" data-label="Nome">${fmtLineName(r.nome_ligacao)}</td>
     <td class="td-logr" data-label="Via">${esc(r.via||'—')}</td>
     <td class="td-tipo" data-label="Característica">${esc(r.caracteristica||'—')}</td>
     <td data-label="Tipo">${esc(r.tipo||'')} ${boolChip(r.cancelado,'canc.')}</td></tr>`).join('');

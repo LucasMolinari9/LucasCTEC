@@ -60,6 +60,19 @@ eq(P.orDash(undefined), '—', 'orDash undefined → travessão');
 eq(P.orDash(0),         0,   'orDash 0 preservado (não vira travessão)');
 eq(P.orDash('x'),       'x', 'orDash valor');
 
+// --- fmtLineName ---
+console.log('fmtLineName');
+eq(P.fmtLineName('Armação dos Búzios - Rio de Janeiro'),
+   'Armação&nbsp;dos&nbsp;Búzios - Rio&nbsp;de&nbsp;Janeiro',
+   'fmtLineName quebra só no " - ", lados inteiros');
+eq(P.fmtLineName('Porciúncula - Rio de Janeiro (via Niterói/BR-101)'),
+   'Porciúncula - Rio&nbsp;de&nbsp;Janeiro&nbsp;(via&nbsp;Niterói/BR-101)',
+   'fmtLineName não quebra em "-" sem espaços (BR-101)');
+eq(P.fmtLineName('Circular'),      'Circular', 'fmtLineName palavra única');
+eq(P.fmtLineName(''),              '—',        'fmtLineName vazio → travessão');
+eq(P.fmtLineName(null),            '—',        'fmtLineName null → travessão');
+eq(P.fmtLineName('<b> - </b>'),    '&lt;b&gt; - &lt;/b&gt;', 'fmtLineName escapa HTML (XSS)');
+
 // --- boolChip ---
 console.log('boolChip');
 ok(P.boolChip(true,'X').includes('chip-on') && P.boolChip(true,'X').includes('X'), 'boolChip true → chip');
