@@ -1621,7 +1621,7 @@ function paginateEvents(container, rows, buildPage, headerHTML='', opts={}){
     page = 1; paint();
     if (opts.onFilter) opts.onFilter(visible.map(i=>rows[i]));
   };
-  fEls.forEach(el=>el.addEventListener('input', applyFilters));
+  fEls.forEach(el=>el.addEventListener('input', debounce(applyFilters)));
   const clear = container.querySelector('.evf-clear');
   if (clear) clear.addEventListener('click', ()=>{ fEls.forEach(el=>el.value=''); applyFilters(); });
 }
@@ -2009,7 +2009,7 @@ LOADERS.empresasRegulares = async () => {
     result.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>openEmpresaLigacoes(tr.dataset.emp)));
   };
   sel.addEventListener('change', paint);
-  inp.addEventListener('input', paint);
+  inp.addEventListener('input', debounce(paint));
   paint();
 };
 
@@ -2058,7 +2058,7 @@ LOADERS.secoesPorEmpresa = async () => {
       const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${fmtCode(r.codlinha)} ${r.codlinha} ${r.nome_ligacao||''}`).includes(q)) : rows;
       result.innerHTML = f.length ? tableHTML(cols, f.map(rowHTML).join(''), f.length+' seção(ões)') : emptyBox('Nenhuma seção com esse filtro.');
     };
-    inp.addEventListener('input', paint);
+    inp.addEventListener('input', debounce(paint));
     paint();
   }, tables:['tarifa_atual_teste']});
 };
@@ -2289,7 +2289,7 @@ LOADERS.secoesPorLigacao = async () => {
     const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${r.nome_ligacao||''}`).includes(q)) : rows;
     result.innerHTML = f.length ? tableHTML(cols, f.map(rowHTML).join(''), f.length+' seção(ões)') : emptyBox('Nenhuma seção com esse filtro.');
   };
-  inp.addEventListener('input', paint);
+  inp.addEventListener('input', debounce(paint));
   paint();
 };
 
@@ -2649,6 +2649,7 @@ app.addEventListener('click', e => {
 /* ================================================================
    UTILITÁRIOS
    ================================================================ */
+function debounce(fn, ms=150){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 function groupBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); if(!m.has(k))m.set(k,[]); m.get(k).push(x); } return m; }
 function countBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); m.set(k,(m.get(k)||0)+1); } return m; }
 function fmtMoney(v){ if(v===null||v===undefined||v==='') return '—'; const n=Number(v); return isNaN(n)?String(v):n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
