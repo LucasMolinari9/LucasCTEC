@@ -1821,7 +1821,7 @@ async function renderLinhaQuadro(host, line){
     // bloco de Seções e Tarifas da linha (mesma tabela/builder da Estrutura), fora do #qhResult
     const h3sec = `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:18px 0 4px">Seções e Tarifas</h3>`;
     const secBlock = secoes.length ? `${h3sec}${secoesTarifasHTML(secoes)}` : '';
-    if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroMetaHTML(line, ultima)}${quadroHorariosBodyHTML(interv, predet, orig)}${secBlock}</div>`;
+    if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroMetaHTML(line, ultima)}${secBlock}${quadroHorariosBodyHTML(interv, predet, orig)}</div>`;
     // filtros por sentido (origem das partidas) e por dia — o PDF segue completo
     const sentidoKey = (cod,nome)=> orig[cod] || nome || ('Origem '+orDash(cod));
     const sentidos = [...new Set([...interv.map(r=>sentidoKey(r.cod_origen,r.nome_origem)), ...predet.map(r=>sentidoKey(r.cod_origem,r.nome_origem))])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
@@ -1829,7 +1829,7 @@ async function renderLinhaQuadro(host, line){
     const sentSel = sentidos.length>1 ? `<label>Sentido <select id="qhSent"><option value="">Todos</option>${sentidos.map(s=>`<option value="${esc(s)}">de ${esc(s)}</option>`).join('')}</select></label>` : '';
     const diaSel  = dias.length>1 ? `<label>Dia <select id="qhDia"><option value="">Todos</option>${dias.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('')}</select></label>` : '';
     const tools = (sentSel||diaSel) ? `<div class="loc-tools">${sentSel}${diaSel}</div>` : '';
-    host.innerHTML = `${quadroMetaHTML(line, ultima)}${tools}<div id="qhResult"></div>${secBlock}`;
+    host.innerHTML = `${quadroMetaHTML(line, ultima)}${secBlock}${tools}<div id="qhResult"></div>`;
     const result = host.querySelector('#qhResult'), ss = host.querySelector('#qhSent'), ds = host.querySelector('#qhDia');
     const paint = ()=>{
       const s = ss?ss.value:'', d = ds?ds.value:'';
