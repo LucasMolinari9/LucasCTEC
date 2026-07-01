@@ -73,6 +73,16 @@ eq(P.fmtLineName(''),              '—',        'fmtLineName vazio → travess�
 eq(P.fmtLineName(null),            '—',        'fmtLineName null → travessão');
 eq(P.fmtLineName('<b> - </b>'),    '&lt;b&gt; - &lt;/b&gt;', 'fmtLineName escapa HTML (XSS)');
 
+// --- byCodlinha ---
+console.log('byCodlinha');
+{
+  const linhas = [{codlinha:'108029009'},{codlinha:'108003000'},{codlinha:'108034000'},{codlinha:'108029001'}];
+  const ord = [...linhas].sort(P.byCodlinha).map(l=>l.codlinha);
+  eq(ord.join(','), '108003000,108029001,108029009,108034000', 'byCodlinha ordena por código crescente');
+}
+eq([{codlinha:'2'},{codlinha:'10'}].sort(P.byCodlinha).map(l=>l.codlinha).join(','), '2,10', 'byCodlinha é numérico (10 depois de 2)');
+eq([{codlinha:'5'},{}].sort(P.byCodlinha).map(l=>l.codlinha||'—').join(','), '—,5', 'byCodlinha trata codlinha ausente');
+
 // --- boolChip ---
 console.log('boolChip');
 ok(P.boolChip(true,'X').includes('chip-on') && P.boolChip(true,'X').includes('X'), 'boolChip true → chip');

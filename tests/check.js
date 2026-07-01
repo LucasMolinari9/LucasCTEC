@@ -74,6 +74,7 @@ const canon = [
   ['enc',                  'const enc = s => encodeURIComponent(s);'],
   ['orDash',               "==='') ? '—'"],
   ['fmtLineName',          "split(' - ').map(p => p.replace(/ /g, '&nbsp;'))"],
+  ['byCodlinha',           "localeCompare(String(b.codlinha||''), undefined, { numeric:true })"],
   ['boolChip',             'chip chip-on'],
   ['isLinhaAtiva',         'const isLinhaAtiva = r => !r.cancelado && !r.paralisado;'],
   ['norm',                 "normalize('NFD')"],

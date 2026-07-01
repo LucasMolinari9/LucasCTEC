@@ -944,7 +944,7 @@ async function doSearch() {
     if (!rows.length) {
       dropdown.innerHTML = '<div class="drop-empty">Nenhuma linha encontrada.</div>';
     } else {
-      dropdown.innerHTML = rows.map(r => `
+      dropdown.innerHTML = rows.sort(byCodlinha).map(r => `
         <button class="result-item" type="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
           <span class="r-num">${esc(r.numero_ligacao || fmtCode(r.codlinha))}</span>
           <span class="r-name">${esc(r.nome_ligacao || '—')}</span>
@@ -1867,7 +1867,7 @@ async function quadroEmpresaRun(term, host){
 async function renderEmpresaQuadros(host, cod, nome){
   host.innerHTML = loading();
   const [linhas, orig] = await Promise.all([
-    sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`),
+    sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=codlinha&limit=500`),
     getOrigem(), getEmpresas()
   ]);
   const nomeEmp = nome || empNome(cod);
@@ -2591,9 +2591,12 @@ function lineResults(host, rows, { prefixHTML='' } = {}){
   groupChk.addEventListener('change', paint);
   paint();
 }
+// ordenação padrão de qualquer listagem de linhas: pelo código da ligação (codlinha),
+// natural/numérico (108-003 antes de 108-029). Usado em toda exibição de várias linhas.
+const byCodlinha = (a, b) => String(a.codlinha||'').localeCompare(String(b.codlinha||''), undefined, { numeric:true });
 function linhasTable(rows){
   if(!rows.length) return emptyBox('Nenhuma ligação.');
-  const body = rows.map(r=>`<tr class="clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
+  const body = [...rows].sort(byCodlinha).map(r=>`<tr class="clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
     <td class="td-logr" data-label="Empresa">${esc(empNome(r.codempresa))}</td>
     <td class="td-num" data-label="RJ">${esc(r.codempresa||'')}</td>
     <td class="td-num" data-label="Código">${esc(fmtCode(r.codlinha))}</td>
