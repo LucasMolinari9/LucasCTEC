@@ -63,8 +63,37 @@ function rowMatchesActiveLine(payload){
   return String(cod) === String(activeLine.codlinha);
 }
 
+// index.html:2303 — agregação do Relatório Gerencial (depende de isLinhaAtiva e countBy)
+function resumoRelatorio(rows){
+  return {
+    total: rows.length,
+    ativas: rows.filter(isLinhaAtiva).length,
+    canc:  rows.filter(r=>r.cancelado).length,
+    paral: rows.filter(r=>r.paralisado).length,
+    sj:    rows.filter(r=>r.sub_judice).length,
+    empCount: new Set(rows.map(r=>r.codempresa)).size,
+    porEmp: [...countBy(rows, r=>r.codempresa||'—')].sort((a,b)=>b[1]-a[1]).slice(0,15),
+  };
+}
+// index.html:2327 — agregação da Frota por Empresa (depende de groupBy)
+function resumoFrota(rows){
+  const num = v => { const n = Number(v); return isNaN(n) ? 0 : n; };
+  const sum = (arr,f) => arr.reduce((s,r)=>s+num(r[f]),0);
+  return {
+    totOp: sum(rows,'frota_operacional'),
+    totRes: sum(rows,'reserva'),
+    porEmp: [...groupBy(rows, r=>r.codempresa||'—')]
+      .map(([cod,rs])=>({cod, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
+      .sort((a,b)=>b.op-a.op),
+    porHier: [...groupBy(rows, r=>r.hierarquia||'—')]
+      .map(([h,rs])=>({h, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
+      .sort((a,b)=>b.op-a.op),
+  };
+}
+
 module.exports = {
   fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, boolChip, isLinhaAtiva, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney,
   setRTState, rowMatchesActiveLine,
+  resumoRelatorio, resumoFrota,
 };

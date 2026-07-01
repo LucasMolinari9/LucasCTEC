@@ -142,5 +142,51 @@ console.log('rowMatchesActiveLine');
   ok(P.rowMatchesActiveLine({new:{}}) === true,                'rmal payload sem codlinha → true');
 }
 
+// --- resumoRelatorio (agregação do Relatório Gerencial) ---
+console.log('resumoRelatorio');
+{
+  const rows = [
+    { codempresa:'10', cancelado:false, paralisado:false, sub_judice:false },  // ativa
+    { codempresa:'10', cancelado:true,  paralisado:false, sub_judice:false },  // cancelada → inativa
+    { codempresa:'10', cancelado:false, paralisado:true,  sub_judice:false },  // paralisada → inativa
+    { codempresa:'20', cancelado:false, paralisado:false, sub_judice:true  },  // sub judice → ativa
+    { codempresa:'20', cancelado:false, paralisado:false, sub_judice:false },  // ativa
+  ];
+  const r = P.resumoRelatorio(rows);
+  eq(r.total, 5,    'resumoRelatorio total');
+  eq(r.ativas, 3,   'resumoRelatorio ativas (sub judice conta como ativa)');
+  eq(r.canc, 1,     'resumoRelatorio canceladas');
+  eq(r.paral, 1,    'resumoRelatorio paralisadas');
+  eq(r.sj, 1,       'resumoRelatorio sub judice');
+  eq(r.empCount, 2, 'resumoRelatorio nº de empresas distintas');
+  ok(r.porEmp[0][0]==='10' && r.porEmp[0][1]===3 && r.porEmp[1][0]==='20' && r.porEmp[1][1]===2,
+     'resumoRelatorio porEmp ordenado por nº de linhas desc');
+  ok(P.resumoRelatorio([]).total===0 && P.resumoRelatorio([]).porEmp.length===0, 'resumoRelatorio vazio');
+}
+
+// --- resumoFrota (agregação da Frota por Empresa) ---
+console.log('resumoFrota');
+{
+  const rows = [
+    { codempresa:'10', hierarquia:'A', frota_operacional:'5', reserva:'1' },
+    { codempresa:'10', hierarquia:'B', frota_operacional:3,   reserva:2   },
+    { codempresa:'20', hierarquia:'A', frota_operacional:'',  reserva:null },  // vazio/null → 0
+    { codempresa:'20', hierarquia:'A', frota_operacional:'x', reserva:'4' },   // inválido → 0
+  ];
+  const r = P.resumoFrota(rows);
+  eq(r.totOp, 8,  'resumoFrota total operacional (vazio/inválido = 0)');
+  eq(r.totRes, 7, 'resumoFrota total reserva');
+  ok(r.porEmp[0].cod==='10' && r.porEmp[0].op===8 && r.porEmp[0].res===3 && r.porEmp[0].n===2,
+     'resumoFrota porEmp empresa 10 consolidada');
+  ok(r.porEmp[1].cod==='20' && r.porEmp[1].op===0 && r.porEmp[1].res===4 && r.porEmp[1].n===2,
+     'resumoFrota porEmp empresa 20 consolidada');
+  ok(r.porEmp[0].op >= r.porEmp[1].op, 'resumoFrota porEmp ordenado por operacional desc');
+  {
+    const hA = r.porHier.find(x=>x.h==='A');
+    ok(hA.n===3 && hA.op===5 && hA.res===5, 'resumoFrota porHier hierarquia A consolidada');
+  }
+  ok(P.resumoFrota([]).totOp===0 && P.resumoFrota([]).porEmp.length===0, 'resumoFrota vazio');
+}
+
 console.log('\n==== PLACAR:', pass + '/' + (pass + fail), '====');
 if (fail){ console.log('FALHAS:'); fails.forEach(f => console.log('  -', f)); process.exit(1); }

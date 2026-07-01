@@ -83,6 +83,8 @@ const canon = [
   ['fmtMoney',             'minimumFractionDigits:2,maximumFractionDigits:2'],
   ['rowMatchesActiveLine', 'function rowMatchesActiveLine(payload){'],
   ['sbFetch',              "async function sbFetch(table, qs = '') {"],
+  ['resumoRelatorio',      'function resumoRelatorio(rows){'],
+  ['resumoFrota',          'function resumoFrota(rows){'],
 ];
 for (const [name, snippet] of canon){
   if (html.includes(snippet)) okline(`${name}`);

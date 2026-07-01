@@ -2298,16 +2298,25 @@ LOADERS.secoesPorLigacao = async () => {
 };
 
 /* ---- Gerenciais ---- */
+// Agregação PURA do Relatório Gerencial (testável em tests/) — separa o cálculo do render.
+// ativa = isLinhaAtiva (não cancelada nem paralisada); porEmp = top 15 empresas por nº de linhas.
+function resumoRelatorio(rows){
+  return {
+    total: rows.length,
+    ativas: rows.filter(isLinhaAtiva).length,
+    canc:  rows.filter(r=>r.cancelado).length,
+    paral: rows.filter(r=>r.paralisado).length,
+    sj:    rows.filter(r=>r.sub_judice).length,
+    empCount: new Set(rows.map(r=>r.codempresa)).size,
+    porEmp: [...countBy(rows, r=>r.codempresa||'—')].sort((a,b)=>b[1]-a[1]).slice(0,15),
+  };
+}
 LOADERS.relatoriosGerenciais = async () => {
   const [rows] = await Promise.all([
     sbFetch('tabela_vista_teste', `select=codempresa,tipo,cancelado,paralisado,sub_judice,transferido&limit=5000`),
     getEmpresas()
   ]);
-  const total=rows.length;
-  const ativas=rows.filter(isLinhaAtiva).length;
-  const canc=rows.filter(r=>r.cancelado).length, paral=rows.filter(r=>r.paralisado).length, sj=rows.filter(r=>r.sub_judice).length;
-  const empCount=new Set(rows.map(r=>r.codempresa)).size;
-  const porEmp = [...countBy(rows, r=>r.codempresa||'—')].sort((a,b)=>b[1]-a[1]).slice(0,15);
+  const { total, ativas, canc, paral, sj, empCount, porEmp } = resumoRelatorio(rows);
   setBody(`<div class="doc">${docHead('Relatórios Gerenciais')}
     <div class="kpi-grid">
       <div class="kpi"><b>${total}</b><span>Linhas cadastradas</span></div>
@@ -2321,6 +2330,22 @@ LOADERS.relatoriosGerenciais = async () => {
     ${tableHTML([{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Linhas',w:'90px'}], porEmp.map(([c,n])=>`<tr><td class="td-num">${esc(c)}</td><td class="td-logr">${esc(empNome(c))}</td><td class="td-sentido">${n}</td></tr>`).join(''))}
     <div class="doc-foot">Consolidado sobre ${total} linhas · tabela_vista_teste</div></div>`);
 };
+// Agregação PURA da Frota por Empresa (testável em tests/): total geral + quebra por empresa e
+// por hierarquia. num() trata vazio/inválido como 0; ordena por frota operacional desc.
+function resumoFrota(rows){
+  const num = v => { const n = Number(v); return isNaN(n) ? 0 : n; };
+  const sum = (arr,f) => arr.reduce((s,r)=>s+num(r[f]),0);
+  return {
+    totOp: sum(rows,'frota_operacional'),
+    totRes: sum(rows,'reserva'),
+    porEmp: [...groupBy(rows, r=>r.codempresa||'—')]
+      .map(([cod,rs])=>({cod, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
+      .sort((a,b)=>b.op-a.op),
+    porHier: [...groupBy(rows, r=>r.hierarquia||'—')]
+      .map(([h,rs])=>({h, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
+      .sort((a,b)=>b.op-a.op),
+  };
+}
 // Frota consolidada por empresa (total geral + quebra por hierarquia) — item 16
 LOADERS.frotaPorEmpresa = async () => {
   const [rows] = await Promise.all([
@@ -2328,16 +2353,8 @@ LOADERS.frotaPorEmpresa = async () => {
     getEmpresas()
   ]);
   if(!rows.length){ setBody(`<div class="doc">${docHead('Frota por Empresa')}${emptyBox('Nenhuma frota cadastrada.')}</div>`); return; }
-  const num = v => { const n = Number(v); return isNaN(n) ? 0 : n; };
-  const sum = (arr,f) => arr.reduce((s,r)=>s+num(r[f]),0);
   const fmtN = n => n.toLocaleString('pt-BR');
-  const totOp = sum(rows,'frota_operacional'), totRes = sum(rows,'reserva');
-  const porEmp = [...groupBy(rows, r=>r.codempresa||'—')]
-    .map(([cod,rs])=>({cod, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
-    .sort((a,b)=>b.op-a.op);
-  const porHier = [...groupBy(rows, r=>r.hierarquia||'—')]
-    .map(([h,rs])=>({h, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
-    .sort((a,b)=>b.op-a.op);
+  const { totOp, totRes, porEmp, porHier } = resumoFrota(rows);
   const h3 = t => `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:18px 0 4px">${t}</h3>`;
   setBody(`<div class="doc">${docHead('Frota por Empresa')}
     ${bannerTrunc(rows)}
