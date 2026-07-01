@@ -42,7 +42,7 @@ Estas **não devem ser mexidas**: já são definição única e as puras são gu
 
 | ID | Padrão (regra embutida no render) | Onde | Vale extrair? |
 |----|-----------------------------------|------|:-------------:|
-| **S1 ★** | "Linha ativa" definida de **3 formas diferentes** | folhaRosto / relatórios / empresasRegulares | ⚠️ **Decisão** (pode ser bug latente) |
+| **S1 ★** | "Linha ativa" com **3 definições divergentes** — regra agora decidida | folhaRosto / relatórios / empresasRegulares | ✅ **Corrigir** contagem de `empresasRegulares` |
 | **S2 ★** | Dedup de empresa por RJ (heurística de "score") | `empresasRegulares` 1977-1982 | ✅ **Sim** (sutil + consequente) |
 | S3 | Agregações de relatório inline (count/sum/sort) | `relatoriosGerenciais`, `frotaPorEmpresa` | 🟡 Opcional (uso único) |
 | S4 | Regra `vigente` de tarifa | `renderTarifas` 1902 | ➖ Não (uso único) |
@@ -52,36 +52,41 @@ Estas **não devem ser mexidas**: já são definição única e as puras são gu
 
 ---
 
-## S1 ★ — "Linha ativa" tem 3 definições diferentes (o achado principal)
+## S1 ★ — "Linha ativa": regra decidida (o achado principal)
 
-A pergunta "esta linha está ativa?" é uma **regra de negócio** e está escrita **inline em cada
-card, com critérios divergentes**:
+A pergunta "esta linha está ativa?" é uma **regra de negócio** e estava escrita **inline em cada
+card, com critérios divergentes** — cada tela olhava um conjunto diferente de flags:
 
-| Local | Código | Flags consideradas |
-|---|---|---|
-| `renderFolhaRosto` (1503) | `[boolChip(cancelado), boolChip(paralisado), boolChip(sub_judice), boolChip(transferido)].join(' ') \|\| 'Ativa'` | **4** (canc, paral, sub_judice, transf) |
-| `relatoriosGerenciais` (2303) | `rows.filter(r=>!r.cancelado && !r.paralisado)` | **2** (canc, paral) |
-| `empresasRegulares` (1975) | `if(!r.cancelado) cnt[k].ativas++` | **1** (só canc) |
+| Local | Código atual | Flags | Bate com a regra? |
+|---|---|:--:|:--:|
+| `relatoriosGerenciais` (2303) | `!r.cancelado && !r.paralisado` | 2 (canc, paral) | ✅ já correto |
+| `renderFolhaRosto` (1503) | chips dos 4 status, senão "Ativa" | 4 | ⚠️ é rótulo, ver abaixo |
+| `empresasRegulares` (1975) | `if(!r.cancelado)` | 1 (só canc) | ❌ conta paralisadas como ativas |
 
-**Sintoma concreto:** uma linha `sub_judice` (mas não cancelada nem paralisada) aparece como
-**"Ativa"** na Folha de Rosto? Não — lá ela sai marcada. Mas ela **conta como "Ativa"** no KPI dos
-Relatórios e como "linha ativa" da empresa. Ou seja, **o mesmo dado é classificado de formas
-diferentes em telas diferentes**.
+**Regra canônica (confirmada pelo dono, 2026):**
 
-**Por que é o achado nº 1:** é exatamente o item "componente de UI com regra de negócio embutida"
-do pedido original — e aqui a regra embutida **diverge entre cópias**, que é a raiz de bugs
-sutis.
+> **Uma linha está ATIVA quando está operando: `ativa = não cancelada e não paralisada`.**
+> **Sub judice** (pendência só na Justiça — a linha continua rodando) e **transferida** (mudou de
+> operadora, mas continua rodando) **contam como ATIVAS**. Só **cancelada** (extinta) e
+> **paralisada** (parada) tiram a linha de "ativa".
 
-**O que fazer — é uma decisão do dono, não uma refatoração óbvia:**
-- Se as diferenças são **intencionais** (ex.: o relatório quer contar `sub_judice`/`transferido`
-  como "ainda operando"), então **está certo** — só convém um comentário em cada local dizendo o
-  porquê, para ninguém "uniformizar" achando que é bug.
-- Se **não** são intencionais, este é o único caso em que extrair uma função canônica
-  `situacaoLinha(r)` / `isLinhaAtiva(r)` **paga o próprio custo**: além de separar lógica de
-  apresentação, **corrige a inconsistência** e vira teste (o critério fica num lugar só).
+**O que isso resolve, tela por tela:**
+- **Relatórios Gerenciais** (2303): já usa `!cancelado && !paralisado` → **já está correto**, nada muda.
+- **Empresas Regulares** (1975): hoje conta como ativa qualquer linha `!cancelado`, **ignorando a
+  paralisada**. Pela regra, **paralisada não é ativa** → a contagem "Linhas ativas" da empresa está
+  **inflada** hoje (paralisadas entram na conta). É o **único ponto que precisa mudar de fato**:
+  `if(!r.cancelado && !r.paralisado)`.
+- **Folha de Rosto** (1503): não é a mesma pergunta — é um **rótulo de status detalhado** que mostra
+  qual dos 4 status a linha tem. Pela regra, uma linha só `sub_judice` (ou só `transferida`) **é
+  ativa**, mas a Folha mostra só o chip "Sub judice"/"Transferida" e esconde o "Ativa". Isso é uma
+  **escolha de exibição** (informar o status jurídico), não erro de contagem — se quiser consistência
+  visual, poderia mostrar **"Ativa · Sub judice"** (as duas coisas). Decisão de UX, opcional.
 
-> **Não dá para decidir isso lendo o código** — depende da regra de negócio do DETRO/DIVAT.
-> Recomendo confirmar com o dono qual é a definição correta de "ativa" antes de qualquer extração.
+**Por que agora vale extrair:** com a regra **decidida**, `isLinhaAtiva(r)` (= `!r.cancelado &&
+!r.paralisado`) deixa de ser abstração especulativa — ela **corrige a contagem das Empresas**,
+separa a lógica do render e vira teste (o critério fica num lugar só). É o caso em que a extração
+paga o próprio custo: **Relatórios e Empresas passam a chamar a mesma função**, e a Folha de Rosto
+pode reusá-la só para decidir se acrescenta o "Ativa".
 
 ---
 
@@ -182,9 +187,10 @@ desejável na Folha de Rosto.
 1. **Não fazer refatoração especulativa.** Com a deduplicação já concluída, o acoplamento restante
    é majoritariamente glue de uso único; extrair violaria "Simplicity First" e/ou adicionaria a
    duplicação no harness que o dono não quer.
-2. **Tratar o S1 primeiro — mas como decisão, não como código.** Confirmar com o dono qual é a
-   definição correta de "linha ativa". Só depois decidir entre "documentar as diferenças
-   intencionais" ou "extrair `situacaoLinha(r)` canônica".
+2. **S1 já está decidido:** `ativa = não cancelada e não paralisada` (sub judice e transferida
+   contam como ativas). A ação concreta que sobra é **corrigir a contagem inflada** de "Linhas
+   ativas" em `empresasRegulares` (hoje só olha `cancelado`, deixando paralisadas na conta) — de
+   preferência via `isLinhaAtiva(r)` reusada por Relatórios e Empresas.
 3. **Se (e só se) quiser uma extração com teste,** o único item que a justifica sozinho é o
    **S2** (`dedupEmpresasPorRJ`). Os demais (S3 opcional; S4–S7 não) não pagam o custo.
 4. **Garantia de não-regressão:** qualquer um desses passos mexe apenas em render/DOM ou adiciona
