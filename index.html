@@ -1653,7 +1653,7 @@ LOADERS.historicoLinha = async () => {
   const pre = activeLine ? (activeLine.numero_ligacao || activeLine.codlinha || '') : '';
   searchPanel({ title:'Histórico da Linha', placeholder:'Nome, número ou código da linha', value:pre,
     onRun: (term, host) => lineSearchRun(term, host, { render:renderLineHistory,
-      emptyMsg:'Busque pelo nome, número ou código da linha.', prompt:'clique para ver o histórico', useActive:false }),
+      emptyMsg:'Busque pelo nome, número ou código da linha.', prompt:'clique para ver o histórico' }),
     tables:['evento_teste'] });
 };
 
