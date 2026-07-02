@@ -145,7 +145,7 @@ console.log('matchEvent');
   ok(!P.matchEvent(r, {text:P.norm('inexistente'), proc:'', ano:null}), 'matchEvent texto sem match → false');
   ok(P.matchEvent(r, {text:'', proc:P.norm('2.599'), ano:null}),  'matchEvent por nº do processo');
   ok(P.matchEvent(r, {text:'', proc:'', ano:2020}),               'matchEvent ano casa o registro');
-  ok(P.matchEvent(r, {text:'', proc:'', ano:2021}),               'matchEvent ano casa a publicação');
+  ok(!P.matchEvent(r, {text:'', proc:'', ano:2021}),              'matchEvent ano usa o registro, não a publicação → false');
   ok(!P.matchEvent(r, {text:'', proc:'', ano:1999}),              'matchEvent ano sem match → false');
 }
 

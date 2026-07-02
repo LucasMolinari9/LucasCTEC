@@ -1579,8 +1579,10 @@ function matchEvent(r, c){
   if (c.text && !norm((r.descricao||'')+' '+(r.observacao||'')).includes(c.text)) return false;
   if (c.proc && !norm(r.numero_processo||'').includes(c.proc)) return false;
   if (c.ano!=null){
-    // casa o ano com o registro OU a publicação (o que estiver preenchido)
-    if (yearOf(r.data_registro) !== c.ano && yearOf(r.data_publicacao) !== c.ano) return false;
+    // usa o ano do Registro (campo que ordena); sem registro, cai p/ a publicação
+    const reg = yearOf(r.data_registro);
+    const y = reg!=null ? reg : yearOf(r.data_publicacao);
+    if (y !== c.ano) return false;
   }
   return true;
 }
