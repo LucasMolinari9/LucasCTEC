@@ -1637,7 +1637,7 @@ function paginateEvents(container, rows, buildPage, headerHTML='', opts={}){
 async function renderLineHistory(host, line){
   selectLine(line);   // sincroniza a linha ativa e o banner do topo
   const [rows, lk] = await Promise.all([
-    sbFetch('evento_teste', `codlinha=eq.${enc(line.codlinha)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.desc&limit=2000`),
+    sbFetch('evento_teste', `codlinha=eq.${enc(line.codlinha)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.asc&limit=2000`),
     getEvLookups(), getEmpresas()
   ]);
   const head = docHead('Histórico da Linha');
@@ -2073,7 +2073,7 @@ LOADERS.secoesPorEmpresa = async () => {
 // Renderiza o histórico (paginado) de UMA empresa dentro de um container
 async function renderEmpresaHistory(host, cod, nome){
   const [rows, lk, empRows] = await Promise.all([
-    sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.desc&limit=500`),
+    sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.asc&limit=500`),
     getEvLookups(),
     sbFetch('codempresa_teste', `codempresa=eq.${enc(cod)}&select=nome_empresa,situacao,processo,data_publicacao,cassada,sob_intervencao&limit=1`)
   ]);
