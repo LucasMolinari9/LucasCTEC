@@ -55,6 +55,27 @@ function groupBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=ke
 function countBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); m.set(k,(m.get(k)||0)+1); } return m; }
 // index.html:2358
 function fmtMoney(v){ if(v===null||v===undefined||v==='') return '—'; const n=Number(v); return isNaN(n)?String(v):n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+// index.html — classifica linhas por município (dentro × intermunicipal) a partir das linhas de
+// itinerário (codlinha, cod_origem). "dentro" = todos os trechos no próprio município (M);
+// "inter" = tem ao menos um trecho em OUTRO município (cod_origem não-vazio e != M).
+function classifyMunLines(itRows, codibge){
+  const M = String(codibge);
+  const bySet = new Map();                       // codlinha(String) → Set de cod_origem (não vazios)
+  for(const r of itRows){
+    if(r.codlinha==null || r.codlinha==='') continue;
+    const cl = String(r.codlinha);
+    let s = bySet.get(cl); if(!s){ s = new Set(); bySet.set(cl, s); }
+    const co = r.cod_origem==null ? '' : String(r.cod_origem);
+    if(co) s.add(co);
+  }
+  const dentro = new Set(), inter = new Set();
+  for(const [cl, s] of bySet){
+    let outro = false;
+    for(const co of s){ if(co !== M){ outro = true; break; } }
+    (outro ? inter : dentro).add(cl);
+  }
+  return { dentro, inter };
+}
 
 /* index.html:2401 — filtro do Realtime. No index.html depende do estado de módulo
    `currentView` e `activeLine`; aqui são variáveis locais ajustáveis via setRTState()
@@ -99,7 +120,7 @@ function resumoFrota(rows){
 
 module.exports = {
   fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, isLinhaAtiva, norm,
-  yearOf, matchEvent, groupBy, countBy, fmtMoney,
+  yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines,
   setRTState, rowMatchesActiveLine,
   resumoRelatorio, resumoFrota,
 };

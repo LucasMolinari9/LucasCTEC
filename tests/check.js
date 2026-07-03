@@ -83,6 +83,7 @@ const canon = [
   ['groupBy',              'if(!m.has(k))m.set(k,[])'],
   ['countBy',              '(m.get(k)||0)+1'],
   ['fmtMoney',             'minimumFractionDigits:2,maximumFractionDigits:2'],
+  ['classifyMunLines',     'function classifyMunLines('],
   ['rowMatchesActiveLine', 'function rowMatchesActiveLine(payload){'],
   ['sbFetch',              "async function sbFetch(table, qs = '') {"],
   ['resumoRelatorio',      'function resumoRelatorio(rows){'],

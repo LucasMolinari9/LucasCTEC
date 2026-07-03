@@ -664,7 +664,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 01/07-A</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 03/07-A</span></span>
   </div>
 </footer>
 
@@ -2190,13 +2190,57 @@ function openLinhasPorIbge(codibge, nome){
     const rows = await fetchLinesByCods(cods,{limit:300});
     setBody(`<div class="doc">${docHead('Linhas no Município')}
       ${metaRows([['Município',esc(nome||codibge),true],['Total',cods.length+' linha(s)']])}
+      <div class="loc-tools"><label>Mostrar <select id="munScope">
+        <option value="todas">Todas as linhas</option>
+        <option value="dentro">Só dentro do município</option>
+        <option value="inter">Que vão para outros municípios</option>
+      </select></label></div>
       <div id="munResult"></div></div>`);
     const result = modalBody.querySelector('#munResult');
+    const scope  = modalBody.querySelector('#munScope');
     const metaPdf = metaRows([['Município',esc(nome||codibge),true],['Total',cods.length+' linha(s)']]);
     // PDF determinístico: lista completa, sem a barra de filtro (evita espaço em branco / subconjunto filtrado)
     if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Linhas no Município')}${metaPdf}${linhasTable(rows)}</div>`;
-    lineResults(result, rows);
+    // classificação dentro×intermunicipal PREGUIÇOSA: só busca o itinerário completo das
+    // linhas quando o usuário escolhe um filtro (o padrão "todas" mantém o custo atual).
+    let cls = null;
+    async function ensureCls(){
+      if(cls) return cls;
+      const it2 = await sbFetch('itinerario_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=codlinha,cod_origem&limit=30000`);
+      cls = classifyMunLines(it2, codibge);
+      return cls;
+    }
+    async function paint(){
+      if(scope.value==='todas'){ lineResults(result, rows); return; }
+      result.innerHTML = loading();
+      const c = await ensureCls();
+      const set = scope.value==='dentro' ? c.dentro : c.inter;
+      lineResults(result, rows.filter(r=>set.has(String(r.codlinha))));
+    }
+    scope.addEventListener('change', ()=>{ paint().catch(e=>{ result.innerHTML = errorBox(e.message); }); });
+    paint();
   }});
+}
+// classifica linhas por município (dentro × intermunicipal) a partir das linhas de
+// itinerário (codlinha, cod_origem). "dentro" = todos os trechos no próprio município (M);
+// "inter" = tem ao menos um trecho em OUTRO município (cod_origem não-vazio e != M).
+function classifyMunLines(itRows, codibge){
+  const M = String(codibge);
+  const bySet = new Map();                       // codlinha(String) → Set de cod_origem (não vazios)
+  for(const r of itRows){
+    if(r.codlinha==null || r.codlinha==='') continue;
+    const cl = String(r.codlinha);
+    let s = bySet.get(cl); if(!s){ s = new Set(); bySet.set(cl, s); }
+    const co = r.cod_origem==null ? '' : String(r.cod_origem);
+    if(co) s.add(co);
+  }
+  const dentro = new Set(), inter = new Set();
+  for(const [cl, s] of bySet){
+    let outro = false;
+    for(const co of s){ if(co !== M){ outro = true; break; } }
+    (outro ? inter : dentro).add(cl);
+  }
+  return { dentro, inter };
 }
 // linhas (codlinha distintos) cujo itinerário passa por um município (codibge)
 async function linhasNoMunicipio(codibge){
