@@ -664,7 +664,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 03/07-A</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 03/07-B</span></span>
   </div>
 </footer>
 
@@ -2518,6 +2518,17 @@ async function getLocalidades(){
   _localidadesList = out;
   return out;
 }
+// codlinha que casam uma localidade pelo NOME/VIA da linha (tabela_vista) OU por uma SEÇÃO de
+// tarifa — MESMA semântica ilike usada na busca do campo A. Usado p/ cruzar duas localidades de
+// forma simétrica (independe da ordem dos campos).
+async function codsPorLocalidade(term){
+  const t = ilikeTerm(term);
+  const [ln, sec] = await Promise.all([
+    sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${t}*,nome_lig_cresc.ilike.*${t}*,via.ilike.*${t}*)&select=codlinha&limit=3000`),
+    sbFetch('tarifa_atual_teste', `or=(nome_ligacao.ilike.*${t}*,via.ilike.*${t}*)&select=codlinha&limit=3000`)
+  ]);
+  return new Set([...ln, ...sec].map(r=>r.codlinha).filter(Boolean));
+}
 async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
   host.innerHTML = loading();
   try{
@@ -2545,7 +2556,12 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
       const munSet = new Set();
       for(const c of cods.slice(0,5)){ (await linhasNoMunicipio(c)).forEach(cl=>munSet.add(cl)); }
       base = rows.filter(r=> munSet.has(r.codlinha));
-    } else if(b){ const bl=norm(b); base = rows.filter(r=> norm((r.nome_ligacao||'')+' '+(r.nome_lig_cresc||'')+' '+(r.via||'')).includes(bl)); }
+    } else if(b){
+      // cruzamento localidade A × localidade B: interseção SIMÉTRICA por codlinha (mesma busca de
+      // nome/via + seção de tarifa que a de A), para não depender da ordem dos dois campos.
+      const setB = await codsPorLocalidade(b);
+      base = rows.filter(r=> setB.has(r.codlinha));
+    }
     if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${a}" e "${b}".`:`Nenhuma linha encontrada para "${a}".`); return; }
     await getEmpresas();
     const titulo = b? `${esc(a)} ↔ ${esc(b)}` : esc(a);
