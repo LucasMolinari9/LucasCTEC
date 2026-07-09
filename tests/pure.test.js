@@ -106,6 +106,21 @@ eq(P.norm('SÃO GONÇALO'), 'sao goncalo', 'norm maiúsculas + cedilha');
 eq(P.norm(P.norm('Açaí')), P.norm('Açaí'), 'norm idempotente');
 eq(P.norm(null),          '',            'norm null');
 
+// --- localidadesQueCasam / orIlike (busca de localidade insensível a acento) ---
+console.log('localidadesQueCasam / orIlike');
+{
+  const lista = ['ALCÂNTARA', 'Maricá', 'SÃO GONÇALO', 'São João de Meriti', 'São José do Turvo', 'São Luis do Mutuca', 'São Miguel', 'Centro'];
+  eq(P.localidadesQueCasam(lista, 'sao goncalo').join('|'), 'SÃO GONÇALO', 'localidadesQueCasam acha canônico sem acento');
+  eq(P.localidadesQueCasam(lista, 'marica').join('|'),      'Maricá',      'localidadesQueCasam acento + caixa');
+  eq(P.localidadesQueCasam(lista, 'alcantara').join('|'),   'ALCÂNTARA',   'localidadesQueCasam circunflexo');
+  eq(P.localidadesQueCasam(lista, '').length,  0, 'localidadesQueCasam termo vazio → []');
+  eq(P.localidadesQueCasam(lista, 'sao').length, 5, 'localidadesQueCasam corta em 5 resultados');
+  eq(P.localidadesQueCasam(lista, 'xyz').length, 0, 'localidadesQueCasam sem match → []');
+  eq(P.orIlike(['a','b'], ['x']),        'or=(a.ilike.*x*,b.ilike.*x*)',              'orIlike 2 colunas × 1 termo');
+  eq(P.orIlike(['a'], ['x','y']),        'or=(a.ilike.*x*,a.ilike.*y*)',              'orIlike 1 coluna × 2 termos');
+  eq(P.orIlike(['a'], ['p)q*']),         'or=(a.ilike.*p%20q%20*)',                   'orIlike sanitiza termos via ilikeTerm');
+}
+
 // --- fmtMoney ---
 console.log('fmtMoney');
 eq(P.fmtMoney(null),      '—',   'fmtMoney null → travessão');

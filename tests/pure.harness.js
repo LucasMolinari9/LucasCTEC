@@ -49,6 +49,15 @@ function matchEvent(r, c){
   }
   return true;
 }
+// index.html — nomes canônicos da lista de localidades que casam o termo (insensível a acento/caixa) —
+// permite digitar "sao goncalo" e buscar no servidor por "SÃO GONÇALO" (o ilike do PostgREST
+// NÃO ignora acento)
+function localidadesQueCasam(lista, term){
+  const nt = norm(term);
+  return nt ? lista.filter(n => norm(n).includes(nt)).slice(0, 5) : [];
+}
+// index.html — filtro or=() do PostgREST: cada coluna ilike cada termo (depende de ilikeTerm)
+const orIlike = (cols, termos) => 'or=(' + termos.map(t => { const e = ilikeTerm(t); return cols.map(c => `${c}.ilike.*${e}*`).join(','); }).join(',') + ')';
 // index.html:2356
 function groupBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); if(!m.has(k))m.set(k,[]); m.get(k).push(x); } return m; }
 // index.html:2357
@@ -120,7 +129,7 @@ function resumoFrota(rows){
 
 module.exports = {
   fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, isLinhaAtiva, norm,
-  yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines,
+  yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike,
   setRTState, rowMatchesActiveLine,
   resumoRelatorio, resumoFrota,
 };

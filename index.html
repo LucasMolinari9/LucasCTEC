@@ -664,7 +664,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 03/07-C</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 09/07-A</span></span>
   </div>
 </footer>
 
@@ -2158,7 +2158,7 @@ LOADERS.municipioRegiao = async () => {
     await getEmpresas();
     // 1) município digitado → vai pras linhas do município (lista se houver vários)
     if(term){
-      const municipios = Object.entries(ibge).filter(([,v])=> (!region||v.regiao===region) && (v.nome||'').toLowerCase().includes(term.toLowerCase()) );
+      const municipios = Object.entries(ibge).filter(([,v])=> (!region||v.regiao===region) && norm(v.nome).includes(norm(term)) );
       if(!municipios.length){ host.innerHTML = emptyBox('Nenhum município.'); return; }
       if(municipios.length===1){ openLinhasPorIbge(municipios[0][0], municipios[0][1].nome); return; }
       munTable(municipios, host); return;
@@ -2270,7 +2270,7 @@ LOADERS.entreLocalidades = async () => {
     <div id="munHost">${emptyBox('Digite um município e clique em Buscar.')}</div></div>`);
   const A=modalBody.querySelector('#munA'), B=modalBody.querySelector('#munB'), host=modalBody.querySelector('#munHost');
   const nameOf = c => ibge[c]?.nome || c;
-  const findCods = t => Object.entries(ibge).filter(([,v])=>(v.nome||'').toLowerCase().includes(t.toLowerCase())).map(([c])=>c);
+  const findCods = t => Object.entries(ibge).filter(([,v])=>norm(v.nome).includes(norm(t))).map(([c])=>c);
   const run = async()=>{
     const a=(A.value||'').trim(), b=(B.value||'').trim();
     if(!a){ host.innerHTML=emptyBox('Informe ao menos o primeiro município.'); return; }
@@ -2519,40 +2519,63 @@ async function getLocalidades(){
   _localidadesList = out;
   return out;
 }
-// codlinha que casam uma localidade pelo NOME/VIA da linha (tabela_vista) OU por uma SEÇÃO de
-// tarifa — MESMA semântica ilike usada na busca do campo A. Usado p/ cruzar duas localidades de
-// forma simétrica (independe da ordem dos campos).
+// nomes canônicos da lista de localidades que casam o termo (insensível a acento/caixa) —
+// permite digitar "sao goncalo" e buscar no servidor por "SÃO GONÇALO" (o ilike do PostgREST
+// NÃO ignora acento)
+function localidadesQueCasam(lista, term){
+  const nt = norm(term);
+  return nt ? lista.filter(n => norm(n).includes(nt)).slice(0, 5) : [];
+}
+// termos p/ o ilike de localidade: nomes canônicos (com acento) + o termo digitado (texto
+// livre, cobre grafias sem acento na base), sem duplicatas
+async function termosLocalidade(term){
+  const canon = localidadesQueCasam(await getLocalidades(), term);
+  const out = [], seen = new Set();
+  for(const t of [...canon, term.trim()]){
+    const k = t.toLowerCase(); if(!t || seen.has(k)) continue; seen.add(k); out.push(t);
+  }
+  return out;
+}
+// filtro or=() do PostgREST: cada coluna ilike cada termo
+const orIlike = (cols, termos) => 'or=(' + termos.map(t => { const e = ilikeTerm(t); return cols.map(c => `${c}.ilike.*${e}*`).join(','); }).join(',') + ')';
+// codlinha que casam uma localidade pelo NOME/VIA da linha (tabela_vista), por uma SEÇÃO de
+// tarifa OU por um LOGRADOURO do itinerário — MESMA semântica usada na busca do campo A.
+// Usado p/ cruzar duas localidades de forma simétrica (independe da ordem dos campos).
 async function codsPorLocalidade(term){
-  const t = ilikeTerm(term);
-  const [ln, sec] = await Promise.all([
-    sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${t}*,nome_lig_cresc.ilike.*${t}*,via.ilike.*${t}*)&select=codlinha&limit=3000`),
-    sbFetch('tarifa_atual_teste', `or=(nome_ligacao.ilike.*${t}*,via.ilike.*${t}*)&select=codlinha&limit=3000`)
+  const termos = await termosLocalidade(term);
+  const [ln, sec, itin] = await Promise.all([
+    sbFetch('tabela_vista_teste', `${orIlike(['nome_ligacao','nome_lig_cresc','via'], termos)}&select=codlinha&limit=3000`),
+    sbFetch('tarifa_atual_teste', `${orIlike(['nome_ligacao','via'], termos)}&select=codlinha&limit=3000`),
+    sbFetch('itinerario_teste', `${orIlike(['nome_logradouro'], termos)}&select=codlinha&limit=2000`)
   ]);
-  return new Set([...ln, ...sec].map(r=>r.codlinha).filter(Boolean));
+  return new Set([...ln, ...sec, ...itin].map(r=>r.codlinha).filter(Boolean));
 }
 async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
   host.innerHTML = loading();
   try{
-    const ai = ilikeTerm(a);
+    const termos = await termosLocalidade(a);
     // 1) linhas cujo nome/nome_cresc/via casa a localidade  2) linhas cujas SEÇÕES de tarifa
     //    casam a localidade (item 13: as seções da Estrutura também entram na busca)
-    const [lineRows, secHits] = await Promise.all([
-      sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${ai}*,nome_lig_cresc.ilike.*${ai}*,via.ilike.*${ai}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=400`),
-      sbFetch('tarifa_atual_teste', `or=(nome_ligacao.ilike.*${ai}*,via.ilike.*${ai}*)&select=codlinha&limit=3000`)
+    // 3) linhas cujo ITINERÁRIO passa por um logradouro com o nome da localidade (a dica da
+    //    tela promete "nome/itinerário")
+    const [lineRows, secHits, itinHits] = await Promise.all([
+      sbFetch('tabela_vista_teste', `${orIlike(['nome_ligacao','nome_lig_cresc','via'], termos)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=400`),
+      sbFetch('tarifa_atual_teste', `${orIlike(['nome_ligacao','via'], termos)}&select=codlinha&limit=3000`),
+      sbFetch('itinerario_teste', `${orIlike(['nome_logradouro'], termos)}&select=codlinha&limit=2000`)
     ]);
     const haveCods = new Set(lineRows.map(r=>r.codlinha));
-    const extraCods = [...new Set(secHits.map(r=>r.codlinha).filter(c=>c && !haveCods.has(c)))].slice(0,200);
+    const extraCods = [...new Set([...secHits, ...itinHits].map(r=>r.codlinha).filter(c=>c && !haveCods.has(c)))].slice(0,200);
     let rows = lineRows;
     if(extraCods.length){
       const extra = await sbFetch('tabela_vista_teste', `codlinha=in.(${extraCods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=200`);
       rows = lineRows.concat(extra);
     }
-    const viaSecao = rows.length - lineRows.length;   // quantas entraram só pela seção
+    const viaSecao = rows.length - lineRows.length;   // quantas entraram só pela seção/itinerário
     let base = rows;
     if(b && bTipo==='municipio'){
       // cruzamento localidade A × MUNICÍPIO B: interseção com as linhas que passam pelo município
       const ibge = await getIbge();
-      const cods = Object.entries(ibge).filter(([,v])=>(v.nome||'').toLowerCase().includes(b.toLowerCase())).map(([c])=>c);
+      const cods = Object.entries(ibge).filter(([,v])=>norm(v.nome).includes(norm(b))).map(([c])=>c);
       if(!cods.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(b)}".`); return; }
       const munSet = new Set();
       for(const c of cods.slice(0,5)){ (await linhasNoMunicipio(c)).forEach(cl=>munSet.add(cl)); }
@@ -2566,7 +2589,7 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${a}" e "${b}".`:`Nenhuma linha encontrada para "${a}".`); return; }
     await getEmpresas();
     const titulo = b? `${esc(a)} ↔ ${esc(b)}` : esc(a);
-    const secNote = (!b && viaSecao>0) ? ` · ${viaSecao} via seção de tarifa` : '';
+    const secNote = (!b && viaSecao>0) ? ` · ${viaSecao} via seção de tarifa ou itinerário` : '';
     const prefix = bannerTrunc(rows)
       + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${base.length} linha(s) · ${titulo}${secNote}</p>`;
     lineResults(host, base, { prefixHTML: prefix });

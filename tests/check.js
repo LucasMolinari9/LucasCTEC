@@ -84,6 +84,8 @@ const canon = [
   ['countBy',              '(m.get(k)||0)+1'],
   ['fmtMoney',             'minimumFractionDigits:2,maximumFractionDigits:2'],
   ['classifyMunLines',     'function classifyMunLines('],
+  ['localidadesQueCasam',  'function localidadesQueCasam('],
+  ['orIlike',              "const orIlike = (cols, termos) => 'or=('"],
   ['rowMatchesActiveLine', 'function rowMatchesActiveLine(payload){'],
   ['sbFetch',              "async function sbFetch(table, qs = '') {"],
   ['resumoRelatorio',      'function resumoRelatorio(rows){'],
