@@ -86,6 +86,7 @@ const canon = [
   ['classifyMunLines',     'function classifyMunLines('],
   ['localidadesQueCasam',  'function localidadesQueCasam('],
   ['orIlike',              "const orIlike = (cols, termos) => 'or=('"],
+  ['municipiosExatos',     'function municipiosExatos(ibge, termos){'],
   ['rowMatchesActiveLine', 'function rowMatchesActiveLine(payload){'],
   ['sbFetch',              "async function sbFetch(table, qs = '') {"],
   ['resumoRelatorio',      'function resumoRelatorio(rows){'],

@@ -58,6 +58,12 @@ function localidadesQueCasam(lista, term){
 }
 // index.html — filtro or=() do PostgREST: cada coluna ilike cada termo (depende de ilikeTerm)
 const orIlike = (cols, termos) => 'or=(' + termos.map(t => { const e = ilikeTerm(t); return cols.map(c => `${c}.ilike.*${e}*`).join(','); }).join(',') + ')';
+// index.html — cod_ibge cujo nome de município é EXATAMENTE um dos termos (insens. a acento/caixa) —
+// exato de propósito: "rio" não pode puxar Rio de Janeiro/Rio Bonito/Rio Claro inteiros
+function municipiosExatos(ibge, termos){
+  const nts = new Set(termos.map(norm).filter(Boolean));
+  return Object.entries(ibge).filter(([,v])=>nts.has(norm(v.nome))).map(([c])=>c);
+}
 // index.html:2356
 function groupBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); if(!m.has(k))m.set(k,[]); m.get(k).push(x); } return m; }
 // index.html:2357
@@ -129,7 +135,7 @@ function resumoFrota(rows){
 
 module.exports = {
   fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, isLinhaAtiva, norm,
-  yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike,
+  yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike, municipiosExatos,
   setRTState, rowMatchesActiveLine,
   resumoRelatorio, resumoFrota,
 };

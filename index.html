@@ -664,7 +664,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 09/07-A</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 13/07-A</span></span>
   </div>
 </footer>
 
@@ -2245,7 +2245,9 @@ function classifyMunLines(itRows, codibge){
 }
 // linhas (codlinha distintos) cujo itinerário passa por um município (codibge)
 async function linhasNoMunicipio(codibge){
-  const rows = await sbFetch('itinerario_teste', `cod_origem=eq.${enc(codibge)}&select=codlinha&limit=8000`);
+  // limite alto de propósito: Rio de Janeiro tem ~13,5 mil trechos de itinerário — com
+  // limite menor o conjunto chega incompleto e as interseções entre municípios encolhem
+  const rows = await sbFetch('itinerario_teste', `cod_origem=eq.${enc(codibge)}&select=codlinha&limit=30000`);
   return distinctCods(rows);
 }
 async function mostrarLinhasResultado(host, cods, titulo){
@@ -2538,6 +2540,12 @@ async function termosLocalidade(term){
 }
 // filtro or=() do PostgREST: cada coluna ilike cada termo
 const orIlike = (cols, termos) => 'or=(' + termos.map(t => { const e = ilikeTerm(t); return cols.map(c => `${c}.ilike.*${e}*`).join(','); }).join(',') + ')';
+// cod_ibge cujo nome de município é EXATAMENTE um dos termos (insens. a acento/caixa) —
+// exato de propósito: "rio" não pode puxar Rio de Janeiro/Rio Bonito/Rio Claro inteiros
+function municipiosExatos(ibge, termos){
+  const nts = new Set(termos.map(norm).filter(Boolean));
+  return Object.entries(ibge).filter(([,v])=>nts.has(norm(v.nome))).map(([c])=>c);
+}
 // codlinha que casam uma localidade pelo NOME/VIA da linha (tabela_vista), por uma SEÇÃO de
 // tarifa OU por um LOGRADOURO do itinerário — MESMA semântica usada na busca do campo A.
 // Usado p/ cruzar duas localidades de forma simétrica (independe da ordem dos campos).
@@ -2548,7 +2556,13 @@ async function codsPorLocalidade(term){
     sbFetch('tarifa_atual_teste', `${orIlike(['nome_ligacao','via'], termos)}&select=codlinha&limit=3000`),
     sbFetch('itinerario_teste', `${orIlike(['nome_logradouro'], termos)}&select=codlinha&limit=2000`)
   ]);
-  return new Set([...ln, ...sec, ...itin].map(r=>r.codlinha).filter(Boolean));
+  const out = new Set([...ln, ...sec, ...itin].map(r=>r.codlinha).filter(Boolean));
+  // localidade que também é MUNICÍPIO (ex.: Niterói): une as linhas cujo itinerário passa
+  // pelo município — a busca textual não enxerga quem passa sem citar o nome
+  for(const c of municipiosExatos(await getIbge(), termos).slice(0,3)){
+    (await linhasNoMunicipio(c)).forEach(cl=>out.add(cl));
+  }
+  return out;
 }
 async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
   host.innerHTML = loading();
@@ -2558,40 +2572,50 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     //    casam a localidade (item 13: as seções da Estrutura também entram na busca)
     // 3) linhas cujo ITINERÁRIO passa por um logradouro com o nome da localidade (a dica da
     //    tela promete "nome/itinerário")
-    const [lineRows, secHits, itinHits] = await Promise.all([
+    const [lineRows, secHits, itinHits, ibge] = await Promise.all([
       sbFetch('tabela_vista_teste', `${orIlike(['nome_ligacao','nome_lig_cresc','via'], termos)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=400`),
       sbFetch('tarifa_atual_teste', `${orIlike(['nome_ligacao','via'], termos)}&select=codlinha&limit=3000`),
-      sbFetch('itinerario_teste', `${orIlike(['nome_logradouro'], termos)}&select=codlinha&limit=2000`)
+      sbFetch('itinerario_teste', `${orIlike(['nome_logradouro'], termos)}&select=codlinha&limit=2000`),
+      getIbge()
     ]);
-    const haveCods = new Set(lineRows.map(r=>r.codlinha));
-    const extraCods = [...new Set([...secHits, ...itinHits].map(r=>r.codlinha).filter(c=>c && !haveCods.has(c)))].slice(0,200);
-    let rows = lineRows;
-    if(extraCods.length){
-      const extra = await sbFetch('tabela_vista_teste', `codlinha=in.(${extraCods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=200`);
-      rows = lineRows.concat(extra);
+    // 4) localidade que também é MUNICÍPIO (ex.: Niterói): linhas cujo itinerário passa pelo
+    //    município também entram — a busca textual não enxerga quem passa sem citar o nome
+    const munACods = [];
+    for(const c of municipiosExatos(ibge, termos).slice(0,3)){
+      (await linhasNoMunicipio(c)).forEach(cl=>munACods.push(cl));
     }
-    const viaSecao = rows.length - lineRows.length;   // quantas entraram só pela seção/itinerário
-    let base = rows;
+    const haveCods = new Set(lineRows.map(r=>r.codlinha));
+    let extraCods = [...new Set([...secHits, ...itinHits].map(r=>r.codlinha).concat(munACods).filter(c=>c && !haveCods.has(c)))];
+    // cruzamento com o campo B: interseção por CODLINHA antes de baixar os dados das linhas
+    // extras (evita buscar linhas que a interseção descartaria e o corte de 200 que estrangulava)
+    let rows = lineRows;
     if(b && bTipo==='municipio'){
-      // cruzamento localidade A × MUNICÍPIO B: interseção com as linhas que passam pelo município
-      const ibge = await getIbge();
+      // localidade A × MUNICÍPIO B: interseção com as linhas que passam pelo município
       const cods = Object.entries(ibge).filter(([,v])=>norm(v.nome).includes(norm(b))).map(([c])=>c);
       if(!cods.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(b)}".`); return; }
       const munSet = new Set();
       for(const c of cods.slice(0,5)){ (await linhasNoMunicipio(c)).forEach(cl=>munSet.add(cl)); }
-      base = rows.filter(r=> munSet.has(r.codlinha));
+      rows = rows.filter(r=> munSet.has(r.codlinha));
+      extraCods = extraCods.filter(c=> munSet.has(c));
     } else if(b){
-      // cruzamento localidade A × localidade B: interseção SIMÉTRICA por codlinha (mesma busca de
-      // nome/via + seção de tarifa que a de A), para não depender da ordem dos dois campos.
+      // localidade A × localidade B: interseção SIMÉTRICA por codlinha (mesma busca de
+      // nome/via + seção/itinerário/município que a de A), para não depender da ordem dos campos.
       const setB = await codsPorLocalidade(b);
-      base = rows.filter(r=> setB.has(r.codlinha));
+      rows = rows.filter(r=> setB.has(r.codlinha));
+      extraCods = extraCods.filter(c=> setB.has(c));
     }
+    const fetchCods = extraCods.slice(0,250);
+    let base = rows;
+    if(fetchCods.length) base = rows.concat(await fetchLinesByCods(fetchCods, { limit: fetchCods.length }));
+    const viaSecao = base.length - rows.length;   // quantas entraram só pela seção/itinerário/município
     if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${a}" e "${b}".`:`Nenhuma linha encontrada para "${a}".`); return; }
     await getEmpresas();
+    const corte = extraCods.length - fetchCods.length;
     const titulo = b? `${esc(a)} ↔ ${esc(b)}` : esc(a);
-    const secNote = (!b && viaSecao>0) ? ` · ${viaSecao} via seção de tarifa ou itinerário` : '';
-    const prefix = bannerTrunc(rows)
-      + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${base.length} linha(s) · ${titulo}${secNote}</p>`;
+    const secNote = (!b && viaSecao>0) ? ` · ${viaSecao} via seção, itinerário ou município` : '';
+    const corteNote = corte>0 ? ` (${corte} linha(s) a mais não exibidas — refine a busca)` : '';
+    const prefix = bannerTrunc(lineRows)
+      + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${base.length} linha(s) · ${titulo}${secNote}${corteNote}</p>`;
     lineResults(host, base, { prefixHTML: prefix });
   }catch(e){ host.innerHTML = errorBox(e.message); }
 }

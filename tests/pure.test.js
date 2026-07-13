@@ -121,6 +121,17 @@ console.log('localidadesQueCasam / orIlike');
   eq(P.orIlike(['a'], ['p)q*']),         'or=(a.ilike.*p%20q%20*)',                   'orIlike sanitiza termos via ilikeTerm');
 }
 
+// --- municipiosExatos (localidade que também é município → via geográfica na busca) ---
+console.log('municipiosExatos');
+{
+  const ibge = { '3304557':{nome:'RIO DE JANEIRO'}, '3300456':{nome:'RIO BONITO'}, '3303302':{nome:'NITERÓI'}, '3302700':{nome:'MARICÁ'} };
+  eq(P.municipiosExatos(ibge, ['Niterói','niteroi']).join('|'), '3303302',   'casa sem acento/caixa (termo digitado + canônico)');
+  eq(P.municipiosExatos(ibge, ['rio']).length, 0,                            'é EXATO: "rio" não puxa Rio de Janeiro/Rio Bonito');
+  eq(P.municipiosExatos(ibge, ['rio de janeiro']).join('|'), '3304557',      'nome composto');
+  eq(P.municipiosExatos(ibge, ['Icaraí']).length, 0,                         'localidade que não é município → []');
+  eq(P.municipiosExatos(ibge, ['']).length, 0,                               'termo vazio → []');
+}
+
 // --- fmtMoney ---
 console.log('fmtMoney');
 eq(P.fmtMoney(null),      '—',   'fmtMoney null → travessão');
