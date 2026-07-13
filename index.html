@@ -2327,7 +2327,7 @@ LOADERS.ligacoesPorTerminal = async () => {
   const orig = await getOrigem();
   searchPanel({ title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', onRun: async(term, host)=>{
     if(!term){ host.innerHTML=emptyBox('Digite o nome do terminal/origem.'); return; }
-    const cods = Object.entries(orig).filter(([,n])=>(n||'').toLowerCase().includes(term.toLowerCase())).map(([c])=>c);
+    const cods = Object.entries(orig).filter(([,n])=>norm(n).includes(norm(term))).map(([c])=>c);
     if(!cods.length){ host.innerHTML=emptyBox('Nenhuma origem com esse nome.'); return; }
     const inList = cods.slice(0,50).map(enc).join(',');
     const qi = await sbFetch('qh_intervalo_teste', `cod_origen=in.(${inList})&select=codlinha&limit=3000`);
