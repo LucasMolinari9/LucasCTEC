@@ -357,6 +357,13 @@
   .loc-emp-head{font-family:'Archivo';font-weight:800;font-size:14px;color:var(--navy);
     margin:16px 0 6px;padding-bottom:4px;border-bottom:2px solid var(--green)}
   .loc-emp-head .loc-emp-rj{font-weight:600;font-size:12.5px;color:var(--muted)}
+  /* relatório de seções por linha (Linhas por Localidade) */
+  .loc-linha-sec{margin:8px 0 16px}
+  .loc-linha-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;cursor:pointer;
+    font-family:'Archivo';font-weight:700;font-size:13.5px;color:var(--navy);margin:8px 0 5px}
+  .loc-linha-head:hover{color:var(--blue)}
+  .loc-linha-head .mono{font-family:'IBM Plex Mono';font-size:12.5px;font-weight:600;color:var(--blue);
+    background:#e7f0f8;padding:2px 8px;border-radius:5px}
   /* chips de município (drill-down) na consulta por região */
   .mun-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:2px 0 12px}
   .mun-chips-lbl{font-family:'Archivo';font-weight:700;font-size:12px;letter-spacing:.03em;
@@ -664,7 +671,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 13/07-A</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 13/07-B</span></span>
   </div>
 </footer>
 
@@ -2607,16 +2614,28 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     const fetchCods = extraCods.slice(0,250);
     let base = rows;
     if(fetchCods.length) base = rows.concat(await fetchLinesByCods(fetchCods, { limit: fetchCods.length }));
-    const viaSecao = base.length - rows.length;   // quantas entraram só pela seção/itinerário/município
     if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${a}" e "${b}".`:`Nenhuma linha encontrada para "${a}".`); return; }
     await getEmpresas();
+    // seções de tarifa cujo NOME casa a(s) localidade(s) buscada(s), por linha — reproduz o
+    // relatório oficial. Município B é só filtro de trânsito, não entra nos termos de seção.
+    const secTerms = [...termos];
+    if(b && bTipo==='localidade'){ (await termosLocalidade(b)).forEach(t=>secTerms.push(t)); }
+    const baseCods = distinctCods(base, 600);
+    let secByLine = new Map();
+    if(baseCods.length){
+      const secRows = await sbFetch('tarifa_atual_teste',
+        `codlinha=in.(${baseCods.map(enc).join(',')})&${orIlike(['nome_ligacao','nome_ligacao_cresc'], secTerms)}`
+        + `&select=codlinha,secao,nome_ligacao,tipo_ligacao,tarifa,situacao&order=codlinha,secao&limit=5000`);
+      secByLine = groupBy(secRows, r=>r.codlinha);
+    }
+    const comSecaoN = base.reduce((n,r)=>n+(secByLine.has(r.codlinha)?1:0),0);
     const corte = extraCods.length - fetchCods.length;
     const titulo = b? `${esc(a)} ↔ ${esc(b)}` : esc(a);
-    const secNote = (!b && viaSecao>0) ? ` · ${viaSecao} via seção, itinerário ou município` : '';
+    const secNote = comSecaoN ? ` · ${comSecaoN} com seção em ${esc(a)}` : '';
     const corteNote = corte>0 ? ` (${corte} linha(s) a mais não exibidas — refine a busca)` : '';
     const prefix = bannerTrunc(lineRows)
       + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${base.length} linha(s) · ${titulo}${secNote}${corteNote}</p>`;
-    lineResults(host, base, { prefixHTML: prefix });
+    renderLocalidadeSecoes(host, base, secByLine, { prefixHTML: prefix });
   }catch(e){ host.innerHTML = errorBox(e.message); }
 }
 LOADERS.localidades = async () => {
@@ -2720,10 +2739,47 @@ function linhasTable(rows){
   return bannerTrunc(rows) + tableHTML([{t:'Empresa',w:'150px'},{t:'RJ',w:'52px'},{t:'Código',w:'108px'},{t:'Número',w:'82px'},{t:'Nome'},{t:'Via',w:'110px'},{t:'Característica',w:'100px'},{t:'Tipo',w:'95px'}], body, rows.length+' ligação(ões) · clique para abrir', 'stack');
 }
 function bindLineRows(host){
-  (host||modalBody).querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{
-    selectLine(JSON.parse(tr.dataset.row)); closeModal();
+  // qualquer elemento com data-row (linha <tr> da tabela OU cabeçalho de linha do
+  // relatório de seções) abre a linha ao clicar
+  (host||modalBody).querySelectorAll('[data-row]').forEach(el=>el.addEventListener('click',()=>{
+    selectLine(JSON.parse(el.dataset.row)); closeModal();
     toast('Linha selecionada: '+(activeLine.nome_ligacao||activeLine.codlinha),'info');
   }));
+}
+// tabela leve de seções de tarifa (Nome da Seção · Tipo · Tarifa) — formato do relatório
+// oficial "seções que possuem seção em <localidade>"
+function secoesLocalidadeTable(secoes){
+  const cols = [{t:'Nome da Seção'},{t:'Tipo',w:'160px'},{t:'Tarifa',w:'90px'}];
+  const body = [...secoes].sort((a,b)=>(a.secao||0)-(b.secao||0)).map(s=>
+    `<tr><td class="td-logr">${esc(orDash(s.nome_ligacao))}</td><td class="td-tipo">${esc(orDash(s.tipo_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(s.tarifa))}</td></tr>`).join('');
+  return tableHTML(cols, body, secoes.length+' seção(ões)');
+}
+// render do "Linhas por Localidade": bloco principal = linhas COM seção na localidade,
+// agrupadas por empresa e com as seções por linha (reproduz o relatório antigo); bloco
+// secundário = demais linhas da cobertura ampla (entram por itinerário/nome), como lista.
+function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='' } = {}){
+  const comSecao = base.filter(r=>secByLine.has(r.codlinha));
+  const semSecao = base.filter(r=>!secByLine.has(r.codlinha));
+  let html = prefixHTML;
+  if(comSecao.length){
+    const groups = [...groupBy(comSecao, r=>r.codempresa||'—')].sort((x,y)=>rjOrder(x[0],y[0]));
+    html += groups.map(([cod,rs])=>{
+      const linhas = [...rs].sort(byCodlinha).map(r=>{
+        const chips = [boolChip(r.cancelado,'canc.'), boolChip(r.paralisado,'paral.')].filter(Boolean).join(' ');
+        return `<div class="loc-linha-sec">
+          <div class="loc-linha-head clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'><span class="mono">${esc(fmtCode(r.codlinha))}</span> <span>${fmtLineName(r.nome_ligacao)}</span> ${chips}</div>
+          ${secoesLocalidadeTable(secByLine.get(r.codlinha)||[])}</div>`;
+      }).join('');
+      return `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${rs.length} linha(s)</span></h3>${linhas}`;
+    }).join('');
+  }
+  if(semSecao.length){
+    html += `<h3 class="loc-emp-head" style="margin-top:22px">Outras linhas <span class="loc-emp-rj">por itinerário ou nome · ${semSecao.length} linha(s)</span></h3>`
+      + `<div class="doc-obs" style="margin:2px 0 10px">Ligam os pontos buscados, mas não têm uma seção de tarifa com esse nome.</div>`
+      + linhasTable(semSecao);
+  }
+  host.innerHTML = html || emptyBox('Nenhuma linha encontrada.');
+  bindLineRows(host);
 }
 // tabela de empresas p/ escolher (código/nome/situação) — `extraChips(e)` acrescenta chips à situação
 function empresaChooserHTML(emps, { prompt, sitWidth = '150px', extraChips } = {}){
