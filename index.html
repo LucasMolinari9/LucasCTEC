@@ -336,7 +336,7 @@
     letter-spacing:.1em;text-transform:uppercase;color:var(--navy);border-radius:6px;margin-top:10px;
     padding:7px 11px;box-shadow:inset 3px 0 0 var(--c-doc);
   }
-  /* formulário "Entre Municípios" */
+  /* formulário "Linhas por Localidade e Município" (com filtros) */
   .loc-form{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:4px 0 12px}
   .loc-form label{display:flex;flex-direction:column;gap:4px;font-family:'Archivo';font-weight:700;
     font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;color:#0a3a63}
@@ -347,6 +347,13 @@
   .loc-btn{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;
     font-weight:600;font-size:14px;cursor:pointer;transition:background .12s}
   .loc-btn:hover{background:var(--navy-deep)}
+  .loc-filters{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
+  .loc-filter-btn{font:inherit;font-family:'Archivo';font-weight:700;font-size:12.5px;
+    letter-spacing:.02em;border:1px solid transparent;border-radius:999px;padding:8px 14px;
+    cursor:pointer;transition:background .12s,color .12s;background:#e7f0f8;color:var(--blue)}
+  .loc-filter-btn:hover{background:#d9e8f5}
+  .loc-filter-btn.active{background:var(--navy);color:#fff}
+  .loc-filter-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
   /* barra de filtros sobre o resultado (situação / agrupar por empresa) */
   .loc-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin:2px 0 12px;
     padding:9px 12px;background:#f3f7fb;border:1px solid var(--line);border-radius:9px}
@@ -830,8 +837,7 @@ const SECTIONS = [
       ['hash','Identificar pelo Número','Localizar uma linha pelo código','ligacoesPorNumero',false],
       ['signpost','Ligações por Logradouro','Linhas que passam por uma via','ligacoesPorLogradouro',false],
       ['map','Município e Região','Linhas por origem e destino','municipioRegiao',false],
-      ['pin','Entre Municípios','Linhas que passam ou trafegam entre municípios','entreLocalidades',false],
-      ['pin','Linhas por Localidade','Buscar linhas por origem, destino ou "via"','localidades',false],
+      ['pin','Linhas por Localidade e Município','Busque por seção, "via" ou cruze localidades/municípios','localidades',false],
       ['hub','Ligações por Terminais','Linhas que atendem um terminal','ligacoesPorTerminal',false],
       ['segments','Seções por Ligação','Seções que compõem uma linha','secoesPorLigacao',true],
     ]},
@@ -2265,64 +2271,54 @@ async function mostrarLinhasResultado(host, cods, titulo){
   const prefix = `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${cods.length} linha(s) — ${esc(titulo)}${extra}</p>`;
   lineResults(host, rows, { prefixHTML: prefix });
 }
-LOADERS.entreLocalidades = async () => {
+// Município A × Município B — filtro direcional (A→B, respeita a ordem do itinerário) e
+// filtro "trafega pelos dois" (qualquer ordem). `inter` é o próprio resultado não-direcional;
+// o direcional refina `inter` consultando a sequência de trechos do itinerário.
+async function mostrarLinhasEntreMunicipios(host, aTerm, bTerm, directional){
   const ibge = await getIbge();
-  const nomes = [...new Set(Object.values(ibge).map(v=>v.nome).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  const dl = `<datalist id="munList">${nomes.map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`;
-  setBody(`<div class="doc">${docHead('Ligações entre Municípios')}
-    <div class="doc-obs" style="margin:0 0 12px"><b>Dica:</b> preencha apenas o primeiro campo para ver as linhas de um município; preencha o segundo para achar linhas entre dois municípios.</div>
-    <div class="loc-form">
-      <label>Município<input id="munA" list="munList" placeholder="Nome do município…" autocomplete="off"></label>
-      <label>Cruzar com (opcional)<input id="munB" list="munList" placeholder="Segundo município…" autocomplete="off"></label>
-    </div>${dl}
-    <div class="loc-actions"><button class="loc-btn" id="munGo" type="button">Buscar linhas</button></div>
-    <div id="munHost">${emptyBox('Digite um município e clique em Buscar.')}</div></div>`);
-  const A=modalBody.querySelector('#munA'), B=modalBody.querySelector('#munB'), host=modalBody.querySelector('#munHost');
   const nameOf = c => ibge[c]?.nome || c;
   const findCods = t => Object.entries(ibge).filter(([,v])=>norm(v.nome).includes(norm(t))).map(([c])=>c);
-  const run = async()=>{
-    const a=(A.value||'').trim(), b=(B.value||'').trim();
-    if(!a){ host.innerHTML=emptyBox('Informe ao menos o primeiro município.'); return; }
-    const codsA = findCods(a);
-    if(!codsA.length){ host.innerHTML=emptyBox(`Nenhum município com o nome "${esc(a)}".`); return; }
-    if(!b){
-      if(codsA.length===1){ openLinhasPorIbge(codsA[0], nameOf(codsA[0])); return; }
-      host.innerHTML = tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}],
-        codsA.map(c=>`<tr class="clickable" tabindex="0" role="button" data-ibge="${esc(c)}"><td class="td-logr">${esc(nameOf(c))}</td><td class="td-tipo">${esc(orDash(ibge[c].regiao))}</td><td class="td-num">cód. ${esc(c)}</td></tr>`).join(''),
-        codsA.length+' município(s) · clique para ver as linhas');
-      host.querySelectorAll('tr[data-ibge]').forEach(tr=>tr.addEventListener('click',()=>openLinhasPorIbge(tr.dataset.ibge, nameOf(tr.dataset.ibge))));
-      return;
-    }
-    if(a.toLowerCase()===b.toLowerCase()){ host.innerHTML=emptyBox('Use municípios diferentes nos dois campos.'); return; }
-    const codsB = findCods(b);
-    if(!codsB.length){ host.innerHTML=emptyBox(`Nenhum município com o nome "${esc(b)}".`); return; }
-    host.innerHTML = loading();
-    try{
-      const all = new Set();
-      for(const ca of codsA.slice(0,5)){
-        for(const cb of codsB.slice(0,5)){
-          if(ca===cb) continue;
-          const lA = await linhasNoMunicipio(ca);
-          const sB = new Set(await linhasNoMunicipio(cb));
-          const inter = lA.filter(c=>sB.has(c));
-          if(!inter.length) continue;
-          const it = await sbFetch('itinerario_teste', `codlinha=in.(${inter.slice(0,200).map(enc).join(',')})&select=codlinha,cod_origem,sentido&order=id&limit=30000`);
-          for(const [k,seq] of groupBy(it, r=>r.codlinha+'¦'+(r.sentido||''))){
-            const iA=seq.findIndex(r=>String(r.cod_origem)===String(ca));
-            const iB=seq.findIndex(r=>String(r.cod_origem)===String(cb));
-            if(iA>=0&&iB>=0&&iA<iB) all.add(k.split('¦')[0]);
-          }
+  const a = (aTerm||'').trim(), b = (bTerm||'').trim();
+  if(!a){ host.innerHTML = emptyBox('Informe ao menos o primeiro município.'); return; }
+  const codsA = findCods(a);
+  if(!codsA.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(a)}".`); return; }
+  if(!b){
+    if(codsA.length===1){ openLinhasPorIbge(codsA[0], nameOf(codsA[0])); return; }
+    host.innerHTML = tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}],
+      codsA.map(c=>`<tr class="clickable" tabindex="0" role="button" data-ibge="${esc(c)}"><td class="td-logr">${esc(nameOf(c))}</td><td class="td-tipo">${esc(orDash(ibge[c].regiao))}</td><td class="td-num">cód. ${esc(c)}</td></tr>`).join(''),
+      codsA.length+' município(s) · clique para ver as linhas');
+    host.querySelectorAll('tr[data-ibge]').forEach(tr=>tr.addEventListener('click',()=>openLinhasPorIbge(tr.dataset.ibge, nameOf(tr.dataset.ibge))));
+    return;
+  }
+  if(a.toLowerCase()===b.toLowerCase()){ host.innerHTML = emptyBox('Use municípios diferentes nos dois campos.'); return; }
+  const codsB = findCods(b);
+  if(!codsB.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(b)}".`); return; }
+  host.innerHTML = loading();
+  try{
+    const all = new Set();    // direcional: A→B, nessa ordem
+    const inter = new Set();  // trafega pelos dois, qualquer ordem
+    for(const ca of codsA.slice(0,5)){
+      for(const cb of codsB.slice(0,5)){
+        if(ca===cb) continue;
+        const lA = await linhasNoMunicipio(ca);
+        const sB = new Set(await linhasNoMunicipio(cb));
+        const interPar = lA.filter(c=>sB.has(c));
+        interPar.forEach(c=>inter.add(c));
+        if(!directional || !interPar.length) continue;
+        const it = await sbFetch('itinerario_teste', `codlinha=in.(${interPar.slice(0,200).map(enc).join(',')})&select=codlinha,cod_origem,sentido&order=id&limit=30000`);
+        for(const [k,seq] of groupBy(it, r=>r.codlinha+'¦'+(r.sentido||''))){
+          const iA=seq.findIndex(r=>String(r.cod_origem)===String(ca));
+          const iB=seq.findIndex(r=>String(r.cod_origem)===String(cb));
+          if(iA>=0&&iB>=0&&iA<iB) all.add(k.split('¦')[0]);
         }
       }
-      const titA = codsA.length===1 ? nameOf(codsA[0]) : a;
-      const titB = codsB.length===1 ? nameOf(codsB[0]) : b;
-      await mostrarLinhasResultado(host, [...all], `de ${titA} → ${titB}`);
-    }catch(e){ host.innerHTML=errorBox(e.message); }
-  };
-  modalBody.querySelector('#munGo').addEventListener('click', run);
-  [A,B].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
-  if(currentView) currentView._panelRun = run;
-};
+    }
+    const titA = codsA.length===1 ? nameOf(codsA[0]) : a;
+    const titB = codsB.length===1 ? nameOf(codsB[0]) : b;
+    const titulo = directional ? `de ${titA} → ${titB}` : `${titA} e ${titB} (qualquer sentido)`;
+    await mostrarLinhasResultado(host, [...(directional?all:inter)], titulo);
+  }catch(e){ host.innerHTML = errorBox(e.message); }
+}
 LOADERS.ligacoesPorTerminal = async () => {
   const orig = await getOrigem();
   searchPanel({ title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', onRun: async(term, host)=>{
@@ -2638,36 +2634,92 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     renderLocalidadeSecoes(host, base, secByLine, { prefixHTML: prefix });
   }catch(e){ host.innerHTML = errorBox(e.message); }
 }
+// 5 modos de busca da tela "Linhas por Localidade e Município" — cada botão de filtro decide
+// o tipo do campo A/B e qual função de busca roda (localidade× vs. município×).
+const LOC_FILTERS = [
+  { label:'Possui seção na Localidade A', kind:'localidade', aType:'localidade', bMode:'none',
+    hint:'Lista as linhas que têm uma seção de tarifa com esse nome na localidade A.' },
+  { label:'De localidade A para localidade B', kind:'localidade', aType:'localidade', bMode:'localidade',
+    hint:'Cruza duas localidades: mostra as linhas que ligam A a B (independe da ordem digitada).' },
+  { label:'De localidade A para Município B', kind:'localidade', aType:'localidade', bMode:'municipio',
+    hint:'Mostra as linhas da localidade A que também passam pelo município B.' },
+  { label:'Do Município A para o Município B', kind:'municipio', aType:'municipio', bMode:'municipio', directional:true,
+    hint:'Mostra as linhas cujo itinerário vai de A para B, nessa ordem.' },
+  { label:'Trafegam nos municípios A e B', kind:'municipio', aType:'municipio', bMode:'municipio', directional:false,
+    hint:'Mostra as linhas que passam pelos dois municípios, em qualquer ordem.' },
+];
 LOADERS.localidades = async () => {
-  const [locs, ibge] = await Promise.all([getLocalidades(), getIbge()]);
-  const muns = [...new Set(Object.values(ibge).map(v=>v.nome).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  // dois campos pesquisáveis (autocomplete via datalist): A obrigatório, B opcional para cruzar.
-  // O segundo campo pode ser outra localidade OU um município (cruzamento por interseção).
-  const dl = `<datalist id="locList">${locs.map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`
-    + `<datalist id="munLocList">${muns.map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`;
-  setBody(`<div class="doc">${docHead('Linhas por Localidade')}
-    <div class="doc-obs" style="margin:0 0 12px"><b>Dica:</b> a localidade é reconhecida no nome/itinerário das linhas (origem, destino ou "via"). Use o segundo campo para cruzar com outra localidade ou com um município.</div>
+  setBody(`<div class="doc">${docHead('Linhas por Localidade e Município')}
+    <div class="doc-obs" id="locHint" style="margin:0 0 12px"><b>Dica:</b> ${esc(LOC_FILTERS[0].hint)}</div>
+    <div class="loc-filters" id="locFilters" role="tablist">${LOC_FILTERS.map((f,i)=>
+      `<button type="button" class="loc-filter-btn${i===0?' active':''}" data-idx="${i}" aria-pressed="${i===0}">${esc(f.label)}</button>`).join('')}</div>
     <div class="loc-form">
-      <label>Localidade<input id="locA" list="locList" placeholder="Digite a localidade…" autocomplete="off"></label>
-      <label>Cruzar com (opcional)<select id="locBTipo"><option value="localidade">Localidade</option><option value="municipio">Município</option></select><input id="locB" list="locList" placeholder="Segunda localidade…" autocomplete="off"></label>
-    </div>${dl}
+      <label id="locALabel"><span class="loc-lbl-txt">Localidade</span><input id="locA" list="locList" placeholder="Digite a localidade…" autocomplete="off"></label>
+      <label id="locBLabel"><span class="loc-lbl-txt">Cruzar com</span><input id="locB" list="locList" placeholder="Segunda localidade…" autocomplete="off"></label>
+    </div>
+    <datalist id="locList"></datalist><datalist id="munLocList"></datalist>
     <div class="loc-actions"><button class="loc-btn" id="locGo" type="button">Buscar linhas</button></div>
-    <div id="locHost">${emptyBox('Digite uma localidade e clique em Buscar.')}</div></div>`);
-  const A=modalBody.querySelector('#locA'), B=modalBody.querySelector('#locB'), BT=modalBody.querySelector('#locBTipo'), host=modalBody.querySelector('#locHost');
-  BT.addEventListener('change', ()=>{
-    const mun = BT.value==='municipio';
-    B.setAttribute('list', mun?'munLocList':'locList');
-    B.placeholder = mun?'Nome do município…':'Segunda localidade…';
+    <div id="locHost">${emptyBox('Escolha um filtro, preencha os campos e clique em Buscar.')}</div></div>`);
+
+  const A=modalBody.querySelector('#locA'), B=modalBody.querySelector('#locB'),
+        ALbl=modalBody.querySelector('#locALabel .loc-lbl-txt'), BLbl=modalBody.querySelector('#locBLabel'),
+        BLblTxt=modalBody.querySelector('#locBLabel .loc-lbl-txt'),
+        hint=modalBody.querySelector('#locHint'), host=modalBody.querySelector('#locHost'),
+        filtersBar=modalBody.querySelector('#locFilters');
+
+  let modeIdx = 0;
+  function applyMode(){
+    const f = LOC_FILTERS[modeIdx];
+    filtersBar.querySelectorAll('.loc-filter-btn').forEach(b=>{
+      const active = +b.dataset.idx===modeIdx;
+      b.classList.toggle('active', active); b.setAttribute('aria-pressed', active);
+    });
+    hint.innerHTML = `<b>Dica:</b> ${esc(f.hint)}`;
+    ALbl.textContent = f.aType==='municipio' ? 'Município' : 'Localidade';
+    A.setAttribute('list', f.aType==='municipio' ? 'munLocList' : 'locList');
+    A.placeholder = f.aType==='municipio' ? 'Nome do município…' : 'Digite a localidade…';
+    A.value=''; B.value='';
+    if(f.bMode==='none'){
+      BLbl.style.display='none';
+    }else{
+      BLbl.style.display='';
+      const bIsMun = f.bMode==='municipio';
+      B.setAttribute('list', bIsMun ? 'munLocList' : 'locList');
+      B.placeholder = bIsMun ? 'Nome do município…' : (f.kind==='municipio' ? 'Segundo município…' : 'Segunda localidade…');
+      BLblTxt.textContent = bIsMun ? 'Município B' : (f.kind==='municipio' ? 'Município B' : 'Cruzar com');
+    }
+    host.innerHTML = emptyBox('Preencha os campos e clique em Buscar.');
+  }
+  filtersBar.addEventListener('click', e=>{
+    const btn = e.target.closest('.loc-filter-btn'); if(!btn) return;
+    modeIdx = +btn.dataset.idx; applyMode();
   });
-  const run = async()=>{
-    const a=(A.value||'').trim(), b=(B.value||'').trim(), bTipo=BT.value;
-    if(!a){ host.innerHTML=emptyBox('Informe ao menos a primeira localidade.'); return; }
-    if(b && bTipo==='localidade' && a.toLowerCase()===b.toLowerCase()){ host.innerHTML=emptyBox('Use localidades diferentes nos dois campos.'); return; }
-    await mostrarLinhasPorLocalidade(host, a, b, bTipo);
+  applyMode();
+
+  const run = async () => {
+    const f = LOC_FILTERS[modeIdx];
+    const a=(A.value||'').trim(), b=(B.value||'').trim();
+    if(!a){ host.innerHTML = emptyBox(`Informe ${f.aType==='municipio'?'o município':'a localidade'}.`); return; }
+    if(f.kind==='localidade'){
+      const bTipo = f.bMode==='municipio' ? 'municipio' : 'localidade';
+      const bb = f.bMode==='none' ? '' : b;
+      if(bb && bTipo==='localidade' && a.toLowerCase()===bb.toLowerCase()){ host.innerHTML=emptyBox('Use localidades diferentes nos dois campos.'); return; }
+      await mostrarLinhasPorLocalidade(host, a, bb, bTipo);
+    }else{
+      if(b && a.toLowerCase()===b.toLowerCase()){ host.innerHTML=emptyBox('Use municípios diferentes nos dois campos.'); return; }
+      await mostrarLinhasEntreMunicipios(host, a, b, f.directional);
+    }
   };
   modalBody.querySelector('#locGo').addEventListener('click', run);
   [A,B].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
-  if(currentView) currentView._panelRun = run;   // realtime re-executa mantendo o que foi digitado
+  if(currentView) currentView._panelRun = run;   // realtime relê modeIdx a cada chamada, não fixa o modo
+
+  Promise.all([getLocalidades(), getIbge()]).then(([locs, ibge])=>{
+    const muns = [...new Set(Object.values(ibge).map(v=>v.nome).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    const locDL = modalBody.querySelector('#locList'), munDL = modalBody.querySelector('#munLocList');
+    if(locDL) locDL.innerHTML = locs.map(n=>`<option value="${esc(n)}"></option>`).join('');
+    if(munDL) munDL.innerHTML = muns.map(n=>`<option value="${esc(n)}"></option>`).join('');
+  }).catch(e=>{ console.warn('datalists de localidade/município indisponíveis:', e); });
 };
 
 /* ================================================================
@@ -2821,7 +2873,7 @@ const VIEW_TABLES = {
   ligacoesPorEmpresa:['tabela_vista_teste'], secoesPorEmpresa:['tarifa_atual_teste'],
   ligacoesPorNome:['tabela_vista_teste'], ligacoesPorNumero:['tabela_vista_teste'],
   ligacoesPorLogradouro:['itinerario_teste'], municipioRegiao:['municipio_teste','itinerario_teste','tabela_vista_teste'],
-  entreLocalidades:['municipio_teste','itinerario_teste'], ligacoesPorTerminal:['qh_intervalo_teste'],
+  ligacoesPorTerminal:['qh_intervalo_teste'],
   secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste'],
   frotaPorEmpresa:['qh_teste'],
   pesquisaEvento:['evento_teste'], portarias:['portaria_teste'],

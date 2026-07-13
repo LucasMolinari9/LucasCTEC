@@ -59,7 +59,7 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
 - `tarifa_atual_teste` → Tarifas, Seções por Ligação/Empresa.
 - `evento_teste` (+ `evento_empresa_teste`, `evento_linha_teste`) → Histórico, Pesquisa de
   Evento.
-- `localidades_teste` → Entre Localidades.
+- `localidades_teste` → Linhas por Localidade e Município.
 
 ## Como o Realtime funciona no código
 - Cada card abre uma "view": `runView({ title, tables:[...], lineFilter, loader })`.
