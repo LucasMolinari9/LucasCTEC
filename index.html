@@ -2615,19 +2615,29 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     // seções de tarifa cujo NOME casa a(s) localidade(s) buscada(s), por linha — reproduz o
     // relatório oficial. Município B é só filtro de trânsito, não entra nos termos de seção.
     const secTerms = [...termos];
-    if(b && bTipo==='localidade'){ (await termosLocalidade(b)).forEach(t=>secTerms.push(t)); }
+    let termsB = null;
+    if(b && bTipo==='localidade'){ termsB = await termosLocalidade(b); termsB.forEach(t=>secTerms.push(t)); }
     const baseCods = distinctCods(base, 600);
     let secByLine = new Map();
     if(baseCods.length){
-      const secRows = await sbFetch('tarifa_atual_teste',
+      let secRows = await sbFetch('tarifa_atual_teste',
         `codlinha=in.(${baseCods.map(enc).join(',')})&${orIlike(['nome_ligacao','nome_ligacao_cresc'], secTerms)}`
-        + `&select=codlinha,secao,nome_ligacao,tipo_ligacao,tarifa,situacao&order=codlinha,secao&limit=5000`);
+        + `&select=codlinha,secao,nome_ligacao,nome_ligacao_cresc,tipo_ligacao,tarifa,situacao&order=codlinha,secao&limit=5000`);
+      // localidade A × localidade B: mostrar só a seção que liga A↔B (casa AMBAS as
+      // localidades), não toda seção que toca A ou B — foco no trecho pesquisado.
+      if(termsB){
+        const hasAny = (hay, ts) => ts.some(t=>{ const n=norm(t); return n && hay.includes(n); });
+        secRows = secRows.filter(r=>{
+          const hay = norm(`${r.nome_ligacao||''} ${r.nome_ligacao_cresc||''}`);
+          return hasAny(hay, termos) && hasAny(hay, termsB);
+        });
+      }
       secByLine = groupBy(secRows, r=>r.codlinha);
     }
     const comSecaoN = base.reduce((n,r)=>n+(secByLine.has(r.codlinha)?1:0),0);
     const corte = extraCods.length - fetchCods.length;
     const titulo = b? `${esc(a)} ↔ ${esc(b)}` : esc(a);
-    const secNote = comSecaoN ? ` · ${comSecaoN} com seção em ${esc(a)}` : '';
+    const secNote = comSecaoN ? ` · ${comSecaoN} com seção ${b && bTipo==='localidade' ? `${esc(a)} ↔ ${esc(b)}` : `em ${esc(a)}`}` : '';
     const corteNote = corte>0 ? ` (${corte} linha(s) a mais não exibidas — refine a busca)` : '';
     const prefix = bannerTrunc(lineRows)
       + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${base.length} linha(s) · ${titulo}${secNote}${corteNote}</p>`;
