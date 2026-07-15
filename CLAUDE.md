@@ -136,11 +136,20 @@ A lógica **pura** dessas seções (formatação, busca, filtros, `sbFetch`) tem
   dados em UTF-8 no Supabase.
 - **Estética:** topo navy + faixa verde fina (identidade DETRO/DIVAT); banner da linha em navy
   com faixa verde inferior. Manter esse idioma visual ao criar telas novas.
-- **Banco sem PK/índices (escalabilidade):** ~14 tabelas estão **sem chave primária e sem índice**, sendo
-  `itinerario_teste` a maior (~52k linhas). O front faz `ilike`/`eq`/`in.()` com `limit` alto (até 30000)
-  sobre elas → hoje são **varreduras completas**. Funciona porque o volume é pequeno; ao crescer, fica lento.
-  Antes de criar telas que filtram tabelas grandes, **criar índices** nas colunas filtradas (codlinha,
-  cod_origem, nome_logradouro, codempresa). Considerar `pg_trgm`+GIN para as buscas `ilike`.
+- **PKs e índices (escalabilidade) — endurecido em 15/07/2026:** hoje **todas as tabelas têm PRIMARY KEY**.
+  Nas que já tinham coluna única (`id`, `cod_ibge`, `cod_origem`, `ordem_importacao`) a PK foi promovida
+  **sobre a coluna existente** (não muda a forma da tabela → não quebra o ETL de importação do dono).
+  As 3 grandes com `id` repetido (`itinerario_teste`, `qh_intervalo_teste`, `qh_predeterminado_teste`)
+  ganharam uma coluna surrogate **`row_id` (`bigint GENERATED ALWAYS AS IDENTITY`)** — o `id` original
+  foi mantido porque o front ordena por ele; `row_id` não é selecionado pelo front. Índices btree +
+  trigram (`pg_trgm`) nas colunas de filtro já existem desde a auditoria 26/06, e a FK `fk_tarifa_linha`
+  (`tarifa_atual_teste`) tem índice de cobertura `idx_tarifa_codempresa_codlinha`. Ao criar telas que
+  filtram **novas** colunas de tabelas grandes, **criar o índice** (btree; `pg_trgm`+GIN para `ilike`).
+- **Tabelas de staging do ETL (não são lidas pelo portal):** `evento_dados` + `evento_textos` montam
+  `evento_teste`; `portaria_data` + `portaria_texto_teste` montam `portaria_teste`. O front lê **só** as
+  finais (`evento_teste`/`portaria_teste`). As de staging têm RLS ligado **sem policy** e **sem grant para
+  `anon`/`authenticated`** (revogado em 15/07/2026) → invisíveis pela API pública, de propósito. O lint
+  `rls_enabled_no_policy` nelas é **esperado**, não é bug. Alimentação é via service role (painel), que ignora isso.
 - **SEM BACKUP (risco máximo):** o projeto **não tem backup/PITR confirmado**. O git versiona só o CÓDIGO,
   nunca os DADOS. **Não rodar nada destrutivo no banco (DROP/DELETE/TRUNCATE/REVOKE/migração)** sem antes
   ligar backup (Dashboard → Database → Backups).
