@@ -678,7 +678,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 13/07-B</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 15/07-A</span></span>
   </div>
 </footer>
 
@@ -875,7 +875,7 @@ SECTIONS.forEach(sec => {
    STATE + CACHES
    ================================================================ */
 let activeLine = null;   // { codlinha, numero_ligacao, nome_ligacao, codempresa, ... }
-let ibgeMap   = null;    // { [codibge]: {nome,regiao} }
+let ibgeMap   = null;    // { [codibge]: {nome,regiao,regiaoPrograma} }
 let origemMap = null;    // { [cod_origem]: nome_origem }
 let evEmpMap  = null;    // { [id]: evento_empresa }
 let evLinMap  = null;    // { [id]: evento_linha }
@@ -889,7 +889,9 @@ async function getIbge() {
   if (ibgeMap) return ibgeMap;
   const rows = await sbFetch('municipio_teste', 'select=cod_ibge,nome_municipio,regiao_municipio,regiao_novo&limit=2000');
   ibgeMap = {};
-  rows.forEach(r => { ibgeMap[r.cod_ibge] = { nome:r.nome_municipio, regiao:r.regiao_novo||r.regiao_municipio }; });
+  // `regiao` = regionalização nova (usada na coluna "Região" dos outros cards);
+  // `regiaoPrograma` = Região Programa clássica (regiao_municipio) — é a do print DETRO.
+  rows.forEach(r => { ibgeMap[r.cod_ibge] = { nome:r.nome_municipio, regiao:r.regiao_novo||r.regiao_municipio, regiaoPrograma:r.regiao_municipio }; });
   return ibgeMap;
 }
 async function getOrigem() {
@@ -2149,21 +2151,24 @@ LOADERS.ligacoesPorNumero = async () => {
 LOADERS.ligacoesPorLogradouro = async () => {
   searchPanel({ title:'Ligações por Logradouro', placeholder:'Nome da via / logradouro', onRun: async(term, host)=>{
     if(!term){ host.innerHTML=emptyBox('Digite o nome do logradouro.'); return; }
-    const it = await sbFetch('itinerario_teste', `nome_logradouro=ilike.*${ilikeTerm(term)}*&select=codlinha&limit=2000`);
-    const cods=distinctCods(it,100);
+    // RPC divat_busca_logradouro: busca sem acento e sem depender de maiúsc./minúsc.
+    // (o ilike direto na coluna é sensível a acento — "getulio" não achava "Getúlio").
+    const it = await sbFetch('rpc/divat_busca_logradouro', `termo=${ilikeTerm(term)}&select=codlinha&limit=2000`);
+    const cods=distinctCods(it,500);
     if(!cods.length){ host.innerHTML=emptyBox('Nenhuma linha passa por esse logradouro.'); return; }
-    const rows = await fetchLinesByCods(cods,{limit:200});
+    const rows = await fetchLinesByCods(cods,{limit:500});
     const prefix = bannerTrunc(it) + `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${cods.length} linha(s) passam por "${esc(term)}"</p>`;
     lineResults(host, rows, { prefixHTML: prefix });
   }, tables:['itinerario_teste']});
 };
 LOADERS.municipioRegiao = async () => {
   const ibge = await getIbge();
-  const regioes = [...new Set(Object.values(ibge).map(x=>x.regiao).filter(Boolean))].sort();
+  // Região Programa clássica (regiao_municipio) — é a classificação do print DETRO.
+  const regioes = [...new Set(Object.values(ibge).map(x=>x.regiaoPrograma).filter(Boolean))].sort();
   // tabela de municípios clicáveis (drill-down → openLinhasPorIbge)
   const munTable = (entries, host)=>{
     const body = entries.sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>
-      `<tr class="clickable" tabindex="0" role="button" data-ibge="${esc(cod)}"><td class="td-logr">${esc(v.nome)}</td><td class="td-tipo">${esc(orDash(v.regiao))}</td><td class="td-num">cód. ${esc(cod)}</td></tr>`).join('');
+      `<tr class="clickable" tabindex="0" role="button" data-ibge="${esc(cod)}"><td class="td-logr">${esc(v.nome)}</td><td class="td-tipo">${esc(orDash(v.regiaoPrograma))}</td><td class="td-num">cód. ${esc(cod)}</td></tr>`).join('');
     host.innerHTML = body? tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}], body, entries.length+' município(s) · clique para ver as linhas'):emptyBox('Nenhum município.');
     host.querySelectorAll('tr[data-ibge]').forEach(tr=>tr.addEventListener('click',()=>openLinhasPorIbge(tr.dataset.ibge, ibge[tr.dataset.ibge]?.nome)));
   };
@@ -2171,25 +2176,40 @@ LOADERS.municipioRegiao = async () => {
     await getEmpresas();
     // 1) município digitado → vai pras linhas do município (lista se houver vários)
     if(term){
-      const municipios = Object.entries(ibge).filter(([,v])=> (!region||v.regiao===region) && norm(v.nome).includes(norm(term)) );
+      const municipios = Object.entries(ibge).filter(([,v])=> (!region||v.regiaoPrograma===region) && norm(v.nome).includes(norm(term)) );
       if(!municipios.length){ host.innerHTML = emptyBox('Nenhum município.'); return; }
       if(municipios.length===1){ openLinhasPorIbge(municipios[0][0], municipios[0][1].nome); return; }
       munTable(municipios, host); return;
     }
-    // 2) região escolhida (sem município) → linhas da região inteira, agrupadas por empresa
+    // 2) Região Programa escolhida → duas métricas do print (RPC divat_linhas_regiao):
+    //    "origem na região" (1º trecho da linha na região) × "trafega dentro da região"
+    //    (todos os trechos na região). O usuário alterna pelo seletor de escopo.
     if(region){
-      const cods = Object.entries(ibge).filter(([,v])=>v.regiao===region).map(([c])=>c);
-      const it = await sbFetch('itinerario_teste', `cod_origem=in.(${cods.map(enc).join(',')})&select=codlinha&limit=20000`);
-      const lc = distinctCods(it,500);
-      if(!lc.length){ host.innerHTML = emptyBox('Nenhuma linha na região '+esc(region)+'.'); return; }
-      const rows = await fetchLinesByCods(lc,{limit:500});
-      const muns = Object.entries(ibge).filter(([,v])=>v.regiao===region).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||''));
+      const muns = Object.entries(ibge).filter(([,v])=>v.regiaoPrograma===region).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||''));
       const chips = muns.map(([cod,v])=>`<button type="button" class="mun-chip" data-ibge="${esc(cod)}">${esc(v.nome)}</button>`).join('');
-      const prefix = bannerTrunc(it)
-        + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${lc.length} linha(s) na região ${esc(region)}</p>`
-        + `<div class="mun-chips"><span class="mun-chips-lbl">Filtrar por município:</span>${chips}</div>`;
-      lineResults(host, rows, { prefixHTML: prefix });
+      host.innerHTML = `<div class="loc-tools"><label>Mostrar <select id="regScope">
+          <option value="origem">Linhas com origem na Região Programa</option>
+          <option value="dentro">Linhas que trafegam dentro da Região Programa</option>
+        </select></label></div>
+        <div class="mun-chips"><span class="mun-chips-lbl">Filtrar por município:</span>${chips}</div>
+        <div id="regResult"></div>`;
+      const result = host.querySelector('#regResult');
+      const scope  = host.querySelector('#regScope');
       host.querySelectorAll('.mun-chip').forEach(b=>b.addEventListener('click',()=>openLinhasPorIbge(b.dataset.ibge, ibge[b.dataset.ibge]?.nome)));
+      async function paint(){
+        result.innerHTML = loading();
+        const modo = scope.value;
+        const it = await sbFetch('rpc/divat_linhas_regiao', `p_regiao=${enc(region)}&p_modo=${enc(modo)}&select=codlinha&limit=2000`);
+        const lc = distinctCods(it,500);
+        if(!lc.length){ result.innerHTML = emptyBox('Nenhuma linha para esse critério na região '+esc(region)+'.'); return; }
+        const rows = await fetchLinesByCods(lc,{limit:500});
+        const label = modo==='origem' ? 'com origem na' : 'que trafegam dentro da';
+        const prefix = bannerTrunc(it)
+          + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${lc.length} linha(s) ${label} região ${esc(region)}</p>`;
+        lineResults(result, rows, { prefixHTML: prefix });
+      }
+      scope.addEventListener('change', ()=>{ paint().catch(e=>{ result.innerHTML = errorBox(e.message); }); });
+      paint().catch(e=>{ result.innerHTML = errorBox(e.message); });
       return;
     }
     // 3) nada informado → orienta
