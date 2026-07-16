@@ -16,8 +16,7 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
 - O botão **PDF** (na barra do modal, ao lado de Imprimir) monta o documento **completo** (sem a
   paginação de tela) num container oculto `.pdf-export` e usa a **impressão nativa** do navegador
   (`window.print()`, vetorial) para o usuário "Salvar como PDF" — sem dependência externa de PDF.
-- `netlify.toml` define os cabeçalhos de segurança (CSP etc.), `Cache-Control: must-revalidate`
-  e `publish = "."`.
+- `vercel.json` define os cabeçalhos de segurança (CSP etc.) e `Cache-Control: must-revalidate`.
 
 ## Supabase
 - Projeto: **`bd_teste`** · ref **`lwzsxuaqqeoamukduhev`** · região sa-east-1.
@@ -94,18 +93,15 @@ A lógica **pura** dessas seções (formatação, busca, filtros, `sbFetch`) tem
 `tests/` — veja a próxima seção. Render/DOM e PDF não têm teste (exigiriam navegador).
 
 ## Publicação (Vercel) e atualização automática
-- **Host oficial: Vercel.** A migração veio do Netlify, que **ficou sem créditos de build**
-  (plano Free) e parou de publicar — deploys ficavam pausados. O Vercel serve o site estático
-  sem esse limite. A ligação com o Supabase **não muda** com a troca de host (toda a comunicação
-  REST/Realtime é client-side, via `SB_URL`/`SB_KEY` no `index.html`; o host só serve o arquivo).
-- **Config do Vercel:** `vercel.json` (na raiz) replica os cabeçalhos de segurança que antes
-  viviam no `netlify.toml` — em especial a **CSP**, cujo `connect-src` **autoriza** o navegador a
-  falar com `lwzsxuaqqeoamukduhev.supabase.co` (REST) e `wss://…` (Realtime). Mexeu na CSP do
-  `vercel.json`? Replique a mesma mudança no `netlify.toml` (mantido só como fallback).
+- **Host: Vercel** (único host em uso). A ligação com o Supabase é toda **client-side** (REST/
+  Realtime via `SB_URL`/`SB_KEY` no `index.html`); o host só serve o arquivo estático.
+- **Config do Vercel:** `vercel.json` (na raiz) carrega os cabeçalhos de segurança — em especial a
+  **CSP**, cujo `connect-src` **autoriza** o navegador a falar com
+  `lwzsxuaqqeoamukduhev.supabase.co` (REST) e `wss://…` (Realtime). Ao mexer na CSP, edite o
+  `vercel.json`.
 - **Auto-deploy:** conectar o repo GitHub `LucasMolinari9/LucasCTEC` ao projeto Vercel pelo
-  **dashboard** (OAuth GitHub, ação única) → **push na `main` = deploy automático**, igual era no
-  Netlify. Sem essa conexão, publica-se rodando o MCP `deploy_to_vercel` (deploya o diretório atual)
-  após o push.
+  **dashboard** (OAuth GitHub, ação única) → **push na `main` = deploy automático**. Sem essa
+  conexão, publica-se rodando o MCP `deploy_to_vercel` (deploya o diretório atual) após o push.
 - **Atualização automática para todos os usuários** (sem limpar cache):
   1. `Cache-Control: public, max-age=0, must-revalidate` (no `vercel.json`) → cada visita revalida.
   2. Detector de versão no JS (`checarNovaVersao`): compara o **ETag** do `index.html` a cada
@@ -113,7 +109,7 @@ A lógica **pura** dessas seções (formatação, busca, filtros, `sbFetch`) tem
      devolve ETag em `HEAD /index.html`, então o detector continua funcionando.
 - **Carimbo de versão** no rodapé (`#verTag`, ex.: `build 19/06-A`). Ao publicar algo que o
   usuário precisa confirmar, **incremente esse texto** — serve para checar qual versão está no ar.
-- O `npx netlify deploy`/`vercel` CLI **não** funciona pelo ambiente do Claude (rede de saída
+- O `vercel` CLI **não** funciona pelo ambiente do Claude (rede de saída
   bloqueia upload e `WebFetch`/`curl` ao site/Supabase). Os caminhos são: **push na `main`**
   (se o auto-deploy git estiver conectado) ou o MCP **`deploy_to_vercel`**.
 
