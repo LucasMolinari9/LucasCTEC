@@ -11,7 +11,7 @@ O backup é feito de **duas peças** que se completam:
 | Peça | O que é | Onde fica | Como refazer |
 |---|---|---|---|
 | **Estrutura** | `docs/backup_schema.sql` — recria tabelas, PK/FK, índices, RLS, grants, funções, trigger | **versionada no git** | regenerar do banco (ver abaixo) |
-| **Dados** | 18 arquivos `*.csv` (um por tabela) | **fora do git** (Drive/local do dono) | exportar pelo Table Editor |
+| **Dados** | dump do banco (`pg_dump`, script Node ou 18 CSVs) | **fora do git** (Drive/local do dono) | 3 formas — ver "Formas de fazer o backup" |
 
 > **Por que separado:** o CSV carrega só as **linhas**; não carrega estrutura, índices, RLS
 > nem funções. O `backup_schema.sql` carrega só a **estrutura**; não carrega dados. Juntos =
@@ -28,7 +28,40 @@ seção Database → Backups só oferece upgrade. Enquanto o projeto ficar no Fr
 **manual** (este runbook). Migrar para o Pro tornaria o backup automático e tornaria este
 processo manual desnecessário.
 
-## Como FAZER um backup (rotina do dono)
+## Formas de fazer o backup dos DADOS
+
+Há três formas de tirar os dados do banco, da mais completa à mais simples. **Todas rodam na sua
+máquina** (o ambiente do Claude não alcança o Supabase) e o resultado vai **fora do git**.
+
+### Opção 1 — `pg_dump` (padrão-ouro: dados + estrutura + policies + índices)
+Precisa do `pg_dump` (vem com o Postgres client) e da **senha do banco** (Dashboard → Project
+Settings → Database → Connection string).
+```bash
+pg_dump "postgresql://postgres:[SUA-SENHA]@db.lwzsxuaqqeoamukduhev.supabase.co:5432/postgres" \
+  --schema=public --no-owner --no-privileges -Fc \
+  -f "divat_backup_$(date +%Y-%m-%d).dump"
+```
+Restaurar num projeto vazio: `pg_restore --no-owner --no-privileges -d "postgresql://…" arquivo.dump`.
+Variações: `--schema-only` (só estrutura) e `--data-only` (só dados).
+
+### Opção 2 — Script Node `scripts/backup_rest.mjs` (sem `pg_dump`; só DADOS)
+Para quando não há `pg_dump` instalado. Baixa as **18 tabelas** em NDJSON via REST, paginando pela
+PK. Requer só **Node 18+** (nenhuma dependência). A `service_role` key fica em Dashboard → Settings
+→ API (é **SECRETA** — não commite, não cole em lugar público).
+```bash
+SUPABASE_URL="https://lwzsxuaqqeoamukduhev.supabase.co" \
+SUPABASE_SERVICE_KEY="<service_role key>" \
+node scripts/backup_rest.mjs "./backup_$(date +%Y-%m-%d)"
+```
+Saída: pasta `backup_AAAA-MM-DD/` com um `.ndjson` por tabela + `manifest.json` (confira a contagem
+de linhas). O `.gitignore` já ignora `backup_*/`. Limitação: só dados — a estrutura vem da Opção 1
+(`--schema-only`) ou de `docs/backup_schema.sql`.
+
+### Opção 3 — Table Editor → CSV (sem terminal)
+A forma manual pelo painel, detalhada abaixo. Não precisa instalar nada, mas é a mais trabalhosa
+(18 exportações à mão).
+
+## Opção 3 em detalhe — CSV pelo Table Editor
 
 Fazer periodicamente (semanal é um bom ritmo para o volume atual). Dados mudam → refazer os
 CSVs; estrutura muda → regenerar o `.sql`.

@@ -50,6 +50,7 @@ todos os testes. Só publique se sair **tudo verde**. O mesmo gate roda no CI a 
 | `index.html` | O portal inteiro (HTML + CSS + JS). |
 | `vercel.json` | Cabeçalhos de segurança (CSP) e cache do host (Vercel). |
 | `tests/` | Testes da lógica pura + o gate `check.js`. Ver [`tests/README.md`](tests/README.md). |
+| `scripts/backup_rest.mjs` | Script de backup dos dados (Node, sem dependências). Ver `docs/backup.md`. |
 | `docs/` | Documentação técnica (abaixo). |
 | `CLAUDE.md` | Contexto detalhado do projeto para sessões de IA (mapa do código, banco, armadilhas). |
 | `.github/workflows/ci.yml` | CI que roda o gate de testes. |

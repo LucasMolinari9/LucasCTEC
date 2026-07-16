@@ -149,8 +149,9 @@ A lógica **pura** dessas seções (formatação, busca, filtros, `sbFetch`) tem
 - **BACKUP — manual, ainda sem PITR (endurecido em 16/07/2026):** o plano é **Free (NANO)**, que **não
   oferece** backup automático/PITR (recurso só do Pro). A rede de segurança hoje é **manual e documentada**
   em **`docs/backup.md`**: (1) **estrutura** em `docs/backup_schema.sql` — versionado no git, recria tabelas/
-  PK/FK/índices/RLS/grants/funções/trigger; (2) **dados** em 18 CSVs exportados pelo Table Editor — **guardados
-  FORA do git** (Drive do dono; dados no repo = vazamento). Um mapa relacional das tabelas está em
+  PK/FK/índices/RLS/grants/funções/trigger; (2) **dados** por 3 caminhos (ver `docs/backup.md`): `pg_dump`
+  (padrão-ouro), o script `scripts/backup_rest.mjs` (Node, sem deps, dump NDJSON via REST) ou 18 CSVs pelo
+  Table Editor — sempre **guardados FORA do git** (Drive do dono; dados no repo = vazamento). Um mapa relacional das tabelas está em
   `docs/schema.md`. **Continua valendo:** o git versiona só o CÓDIGO, nunca os DADOS, e **não rodar nada
   destrutivo (DROP/DELETE/TRUNCATE/REVOKE/migração) sem um backup fresco** (refazer os CSVs antes). Migrar
   para o Pro tornaria o backup automático e dispensaria a rotina manual.
