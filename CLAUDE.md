@@ -77,7 +77,7 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
 - Atualiza **a tela aberta**. Quem não está com o card aberto vê o dado novo na próxima busca.
 
 ## Mapa do código (`index.html`)
-O JS é um arquivo só (~1.800 linhas), mas está dividido em seções com marcas
+O JS é um arquivo só (~2.360 linhas), mas está dividido em seções com marcas
 `/* ===== TÍTULO ===== */`. **Para achar algo, dê grep na marca da seção** (ela não
 muda de lugar como número de linha muda). Visão geral:
 
