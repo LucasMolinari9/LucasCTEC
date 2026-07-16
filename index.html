@@ -686,6 +686,15 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ================================================================
+   ÍNDICE DO ARQUIVO  —  navegue por `grep` da marca da seção.
+   ----------------------------------------------------------------
+   SUPABASE CONFIG · ÍCONES · SEÇÕES/CARDS · RENDER CARDS ·
+   STATE + CACHES · BUSCA DE LINHAS · LINHA ATIVA — BANNER ·
+   MODAL / SISTEMA DE VIEWS (maior bloco — tem sub-índice próprio) ·
+   COMPONENTES AUXILIARES · CLIQUE NOS CARDS · UTILITÁRIOS ·
+   TOAST · REALTIME · AUTO-ATUALIZAÇÃO
+   ================================================================ */
+/* ================================================================
    SUPABASE CONFIG
    ================================================================ */
 const SB_URL = 'https://lwzsxuaqqeoamukduhev.supabase.co';
@@ -1014,7 +1023,17 @@ function selectLine(row) {
 /* ================================================================
    MODAL / SISTEMA DE VIEWS
    currentView = { title, tables:[], lineFilter, loader, _panelRun }
+   ----------------------------------------------------------------
+   SUB-ÍNDICE (grep `--- ` para pular). Na ordem atual do arquivo:
+     Chrome do modal · Dispatcher — runView ·
+     Helpers de documento e busca de linha · DOC · Folha de Rosto ·
+     Eventos — helpers compartilhados · DOC · Histórico (linha) ·
+     Blocos HTML por documento (tarifa/itinerário/quadro/frota) ·
+     Renders por documento (itinerário/quadro/tarifa/frota/estrutura) ·
+     DOC · Empresas · DOC · Municípios / entre-municípios ·
+     Relatórios · DOC · Portaria · DOC · Localidades
    ================================================================ */
+/* --- Chrome do modal --------------------------------------------- */
 const overlay    = document.getElementById('modalOverlay');
 const modalClose = document.getElementById('modalClose');
 const modalBody  = document.getElementById('modalBody');
@@ -1149,6 +1168,7 @@ function loading(msg='Carregando…'){ return `<div class="m-loading"><div class
 function emptyBox(msg){ return `<div class="m-loading">${esc(msg)}</div>`; }
 function errorBox(msg){ return `<div class="m-loading" style="color:#b33a2e">Erro ao carregar: ${esc(msg)}</div>`; }
 
+/* --- Dispatcher — runView ---------------------------------------- */
 async function runView(view, { silent=false } = {}){
   if (!_goingBack && overlay.classList.contains('open') && currentView) {
     viewHistory.push(currentView);
@@ -1449,6 +1469,7 @@ const DETRO_LOGO_SVG = `<svg class="logo-detro" xmlns="http://www.w3.org/2000/sv
       141 132 217 79z"/>
         </g>
       </svg>`;
+/* --- Helpers de documento e busca de linha ----------------------- */
 function docHead(subtitle){
   return `<div class="doc-head">
     <span class="brand-logo brand-logo-doc" role="img" aria-label="DETRO — Departamento de Transportes Rodoviários do RJ">${DETRO_LOGO_SVG.replace(/currentColor/g,'#0a3a63')}</span>
@@ -1514,6 +1535,7 @@ function lineDocRun(term, host, render){
 }
 
 LOADERS.folhaRosto = () => lineDocView({ subtitle:'Cadastro de Linhas: Folha de Rosto', render:renderFolhaRosto });
+/* --- DOC · Folha de Rosto ----------------------------------------- */
 async function renderFolhaRosto(host, line){
   host.innerHTML = loading();
   const [rows, , tarifas] = await Promise.all([
@@ -1561,6 +1583,7 @@ async function renderFolhaDivisoria(host, line){
 
 /* Histórico (linha e empresa): um evento por página, descrição/observação por extenso.
    A impressão e o PDF saem com todos os eventos, um por página. */
+/* --- Eventos — helpers compartilhados ---------------------------- */
 function evBlocksHTML(r){
   return `<div class="ev-block"><div class="ev-label">Descrição:</div><div class="ev-text${r.descricao?'':' empty'}">${r.descricao?esc(r.descricao):'—'}</div></div>
     <div class="ev-block"><div class="ev-label">Observação:</div><div class="ev-text${r.observacao?'':' empty'}">${r.observacao?esc(r.observacao):'—'}</div></div>`;
@@ -1652,6 +1675,7 @@ function paginateEvents(container, rows, buildPage, headerHTML='', opts={}){
   if (clear) clear.addEventListener('click', ()=>{ fEls.forEach(el=>el.value=''); applyFilters(); });
 }
 // Renderiza o histórico (paginado) de UMA linha dentro de um container
+/* --- DOC · Histórico (linha) -------------------------------------- */
 async function renderLineHistory(host, line){
   selectLine(line);   // sincroniza a linha ativa e o banner do topo
   const [rows, lk] = await Promise.all([
@@ -1679,6 +1703,7 @@ const SENTIDO_ORDER = { 'Ida':1, 'Volta':2, 'Circular':3 };
 const normSentido = s => { const t=String(s||'').trim().toLowerCase(); if(t.startsWith('ida'))return'Ida'; if(t.startsWith('volta'))return'Volta'; if(t.startsWith('circ'))return'Circular'; return s?String(s):'—'; };
 
 /* ---- Builders reutilizáveis (usados pelos loaders e pela Estrutura Operacional) ---- */
+/* --- Blocos HTML por documento (tarifa/itinerário/quadro/frota) --- */
 function secoesTarifasHTML(rows){
   if(!rows.length) return emptyBox('Nenhuma seção/tarifa cadastrada para esta linha.');
   const body = rows.map(r=>{
@@ -1775,6 +1800,7 @@ function frotaBlockHTML(f){
 }
 
 LOADERS.itinerarios = () => lineDocView({ subtitle:'Cadastro de Linhas: Itinerários', render:renderItinerarios });
+/* --- Renders por documento (itinerário/quadro/tarifa/frota/estrutura) --- */
 async function renderItinerarios(host, line){
   host.innerHTML = loading();
   const [rows, ibge] = await Promise.all([
@@ -2039,6 +2065,7 @@ LOADERS.empresasRegulares = async () => {
   paint();
 };
 
+/* --- DOC · Empresas ----------------------------------------------- */
 function openEmpresaLigacoes(cod){
   runView({ title:'Ligações por Empresa', tables:['tabela_vista_teste','codempresa_teste'], loader: async()=>{
     const [rows] = await Promise.all([
@@ -2216,6 +2243,7 @@ LOADERS.municipioRegiao = async () => {
     host.innerHTML = emptyBox('Escolha uma região para ver as linhas, ou digite o nome de um município.');
   }, tables:['municipio_teste','itinerario_teste','tabela_vista_teste'], auto:true});
 };
+/* --- DOC · Municípios / entre-municípios -------------------------- */
 function openLinhasPorIbge(codibge, nome){
   runView({ title:'Linhas no Município', tables:['itinerario_teste','tabela_vista_teste','codempresa_teste'], loader: async()=>{
     const it = await sbFetch('itinerario_teste', `cod_origem=eq.${enc(codibge)}&select=codlinha&limit=4000`);
@@ -2380,6 +2408,7 @@ LOADERS.secoesPorLigacao = async () => {
 /* ---- Gerenciais ---- */
 // Agregação PURA do Relatório Gerencial (testável em tests/) — separa o cálculo do render.
 // ativa = isLinhaAtiva (não cancelada nem paralisada); porEmp = top 15 empresas por nº de linhas.
+/* --- Relatórios --------------------------------------------------- */
 function resumoRelatorio(rows){
   return {
     total: rows.length,
@@ -2469,6 +2498,7 @@ LOADERS.pesquisaEvento = async () => {
   }, tables:['evento_teste']});
 };
 let _portariaAnos = null;
+/* --- DOC · Portaria ----------------------------------------------- */
 async function getPortariaAnos(){
   if(_portariaAnos) return _portariaAnos;
   const maxAno = new Date().getFullYear();
@@ -2534,6 +2564,7 @@ function showPortaria(r, host){
 
 /* ---- Linhas por Localidade (cruza nome em tabela_vista_teste; enriquece com qh_teste) ---- */
 let _localidadesList = null;
+/* --- DOC · Localidades -------------------------------------------- */
 async function getLocalidades(){
   if(_localidadesList) return _localidadesList;
   const rows = await sbFetch('localidades_teste', 'select=localidade,ordem_importacao&order=ordem_importacao&limit=2000');
