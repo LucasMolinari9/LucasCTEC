@@ -1028,8 +1028,8 @@ function selectLine(row) {
      Chrome do modal · Dispatcher — runView ·
      Helpers de documento e busca de linha · DOC · Folha de Rosto ·
      Eventos — helpers compartilhados · DOC · Histórico (linha) ·
-     Blocos HTML por documento (tarifa/itinerário/quadro/frota) ·
-     Renders por documento (itinerário/quadro/tarifa/frota/estrutura) ·
+     DOC · Itinerários · DOC · Quadro de Horários · DOC · Tarifas ·
+     DOC · Frota · DOC · Estrutura Operacional ·
      DOC · Empresas · DOC · Municípios / entre-municípios ·
      Relatórios · DOC · Portaria · DOC · Localidades
    ================================================================ */
@@ -1699,24 +1699,10 @@ LOADERS.historicoLinha = async () => {
     tables:['evento_teste'] });
 };
 
+/* --- DOC · Itinerários ---------------------------------------- */
 const SENTIDO_ORDER = { 'Ida':1, 'Volta':2, 'Circular':3 };
 const normSentido = s => { const t=String(s||'').trim().toLowerCase(); if(t.startsWith('ida'))return'Ida'; if(t.startsWith('volta'))return'Volta'; if(t.startsWith('circ'))return'Circular'; return s?String(s):'—'; };
 
-/* ---- Builders reutilizáveis (usados pelos loaders e pela Estrutura Operacional) ---- */
-/* --- Blocos HTML por documento (tarifa/itinerário/quadro/frota) --- */
-function secoesTarifasHTML(rows){
-  if(!rows.length) return emptyBox('Nenhuma seção/tarifa cadastrada para esta linha.');
-  const body = rows.map(r=>{
-    // chip de status com a data do evento ao lado (quando a coluna de data está disponível)
-    const dChip = (v,label,date) => v ? `<span class="chip chip-on">${label}${date?' '+fmtDate(date):''}</span>` : '';
-    const st = [ dChip(r.cancelado,'Canc.',r.data_cancelamento), dChip(r.paralisado,'Paral.',r.data_paralisacao), dChip(r.sub_judice,'Sub jud.',r.data_sub_judice), dChip(r.transferido,'Transf.',r.data_transferencia) ].filter(Boolean).join(' ') || '<span class="chip chip-off">OK</span>';
-    return `<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-num">${esc(orDash(r.numero_linha))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td>
-    <td class="td-tipo">${esc(orDash(r.via))}</td><td class="td-tipo">${esc(orDash(r.caracteristica))}</td><td class="td-tipo">${esc(orDash(r.tipo_ligacao))}</td><td class="td-num">${esc(orDash(r.rm))}</td>
-    <td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td><td class="td-num">R$ ${esc(fmtMoney(r.piso_i))}</td>
-    <td class="td-tipo">${esc(orDash(r.situacao))}</td><td class="td-num">${fmtDate(r.data_criacao)}</td><td>${st}</td></tr>`;
-  }).join('');
-  return tableHTML([{t:'Seção',w:'60px'},{t:'Nº Linha',w:'80px'},{t:'Ligação'},{t:'Via',w:'90px'},{t:'Caract.',w:'90px'},{t:'Tipo',w:'90px'},{t:'RM',w:'55px'},{t:'Tarifa',w:'80px'},{t:'Piso I',w:'80px'},{t:'Situação',w:'90px'},{t:'Criação',w:'90px'},{t:'Status',w:'150px'}], body, rows.length+' seção(ões)');
-}
 function itinerarioTableHTML(rows, ibge){
   if(!rows.length) return emptyBox('Nenhum itinerário cadastrado para esta linha.');
   rows.forEach(r=>r._sn=normSentido(r.sentido));
@@ -1730,6 +1716,39 @@ function itinerarioTableHTML(rows, ibge){
   }).join('');
   return tableHTML([{t:'Sentido',w:'62px'},{t:'Tipo',w:'84px'},{t:'Nome do Logradouro'},{t:'Município',w:'110px'}], body, `${rows.length} logradouro(s) · cadastro DETRO-RJ`);
 }
+
+async function renderItinerarios(host, line){
+  host.innerHTML = loading();
+  const [rows, ibge] = await Promise.all([
+    sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_origem,codempresa&order=id`),
+    getIbge(), getEmpresas()
+  ]);
+  if (!rows.length) { host.innerHTML = emptyBox('Nenhum itinerário encontrado para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
+  const codEmp = rows[0]?.codempresa || line.codempresa || '';
+  const meta = metaRows([['Empresa',esc(empNome(codEmp)),true],['Registro','RJ-'+esc(codEmp)],
+      ['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
+      ['Ligação',esc(line.nome_ligacao||'—'),true],['Via',esc(orDash(line.via))],
+      ['Característica',esc(orDash(line.caracteristica))],['Tipo da Ligação',esc(orDash(line.tipo))]]);
+  const inner = `${meta}${itinerarioTableHTML(rows, ibge)}`;   // documento completo (p/ PDF)
+  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}${inner}</div>`;
+  // filtro por sentido — o PDF segue com os dois sentidos
+  rows.forEach(r=>r._sn=normSentido(r.sentido));
+  const sentidos = [...new Set(rows.map(r=>r._sn))].filter(Boolean).sort((a,b)=>(SENTIDO_ORDER[a]||9)-(SENTIDO_ORDER[b]||9));
+  const tools = sentidos.length>1 ? `<div class="loc-tools"><label>Sentido <select id="itiSent"><option value="">Todos</option>${sentidos.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select></label></div>` : '';
+  host.innerHTML = `${meta}${tools}<div id="itiResult"></div>`;
+  const result = host.querySelector('#itiResult'), sel = host.querySelector('#itiSent');
+  const paint = ()=>{
+    const s = sel?sel.value:'';
+    const f = s ? rows.filter(r=>r._sn===s) : rows;
+    result.innerHTML = itinerarioTableHTML(f, ibge);
+  };
+  if(sel) sel.addEventListener('change', paint);
+  paint();
+}
+
+LOADERS.itinerarios = () => lineDocView({ subtitle:'Cadastro de Linhas: Itinerários', render:renderItinerarios });
+
+/* --- DOC · Quadro de Horários --------------------------------- */
 function quadroHorariosBodyHTML(interv, predet, orig){
   if(!interv.length && !predet.length) return emptyBox('Nenhum quadro de horários cadastrado para esta linha.');
   // Rótulo do SENTIDO: a origem AUTORITATIVA (origem_teste, via `orig`) tem prioridade sobre o
@@ -1761,6 +1780,7 @@ function quadroHorariosBodyHTML(interv, predet, orig){
   }
   return html;
 }
+
 // Corpo de UM quadro (meta + tabelas) para uma linha qualquer — reusado na linha ativa,
 // no clique da lista por empresa e na montagem do PDF de todos os quadros.
 function quadroMetaHTML(line, ultimaAlteracao){
@@ -1768,10 +1788,12 @@ function quadroMetaHTML(line, ultimaAlteracao){
   if(ultimaAlteracao!==undefined) pares.push(['Última alteração',fmtDate(ultimaAlteracao)]);
   return metaRows(pares);
 }
+
 function quadroDocInner(line, interv, predet, orig){
   return `${quadroMetaHTML(line)}
     ${quadroHorariosBodyHTML(interv, predet, orig)}`;
 }
+
 // Busca os quadros (intervalo + predeterminado) de várias linhas de uma vez e agrupa por codlinha.
 async function fetchQHByLines(codlinhas){
   const inList = codlinhas.map(enc).join(',');
@@ -1782,72 +1804,12 @@ async function fetchQHByLines(codlinhas){
   return { intervBy: groupBy(interv, r=>r.codlinha), predetBy: groupBy(predet, r=>r.codlinha),
            trunc: !!(interv._trunc || predet._trunc) };
 }
-function frotaBlockHTML(f){
-  return `<div class="kpi-grid">
-      <div class="kpi"><b>${esc(orDash(f.frota_operacional))}</b><span>Operacional</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_a))}</b><span>Comum (A)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_sa))}</b><span>Comum (SA)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_ac))}</b><span>Ar cond. (AC)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_sac))}</b><span>Ar cond. (SAC)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_micro_a))}</b><span>Micro (A)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_micro_sa))}</b><span>Micro (SA)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_micro_ac))}</b><span>Micro (AC)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_micro_sac))}</b><span>Micro (SAC)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_micro_e))}</b><span>Micro (E)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_e))}</b><span>Especial (E)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.reserva))}</b><span>Reserva</span></div>
-    </div>`;
-}
 
-LOADERS.itinerarios = () => lineDocView({ subtitle:'Cadastro de Linhas: Itinerários', render:renderItinerarios });
-/* --- Renders por documento (itinerário/quadro/tarifa/frota/estrutura) --- */
-async function renderItinerarios(host, line){
-  host.innerHTML = loading();
-  const [rows, ibge] = await Promise.all([
-    sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_origem,codempresa&order=id`),
-    getIbge(), getEmpresas()
-  ]);
-  if (!rows.length) { host.innerHTML = emptyBox('Nenhum itinerário encontrado para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
-  const codEmp = rows[0]?.codempresa || line.codempresa || '';
-  const meta = metaRows([['Empresa',esc(empNome(codEmp)),true],['Registro','RJ-'+esc(codEmp)],
-      ['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
-      ['Ligação',esc(line.nome_ligacao||'—'),true],['Via',esc(orDash(line.via))],
-      ['Característica',esc(orDash(line.caracteristica))],['Tipo da Ligação',esc(orDash(line.tipo))]]);
-  const inner = `${meta}${itinerarioTableHTML(rows, ibge)}`;   // documento completo (p/ PDF)
-  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}${inner}</div>`;
-  // filtro por sentido — o PDF segue com os dois sentidos
-  rows.forEach(r=>r._sn=normSentido(r.sentido));
-  const sentidos = [...new Set(rows.map(r=>r._sn))].filter(Boolean).sort((a,b)=>(SENTIDO_ORDER[a]||9)-(SENTIDO_ORDER[b]||9));
-  const tools = sentidos.length>1 ? `<div class="loc-tools"><label>Sentido <select id="itiSent"><option value="">Todos</option>${sentidos.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select></label></div>` : '';
-  host.innerHTML = `${meta}${tools}<div id="itiResult"></div>`;
-  const result = host.querySelector('#itiResult'), sel = host.querySelector('#itiSent');
-  const paint = ()=>{
-    const s = sel?sel.value:'';
-    const f = s ? rows.filter(r=>r._sn===s) : rows;
-    result.innerHTML = itinerarioTableHTML(f, ibge);
-  };
-  if(sel) sel.addEventListener('change', paint);
-  paint();
-}
-
-LOADERS.quadroHorarios = async () => {
-  searchPanel({
-    title:'Quadro de Horários',
-    placeholder:'Número, nome ou código da linha (ou empresa)',
-    selectOpts:[['linha','Por linha'],['empresa','Por empresa (PDF de todos)']],
-    note: 'Por linha: número, nome ou código → mostra o quadro dela. Por empresa: nome ou código → baixa o PDF de todos os quadros da operadora.',
-    onRun: (term, host, modo) => modo==='empresa' ? quadroEmpresaRun(term, host) : quadroLinhaRun(term, host)
-  });
-  // havendo linha ativa, prefill com a linha e mostra o quadro dela (modo "Por linha", padrão)
-  if (activeLine){
-    const i = modalBody.querySelector('#spInput'); if(i) i.value = activeLine.numero_ligacao || activeLine.codlinha || '';
-    await renderLinhaQuadro(modalBody.querySelector('#spHost'), activeLine);
-  }
-};
 // Modo linha: resolve o termo (número, nome ou código) → 1 linha (mostra o quadro) ou várias (lista)
 function quadroLinhaRun(term, host){
   return lineSearchRun(term, host, { render:renderLinhaQuadro, emptyMsg:'Busque a linha pelo número, nome ou código.', prompt:'clique para ver o quadro' });
 }
+
 // Quadro de UMA linha (comportamento clássico do card)
 async function renderLinhaQuadro(host, line){
   if(!host || !line) return;
@@ -1886,8 +1848,10 @@ async function renderLinhaQuadro(host, line){
     paint();
   } catch(e){ host.innerHTML = errorBox(e.message); }
 }
+
 // compat: alguns caminhos chamam o quadro da linha ativa
 const renderActiveLineQuadro = host => renderLinhaQuadro(host, activeLine);
+
 // Modo empresa: resolve a empresa e lista as linhas com quadro
 async function quadroEmpresaRun(term, host){
   term = (term||'').trim();
@@ -1907,6 +1871,7 @@ async function quadroEmpresaRun(term, host){
   const nome = emps.length===1 ? emps[0].nome_empresa : null;
   await renderEmpresaQuadros(host, cod, nome);
 }
+
 // Lista as linhas (com quadro) de uma empresa e prepara o PDF de todos os quadros
 async function renderEmpresaQuadros(host, cod, nome){
   host.innerHTML = loading();
@@ -1942,7 +1907,36 @@ async function renderEmpresaQuadros(host, cod, nome){
   }));
 }
 
-LOADERS.tarifas = () => lineDocView({ subtitle:'Tarifas Vigentes', render:renderTarifas });
+LOADERS.quadroHorarios = async () => {
+  searchPanel({
+    title:'Quadro de Horários',
+    placeholder:'Número, nome ou código da linha (ou empresa)',
+    selectOpts:[['linha','Por linha'],['empresa','Por empresa (PDF de todos)']],
+    note: 'Por linha: número, nome ou código → mostra o quadro dela. Por empresa: nome ou código → baixa o PDF de todos os quadros da operadora.',
+    onRun: (term, host, modo) => modo==='empresa' ? quadroEmpresaRun(term, host) : quadroLinhaRun(term, host)
+  });
+  // havendo linha ativa, prefill com a linha e mostra o quadro dela (modo "Por linha", padrão)
+  if (activeLine){
+    const i = modalBody.querySelector('#spInput'); if(i) i.value = activeLine.numero_ligacao || activeLine.codlinha || '';
+    await renderLinhaQuadro(modalBody.querySelector('#spHost'), activeLine);
+  }
+};
+
+/* --- DOC · Tarifas -------------------------------------------- */
+function secoesTarifasHTML(rows){
+  if(!rows.length) return emptyBox('Nenhuma seção/tarifa cadastrada para esta linha.');
+  const body = rows.map(r=>{
+    // chip de status com a data do evento ao lado (quando a coluna de data está disponível)
+    const dChip = (v,label,date) => v ? `<span class="chip chip-on">${label}${date?' '+fmtDate(date):''}</span>` : '';
+    const st = [ dChip(r.cancelado,'Canc.',r.data_cancelamento), dChip(r.paralisado,'Paral.',r.data_paralisacao), dChip(r.sub_judice,'Sub jud.',r.data_sub_judice), dChip(r.transferido,'Transf.',r.data_transferencia) ].filter(Boolean).join(' ') || '<span class="chip chip-off">OK</span>';
+    return `<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-num">${esc(orDash(r.numero_linha))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td>
+    <td class="td-tipo">${esc(orDash(r.via))}</td><td class="td-tipo">${esc(orDash(r.caracteristica))}</td><td class="td-tipo">${esc(orDash(r.tipo_ligacao))}</td><td class="td-num">${esc(orDash(r.rm))}</td>
+    <td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td><td class="td-num">R$ ${esc(fmtMoney(r.piso_i))}</td>
+    <td class="td-tipo">${esc(orDash(r.situacao))}</td><td class="td-num">${fmtDate(r.data_criacao)}</td><td>${st}</td></tr>`;
+  }).join('');
+  return tableHTML([{t:'Seção',w:'60px'},{t:'Nº Linha',w:'80px'},{t:'Ligação'},{t:'Via',w:'90px'},{t:'Caract.',w:'90px'},{t:'Tipo',w:'90px'},{t:'RM',w:'55px'},{t:'Tarifa',w:'80px'},{t:'Piso I',w:'80px'},{t:'Situação',w:'90px'},{t:'Criação',w:'90px'},{t:'Status',w:'150px'}], body, rows.length+' seção(ões)');
+}
+
 async function renderTarifas(host, line){
   host.innerHTML = loading();
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`);
@@ -1965,7 +1959,26 @@ async function renderTarifas(host, line){
   paint();
 }
 
-LOADERS.frota = () => lineDocView({ subtitle:'Frota da Linha', render:renderFrota });
+LOADERS.tarifas = () => lineDocView({ subtitle:'Tarifas Vigentes', render:renderTarifas });
+
+/* --- DOC · Frota ---------------------------------------------- */
+function frotaBlockHTML(f){
+  return `<div class="kpi-grid">
+      <div class="kpi"><b>${esc(orDash(f.frota_operacional))}</b><span>Operacional</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_a))}</b><span>Comum (A)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_sa))}</b><span>Comum (SA)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_ac))}</b><span>Ar cond. (AC)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_sac))}</b><span>Ar cond. (SAC)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_a))}</b><span>Micro (A)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_sa))}</b><span>Micro (SA)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_ac))}</b><span>Micro (AC)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_sac))}</b><span>Micro (SAC)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_e))}</b><span>Micro (E)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_e))}</b><span>Especial (E)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.reserva))}</b><span>Reserva</span></div>
+    </div>`;
+}
+
 async function renderFrota(host, line){
   host.innerHTML = loading();
   const [rows] = await Promise.all([
@@ -1982,9 +1995,9 @@ async function renderFrota(host, line){
   if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Frota da Linha')}${inner}</div>`;
 }
 
-// Documento consolidado (igual ao Relatório oficial): cadastro + Seções/Tarifas +
-// Itinerário + Quadro de Horários e Frota, num único .doc (também usado no PDF).
-LOADERS.estrutura = () => lineDocView({ subtitle:'Cadastro de Linhas: Estrutura Operacional', render:renderEstrutura });
+LOADERS.frota = () => lineDocView({ subtitle:'Frota da Linha', render:renderFrota });
+
+/* --- DOC · Estrutura Operacional ------------------------------ */
 async function renderEstrutura(host, line){
   host.innerHTML = loading();
   const cod = enc(line.codlinha);
@@ -2015,6 +2028,10 @@ async function renderEstrutura(host, line){
   host.innerHTML = inner;
   if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Cadastro de Linhas: Estrutura Operacional')}${inner}</div>`;
 }
+
+// Documento consolidado (igual ao Relatório oficial): cadastro + Seções/Tarifas +
+// Itinerário + Quadro de Horários e Frota, num único .doc (também usado no PDF).
+LOADERS.estrutura = () => lineDocView({ subtitle:'Cadastro de Linhas: Estrutura Operacional', render:renderEstrutura });
 
 /* ---- Empresas ---- */
 LOADERS.empresasRegulares = async () => {
