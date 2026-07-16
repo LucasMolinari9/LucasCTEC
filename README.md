@@ -38,8 +38,7 @@ todos os testes. Só publique se sair **tudo verde**. O mesmo gate roda no CI a 
 
 ## Publicação
 
-- **Host oficial: Vercel** (config em [`vercel.json`](vercel.json)). `netlify.toml` é mantido só
-  como fallback.
+- **Host: Vercel** (config em [`vercel.json`](vercel.json)) — cabeçalhos de segurança (CSP) e cache.
 - Com o auto-deploy conectado, **push na `main` = deploy automático**. As telas dos usuários se
   atualizam sozinhas (detector de versão por ETag no próprio JS).
 - Mudanças **de dados** não exigem deploy — o site lê o Supabase ao vivo.
@@ -49,7 +48,7 @@ todos os testes. Só publique se sair **tudo verde**. O mesmo gate roda no CI a 
 | Caminho | O que é |
 |---|---|
 | `index.html` | O portal inteiro (HTML + CSS + JS). |
-| `vercel.json` / `netlify.toml` | Cabeçalhos de segurança (CSP) e cache do host. |
+| `vercel.json` | Cabeçalhos de segurança (CSP) e cache do host (Vercel). |
 | `tests/` | Testes da lógica pura + o gate `check.js`. Ver [`tests/README.md`](tests/README.md). |
 | `docs/` | Documentação técnica (abaixo). |
 | `CLAUDE.md` | Contexto detalhado do projeto para sessões de IA (mapa do código, banco, armadilhas). |
