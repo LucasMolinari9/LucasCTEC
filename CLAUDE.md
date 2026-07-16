@@ -150,9 +150,14 @@ A lógica **pura** dessas seções (formatação, busca, filtros, `sbFetch`) tem
   finais (`evento_teste`/`portaria_teste`). As de staging têm RLS ligado **sem policy** e **sem grant para
   `anon`/`authenticated`** (revogado em 15/07/2026) → invisíveis pela API pública, de propósito. O lint
   `rls_enabled_no_policy` nelas é **esperado**, não é bug. Alimentação é via service role (painel), que ignora isso.
-- **SEM BACKUP (risco máximo):** o projeto **não tem backup/PITR confirmado**. O git versiona só o CÓDIGO,
-  nunca os DADOS. **Não rodar nada destrutivo no banco (DROP/DELETE/TRUNCATE/REVOKE/migração)** sem antes
-  ligar backup (Dashboard → Database → Backups).
+- **BACKUP — manual, ainda sem PITR (endurecido em 16/07/2026):** o plano é **Free (NANO)**, que **não
+  oferece** backup automático/PITR (recurso só do Pro). A rede de segurança hoje é **manual e documentada**
+  em **`docs/backup.md`**: (1) **estrutura** em `docs/backup_schema.sql` — versionado no git, recria tabelas/
+  PK/FK/índices/RLS/grants/funções/trigger; (2) **dados** em 18 CSVs exportados pelo Table Editor — **guardados
+  FORA do git** (Drive do dono; dados no repo = vazamento). Um mapa relacional das tabelas está em
+  `docs/schema.md`. **Continua valendo:** o git versiona só o CÓDIGO, nunca os DADOS, e **não rodar nada
+  destrutivo (DROP/DELETE/TRUNCATE/REVOKE/migração) sem um backup fresco** (refazer os CSVs antes). Migrar
+  para o Pro tornaria o backup automático e dispensaria a rotina manual.
 - **Truncagem silenciosa:** vários loaders cortam resultados com `limit` e `slice(0,N)` **sem avisar**.
   Ao crescer os dados, o portal pode mostrar listas incompletas sem erro visível. Ao mexer numa view,
   considerar avisar o usuário quando o limite for atingido.
