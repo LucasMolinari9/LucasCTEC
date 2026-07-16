@@ -407,11 +407,12 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 
 -- ============================================================
 -- 8) REALTIME
--- ⚠️ Hoje só estas 8 tabelas estão na publicação supabase_realtime — as
--- outras 6 tabelas com policy de leitura (itinerario_teste, qh_intervalo_teste,
--- qh_predeterminado_teste, qh_teste, tabela_vista_teste, tarifa_atual_teste)
--- NÃO estão. Isso pode ser intencional (menos volume de eventos) ou uma
--- lacuna — vale confirmar com o dono antes de assumir que é bug.
+-- As 14 tabelas lidas pelo portal estão na publicação supabase_realtime.
+-- As 6 últimas foram adicionadas na auditoria de Realtime (16/07/2026): antes
+-- faltavam (itinerario_teste, qh_intervalo_teste, qh_predeterminado_teste,
+-- qh_teste, tabela_vista_teste, tarifa_atual_teste), o que quebrava a atualização
+-- ao vivo dos cards que as usam. A regra: toda tabela lida por um card precisa
+-- estar aqui E em RT_TABLES/VIEW_TABLES no index.html (ver CLAUDE.md § Realtime).
 -- ============================================================
 ALTER PUBLICATION supabase_realtime ADD TABLE public.codempresa_teste;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.evento_empresa_teste;
@@ -421,6 +422,12 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.localidades_teste;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.municipio_teste;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.origem_teste;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.portaria_teste;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.tabela_vista_teste;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.itinerario_teste;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.qh_teste;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.qh_intervalo_teste;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.qh_predeterminado_teste;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.tarifa_atual_teste;
 
 ALTER TABLE public.codempresa_teste     REPLICA IDENTITY FULL;
 ALTER TABLE public.evento_teste         REPLICA IDENTITY FULL;
