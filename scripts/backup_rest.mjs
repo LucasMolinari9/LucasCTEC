@@ -28,7 +28,7 @@ if (!URL || !KEY) {
 
 // tabela -> coluna de PK usada para ordenar a paginação (todas têm PK desde 15/07/2026).
 const TABELAS = {
-  tabela_vista_teste: 'codlinha',      // PK composta (codlinha,codempresa); ordenar por codlinha basta
+  tabela_vista_teste: 'codlinha,codempresa', // PK composta; ordenar pelas duas colunas (codlinha repete → offset instável)
   tarifa_atual_teste: 'ordem_importacao',
   itinerario_teste: 'row_id',
   qh_teste: 'id',

@@ -678,7 +678,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 15/07-A</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 16/07-A</span></span>
   </div>
 </footer>
 
@@ -2040,7 +2040,7 @@ LOADERS.empresasRegulares = async () => {
 };
 
 function openEmpresaLigacoes(cod){
-  runView({ title:'Ligações por Empresa', tables:['tabela_vista_teste'], loader: async()=>{
+  runView({ title:'Ligações por Empresa', tables:['tabela_vista_teste','codempresa_teste'], loader: async()=>{
     const [rows] = await Promise.all([
       sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`),
       getEmpresas()
@@ -2217,13 +2217,17 @@ LOADERS.municipioRegiao = async () => {
   }, tables:['municipio_teste','itinerario_teste','tabela_vista_teste'], auto:true});
 };
 function openLinhasPorIbge(codibge, nome){
-  runView({ title:'Linhas no Município', tables:['itinerario_teste'], loader: async()=>{
+  runView({ title:'Linhas no Município', tables:['itinerario_teste','tabela_vista_teste','codempresa_teste'], loader: async()=>{
     const it = await sbFetch('itinerario_teste', `cod_origem=eq.${enc(codibge)}&select=codlinha&limit=4000`);
-    const cods=distinctCods(it,150);
+    const allCods=distinctCods(it);          // total real (sem corte) para o "Total"
+    const cods=allCods.slice(0,500);         // teto de listagem (alinha com as views irmãs)
     if(!cods.length){ setBody(`<div class="doc">${docHead('Linhas no Município')}${emptyBox('Nenhuma linha registrada em '+(nome||codibge)+'.')}</div>`); return; }
-    const rows = await fetchLinesByCods(cods,{limit:300});
+    const rows = await fetchLinesByCods(cods,{limit:500});
+    const avisoTrunc = allCods.length>cods.length
+      ? `<div class="trunc-aviso"><b>Lista parcial:</b> ${allCods.length} linhas no total; mostrando as primeiras ${cods.length}.</div>` : '';
     setBody(`<div class="doc">${docHead('Linhas no Município')}
-      ${metaRows([['Município',esc(nome||codibge),true],['Total',cods.length+' linha(s)']])}
+      ${metaRows([['Município',esc(nome||codibge),true],['Total',allCods.length+' linha(s)']])}
+      ${avisoTrunc}
       <div class="loc-tools"><label>Mostrar <select id="munScope">
         <option value="todas">Todas as linhas</option>
         <option value="dentro">Só dentro do município</option>
@@ -2232,9 +2236,9 @@ function openLinhasPorIbge(codibge, nome){
       <div id="munResult"></div></div>`);
     const result = modalBody.querySelector('#munResult');
     const scope  = modalBody.querySelector('#munScope');
-    const metaPdf = metaRows([['Município',esc(nome||codibge),true],['Total',cods.length+' linha(s)']]);
+    const metaPdf = metaRows([['Município',esc(nome||codibge),true],['Total',allCods.length+' linha(s)']]);
     // PDF determinístico: lista completa, sem a barra de filtro (evita espaço em branco / subconjunto filtrado)
-    if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Linhas no Município')}${metaPdf}${linhasTable(rows)}</div>`;
+    if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Linhas no Município')}${metaPdf}${avisoTrunc}${linhasTable(rows)}</div>`;
     // classificação dentro×intermunicipal PREGUIÇOSA: só busca o itinerário completo das
     // linhas quando o usuário escolhe um filtro (o padrão "todas" mantém o custo atual).
     let cls = null;
