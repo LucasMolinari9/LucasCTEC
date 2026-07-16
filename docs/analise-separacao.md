@@ -13,7 +13,7 @@ componentes, hooks nem "container/presentational" no sentido literal. A fronteir
 **"função pura (lógica/dados) × código de render/DOM (apresentação)"**, que também é a fronteira de
 **testabilidade**: só o que é puro tem teste em `tests/` (via cópia verbatim no `*.harness.js`).
 
-A **deduplicação já foi feita** numa sessão anterior (D1–D5 do `ANALISE_DUPLICACAO.md`). Os helpers
+A **deduplicação já foi feita** numa sessão anterior (D1–D5 do `analise-duplicacao.md`). Os helpers
 estão no código: `searchLines` (1466), `lineSearchRun` (1472), `searchEmpresas` (898),
 `empresaChooserHTML` (2591), `bindEmpresaRows` (2597), `distinctCods` (2523), `fetchLinesByCods`
 (2525). Portanto **este documento não repete aquela análise** — foca no que sobra: **regras de

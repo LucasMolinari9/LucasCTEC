@@ -1,0 +1,17 @@
+# === DADOS — NUNCA versionar (vazamento) ===
+# O portal versiona só CÓDIGO. Os backups de dados (CSVs do Table Editor) ficam
+# FORA do git — no Drive/local do dono. Ver docs/backup.md.
+*.csv
+divat_security_snapshot_*.sql
+
+# === Node (só os testes usam Node; não há build nem dependências) ===
+node_modules/
+npm-debug.log*
+
+# === Lixo de SO / editor ===
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/
