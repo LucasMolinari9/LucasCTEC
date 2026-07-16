@@ -2893,21 +2893,27 @@ function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=fal
 /* ================================================================
    CLIQUE NOS CARDS  → abre a view
    ================================================================ */
-// tabelas que cada view consome (para o realtime saber quando recarregar)
+// tabelas que cada view consome (para o realtime saber quando recarregar).
+// REGRA: listar TODAS as tabelas que o loader lê — inclusive as lidas por baixo via lookups
+// (getEmpresas→codempresa_teste, getIbge→municipio_teste, getOrigem→origem_teste,
+// getEvLookups→evento_empresa_teste/evento_linha_teste, getLocalidades→localidades_teste).
+// Se uma tabela lida não estiver aqui, mudanças nela NÃO recarregam a tela aberta (bug de
+// atualização ao vivo). Toda tabela citada aqui também precisa estar em RT_TABLES (assinada) e
+// na publicação supabase_realtime do banco. O teste tests/realtime.test.js guarda essa regra.
 const VIEW_TABLES = {
-  folhaRosto:['tabela_vista_teste'], folhaDivisoria:['tabela_vista_teste'],
-  historicoLinha:['evento_teste'], itinerarios:['itinerario_teste'],
-  quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste','qh_teste','tarifa_atual_teste'], tarifas:['tarifa_atual_teste'],
-  frota:['qh_teste'], estrutura:['qh_teste','tarifa_atual_teste'],
-  empresasRegulares:['tabela_vista_teste'], historicoEmpresa:['evento_teste'],
-  ligacoesPorEmpresa:['tabela_vista_teste'], secoesPorEmpresa:['tarifa_atual_teste'],
-  ligacoesPorNome:['tabela_vista_teste'], ligacoesPorNumero:['tabela_vista_teste'],
-  ligacoesPorLogradouro:['itinerario_teste'], municipioRegiao:['municipio_teste','itinerario_teste','tabela_vista_teste'],
-  ligacoesPorTerminal:['qh_intervalo_teste'],
-  secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste'],
-  frotaPorEmpresa:['qh_teste'],
-  pesquisaEvento:['evento_teste'], portarias:['portaria_teste'],
-  localidades:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','municipio_teste'],
+  folhaRosto:['tabela_vista_teste','codempresa_teste','tarifa_atual_teste'], folhaDivisoria:['tabela_vista_teste','codempresa_teste'],
+  historicoLinha:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste','tabela_vista_teste'], itinerarios:['itinerario_teste','municipio_teste','codempresa_teste'],
+  quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste','qh_teste','tarifa_atual_teste','origem_teste','codempresa_teste','tabela_vista_teste'], tarifas:['tarifa_atual_teste'],
+  frota:['qh_teste','codempresa_teste'], estrutura:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','qh_intervalo_teste','qh_predeterminado_teste','qh_teste','origem_teste','municipio_teste','codempresa_teste'],
+  empresasRegulares:['tabela_vista_teste','codempresa_teste'], historicoEmpresa:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste'],
+  ligacoesPorEmpresa:['tabela_vista_teste','codempresa_teste'], secoesPorEmpresa:['tarifa_atual_teste'],
+  ligacoesPorNome:['tabela_vista_teste','codempresa_teste'], ligacoesPorNumero:['tabela_vista_teste','codempresa_teste'],
+  ligacoesPorLogradouro:['itinerario_teste','tabela_vista_teste','codempresa_teste'], municipioRegiao:['municipio_teste','itinerario_teste','tabela_vista_teste','codempresa_teste'],
+  ligacoesPorTerminal:['qh_intervalo_teste','origem_teste','tabela_vista_teste','codempresa_teste'],
+  secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste','codempresa_teste'],
+  frotaPorEmpresa:['qh_teste','codempresa_teste'],
+  pesquisaEvento:['evento_teste','codempresa_teste'], portarias:['portaria_teste'],
+  localidades:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','municipio_teste','localidades_teste','codempresa_teste'],
 };
 
 app.addEventListener('click', e => {

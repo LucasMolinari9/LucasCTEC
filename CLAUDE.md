@@ -44,9 +44,13 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
     alimentar e, após a remoção das `auth_all_*`, tampouco teria permissão de escrita.
   - **Rollback:** o snapshot `divat_security_snapshot_2026-06-26.sql` (gerado na auditoria) reconstrói o
     estado anterior de grants/policies, se algum dia for necessário.
-- **Realtime**: as tabelas usadas estão na publicação `supabase_realtime` e as tabelas sem
-  PK têm `REPLICA IDENTITY FULL`. Ao criar um card que lê uma tabela nova, **adicione-a à
-  publicação** (`alter publication supabase_realtime add table public.<tabela>;`).
+- **Realtime**: as 14 tabelas lidas pelo portal estão na publicação `supabase_realtime`
+  (endurecido em 16/07/2026 — 6 tabelas centrais faltavam e a atualização ao vivo estava
+  quebrada; ver auditoria). Ao criar um card que lê uma tabela nova, faça **as duas coisas**:
+  (1) **adicione-a à publicação** (`alter publication supabase_realtime add table public.<tabela>;`)
+  e (2) **inclua-a em `RT_TABLES` e no `VIEW_TABLES` da view** no `index.html`. Confira a
+  publicação com `select tablename from pg_publication_tables where pubname='supabase_realtime';`
+  (deve bater com `RT_TABLES`). O teste `tests/realtime.test.js` guarda os itens do lado do JS.
 
 ## Tabelas → onde aparecem (cards)
 - `tabela_vista_teste` (cadastro de linhas) → busca, Folha de Rosto, Ligações por Empresa/
@@ -65,6 +69,11 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
 - Um canal assina `postgres_changes` de todas as tabelas (`RT_TABLES`). Quando chega um
   evento de uma tabela que a view aberta usa (`VIEW_TABLES`/`tables`) e bate o filtro de
   linha ativa, o `loader()` (ou `_panelRun` dos painéis de busca) roda de novo, com debounce.
+  **`VIEW_TABLES` deve listar TODAS as tabelas que o loader lê — inclusive as lidas por baixo
+  via lookups** (`getEmpresas→codempresa_teste`, `getIbge→municipio_teste`, `getOrigem→origem_teste`,
+  `getEvLookups→evento_empresa_teste/evento_linha_teste`). Se faltar uma, mudanças nela não
+  recarregam a tela (foi o bug corrigido em 16/07/2026). Obs.: o arg `tables:[...]` passado a
+  `searchPanel(...)` é ignorado — quem controla é o `VIEW_TABLES[view]` usado no `runView`.
 - Atualiza **a tela aberta**. Quem não está com o card aberto vê o dado novo na próxima busca.
 
 ## Mapa do código (`index.html`)
