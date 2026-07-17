@@ -77,6 +77,7 @@ const canon = [
   ['byCodlinha',           "localeCompare(String(b.codlinha||''), undefined, { numeric:true })"],
   ['boolChip',             'chip chip-on'],
   ['isLinhaAtiva',         'const isLinhaAtiva = r => !r.cancelado && !r.paralisado;'],
+  ['isVigente',            'const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;'],
   ['norm',                 "normalize('NFD')"],
   ['yearOf',               'parseInt(String(d).slice(0,4),10)'],
   ['matchEvent',           'function matchEvent(r, c){'],

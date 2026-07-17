@@ -678,12 +678,13 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 17/07-A</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 17/07-B</span></span>
   </div>
 </footer>
 
-<!-- supabase-js: usado APENAS para o canal Realtime (as consultas usam REST/fetch) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- supabase-js (vendorado, v2.110.7): usado APENAS para o canal Realtime (as consultas usam REST/fetch).
+     Vendorado em vez de CDN → versão fixa, mesma origem, sem dependência de terceiro em runtime. -->
+<script src="vendor/supabase-js-2.110.7.min.js"></script>
 <script>
 /* ================================================================
    ÍNDICE DO ARQUIVO  —  navegue por `grep` da marca da seção.
@@ -791,6 +792,10 @@ const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` :
 // Sub judice (pendência só na Justiça) e transferida (mudou de operadora) seguem
 // operando → contam como ativas. Critério único usado por Empresas e Relatórios.
 const isLinhaAtiva = r => !r.cancelado && !r.paralisado;
+// VIGENTE (seção/tarifa) é o critério ESTRITO: além de ativa, exclui sub judice e transferida.
+// Repare que sub_judice/transferido têm efeito OPOSTO aqui vs. em isLinhaAtiva — por isso as
+// duas noções são explícitas e derivam de um ponto só (não confundir "ativa" com "vigente").
+const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;
 
 /* ================================================================
    ÍCONES
@@ -1695,8 +1700,7 @@ LOADERS.historicoLinha = async () => {
   const pre = activeLine ? (activeLine.numero_ligacao || activeLine.codlinha || '') : '';
   searchPanel({ title:'Histórico da Linha', placeholder:'Nome, número ou código da linha', value:pre,
     onRun: (term, host) => lineSearchRun(term, host, { render:renderLineHistory,
-      emptyMsg:'Busque pelo nome, número ou código da linha.', prompt:'clique para ver o histórico' }),
-    tables:['evento_teste'] });
+      emptyMsg:'Busque pelo nome, número ou código da linha.', prompt:'clique para ver o histórico' }) });
 };
 
 /* --- DOC · Itinerários ---------------------------------------- */
@@ -1944,15 +1948,14 @@ async function renderTarifas(host, line){
   const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]]);
   const inner = `${meta}${secoesTarifasHTML(rows)}`;            // documento completo (p/ PDF)
   if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Tarifas Vigentes')}${inner}</div>`;
-  // filtro por situação da seção (vigente = sem cancelamento/paralisação/sub judice/transferência)
-  const vigente = r => !r.cancelado && !r.paralisado && !r.sub_judice && !r.transferido;
-  const temInativa = rows.some(r=>!vigente(r));
+  // filtro por situação da seção — reusa isVigente (critério estrito compartilhado; ver junto a isLinhaAtiva)
+  const temInativa = rows.some(r=>!isVigente(r));
   const tools = temInativa ? `<div class="loc-tools"><label>Situação <select id="tarSit"><option value="todas">Todas</option><option value="vigentes">Vigentes</option><option value="inativas">Canceladas/inativas</option></select></label></div>` : '';
   host.innerHTML = `${meta}${tools}<div id="tarResult"></div>`;
   const result = host.querySelector('#tarResult'), sel = host.querySelector('#tarSit');
   const paint = ()=>{
     const s = sel?sel.value:'todas';
-    const f = s==='vigentes' ? rows.filter(vigente) : s==='inativas' ? rows.filter(r=>!vigente(r)) : rows;
+    const f = s==='vigentes' ? rows.filter(isVigente) : s==='inativas' ? rows.filter(r=>!isVigente(r)) : rows;
     result.innerHTML = f.length ? secoesTarifasHTML(f) : emptyBox('Nenhuma seção com esse filtro.');
   };
   if(sel) sel.addEventListener('change', paint);
@@ -2111,7 +2114,7 @@ LOADERS.ligacoesPorEmpresa = async () => {
     const filter = cods.length===1 ? `codempresa=eq.${enc(cods[0])}` : `codempresa=in.(${cods.map(enc).join(',')})`;
     const rows = await sbFetch('tabela_vista_teste', `${filter}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`);
     lineResults(host, rows);
-  }, tables:['tabela_vista_teste']});
+  }});
 };
 LOADERS.secoesPorEmpresa = async () => {
   const pre = activeLine?.codempresa || '';
@@ -2130,7 +2133,7 @@ LOADERS.secoesPorEmpresa = async () => {
     };
     inp.addEventListener('input', debounce(paint));
     paint();
-  }, tables:['tarifa_atual_teste']});
+  }});
 };
 // Renderiza o histórico (paginado) de UMA empresa dentro de um container
 async function renderEmpresaHistory(host, cod, nome){
@@ -2167,7 +2170,7 @@ LOADERS.historicoEmpresa = async () => {
       }
       // não achou no cadastro de nomes → tenta o termo como código direto nos eventos
       await renderEmpresaHistory(host, term, null);
-    }, tables:['evento_teste'] });
+    } });
 };
 
 /* ---- Consultas de Ligações ---- */
@@ -2179,7 +2182,7 @@ LOADERS.ligacoesPorNome = async () => {
       getEmpresas()
     ]);
     lineResults(host, rows);
-  }, tables:['tabela_vista_teste'], auto:true});
+  }, auto:true});
 };
 LOADERS.ligacoesPorNumero = async () => {
   searchPanel({ title:'Identificar pelo Número', placeholder:'Número ou código da linha', onRun: async(term, host)=>{
@@ -2190,7 +2193,7 @@ LOADERS.ligacoesPorNumero = async () => {
       getEmpresas()
     ]);
     lineResults(host, rows);
-  }, tables:['tabela_vista_teste']});
+  }});
 };
 LOADERS.ligacoesPorLogradouro = async () => {
   searchPanel({ title:'Ligações por Logradouro', placeholder:'Nome da via / logradouro', onRun: async(term, host)=>{
@@ -2203,7 +2206,7 @@ LOADERS.ligacoesPorLogradouro = async () => {
     const rows = await fetchLinesByCods(cods,{limit:500});
     const prefix = bannerTrunc(it) + `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${cods.length} linha(s) passam por "${esc(term)}"</p>`;
     lineResults(host, rows, { prefixHTML: prefix });
-  }, tables:['itinerario_teste']});
+  }});
 };
 LOADERS.municipioRegiao = async () => {
   const ibge = await getIbge();
@@ -2258,7 +2261,7 @@ LOADERS.municipioRegiao = async () => {
     }
     // 3) nada informado → orienta
     host.innerHTML = emptyBox('Escolha uma região para ver as linhas, ou digite o nome de um município.');
-  }, tables:['municipio_teste','itinerario_teste','tabela_vista_teste'], auto:true});
+  }, auto:true});
 };
 /* --- DOC · Municípios / entre-municípios -------------------------- */
 function openLinhasPorIbge(codibge, nome){
@@ -2401,7 +2404,7 @@ LOADERS.ligacoesPorTerminal = async () => {
     const rows = await fetchLinesByCods(lineCods,{limit:200});
     const prefix = `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${lineCods.length} linha(s) a partir de "${esc(term)}"</p>`;
     lineResults(host, rows, { prefixHTML: prefix });
-  }, tables:['qh_intervalo_teste']});
+  }});
 };
 LOADERS.secoesPorLigacao = async () => {
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,nome_ligacao,tarifa&order=secao`);
@@ -2512,7 +2515,7 @@ LOADERS.pesquisaEvento = async () => {
       rows.map(r=>`<tr><td class="td-num">${esc(fmtDate(r.data_registro))}</td><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-logr">${esc(empNome(r.codempresa))}</td><td class="td-num">${esc(orDash(r.codempresa))}</td>
         <td class="td-num">${esc(orDash(r.numero_processo))}</td><td class="td-logr">${esc(orDash(r.descricao))}</td><td class="td-logr">${esc(orDash(r.observacao))}</td></tr>`).join(''))
       : emptyBox('Nenhum evento encontrado para "'+term+'".');
-  }, tables:['evento_teste']});
+  }});
 };
 let _portariaAnos = null;
 /* --- DOC · Portaria ----------------------------------------------- */
@@ -2846,7 +2849,15 @@ function lineResults(host, rows, { prefixHTML='' } = {}){
       const groups = [...groupBy(f, r=>r.codempresa||'—')].sort((x,y)=>rjOrder(x[0],y[0]));
       result.innerHTML = groups.map(([cod,rs])=>`<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${rs.length} linha(s)</span></h3>${linhasTable(rs)}`).join('');
     } else {
-      result.innerHTML = linhasTable(f.slice(0,300));
+      // corta em 300 no cliente; o slice não copia as flags não-enumeráveis, então marca
+      // _trunc/_limite à mão para o bannerTrunc (dentro de linhasTable) avisar "Resultado
+      // parcial: mostrando os primeiros 300" em vez de sumir com o excedente calado.
+      const shown = f.slice(0,300);
+      if (f.length > 300){
+        Object.defineProperty(shown, '_trunc',  { value:true, enumerable:false });
+        Object.defineProperty(shown, '_limite', { value:300,  enumerable:false });
+      }
+      result.innerHTML = linhasTable(shown);
     }
     bindLineRows(result);
   };
@@ -3061,7 +3072,7 @@ try {
   });
 } catch(e){
   console.warn('Realtime indisponível:', e);
-  // supabase-js (CDN) fora do ar/bloqueado → a consulta via REST segue funcionando, mas sem atualização ao vivo
+  // supabase-js (vendorado) indisponível → a consulta via REST segue funcionando, mas sem atualização ao vivo
   if (typeof toast === 'function') toast('Atualização ao vivo indisponível no momento', 'warn');
 }
 

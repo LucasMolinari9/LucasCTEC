@@ -33,6 +33,8 @@ const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` :
 // index.html:763 — linha ATIVA = operando (não cancelada e não paralisada). Sub judice e
 // transferida contam como ativas. Critério único de Empresas e Relatórios.
 const isLinhaAtiva = r => !r.cancelado && !r.paralisado;
+// index.html — VIGENTE (seção/tarifa) = critério estrito: além de ativa, exclui sub judice e transferida.
+const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;
 // index.html:842 — normaliza acento/caixa para busca
 const norm = s => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 // index.html:1510
@@ -134,7 +136,7 @@ function resumoFrota(rows){
 }
 
 module.exports = {
-  fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, isLinhaAtiva, norm,
+  fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, isLinhaAtiva, isVigente, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike, municipiosExatos,
   setRTState, rowMatchesActiveLine,
   resumoRelatorio, resumoFrota,

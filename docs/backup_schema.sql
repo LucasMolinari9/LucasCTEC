@@ -216,7 +216,8 @@ CREATE TABLE public.evento_textos (
   observacao        text
 );
 
--- Staging do ETL (portaria_data + portaria_texto_teste → portaria_teste).
+-- Staging do ETL (portaria_data + portaria_texto_teste → portaria_teste). Não lidas
+-- pelo portal; RLS fica ligado SEM policy de propósito (ver docs/schema.md).
 CREATE TABLE public.portaria_data (
   id                  integer PRIMARY KEY,
   numero_portaria     character varying,

@@ -94,7 +94,7 @@ pode reusá-la só para decidir se acrescenta o "Ativa".
 incluindo sub judice/transferida = ativas) e cópia guardada pelo anti-drift do `check.js`.
 `empresasRegulares` passou a usá-la — **e o SELECT agora traz `paralisado`, que antes não era
 buscado** (sem isso a correção seria um no-op) — e `relatoriosGerenciais` também aponta para a mesma
-função. `node tests/check.js` verde (69/69). A **Folha de Rosto não foi tocada** (segue com o rótulo
+função. `node tests/check.js` verde. A **Folha de Rosto não foi tocada** (segue com o rótulo
 de status detalhado; ajustar para exibir "Ativa · Sub judice" fica como decisão de UX futura).
 
 ---

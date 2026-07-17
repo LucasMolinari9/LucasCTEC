@@ -42,8 +42,12 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
   - **Como o dono alimenta:** direto pelo **painel do Supabase** (service role, ignora RLS e **não** foi
     afetado pela remediação) — esse é o fluxo real. O frontend logado (`authenticated`) **não** é usado para
     alimentar e, após a remoção das `auth_all_*`, tampouco teria permissão de escrita.
-  - **Rollback:** o snapshot `divat_security_snapshot_2026-06-26.sql` (gerado na auditoria) reconstrói o
-    estado anterior de grants/policies, se algum dia for necessário.
+  - **Rollback / snapshot de segurança (reproduzível):** a baseline **segura** de reconstrução (RLS/
+    policies/grants/índices/funções) está **versionada** em `docs/backup_schema.sql`. Para um snapshot do
+    estado **atual** (auditoria/DR), rode `scripts/gen_security_snapshot.sql` — a saída **é** o snapshot,
+    sempre regenerável (salve como `divat_security_snapshot_AAAA-MM-DD.sql`, **fora do git**). Assim o
+    snapshot nunca mais "se perde". O snapshot pré-endurecimento de 26/06/2026 é **obsoleto** — restaurá-lo
+    reabriria as brechas fechadas na auditoria; não use como caminho de rollback.
 - **Realtime**: as 14 tabelas lidas pelo portal estão na publicação `supabase_realtime`
   (endurecido em 16/07/2026 — 6 tabelas centrais faltavam e a atualização ao vivo estava
   quebrada; ver auditoria). Ao criar um card que lê uma tabela nova, faça **as duas coisas**:

@@ -99,6 +99,17 @@ ok(P.isLinhaAtiva({sub_judice:true,transferido:true}) === true,    'isLinhaAtiva
 ok(P.isLinhaAtiva({cancelado:true,paralisado:true}) === false,     'isLinhaAtiva cancelada + paralisada → inativa');
 ok(P.isLinhaAtiva({paralisado:true,sub_judice:true}) === false,    'isLinhaAtiva paralisada vence sub judice → inativa');
 
+// --- isVigente (estrito: ativa E não sub judice E não transferida; usado no filtro das tarifas) ---
+console.log('isVigente');
+ok(P.isVigente({}) === true,                                       'isVigente sem flags → vigente');
+ok(P.isVigente({cancelado:true}) === false,                        'isVigente cancelada → não vigente');
+ok(P.isVigente({paralisado:true}) === false,                       'isVigente paralisada → não vigente');
+ok(P.isVigente({sub_judice:true}) === false,                       'isVigente sub judice → não vigente (oposto de ativa)');
+ok(P.isVigente({transferido:true}) === false,                      'isVigente transferida → não vigente (oposto de ativa)');
+// contraste explícito: os mesmos flags dão resultados opostos nas duas noções
+ok(P.isLinhaAtiva({sub_judice:true}) === true && P.isVigente({sub_judice:true}) === false, 'sub judice: ativa mas NÃO vigente');
+ok(P.isLinhaAtiva({transferido:true}) === true && P.isVigente({transferido:true}) === false, 'transferida: ativa mas NÃO vigente');
+
 // --- norm ---
 console.log('norm');
 eq(P.norm('Niterói '),    'niteroi',     'norm acento + caixa + trim');

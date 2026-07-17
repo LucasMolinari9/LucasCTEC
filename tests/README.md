@@ -19,9 +19,13 @@ falhar — **rode-o antes de cada publicação**.
 Avulso (um arquivo só), se quiser:
 ```bash
 cd tests
-node sbFetch.test.js   # → ==== PLACAR: 28/28 ====
-node pure.test.js      # → ==== PLACAR: 56/56 ====
+node sbFetch.test.js    # casos de sbFetch / marcarTrunc / bannerTrunc
+node pure.test.js       # lógica pura (formatação, busca, filtros de negócio)
+node realtime.test.js   # VIEW_TABLES ⊆ RT_TABLES + mapa canônico
 ```
+Cada arquivo imprime seu próprio `==== PLACAR: N/N ====`; o total **autoritativo** sai do
+`node tests/check.js` (não fixamos o número aqui de propósito — pinar contagem em prosa drifta a
+cada teste novo).
 
 ## O que é coberto
 - **`sbFetch`** — sucesso; retry em 5xx e 429; 4xx que **não** repete (lança a
@@ -37,6 +41,9 @@ node pure.test.js      # → ==== PLACAR: 56/56 ====
 - **Lógica de negócio:** `matchEvent` (filtro do histórico por texto/processo/ano),
   `groupBy`/`countBy` (agregação dos relatórios), `rowMatchesActiveLine` (filtro do
   Realtime: só recarrega quando a mudança é da linha ativa).
+- **Sincronização do Realtime** (`realtime.test.js`): `VIEW_TABLES` bate com o mapa canônico,
+  toda tabela citada em `VIEW_TABLES` está em `RT_TABLES`, e `RT_TABLES` == a publicação esperada
+  (a checagem **viva** contra o banco fica em `scripts/check_realtime.mjs`, que precisa de rede).
 
 ## Arquivos
 - `check.js` — **runner / gate de pré-publicação** (sintaxe + anti-drift + testes).
@@ -44,6 +51,7 @@ node pure.test.js      # → ==== PLACAR: 56/56 ====
 - `sbFetch.test.js` — casos de `sbFetch`/`marcarTrunc`/`bannerTrunc`.
 - `pure.harness.js` — cópia **verbatim** das funções puras (com a linha de origem citada).
 - `pure.test.js` — casos das funções puras.
+- `realtime.test.js` — guarda a sincronização `VIEW_TABLES`/`RT_TABLES` (extrai os literais do `index.html`).
 
 ## ⚠️ Regra de ouro (anti-drift)
 Os harness **copiam o código do `index.html` à mão**. Ao **editar uma dessas funções
