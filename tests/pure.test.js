@@ -251,30 +251,30 @@ console.log('resumoFrota');
 // --- classifyMunLines ---
 console.log('classifyMunLines');
 {
-  // M = município pesquisado; cada linha vira "dentro" (só M) ou "inter" (tem outro cod_origem).
+  // M = município pesquisado; cada linha vira "dentro" (só M) ou "inter" (tem outro cod_municipio_origem).
   const rows = [
-    { codlinha:'A', cod_origem:'33' },                 // só M
-    { codlinha:'A', cod_origem:'33' },
-    { codlinha:'B', cod_origem:'33' },                 // M + outro → inter
-    { codlinha:'B', cod_origem:'44' },
-    { codlinha:'C', cod_origem:'33' },                 // M + trecho vazio/null → ainda dentro
-    { codlinha:'C', cod_origem:'' },
-    { codlinha:'C', cod_origem:null },
-    { codlinha:null, cod_origem:'33' },                // sem codlinha → ignorado
+    { codlinha:'A', cod_municipio_origem:'33' },                 // só M
+    { codlinha:'A', cod_municipio_origem:'33' },
+    { codlinha:'B', cod_municipio_origem:'33' },                 // M + outro → inter
+    { codlinha:'B', cod_municipio_origem:'44' },
+    { codlinha:'C', cod_municipio_origem:'33' },                 // M + trecho vazio/null → ainda dentro
+    { codlinha:'C', cod_municipio_origem:'' },
+    { codlinha:'C', cod_municipio_origem:null },
+    { codlinha:null, cod_municipio_origem:'33' },                // sem codlinha → ignorado
   ];
   const r = P.classifyMunLines(rows, '33');
   ok(r.dentro.has('A') && !r.inter.has('A'), 'classifyMunLines linha só no município → dentro');
   ok(r.inter.has('B') && !r.dentro.has('B'), 'classifyMunLines linha com outro município → inter');
-  ok(r.dentro.has('C') && !r.inter.has('C'), 'classifyMunLines cod_origem vazio/null não conta como outro');
+  ok(r.dentro.has('C') && !r.inter.has('C'), 'classifyMunLines cod_municipio_origem vazio/null não conta como outro');
   ok(!r.dentro.has('null') && !r.inter.has('null'), 'classifyMunLines linha sem codlinha é ignorada');
   ok(r.dentro.size===2 && r.inter.size===1, 'classifyMunLines conta dentro=2, inter=1');
 }
 {
-  // codibge numérico vs cod_origem string: a comparação normaliza tudo com String().
+  // codibge numérico vs cod_municipio_origem string: a comparação normaliza tudo com String().
   const r = P.classifyMunLines([
-    { codlinha:1, cod_origem:33 },
-    { codlinha:1, cod_origem:'44' },
-    { codlinha:2, cod_origem:'33' },
+    { codlinha:1, cod_municipio_origem:33 },
+    { codlinha:1, cod_municipio_origem:'44' },
+    { codlinha:2, cod_municipio_origem:'33' },
   ], 33);
   ok(r.inter.has('1'), 'classifyMunLines compara número×string (inter)');
   ok(r.dentro.has('2'), 'classifyMunLines compara número×string (dentro)');

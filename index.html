@@ -1714,7 +1714,7 @@ function itinerarioTableHTML(rows, ibge){
   let last=null;
   const body = rows.map(r=>{
     let sep=''; if(r._sn!==last){ sep=`<tr class="sentido-sep"><td colspan="4">Sentido: ${esc(r._sn)}</td></tr>`; last=r._sn; }
-    const mun = (ibge[r.cod_origem]?.nome) || (r.cod_origem?String(r.cod_origem):'');
+    const mun = (ibge[r.cod_municipio_origem]?.nome) || (r.cod_municipio_origem?String(r.cod_municipio_origem):'');
     return sep+`<tr><td class="td-sentido">${esc(r._sn||'')}</td><td class="td-tipo">${esc(r.tipo_logradouro||'')}</td>
       <td class="td-logr">${esc(r.nome_logradouro||'—')}</td><td class="td-mun">${esc(mun)}</td></tr>`;
   }).join('');
@@ -1724,7 +1724,7 @@ function itinerarioTableHTML(rows, ibge){
 async function renderItinerarios(host, line){
   host.innerHTML = loading();
   const [rows, ibge] = await Promise.all([
-    sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_origem,codempresa&order=id`),
+    sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_municipio_origem,codempresa&order=id`),
     getIbge(), getEmpresas()
   ]);
   if (!rows.length) { host.innerHTML = emptyBox('Nenhum itinerário encontrado para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
@@ -1762,7 +1762,7 @@ function quadroHorariosBodyHTML(interv, predet, orig){
   let html='';
   if (interv.length){
     html += `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:14px 0 4px">Por intervalo / frequência</h3>`;
-    for (const [label, list] of groupBy(interv, r=>sentidoKey(r.cod_origen, r.nome_origem))){
+    for (const [label, list] of groupBy(interv, r=>sentidoKey(r.cod_origem, r.nome_origem))){
       html += `<div class="qh-sentido">Sentido · partidas de ${esc(label)}</div>`;
       for (const [dia, rows] of groupBy(list, r=>r.dia_semana||'—')){
         const body = rows.map(r=>`<tr><td class="td-num">${esc(fmtTime(r.hora_inicio))}</td>
@@ -1802,7 +1802,7 @@ function quadroDocInner(line, interv, predet, orig){
 async function fetchQHByLines(codlinhas){
   const inList = codlinhas.map(enc).join(',');
   const [interv, predet] = await Promise.all([
-    sbFetch('qh_intervalo_teste', `codlinha=in.(${inList})&select=codlinha,cod_origen,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id&limit=20000`),
+    sbFetch('qh_intervalo_teste', `codlinha=in.(${inList})&select=codlinha,cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id&limit=20000`),
     sbFetch('qh_predeterminado_teste', `codlinha=in.(${inList})&select=codlinha,cod_origem,nome_origem,dia_semana,saida&order=id&limit=30000`)
   ]);
   return { intervBy: groupBy(interv, r=>r.codlinha), predetBy: groupBy(predet, r=>r.codlinha),
@@ -1820,7 +1820,7 @@ async function renderLinhaQuadro(host, line){
   host.innerHTML = loading();
   try {
     const [interv, predet, qh, secoes, orig] = await Promise.all([
-      sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(line.codlinha)}&select=cod_origen,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
+      sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(line.codlinha)}&select=cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
       sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(line.codlinha)}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
       sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=ultima_alteracao&limit=1`),
       sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`),
@@ -1834,7 +1834,7 @@ async function renderLinhaQuadro(host, line){
     if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroMetaHTML(line, ultima)}${secBlock}${quadroHorariosBodyHTML(interv, predet, orig)}</div>`;
     // filtros por sentido (origem das partidas) e por dia — o PDF segue completo
     const sentidoKey = (cod,nome)=> orig[cod] || nome || ('Origem '+orDash(cod));
-    const sentidos = [...new Set([...interv.map(r=>sentidoKey(r.cod_origen,r.nome_origem)), ...predet.map(r=>sentidoKey(r.cod_origem,r.nome_origem))])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+    const sentidos = [...new Set([...interv.map(r=>sentidoKey(r.cod_origem,r.nome_origem)), ...predet.map(r=>sentidoKey(r.cod_origem,r.nome_origem))])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
     const dias = [...new Set([...interv,...predet].map(r=>r.dia_semana||'—'))].filter(v=>v&&v!=='—').sort((a,b)=>a.localeCompare(b));
     const sentSel = sentidos.length>1 ? `<label>Sentido <select id="qhSent"><option value="">Todos</option>${sentidos.map(s=>`<option value="${esc(s)}">de ${esc(s)}</option>`).join('')}</select></label>` : '';
     const diaSel  = dias.length>1 ? `<label>Dia <select id="qhDia"><option value="">Todos</option>${dias.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('')}</select></label>` : '';
@@ -1843,7 +1843,7 @@ async function renderLinhaQuadro(host, line){
     const result = host.querySelector('#qhResult'), ss = host.querySelector('#qhSent'), ds = host.querySelector('#qhDia');
     const paint = ()=>{
       const s = ss?ss.value:'', d = ds?ds.value:'';
-      const fi = interv.filter(r=>(!s||sentidoKey(r.cod_origen,r.nome_origem)===s)&&(!d||(r.dia_semana||'—')===d));
+      const fi = interv.filter(r=>(!s||sentidoKey(r.cod_origem,r.nome_origem)===s)&&(!d||(r.dia_semana||'—')===d));
       const fp = predet.filter(r=>(!s||sentidoKey(r.cod_origem,r.nome_origem)===s)&&(!d||(r.dia_semana||'—')===d));
       result.innerHTML = quadroHorariosBodyHTML(fi, fp, orig);
     };
@@ -2007,8 +2007,8 @@ async function renderEstrutura(host, line){
   const [lineRows, secoes, itin, interv, predet, qh, orig, ibge] = await Promise.all([
     sbFetch('tabela_vista_teste', `codlinha=eq.${cod}&select=${LINE_FIELDS}&limit=1`),
     sbFetch('tarifa_atual_teste', `codlinha=eq.${cod}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`),
-    sbFetch('itinerario_teste', `codlinha=eq.${cod}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_origem,codempresa&order=id`),
-    sbFetch('qh_intervalo_teste', `codlinha=eq.${cod}&select=cod_origen,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
+    sbFetch('itinerario_teste', `codlinha=eq.${cod}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_municipio_origem,codempresa&order=id`),
+    sbFetch('qh_intervalo_teste', `codlinha=eq.${cod}&select=cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
     sbFetch('qh_predeterminado_teste', `codlinha=eq.${cod}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
     sbFetch('qh_teste', `codlinha=eq.${cod}&select=codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e&limit=1`),
     getOrigem(), getIbge(), getEmpresas()
@@ -2266,7 +2266,7 @@ LOADERS.municipioRegiao = async () => {
 /* --- DOC · Municípios / entre-municípios -------------------------- */
 function openLinhasPorIbge(codibge, nome){
   runView({ title:'Linhas no Município', tables:['itinerario_teste','tabela_vista_teste','codempresa_teste'], loader: async()=>{
-    const it = await sbFetch('itinerario_teste', `cod_origem=eq.${enc(codibge)}&select=codlinha&limit=4000`);
+    const it = await sbFetch('itinerario_teste', `cod_municipio_origem=eq.${enc(codibge)}&select=codlinha&limit=4000`);
     const allCods=distinctCods(it);          // total real (sem corte) para o "Total"
     const cods=allCods.slice(0,500);         // teto de listagem (alinha com as views irmãs)
     if(!cods.length){ setBody(`<div class="doc">${docHead('Linhas no Município')}${emptyBox('Nenhuma linha registrada em '+(nome||codibge)+'.')}</div>`); return; }
@@ -2292,7 +2292,7 @@ function openLinhasPorIbge(codibge, nome){
     let cls = null;
     async function ensureCls(){
       if(cls) return cls;
-      const it2 = await sbFetch('itinerario_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=codlinha,cod_origem&limit=30000`);
+      const it2 = await sbFetch('itinerario_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=codlinha,cod_municipio_origem&limit=30000`);
       cls = classifyMunLines(it2, codibge);
       return cls;
     }
@@ -2308,16 +2308,16 @@ function openLinhasPorIbge(codibge, nome){
   }});
 }
 // classifica linhas por município (dentro × intermunicipal) a partir das linhas de
-// itinerário (codlinha, cod_origem). "dentro" = todos os trechos no próprio município (M);
-// "inter" = tem ao menos um trecho em OUTRO município (cod_origem não-vazio e != M).
+// itinerário (codlinha, cod_municipio_origem). "dentro" = todos os trechos no próprio município (M);
+// "inter" = tem ao menos um trecho em OUTRO município (cod_municipio_origem não-vazio e != M).
 function classifyMunLines(itRows, codibge){
   const M = String(codibge);
-  const bySet = new Map();                       // codlinha(String) → Set de cod_origem (não vazios)
+  const bySet = new Map();                       // codlinha(String) → Set de cod_municipio_origem (não vazios)
   for(const r of itRows){
     if(r.codlinha==null || r.codlinha==='') continue;
     const cl = String(r.codlinha);
     let s = bySet.get(cl); if(!s){ s = new Set(); bySet.set(cl, s); }
-    const co = r.cod_origem==null ? '' : String(r.cod_origem);
+    const co = r.cod_municipio_origem==null ? '' : String(r.cod_municipio_origem);
     if(co) s.add(co);
   }
   const dentro = new Set(), inter = new Set();
@@ -2332,7 +2332,7 @@ function classifyMunLines(itRows, codibge){
 async function linhasNoMunicipio(codibge){
   // limite alto de propósito: Rio de Janeiro tem ~13,5 mil trechos de itinerário — com
   // limite menor o conjunto chega incompleto e as interseções entre municípios encolhem
-  const rows = await sbFetch('itinerario_teste', `cod_origem=eq.${enc(codibge)}&select=codlinha&limit=30000`);
+  const rows = await sbFetch('itinerario_teste', `cod_municipio_origem=eq.${enc(codibge)}&select=codlinha&limit=30000`);
   return distinctCods(rows);
 }
 async function mostrarLinhasResultado(host, cods, titulo){
@@ -2377,10 +2377,10 @@ async function mostrarLinhasEntreMunicipios(host, aTerm, bTerm, directional){
         const interPar = lA.filter(c=>sB.has(c));
         interPar.forEach(c=>inter.add(c));
         if(!directional || !interPar.length) continue;
-        const it = await sbFetch('itinerario_teste', `codlinha=in.(${interPar.slice(0,200).map(enc).join(',')})&select=codlinha,cod_origem,sentido&order=id&limit=30000`);
+        const it = await sbFetch('itinerario_teste', `codlinha=in.(${interPar.slice(0,200).map(enc).join(',')})&select=codlinha,cod_municipio_origem,sentido&order=id&limit=30000`);
         for(const [k,seq] of groupBy(it, r=>r.codlinha+'¦'+(r.sentido||''))){
-          const iA=seq.findIndex(r=>String(r.cod_origem)===String(ca));
-          const iB=seq.findIndex(r=>String(r.cod_origem)===String(cb));
+          const iA=seq.findIndex(r=>String(r.cod_municipio_origem)===String(ca));
+          const iB=seq.findIndex(r=>String(r.cod_municipio_origem)===String(cb));
           if(iA>=0&&iB>=0&&iA<iB) all.add(k.split('¦')[0]);
         }
       }
@@ -2398,7 +2398,7 @@ LOADERS.ligacoesPorTerminal = async () => {
     const cods = Object.entries(orig).filter(([,n])=>norm(n).includes(norm(term))).map(([c])=>c);
     if(!cods.length){ host.innerHTML=emptyBox('Nenhuma origem com esse nome.'); return; }
     const inList = cods.slice(0,50).map(enc).join(',');
-    const qi = await sbFetch('qh_intervalo_teste', `cod_origen=in.(${inList})&select=codlinha&limit=3000`);
+    const qi = await sbFetch('qh_intervalo_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`);
     const lineCods=distinctCods(qi,120);
     if(!lineCods.length){ host.innerHTML=emptyBox('Nenhuma linha vinculada a esse terminal.'); return; }
     const rows = await fetchLinesByCods(lineCods,{limit:200});

@@ -73,16 +73,16 @@ function countBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=ke
 // index.html:2358
 function fmtMoney(v){ if(v===null||v===undefined||v==='') return '—'; const n=Number(v); return isNaN(n)?String(v):n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 // index.html — classifica linhas por município (dentro × intermunicipal) a partir das linhas de
-// itinerário (codlinha, cod_origem). "dentro" = todos os trechos no próprio município (M);
-// "inter" = tem ao menos um trecho em OUTRO município (cod_origem não-vazio e != M).
+// itinerário (codlinha, cod_municipio_origem). "dentro" = todos os trechos no próprio município (M);
+// "inter" = tem ao menos um trecho em OUTRO município (cod_municipio_origem não-vazio e != M).
 function classifyMunLines(itRows, codibge){
   const M = String(codibge);
-  const bySet = new Map();                       // codlinha(String) → Set de cod_origem (não vazios)
+  const bySet = new Map();                       // codlinha(String) → Set de cod_municipio_origem (não vazios)
   for(const r of itRows){
     if(r.codlinha==null || r.codlinha==='') continue;
     const cl = String(r.codlinha);
     let s = bySet.get(cl); if(!s){ s = new Set(); bySet.set(cl, s); }
-    const co = r.cod_origem==null ? '' : String(r.cod_origem);
+    const co = r.cod_municipio_origem==null ? '' : String(r.cod_municipio_origem);
     if(co) s.add(co);
   }
   const dentro = new Set(), inter = new Set();

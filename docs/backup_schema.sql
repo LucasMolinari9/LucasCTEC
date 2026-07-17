@@ -112,7 +112,7 @@ CREATE TABLE public.qh_intervalo_teste (
   id            integer,
   codlinha      character varying,
   dia_semana    text,
-  cod_origen    character varying,
+  cod_origem    character varying,
   nome_origem   text,
   hora_inicio   time without time zone,
   hora_fim      time without time zone,
@@ -130,13 +130,14 @@ CREATE TABLE public.qh_predeterminado_teste (
   row_id        bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY
 );
 
--- cod_origem aqui é código IBGE de MUNICÍPIO, não terminal (ver docs/schema.md)
+-- cod_municipio_origem é código IBGE de MUNICÍPIO, não terminal (renomeado de cod_origem
+-- para desambiguar do cod_origem de terminal em origem_teste/qh_*; ver docs/schema.md)
 CREATE TABLE public.itinerario_teste (
-  id                numeric,
-  codlinha          character varying,
-  tipo_logradouro   text,
-  nome_logradouro   text,
-  cod_origem        integer,
+  id                    numeric,
+  codlinha              character varying,
+  tipo_logradouro       text,
+  nome_logradouro       text,
+  cod_municipio_origem  integer,
   sentido           text,
   codempresa        character varying,
   row_id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY
@@ -256,7 +257,7 @@ CREATE INDEX idx_evento_codlinha ON public.evento_teste USING btree (codlinha);
 CREATE INDEX trgm_evento_descricao ON public.evento_teste USING gin (descricao gin_trgm_ops);
 CREATE INDEX trgm_evento_observacao ON public.evento_teste USING gin (observacao gin_trgm_ops);
 
-CREATE INDEX idx_itinerario_cod_origem ON public.itinerario_teste USING btree (cod_origem);
+CREATE INDEX idx_itinerario_cod_municipio_origem ON public.itinerario_teste USING btree (cod_municipio_origem);
 CREATE INDEX idx_itinerario_codlinha ON public.itinerario_teste USING btree (codlinha);
 CREATE INDEX trgm_itinerario_logradouro ON public.itinerario_teste USING gin (nome_logradouro gin_trgm_ops);
 -- depende de f_unaccent (seção 6) — rodar essa parte DEPOIS das funções
@@ -267,7 +268,7 @@ CREATE INDEX trgm_portaria_assunto ON public.portaria_teste USING gin (assunto g
 CREATE INDEX trgm_portaria_conteudo ON public.portaria_teste USING gin (conteudo gin_trgm_ops);
 CREATE INDEX trgm_portaria_numero ON public.portaria_teste USING gin (numero_portaria gin_trgm_ops);
 
-CREATE INDEX idx_qh_intervalo_cod_origen ON public.qh_intervalo_teste USING btree (cod_origen);
+CREATE INDEX idx_qh_intervalo_cod_origem ON public.qh_intervalo_teste USING btree (cod_origem);
 CREATE INDEX idx_qh_intervalo_codlinha ON public.qh_intervalo_teste USING btree (codlinha);
 
 CREATE INDEX idx_qh_predeterminado_codlinha ON public.qh_predeterminado_teste USING btree (codlinha);
@@ -321,8 +322,8 @@ AS $function$
   ),
   agg as (
     select i.codlinha,
-           bool_and(i.cod_origem in (select cod_ibge from muns)) as all_in,
-           (array_agg(i.cod_origem order by i.id))[1] as origem_ibge
+           bool_and(i.cod_municipio_origem in (select cod_ibge from muns)) as all_in,
+           (array_agg(i.cod_municipio_origem order by i.id))[1] as origem_ibge
     from public.itinerario_teste i
     group by i.codlinha
   )

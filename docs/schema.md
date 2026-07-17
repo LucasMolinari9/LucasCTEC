@@ -32,12 +32,12 @@ erDiagram
     }
     itinerario_teste {
         varchar codlinha
-        int     cod_origem "= cod_ibge (!)"
+        int     cod_municipio_origem "= cod_ibge"
         text    nome_logradouro
     }
     qh_intervalo_teste {
         varchar codlinha
-        varchar cod_origen
+        varchar cod_origem
     }
     qh_predeterminado_teste {
         varchar codlinha
@@ -79,9 +79,9 @@ erDiagram
     tabela_vista_teste ||--o{ qh_teste                  : "codlinha · convenção"
     tabela_vista_teste ||--o{ evento_teste              : "codlinha · convenção"
     codempresa_teste   ||--o{ tabela_vista_teste        : "codempresa · convenção"
-    origem_teste       ||--o{ qh_intervalo_teste        : "cod_origem = cod_origen"
+    origem_teste       ||--o{ qh_intervalo_teste        : "cod_origem · convenção"
     origem_teste       ||--o{ qh_predeterminado_teste   : "cod_origem · convenção"
-    municipio_teste    ||--o{ itinerario_teste          : "cod_ibge = cod_origem (!)"
+    municipio_teste    ||--o{ itinerario_teste          : "cod_ibge = cod_municipio_origem"
     evento_empresa_teste ||--o{ evento_teste            : "id → evento_empresa (lookup)"
     evento_linha_teste   ||--o{ evento_teste            : "id → evento_linha (lookup)"
 ```
@@ -112,8 +112,8 @@ erDiagram
 | Tabela | PK | Ligada de | Por | Tipo |
 |---|---|---|---|---|
 | `codempresa_teste` | `id` (`codempresa` único) | `tabela_vista_teste`, `qh_teste`, `evento_teste`, `itinerario_teste` | `codempresa` | convenção — resolve nome da empresa (`empNome`/`empresaMap`) |
-| `origem_teste` | `cod_origem` | `qh_intervalo_teste` (`cod_origen`), `qh_predeterminado_teste` (`cod_origem`) | `cod_origem` | convenção — nome do terminal/origem (`origemMap`) |
-| `municipio_teste` | `cod_ibge` | `itinerario_teste` (`cod_origem`) | `cod_ibge` | convenção — nome do município (`ibgeMap`/`getIbge`) |
+| `origem_teste` | `cod_origem` | `qh_intervalo_teste` (`cod_origem`), `qh_predeterminado_teste` (`cod_origem`) | `cod_origem` | convenção — nome do terminal/origem (`origemMap`) |
+| `municipio_teste` | `cod_ibge` | `itinerario_teste` (`cod_municipio_origem`) | `cod_ibge` | convenção — nome do município (`ibgeMap`/`getIbge`) |
 | `evento_empresa_teste` | `row_id` (`id`) | `evento_teste` | `id` | convenção — descrição do evento de empresa (`evEmpMap`) |
 | `evento_linha_teste` | `row_id` (`id`) | `evento_teste` | `id` | convenção — descrição do evento de linha (`evLinMap`) |
 | `localidades_teste` | `ordem_importacao` | — (lista de referência) | texto | convenção — "Linhas por Localidade e Município" |
@@ -121,12 +121,14 @@ erDiagram
 
 ## ⚠️ Armadilhas de nomenclatura (não confundir)
 
-- **`cod_origem` tem DOIS significados diferentes:**
-  - Em `qh_intervalo_teste` (grafado **`cod_origen`**, com N) e `qh_predeterminado_teste`
-    (`cod_origem`) → é **terminal/origem** → `origem_teste`.
-  - Em `itinerario_teste` (`cod_origem`, tipo `int`) → **NÃO é terminal**. O código faz
-    `ibge[r.cod_origem]`, ou seja, é um **código de município (IBGE)** → `municipio_teste`.
-    (ver `itinerarioTableHTML` / `renderItinerarios` no `index.html`).
+- **`cod_origem` (terminal) × `cod_municipio_origem` (município) — desambiguado em 17/07/2026:**
+  - Em `qh_intervalo_teste` e `qh_predeterminado_teste` → `cod_origem` = **terminal/origem** →
+    `origem_teste`. (O typo histórico `cod_origen`, com N, em `qh_intervalo_teste` foi **corrigido**
+    para `cod_origem` na mesma mudança.)
+  - Em `itinerario_teste` → a coluna que antes se chamava `cod_origem` foi **renomeada** para
+    **`cod_municipio_origem`** (tipo `int`): **NÃO é terminal** — o código faz
+    `ibge[r.cod_municipio_origem]`, ou seja, é um **código de município (IBGE)** → `municipio_teste`
+    (ver `renderItinerarios` / `classifyMunLines` no `index.html`).
 - **`codlinha` e `codempresa` são strings** (`varchar`), não inteiros — comparar/encodar
   como texto nas queries.
 - **`nome_origem` vem denormalizado e às vezes trocado** nas tabelas de QH; o código dá
