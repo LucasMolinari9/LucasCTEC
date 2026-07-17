@@ -16,7 +16,7 @@ foi fechado, do que só o dono consegue fechar (dashboard/billing/dados) e por q
 | 5 | `check_realtime.mjs` / checks vivos sem CI (H) | revisão 17/07 | ✅ resolvido | `.github/workflows/db-checks.yml` |
 | 6 | `extension_in_public` (pg_trgm/unaccent) | advisor 0014 | 🟡 aceito/adiado (recipe) | `CLAUDE.md` (bloco advisors) |
 | 7 | Leaked Password Protection = OFF | `CLAUDE.md` | ⛔ bloqueado por plano (Pro) — tentado e rejeitado | Authentication → Sign In/Providers → Email |
-| 8 | Restore drill nunca provado + sem PITR | revisão 16/07 (5b) | ⛔ só dono (service role/billing) | `docs/backup.md` |
+| 8 | Restore drill nunca provado + sem PITR | revisão 16/07 (5b) | 🟡 Camada 1 provada (schema fiel); dados/PITR seguem c/ dono | `docs/backup.md` |
 | 9 | Dados: órfãos, `cod_origem` inválido, U+FFFD | achado pelo #4 | ⛔ só dono (service role) | ver abaixo |
 | 10 | ETL: mapear nomes novos `cod_origem`/`cod_municipio_origem` | revisão 17/07 | ⛔ só dono (ETL) | Armadilhas do `CLAUDE.md` |
 | 11 | **Signup do Auth estava ABERTO** (drift: doc exigia OFF, dashboard tinha ON) | achado nesta rodada, via dashboard | ✅ resolvido | Authentication → Sign In/Providers |
@@ -76,9 +76,11 @@ para rodar quando houver backup.
 ## Só o dono consegue fechar (ação fora do ambiente do Claude)
 
 - **#7 Leaked Password Protection:** Dashboard → Authentication → Password → habilitar. 1 clique.
-- **#8 Restore drill + PITR:** provar um restore ponta-a-ponta (runbook em `docs/backup.md`) e avaliar
-  migrar para o **Pro** (liga PITR automático e aposenta o backup manual). É o maior ponto único de
-  falha hoje.
+- **#8 Restore drill + PITR:** **Camada 1 do drill foi provada em 17/07** — o diff de completude mostrou
+  que `docs/backup_schema.sql` bate 100% com o schema vivo (18 tabelas, PKs, FK, 26 índices, 14 policies,
+  6 funções) e a ordem de execução está correta. Falta a **Camada 3** (restore dos ~114 MB de dados ponta
+  a ponta), que só o dono roda (fora do alcance/volume do ambiente do Claude) — checklist de verificação
+  pós-restore agora em `docs/backup.md`. Avaliar o **Pro** (PITR automático) segue como decisão de billing.
 - **#9 Correção dos dados (service role):** o `check_data_quality` achou, em 17/07:
   `codlinha_orfa` — itinerario 2, qh_teste 3, qh_predeterminado 5, evento 7;
   `cod_origem_invalido` — qh_predeterminado 4;

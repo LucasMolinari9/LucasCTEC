@@ -127,6 +127,45 @@ criar/alterar tabela, índice, policy ou função, atualize-o. As consultas-font
    novo host `*.supabase.co`).
 6. Recrie o **usuário do Auth** do dono (1 login) manualmente no Dashboard — não vai nos CSVs.
 
+## Drill de restauração — o que já foi provado (17/07/2026)
+
+Um *restore drill* verifica que o backup **realmente restaura** — não basta ele existir. Feito em
+camadas, da mais barata/segura à mais cara:
+
+- **✅ Camada 1 — diff de completude do schema (feito 17/07/2026).** Comparou-se `backup_schema.sql`,
+  objeto por objeto, contra o schema vivo via `information_schema`/`pg_catalog`: **18 tabelas, todas
+  as contagens de coluna, 18 PKs, 1 FK, 26 índices, 14 policies RLS e as 6 funções do projeto batem
+  100%**. Nenhum drift. A ordem de execução do arquivo também foi conferida (extensões → tabelas → FK
+  → índices → funções; o índice que depende de `f_unaccent` vem depois da função). Conclusão: **o
+  artefato versionado reconstrói a estrutura inteira e está em dia.** Refazer este diff é o check mais
+  barato após qualquer mudança de schema (as consultas-fonte estão na seção "Regenerar" acima).
+- **⏳ Camada 2 — execução do zero (não feita).** Provar que o `.sql` roda limpo num banco vazio exige
+  um projeto Supabase descartável. A ordem já foi validada por inspeção (Camada 1); executar de fato é
+  confiança marginal a mais. Rodar quando/se quiser: criar projeto novo → colar o `.sql` → conferir que
+  não há erro → apagar o projeto.
+- **⏳ Camada 3 — restore de dados ponta a ponta (só o dono).** Os ~114 MB de dados voltam via CSV/
+  `pg_restore` na máquina do dono (o ambiente do Claude não alcança o Supabase nem comporta esse volume).
+  **É a camada que falta provar de verdade.** Use o checklist abaixo depois de restaurar.
+
+### Checklist de verificação PÓS-restore (prova que os dados voltaram certos)
+
+Depois de recriar o schema e importar os CSVs, rode estas conferências (SQL Editor ou os scripts):
+
+1. **Contagem de linhas por tabela** bate com o manifesto do backup? Compare com a tabela de
+   "Tamanhos de referência" acima (ex.: `evento_teste` ~20.753, `itinerario_teste` ~52.146). Uma
+   tabela com muito menos linhas = import parcial (só a página visível) — refaça.
+2. **FK íntegra:** `tabela_vista_teste` entrou **antes** de `tarifa_atual_teste`? Se a importação
+   reclamou de violação de `fk_tarifa_linha`, a ordem foi trocada.
+3. **Qualidade referencial:** `node scripts/check_data_quality.mjs` (ou `select * from
+   public.divat_data_quality()`) — os órfãos/inválidos não devem ter **aumentado** vs. o baseline
+   (17/07: codlinha órfã 2/3/5/7, cod_origem inválido 4, ~50 U+FFFD).
+4. **Realtime:** `node scripts/check_realtime.mjs` — publicação com as 14 tabelas.
+5. **Advisors:** `get_advisors` (MCP) — sem regressão de segurança (RLS ligado, funções INVOKER,
+   search_path fixo). Um projeto novo **volta com o signup ABERTO e a password policy fraca** — refaça
+   o hardening de Auth (ver `CLAUDE.md` § segurança: signup OFF, min length 8, requirements completos).
+6. **Frontend:** se for projeto novo, `SB_URL`/`SB_KEY` no `index.html` e o `connect-src` da CSP
+   (`vercel.json`) apontam para o host novo? (passo 5 do "Como RESTAURAR").
+
 ## Encoding dos CSVs (não é bug)
 
 Ao abrir um CSV no Excel por duplo-clique, acentos podem aparecer trocados (ex.: `VIAÃ‡ÃO` em
