@@ -15,10 +15,12 @@ foi fechado, do que só o dono consegue fechar (dashboard/billing/dados) e por q
 | 4 | Checks de qualidade de dados pós-ETL (P1) | revisão 16/07 | ✅ resolvido | `scripts/check_data_quality.mjs` + função |
 | 5 | `check_realtime.mjs` / checks vivos sem CI (H) | revisão 17/07 | ✅ resolvido | `.github/workflows/db-checks.yml` |
 | 6 | `extension_in_public` (pg_trgm/unaccent) | advisor 0014 | 🟡 aceito/adiado (recipe) | `CLAUDE.md` (bloco advisors) |
-| 7 | Leaked Password Protection = OFF | `CLAUDE.md` | ⛔ só dashboard (dono) | Authentication → Password |
+| 7 | Leaked Password Protection = OFF | `CLAUDE.md` | ⛔ bloqueado por plano (Pro) — tentado e rejeitado | Authentication → Sign In/Providers → Email |
 | 8 | Restore drill nunca provado + sem PITR | revisão 16/07 (5b) | ⛔ só dono (service role/billing) | `docs/backup.md` |
 | 9 | Dados: órfãos, `cod_origem` inválido, U+FFFD | achado pelo #4 | ⛔ só dono (service role) | ver abaixo |
 | 10 | ETL: mapear nomes novos `cod_origem`/`cod_municipio_origem` | revisão 17/07 | ⛔ só dono (ETL) | Armadilhas do `CLAUDE.md` |
+| 11 | **Signup do Auth estava ABERTO** (drift: doc exigia OFF, dashboard tinha ON) | achado nesta rodada, via dashboard | ✅ resolvido | Authentication → Sign In/Providers |
+| 12 | Password policy fraca (min 6, sem exigência de complexidade) | achado nesta rodada, via dashboard | ✅ resolvido | Authentication → Sign In/Providers → Email |
 
 ## O que foi resolvido nesta rodada (código + banco)
 
@@ -43,6 +45,25 @@ Duas migrações não-destrutivas no Supabase (`ALTER FUNCTION` / `CREATE OR REP
 
 Advisors de segurança **depois** da rodada: só restam `extension_in_public` (×2, aceito) e
 `auth_leaked_password_protection` (dashboard). Os 4 `rls_enabled_no_policy` são as staging (esperado).
+
+## O que foi resolvido no dashboard (feito junto com o dono, fora do meu ambiente)
+
+O `get_advisors` e o código não enxergam configuração do Supabase Auth (é outro serviço, sem
+tabela/SQL) — só apareceu ao navegar o dashboard manualmente:
+
+- **#11 · Signup estava aberto.** O `CLAUDE.md` já **exigia** "Allow new users to sign up" = OFF
+  havia rodadas, mas ninguém tinha confirmado o valor real no dashboard — estava **ON**. Corrigido
+  e salvo. Isso é o tipo de pendência que `get_advisors`/testes não capturam: **drift entre o que o
+  doc manda e o que está configurado de fato**. Vale checar Auth Settings manualmente de tempos em
+  tempos, não só confiar no que o `CLAUDE.md` descreve.
+- **#12 · Password policy endurecida** (Authentication → Sign In/Providers → Email):
+  `Minimum password length` 6→8; `Password requirements` "nenhum"→minúscula+maiúscula+dígito+símbolo;
+  `Secure password change` e `Require current password when updating` ligados. Compensa parcialmente
+  o item #7 (leaked-password check é Pro-only).
+- **#7 · Confirmado, não só suposto:** tentei ligar `Prevent use of leaked passwords` e o Supabase
+  **rejeitou o save** com a mensagem "disponível nos planos Pro e superiores". Não é mais um "pendente,
+  1 clique" — é bloqueio de plano confirmado. Junta com o #8: **um único upgrade para o Pro resolveria
+  tanto o #7 quanto o #8** (PITR).
 
 ## Por que #6 (extension_in_public) NÃO foi executado
 

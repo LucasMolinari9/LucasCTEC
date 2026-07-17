@@ -38,8 +38,16 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
     tabela/coluna** — nunca `ALL USING(true)`.
   - **Signup do Auth:** manter **FECHADO** (Dashboard → Authentication → Sign In/Providers → "Allow new users
     to sign up" = OFF) segue sendo boa prática (1 usuário, o do dono), mas **já não é a única barreira** — com
-    as `auth_all_*` removidas, nem um usuário logado escreve. **Pendente (só dashboard, único item de segurança
-    aberto): ligar Leaked Password Protection** (Authentication → Password → habilitar checagem no HaveIBeenPwned).
+    as `auth_all_*` removidas, nem um usuário logado escreve. **Achado e corrigido em 17/07/2026:** apesar de o
+    `CLAUDE.md` já exigir OFF, o toggle estava **ON** no dashboard (drift entre doc e config real) — qualquer
+    pessoa podia se cadastrar. Desligado e salvo. **Ao auditar Auth, confira o valor real no dashboard, não
+    assuma pelo que o `CLAUDE.md` documenta.**
+  - **Password policy do Auth — endurecida em 17/07/2026 (dashboard → Authentication → Sign In/Providers →
+    Email):** `Minimum password length` 6→**8**; `Password requirements` estava **"nenhum"** → agora exige
+    minúscula+maiúscula+dígito+símbolo; `Secure password change` e `Require current password when updating`
+    ligados. **`Prevent use of leaked passwords`: tentado e REJEITADO pelo Supabase** ("disponível nos planos
+    Pro e superiores") — não é toggle pendente, é **bloqueio de plano confirmado**; só se resolve com upgrade
+    para o Pro (que também liga PITR — ver Backup). Único item de segurança que resta em aberto.
   - **Advisors de segurança — endurecidos em 17/07/2026:** rodar `get_advisors` (MCP Supabase) é o check
     canônico. Nesta rodada fecharam-se:
     - **`function_search_path_mutable` (0011):** `f_unaccent`, `divat_busca_logradouro` e `divat_linhas_regiao`
