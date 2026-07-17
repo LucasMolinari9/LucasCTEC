@@ -351,6 +351,23 @@ CREATE TRIGGER trg_vigor_auto
   BEFORE INSERT OR UPDATE ON public.portaria_teste
   FOR EACH ROW EXECUTE FUNCTION public.fn_vigor_auto();
 
+-- realtime_tables(): lista as tabelas da publicação supabase_realtime. SECURITY DEFINER
+-- (o anon não enxerga pg_publication_tables direto) e read-only. Usada por
+-- scripts/check_realtime.mjs para conferir RT_TABLES (index.html) contra o banco.
+-- Não vaza nada: RT_TABLES já é público no index.html. (Criada em 17/07/2026.)
+CREATE OR REPLACE FUNCTION public.realtime_tables()
+ RETURNS SETOF text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+  select tablename::text from pg_publication_tables
+  where pubname = 'supabase_realtime'
+  order by tablename
+$function$;
+REVOKE ALL ON FUNCTION public.realtime_tables() FROM public;
+GRANT EXECUTE ON FUNCTION public.realtime_tables() TO anon;
+
 -- ============================================================
 -- 6) ROW LEVEL SECURITY — habilitar em TODAS as tabelas
 -- ============================================================

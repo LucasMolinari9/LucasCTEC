@@ -11,8 +11,9 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
 ## Arquitetura (importante)
 - **Frontend = um único arquivo: `index.html`** — auto-contido, com **CSS e JS embutidos**.
   Não há build, nem framework, nem `package.json`. É só servir o arquivo estático.
-- As consultas usam **REST do Supabase via `fetch`** (PostgREST). O **supabase-js** (CDN) é
-  usado **só** para o canal **Realtime**.
+- As consultas usam **REST do Supabase via `fetch`** (PostgREST). O **supabase-js** é usado **só**
+  para o canal **Realtime** — e é **vendorado** em `vendor/supabase-js-2.110.7.min.js` (versão fixa,
+  mesma origem, sem CDN nem terceiro em runtime; ver Armadilhas).
 - O botão **PDF** (na barra do modal, ao lado de Imprimir) monta o documento **completo** (sem a
   paginação de tela) num container oculto `.pdf-export` e usa a **impressão nativa** do navegador
   (`window.print()`, vetorial) para o usuário "Salvar como PDF" — sem dependência externa de PDF.
@@ -52,9 +53,10 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
   (endurecido em 16/07/2026 — 6 tabelas centrais faltavam e a atualização ao vivo estava
   quebrada; ver auditoria). Ao criar um card que lê uma tabela nova, faça **as duas coisas**:
   (1) **adicione-a à publicação** (`alter publication supabase_realtime add table public.<tabela>;`)
-  e (2) **inclua-a em `RT_TABLES` e no `VIEW_TABLES` da view** no `index.html`. Confira a
-  publicação com `select tablename from pg_publication_tables where pubname='supabase_realtime';`
-  (deve bater com `RT_TABLES`). O teste `tests/realtime.test.js` guarda os itens do lado do JS.
+  e (2) **inclua-a em `RT_TABLES` e no `VIEW_TABLES` da view** no `index.html`. O teste offline
+  `tests/realtime.test.js` guarda os itens do lado do JS (`VIEW_TABLES ⊆ RT_TABLES`); a **checagem
+  viva** contra o banco é `scripts/check_realtime.mjs` (compara `RT_TABLES` com a publicação via a
+  função RPC `realtime_tables()`; rode-o depois de mexer no Realtime).
 
 ## Tabelas → onde aparecem (cards)
 - `tabela_vista_teste` (cadastro de linhas) → busca, Folha de Rosto, Ligações por Empresa/
@@ -76,8 +78,9 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
   **`VIEW_TABLES` deve listar TODAS as tabelas que o loader lê — inclusive as lidas por baixo
   via lookups** (`getEmpresas→codempresa_teste`, `getIbge→municipio_teste`, `getOrigem→origem_teste`,
   `getEvLookups→evento_empresa_teste/evento_linha_teste`). Se faltar uma, mudanças nela não
-  recarregam a tela (foi o bug corrigido em 16/07/2026). Obs.: o arg `tables:[...]` passado a
-  `searchPanel(...)` é ignorado — quem controla é o `VIEW_TABLES[view]` usado no `runView`.
+  recarregam a tela (foi o bug corrigido em 16/07/2026). Obs.: `searchPanel(...)` **não** recebe
+  `tables` — quem controla é o `VIEW_TABLES[view]` usado no `runView` (os args `tables:[...]` mortos
+  que sobravam nas chamadas de `searchPanel` foram removidos em 17/07/2026).
 - Atualiza **a tela aberta**. Quem não está com o card aberto vê o dado novo na próxima busca.
 
 ## Mapa do código (`index.html`)
@@ -158,6 +161,13 @@ A lógica **pura** dessas seções (formatação, busca, filtros, `sbFetch`) tem
   trigram (`pg_trgm`) nas colunas de filtro já existem desde a auditoria 26/06, e a FK `fk_tarifa_linha`
   (`tarifa_atual_teste`) tem índice de cobertura `idx_tarifa_codempresa_codlinha`. Ao criar telas que
   filtram **novas** colunas de tabelas grandes, **criar o índice** (btree; `pg_trgm`+GIN para `ilike`).
+- **`cod_origem` × `cod_municipio_origem` (desambiguado em 17/07/2026):** `cod_origem` = **terminal/origem**
+  (em `origem_teste`, `qh_intervalo_teste`, `qh_predeterminado_teste`); `cod_municipio_origem` = **código
+  IBGE de município** (em `itinerario_teste` — antes se chamava `cod_origem`, mesmo nome com significado
+  diferente). O typo `cod_origen` (só em `qh_intervalo_teste`) também virou `cod_origem`. Índices e função
+  `divat_linhas_regiao` acompanharam o rename; detalhe + diagrama em `docs/schema.md`. **Atenção ETL:** o
+  import do dono precisa escrever nos nomes NOVOS (`cod_origem` em `qh_intervalo_teste`, `cod_municipio_origem`
+  em `itinerario_teste`) — se escrever nos antigos, **recria as colunas velhas**.
 - **Tabelas de staging do ETL (não são lidas pelo portal):** `evento_dados` + `evento_textos` montam
   `evento_teste`; `portaria_data` + `portaria_texto_teste` montam `portaria_teste`. O front lê **só** as
   finais (`evento_teste`/`portaria_teste`). As de staging têm RLS ligado **sem policy** e **sem grant para
@@ -172,12 +182,17 @@ A lógica **pura** dessas seções (formatação, busca, filtros, `sbFetch`) tem
   `docs/schema.md`. **Continua valendo:** o git versiona só o CÓDIGO, nunca os DADOS, e **não rodar nada
   destrutivo (DROP/DELETE/TRUNCATE/REVOKE/migração) sem um backup fresco** (refazer os CSVs antes). Migrar
   para o Pro tornaria o backup automático e dispensaria a rotina manual.
-- **Truncagem silenciosa:** vários loaders cortam resultados com `limit` e `slice(0,N)` **sem avisar**.
-  Ao crescer os dados, o portal pode mostrar listas incompletas sem erro visível. Ao mexer numa view,
-  considerar avisar o usuário quando o limite for atingido.
-- **Dependências CDN sem trava:** `@supabase/supabase-js@2` (qualquer 2.x) vem da jsDelivr **sem
-  versão fixa nem SRI** (`integrity`). Ideal fixar versão exata + SRI (hash) ou fazer vendoring — mas só com
-  o hash REAL verificado, pois SRI errado **quebra o carregamento** do site.
+- **Truncagem silenciosa:** a maioria dos loaders avisa via `marcarTrunc`/`bannerTrunc`, mas cortes
+  feitos por `slice(0,N)` no cliente **perdem** a flag não-enumerável `_trunc` (o `slice` não a copia)
+  e podem exibir listas incompletas sem aviso. O corte de 300 em `linhasTable` foi corrigido em
+  17/07/2026 (repõe `_trunc`/`_limite` à mão). Ao criar/editar uma view que faz `slice` no cliente,
+  **reponha a flag** (ou avise o usuário) quando o limite for atingido.
+- **Dependência do supabase-js — vendorada (17/07/2026):** era `@supabase/supabase-js@2` (qualquer 2.x)
+  da jsDelivr, **sem versão fixa nem SRI**. Agora é **vendorada** em `vendor/supabase-js-2.110.7.min.js`
+  (build UMD exato do npm, integridade sha512 conferida contra o registro), servida da **mesma origem** —
+  versão fixa, sem CDN nem terceiro em runtime, e o `script-src` da CSP (`vercel.json`) não lista mais o
+  jsDelivr. Para **atualizar a versão**: `npm pack @supabase/supabase-js@<v>`, extrair `dist/umd/supabase.js`,
+  conferir a integridade, trocar o arquivo em `vendor/` e a tag `<script src>` no `index.html`.
 - **`sbFetch` tem timeout (20s) + retry** (backoff) para erros transitórios; erros definitivos (4xx) não
   repetem. Não remover isso ao refatorar.
 - **NÃO duplicar busca/listagem — reusar os helpers.** Antes de colar um bloco de busca de linha,

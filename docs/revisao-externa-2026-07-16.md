@@ -52,9 +52,9 @@ Contagem de linhas no `CLAUDE.md` (~1.800 → ~2.360) e carimbo de versão (`bui
 
 ## O que ficou para depois (válido, fora do escopo desta rodada)
 
-- **⏳ 1 · Pin + SRI do `supabase-js`.** Apontamento correto de supply-chain. Exige buscar o arquivo
-  pinado da CDN e calcular o hash **real** — SRI errado **quebra o carregamento** do site (ver
-  `CLAUDE.md`). Fazer com o hash verificado, não de memória.
+- **✅ 1 · Pin + SRI do `supabase-js`** — *resolvido em 17/07/2026* (ver `revisao-externa-2026-07-17.md`,
+  item 4). Em vez de pin+SRI na CDN, foi **vendorado** o build UMD do npm (integridade sha512 conferida)
+  em `vendor/supabase-js-2.110.7.min.js` — mesma origem, versão fixa, sem terceiro em runtime.
 - **⏳ 5b · Backup recorrente + restore drill.** O backup é manual **por design** (roda na máquina do
   dono com a `service_role` key; o ambiente do Claude não alcança o Supabase). Automatizar implicaria
   colocar a service key num CI/cron — tradeoff de segurança, não um quick win. Um **restore drill**
