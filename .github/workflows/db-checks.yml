@@ -1,0 +1,24 @@
+# Checagens VIVAS contra o Supabase (precisam de rede — por isso NÃO ficam no gate de push).
+# Rodam semanalmente e sob demanda (workflow_dispatch):
+#   - check_realtime.mjs ....... RT_TABLES (index.html) == publicação supabase_realtime (falha em drift)
+#   - check_data_quality.mjs ... órfãos/refs pós-ETL (falha em erro referencial; U+FFFD é só aviso)
+# Usam a URL + anon key públicas do index.html — nenhum segredo necessário.
+name: DB checks (Supabase)
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'   # segunda-feira 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  db-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Realtime em sincronia (RT_TABLES ↔ publicação)
+        run: node scripts/check_realtime.mjs
+      - name: Qualidade dos dados pós-ETL
+        run: node scripts/check_data_quality.mjs

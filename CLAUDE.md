@@ -38,8 +38,32 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
     tabela/coluna** — nunca `ALL USING(true)`.
   - **Signup do Auth:** manter **FECHADO** (Dashboard → Authentication → Sign In/Providers → "Allow new users
     to sign up" = OFF) segue sendo boa prática (1 usuário, o do dono), mas **já não é a única barreira** — com
-    as `auth_all_*` removidas, nem um usuário logado escreve. Pendente (só dashboard): ligar **Leaked Password
-    Protection** (Authentication → Password).
+    as `auth_all_*` removidas, nem um usuário logado escreve. **Pendente (só dashboard, único item de segurança
+    aberto): ligar Leaked Password Protection** (Authentication → Password → habilitar checagem no HaveIBeenPwned).
+  - **Advisors de segurança — endurecidos em 17/07/2026:** rodar `get_advisors` (MCP Supabase) é o check
+    canônico. Nesta rodada fecharam-se:
+    - **`function_search_path_mutable` (0011):** `f_unaccent`, `divat_busca_logradouro` e `divat_linhas_regiao`
+      ganharam `SET search_path = pg_catalog, public` (as refs já eram schema-qualified → comportamento
+      inalterado). **Ao criar função nova, sempre fixe o `search_path`.**
+    - **`anon/authenticated_security_definer_function_executable` (0028/0029):** `realtime_tables()` deixou de
+      ser `SECURITY DEFINER` e virou **`SECURITY INVOKER`** — o `anon` já lê `pg_publication_tables` direto
+      (confirmado), então o DEFINER era desnecessário. A nova `divat_data_quality()` já nasceu INVOKER.
+    - **`extension_in_public` (0014) — ACEITO/adiado, NÃO resolver às cegas:** `pg_trgm` e `unaccent` estão no
+      schema `public`. Mover para um schema `extensions` **quebraria `f_unaccent`** (que referencia
+      `public.unaccent`) e exige recriar a função + validar os índices trigram — é **migração** e, pela regra
+      abaixo, **não se faz sem backup fresco**. Como agora o `search_path` das funções está fixo, o risco
+      prático caiu; é WARN de boa prática, não vulnerabilidade. Recipe (rodar só com backup): `create schema
+      if not exists extensions;` → `alter extension unaccent set schema extensions;` → recriar `f_unaccent`
+      apontando `extensions.unaccent` → `alter extension pg_trgm set schema extensions;` → conferir search
+      (`divat_busca_logradouro`) e reindex se preciso.
+    - **`rls_enabled_no_policy` (0008) nas 4 staging** (`evento_dados`, `evento_textos`, `portaria_data`,
+      `portaria_texto_teste`): **esperado**, ver "Tabelas de staging" nas Armadilhas — não é bug.
+  - **Qualidade de dados pós-ETL (P1):** `scripts/check_data_quality.mjs` (+ função read-only
+    `public.divat_data_quality()`, INVOKER) reporta órfãos de `codlinha`, `cod_origem`/`cod_municipio_origem`
+    fora das tabelas de domínio, `codempresa` inválida e contagem de `U+FFFD`. Roda na máquina do dono / no
+    workflow `.github/workflows/db-checks.yml` (semanal + manual). **Achados atuais (17/07) são do lado dos
+    DADOS, corrigidos via service role:** ~17 `codlinha` órfãs somadas, 4 `cod_origem` inválidos em
+    `qh_predeterminado_teste` e ~50 células com `U+FFFD` (encoding — ver Armadilhas).
   - **Como o dono alimenta:** direto pelo **painel do Supabase** (service role, ignora RLS e **não** foi
     afetado pela remediação) — esse é o fluxo real. O frontend logado (`authenticated`) **não** é usado para
     alimentar e, após a remoção das `auth_all_*`, tampouco teria permissão de escrita.

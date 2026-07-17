@@ -1,9 +1,16 @@
 # Análise de Duplicação de Código — Portal DIVAT
 
-> **Tipo:** relatório de análise (somente leitura). Nenhuma linha do `index.html` foi alterada,
-> nenhuma operação de banco foi executada. As referências `index.html:NNN` são do estado atual
-> do arquivo; como o JS é um único bloco, os números podem deslocar a cada edição — confira
-> sempre pelo **trecho de código citado**, não só pela linha.
+> **STATUS (17/07/2026): o tier recomendado JÁ FOI APLICADO.** Este documento nasceu como
+> diagnóstico read-only, mas o "tier alto valor, baixo risco" (**D1+D2, D3+D4, D5**) foi
+> implementado depois — os helpers existem hoje no `index.html`: `searchLines`/`lineSearchRun`
+> (D1/D2), `searchEmpresas` + `empresaChooserHTML`/`bindEmpresaRows` (D3/D4) e
+> `distinctCods`/`fetchLinesByCods` (D5). Os itens **D6–D10 seguem NÃO aplicados de propósito**
+> (churn cosmético, ver a seção deles). Ou seja: **não há mais dívida de duplicação relevante**;
+> o texto abaixo é o histórico do diagnóstico original.
+>
+> **Tipo:** relatório de análise (somente leitura). As referências `index.html:NNN` são do estado
+> em que o diagnóstico foi escrito; como o JS é um único bloco, os números deslocam a cada edição —
+> confira sempre pelo **trecho de código citado**, não só pela linha.
 
 ## Sumário
 

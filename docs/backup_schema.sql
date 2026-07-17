@@ -293,6 +293,7 @@ CREATE OR REPLACE FUNCTION public.f_unaccent(text)
  RETURNS text
  LANGUAGE sql
  IMMUTABLE PARALLEL SAFE STRICT
+ SET search_path TO 'pg_catalog', 'public'
 AS $function$
   select public.unaccent('public.unaccent', $1)
 $function$;
@@ -305,6 +306,7 @@ CREATE OR REPLACE FUNCTION public.divat_busca_logradouro(termo text)
  RETURNS TABLE(codlinha character varying)
  LANGUAGE sql
  STABLE PARALLEL SAFE
+ SET search_path TO 'pg_catalog', 'public'
 AS $function$
   select distinct i.codlinha
   from public.itinerario_teste i
@@ -316,6 +318,7 @@ CREATE OR REPLACE FUNCTION public.divat_linhas_regiao(p_regiao text, p_modo text
  RETURNS TABLE(codlinha character varying)
  LANGUAGE sql
  STABLE PARALLEL SAFE
+ SET search_path TO 'pg_catalog', 'public'
 AS $function$
   with muns as (
     select cod_ibge from public.municipio_teste where regiao_municipio = p_regiao
@@ -351,14 +354,15 @@ CREATE TRIGGER trg_vigor_auto
   BEFORE INSERT OR UPDATE ON public.portaria_teste
   FOR EACH ROW EXECUTE FUNCTION public.fn_vigor_auto();
 
--- realtime_tables(): lista as tabelas da publicação supabase_realtime. SECURITY DEFINER
--- (o anon não enxerga pg_publication_tables direto) e read-only. Usada por
+-- realtime_tables(): lista as tabelas da publicação supabase_realtime. SECURITY INVOKER e
+-- read-only — o anon já lê pg_publication_tables direto (confirmado 17/07/2026), então não
+-- precisa de SECURITY DEFINER (que disparava o advisor 0028/0029). Usada por
 -- scripts/check_realtime.mjs para conferir RT_TABLES (index.html) contra o banco.
 -- Não vaza nada: RT_TABLES já é público no index.html. (Criada em 17/07/2026.)
 CREATE OR REPLACE FUNCTION public.realtime_tables()
  RETURNS SETOF text
  LANGUAGE sql
- STABLE SECURITY DEFINER
+ STABLE SECURITY INVOKER
  SET search_path TO 'pg_catalog', 'public'
 AS $function$
   select tablename::text from pg_publication_tables
@@ -367,6 +371,86 @@ AS $function$
 $function$;
 REVOKE ALL ON FUNCTION public.realtime_tables() FROM public;
 GRANT EXECUTE ON FUNCTION public.realtime_tables() TO anon;
+
+-- divat_data_quality(): relatório read-only de qualidade dos dados pós-ETL (P1). SECURITY
+-- INVOKER (o anon já tem SELECT nas tabelas do portal). Usada por scripts/check_data_quality.mjs.
+-- Retorna só as linhas com problema. (Criada em 17/07/2026.)
+CREATE OR REPLACE FUNCTION public.divat_data_quality()
+ RETURNS TABLE(verificacao text, severidade text, qtd bigint, detalhe text)
+ LANGUAGE plpgsql
+ STABLE SECURITY INVOKER
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+declare
+  r record;
+  n bigint;
+  fffd text := chr(65533);
+  portal_tables text[] := array[
+    'tabela_vista_teste','itinerario_teste','qh_intervalo_teste','qh_predeterminado_teste',
+    'qh_teste','tarifa_atual_teste','evento_teste','localidades_teste','municipio_teste',
+    'origem_teste','codempresa_teste','portaria_teste','evento_empresa_teste','evento_linha_teste'
+  ];
+begin
+  for r in
+    select c.table_name, c.column_name from information_schema.columns c
+    where c.table_schema='public' and c.data_type in ('text','character varying')
+      and c.table_name = any(portal_tables)
+  loop
+    execute format('select count(*) from public.%I where %I like %L',
+                   r.table_name, r.column_name, '%'||fffd||'%') into n;
+    if n > 0 then
+      verificacao:='encoding_ufffd'; severidade:='aviso'; qtd:=n;
+      detalhe:=r.table_name||'.'||r.column_name; return next;
+    end if;
+  end loop;
+
+  for r in select t.tbl from unnest(array[
+    'itinerario_teste','qh_teste','qh_intervalo_teste','qh_predeterminado_teste',
+    'tarifa_atual_teste','evento_teste']) as t(tbl)
+  loop
+    execute format(
+      'select count(distinct f.codlinha) from public.%I f where f.codlinha is not null '
+      'and not exists (select 1 from public.tabela_vista_teste v where v.codlinha=f.codlinha)',
+      r.tbl) into n;
+    if n > 0 then
+      verificacao:='codlinha_orfa'; severidade:='erro'; qtd:=n;
+      detalhe:=r.tbl||' sem match em tabela_vista_teste'; return next;
+    end if;
+  end loop;
+
+  select count(*) into n from public.itinerario_teste i
+  where i.cod_municipio_origem is not null
+    and not exists (select 1 from public.municipio_teste m where m.cod_ibge=i.cod_municipio_origem);
+  if n > 0 then
+    verificacao:='cod_municipio_origem_invalido'; severidade:='erro'; qtd:=n;
+    detalhe:='itinerario_teste.cod_municipio_origem sem match em municipio_teste.cod_ibge'; return next;
+  end if;
+
+  for r in select t.tbl from unnest(array['qh_intervalo_teste','qh_predeterminado_teste']) as t(tbl)
+  loop
+    execute format(
+      'select count(*) from public.%I q where q.cod_origem is not null '
+      'and not exists (select 1 from public.origem_teste o where o.cod_origem::text=q.cod_origem::text)',
+      r.tbl) into n;
+    if n > 0 then
+      verificacao:='cod_origem_invalido'; severidade:='erro'; qtd:=n;
+      detalhe:=r.tbl||'.cod_origem sem match em origem_teste'; return next;
+    end if;
+  end loop;
+
+  select count(*) into n from public.tabela_vista_teste v
+  where v.codempresa is not null
+    and not exists (select 1 from public.codempresa_teste c where c.codempresa=v.codempresa);
+  if n > 0 then
+    verificacao:='codempresa_invalida'; severidade:='aviso'; qtd:=n;
+    detalhe:='tabela_vista_teste.codempresa sem match em codempresa_teste'; return next;
+  end if;
+
+  return;
+end;
+$function$;
+REVOKE ALL ON FUNCTION public.divat_data_quality() FROM public;
+GRANT EXECUTE ON FUNCTION public.divat_data_quality() TO anon;
 
 -- ============================================================
 -- 6) ROW LEVEL SECURITY — habilitar em TODAS as tabelas
