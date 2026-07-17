@@ -119,6 +119,15 @@ A lógica **pura** dessas seções (formatação, busca, filtros, `sbFetch`) tem
   **CSP**, cujo `connect-src` **autoriza** o navegador a falar com
   `lwzsxuaqqeoamukduhev.supabase.co` (REST) e `wss://…` (Realtime). Ao mexer na CSP, edite o
   `vercel.json`.
+- **Auditoria de segurança do frontend (17/07/2026):** SQL injection, XSS, CSRF, validação de input
+  e headers foram auditados (relatório em `docs/auditoria-seguranca-2026-07-17.md`). Resultado:
+  portal já seguro — injeção coberta por `enc`/`ilikeTerm`, XSS por `esc()` consistente, CSRF não
+  se aplica (read-only, sem cookie de sessão). Aplicados só retoques de header (`upgrade-insecure-requests`
+  e HSTS `includeSubDomains`). **Postura de CSP decidida:** manter `script-src 'unsafe-inline'` — o
+  inline é exigido pelo `<script>` único do `index.html`, e removê-lo (externalizar JS ou CSP por hash)
+  quebraria o arquivo único e/ou o auto-update por ETag. O risco residual é aceito porque o `esc()` já
+  mitiga XSS na fonte; **por isso, ao criar views novas, escapar TODO valor dinâmico com `esc()` segue
+  sendo obrigatório** (o CSP não é rede de segurança aqui).
 - **Auto-deploy:** conectar o repo GitHub `LucasMolinari9/LucasCTEC` ao projeto Vercel pelo
   **dashboard** (OAuth GitHub, ação única) → **push na `main` = deploy automático**. Sem essa
   conexão, publica-se rodando o MCP `deploy_to_vercel` (deploya o diretório atual) após o push.
