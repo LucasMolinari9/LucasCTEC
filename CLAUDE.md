@@ -77,9 +77,13 @@ direto no Supabase**; o site apenas exibe e **atualiza ao vivo** (Realtime).
 - Atualiza **a tela aberta**. Quem não está com o card aberto vê o dado novo na próxima busca.
 
 ## Mapa do código (`index.html`)
-O JS é um arquivo só (~2.360 linhas), mas está dividido em seções com marcas
+O JS é um arquivo só (~2.400 linhas), mas está dividido em seções com marcas
 `/* ===== TÍTULO ===== */`. **Para achar algo, dê grep na marca da seção** (ela não
-muda de lugar como número de linha muda). Visão geral:
+muda de lugar como número de linha muda). Há um **índice no topo do `<script>`** e o bloco
+`MODAL / SISTEMA DE VIEWS` (o maior) tem **sub-índice + sub-marcas `/* --- … --- */`** por
+documento. Guia completo de navegação e as **regras de segurança para reorganizar o JS**
+(hoisting, TDZ, ordem do `LOADERS`, verificação em 3 camadas) em **`docs/estrutura-frontend.md`**.
+Visão geral:
 
 | Seção (faça grep do título) | Funções-chave | O que faz |
 |---|---|---|
