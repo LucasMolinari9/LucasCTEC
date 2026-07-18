@@ -678,7 +678,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 17/07-B</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 18/07-A</span></span>
   </div>
 </footer>
 
@@ -891,10 +891,9 @@ SECTIONS.forEach(sec => {
 let activeLine = null;   // { codlinha, numero_ligacao, nome_ligacao, codempresa, ... }
 let ibgeMap   = null;    // { [codibge]: {nome,regiao,regiaoPrograma} }
 let origemMap = null;    // { [cod_origem]: nome_origem }
-let evEmpMap  = null;    // { [id]: evento_empresa }
-let evLinMap  = null;    // { [id]: evento_linha }
-let empresaMap = null;   // { [codempresa]: nome_empresa }
-let empresaList = null;  // lista completa de empresas (p/ busca client-side)
+// caches carregados e invalidados JUNTOS → cada grupo num objeto só (ver CACHE_INVALIDATORS)
+const evLookups = { emp:null, lin:null };  // lookups de evento: emp={[id]:evento_empresa}, lin={[id]:evento_linha}
+const empresas  = { map:null, list:null }; // cadastro (nome↔RJ): map={[codempresa]:nome_empresa}, list=linhas cruas p/ busca client-side
 
 // normaliza p/ busca insensível a maiúsc./minúsc. E acento
 const norm = s => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
@@ -915,35 +914,35 @@ async function getOrigem() {
   return origemMap;
 }
 async function getEmpresas() {
-  if (empresaMap) return empresaMap;
+  if (empresas.map) return empresas.map;
   const rows = await sbFetch('codempresa_teste', 'select=codempresa,nome_empresa,situacao,cassada,sob_intervencao&limit=2000');
-  empresaList = rows;
-  empresaMap = {};
+  empresas.list = rows;
+  empresas.map = {};
   // alguns RJ aparecem duplicados (ex.: 103) → prioriza a entrada REGULAR/não cassada
   const melhor = r => (r && !r.cassada && String(r.situacao||'').toUpperCase()==='REGULAR') ? 2 : (r && !r.cassada ? 1 : 0);
   const best = {};
   rows.forEach(r => {
     const k = r.codempresa;
     if (k==null) return;
-    if (!(k in empresaMap) || melhor(r) > best[k]) { empresaMap[k] = r.nome_empresa; best[k] = melhor(r); }
+    if (!(k in empresas.map) || melhor(r) > best[k]) { empresas.map[k] = r.nome_empresa; best[k] = melhor(r); }
   });
-  return empresaMap;
+  return empresas.map;
 }
 // nome da empresa (síncrono; cai no próprio código se o cache ainda não carregou)
-const empNome = cod => (empresaMap && empresaMap[cod]) ? empresaMap[cod] : (cod ?? '—');
+const empNome = cod => (empresas.map && empresas.map[cod]) ? empresas.map[cod] : (cod ?? '—');
 // busca empresas por nome (insensível a acento) ou código — assume getEmpresas() já carregado
 function searchEmpresas(term, { limit = 40 } = {}){
   const nt = norm(term);
-  return (empresaList||[])
+  return (empresas.list||[])
     .filter(e => norm(e.nome_empresa).includes(nt) || String(e.codempresa||'').includes(term))
     .sort((a,b)=> String(a.nome_empresa||'').localeCompare(String(b.nome_empresa||'')))
     .slice(0, limit);
 }
 
 async function getEvLookups() {
-  if (!evEmpMap) { const r = await sbFetch('evento_empresa_teste','select=id,evento_empresa').catch(()=>[]); evEmpMap={}; r.forEach(x=>evEmpMap[x.id]=x.evento_empresa); }
-  if (!evLinMap) { const r = await sbFetch('evento_linha_teste','select=id,evento_linha').catch(()=>[]); evLinMap={}; r.forEach(x=>evLinMap[x.id]=x.evento_linha); }
-  return { emp:evEmpMap, lin:evLinMap };
+  if (!evLookups.emp) { const r = await sbFetch('evento_empresa_teste','select=id,evento_empresa').catch(()=>[]); evLookups.emp={}; r.forEach(x=>evLookups.emp[x.id]=x.evento_empresa); }
+  if (!evLookups.lin) { const r = await sbFetch('evento_linha_teste','select=id,evento_linha').catch(()=>[]); evLookups.lin={}; r.forEach(x=>evLookups.lin[x.id]=x.evento_linha); }
+  return evLookups;
 }
 
 /* ================================================================
@@ -1020,9 +1019,21 @@ function selectLine(row) {
     activeLine = null; banner.style.display = 'none';
   });
   // se o cache de empresas ainda não chegou, atualiza o texto quando carregar
-  if (!empresaMap) getEmpresas().then(() => {
+  if (!empresas.map) getEmpresas().then(() => {
     if (activeLine === row) { const el = banner.querySelector('.lb-emp'); if (el) el.innerHTML = bannerEmpHTML(row); }
   }).catch(()=>{});
+}
+// `activeLine` é um snapshot do row (congelado no clique). Sem isto, uma edição ao vivo em
+// tabela_vista_teste (nome, empresa, cancelamento) recarregava o modal mas deixava o BANNER
+// exibindo os dados antigos. Rebusca a linha ativa e re-renderiza o banner (chamado pelo Realtime).
+async function refreshActiveLine(){
+  if (!activeLine) return;
+  const cod = activeLine.codlinha;
+  try {
+    const rows = await sbFetch('tabela_vista_teste', `codlinha=eq.${enc(cod)}&select=${LINE_FIELDS}&limit=1`);
+    // só reaplica se a linha ativa ainda é a mesma (usuário pode ter trocado durante a busca)
+    if (rows && rows[0] && activeLine && String(activeLine.codlinha) === String(cod)) selectLine(rows[0]);
+  } catch(_){ /* transitório → banner segue com o último valor conhecido */ }
 }
 
 /* ================================================================
@@ -1150,22 +1161,30 @@ async function baixarPdf(){
 }
 
 let currentView = null, lastFocused = null;
-let viewHistory = [];
-let _goingBack = false;
 const btnBack = document.getElementById('btnBack');
+// Pilha de navegação do modal (voltar). Estado que muda junto — pilha, flag de "indo p/ trás"
+// e o botão Voltar — encapsulado aqui em vez de três variáveis soltas espalhadas por
+// runView/btnBack/closeModal (o flag solto `_goingBack` era fácil de dessincronizar).
+const nav = {
+  stack: [],
+  goingBack: false,
+  get length(){ return this.stack.length; },
+  push(view){ this.stack.push(view); btnBack.style.display = ''; },
+  pop(){ const v = this.stack.pop(); btnBack.style.display = this.stack.length ? '' : 'none'; return v; },
+  reset(){ this.stack = []; this.goingBack = false; btnBack.style.display = 'none'; },
+};
 function closeModal(){
   if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); }
   overlay.classList.remove('open','fs-fallback'); currentView = null;
-  viewHistory = []; btnBack.style.display = 'none';
+  nav.reset();
   // devolve o foco ao elemento que abriu o modal (acessibilidade)
   if (lastFocused && lastFocused.focus) { try { lastFocused.focus(); } catch(_){} lastFocused = null; }
   if (window.__divatReload) location.reload();
 }
 btnBack.addEventListener('click', () => {
-  if (!viewHistory.length) return;
-  const prev = viewHistory.pop();
-  btnBack.style.display = viewHistory.length ? '' : 'none';
-  _goingBack = true;
+  if (!nav.length) return;
+  const prev = nav.pop();
+  nav.goingBack = true;
   runView(prev, { silent: false });
 });
 function setBody(html){ modalBody.innerHTML = html; }
@@ -1175,11 +1194,10 @@ function errorBox(msg){ return `<div class="m-loading" style="color:#b33a2e">Err
 
 /* --- Dispatcher — runView ---------------------------------------- */
 async function runView(view, { silent=false } = {}){
-  if (!_goingBack && overlay.classList.contains('open') && currentView) {
-    viewHistory.push(currentView);
-    btnBack.style.display = '';
+  if (!nav.goingBack && overlay.classList.contains('open') && currentView) {
+    nav.push(currentView);
   }
-  _goingBack = false;
+  nav.goingBack = false;
   if (!overlay.classList.contains('open')) lastFocused = document.activeElement;
   currentView = view;
   mtTitle.textContent = view.title;
@@ -2047,7 +2065,7 @@ LOADERS.empresasRegulares = async () => {
   lineRows.forEach(r=>{ const k=r.codempresa||'—'; cnt[k]=cnt[k]||{total:0,ativas:0}; cnt[k].total++; if(isLinhaAtiva(r))cnt[k].ativas++; });
   // dedup do cadastro por RJ (prioriza a entrada REGULAR/não cassada — resolve o RJ 103)
   const best = {};
-  (empresaList||[]).forEach(e=>{ const k=e.codempresa; if(k==null) return;
+  (empresas.list||[]).forEach(e=>{ const k=e.codempresa; if(k==null) return;
     const sc = (!e.cassada && String(e.situacao||'').toUpperCase()==='REGULAR')?2:(!e.cassada?1:0);
     if(!(k in best) || sc>best[k]._s) best[k] = {...e, _s:sc}; });
   const list = Object.values(best).map(e=>({ ...e, total:(cnt[e.codempresa]?.total)||0, ativas:(cnt[e.codempresa]?.ativas)||0 }));
@@ -2108,7 +2126,7 @@ LOADERS.ligacoesPorEmpresa = async () => {
       cods = [term.trim()];
     } else {
       const t = norm(term);
-      cods = Object.entries(empresaMap).filter(([,n])=>norm(n||'').includes(t)).map(([c])=>c);
+      cods = Object.entries(empresas.map).filter(([,n])=>norm(n||'').includes(t)).map(([c])=>c);
       if(!cods.length){ host.innerHTML=emptyBox('Nenhuma empresa encontrada para "'+esc(term)+'".'); return; }
     }
     const filter = cods.length===1 ? `codempresa=eq.${enc(cods[0])}` : `codempresa=in.(${cods.map(enc).join(',')})`;
@@ -3027,9 +3045,9 @@ let reloadTimer = null;
 const CACHE_INVALIDATORS = {
   municipio_teste:      () => { ibgeMap = null; },
   origem_teste:         () => { origemMap = null; },
-  evento_empresa_teste: () => { evEmpMap = null; },
-  evento_linha_teste:   () => { evLinMap = null; },
-  codempresa_teste:     () => { empresaMap = null; empresaList = null; getEmpresas().catch(()=>{}); },
+  evento_empresa_teste: () => { evLookups.emp = null; },
+  evento_linha_teste:   () => { evLookups.lin = null; },
+  codempresa_teste:     () => { empresas.map = null; empresas.list = null; getEmpresas().catch(()=>{}); },
   portaria_teste:       () => { _portariaAnos = null; },
   localidades_teste:    () => { _localidadesList = null; },
 };
@@ -3042,6 +3060,7 @@ function scheduleReload(){
   reloadTimer = setTimeout(async ()=>{
     if(!currentView) return;
     try {
+      await refreshActiveLine();                                  // banner ao vivo (activeLine é snapshot)
       if(currentView._panelRun) await currentView._panelRun();   // painéis de busca
       else await currentView.loader();                            // views diretas
       mtLive.classList.remove('on'); void mtLive.offsetWidth; mtLive.classList.add('on');
