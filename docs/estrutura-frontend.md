@@ -95,7 +95,56 @@ ordem/TDZ em runtime. Ao mover código, use as 3 camadas:
    `before initialization` **novo**. Se o navegador não subir, apoie-se nas camadas 1–2 e diga que a
    camada 3 não rodou — não afirme verificação de runtime que não aconteceu.
 
-## 4. Histórico da organização
+## 4. Paginação (só de tela) e completude do PDF
+
+Listas longas são quebradas em **páginas de 25 itens** para não exigir rolagem infinita. Toda a
+paginação vive na seção `COMPONENTES AUXILIARES` (exceto `paginateEvents`, que é do MODAL) e é
+**apenas visual** — os dados e o PDF nunca são cortados.
+
+### As funções (grep pela marca / nome)
+
+- **`pageBounds(total, pageSize, page)`** — matemática **pura** (clampa a página, devolve
+  `{page,totalPages,start,end}`). Tem cópia verbatim em `tests/pure.harness.js` + casos em
+  `tests/pure.test.js`. É o único pedaço testável; o resto é DOM.
+- **`paginate(container, total, renderSlice, {pageSize=25, afterPaint, unit})`** — **núcleo** por
+  fatia, agnóstico de conteúdo. Renderiza **só a fatia atual** num `.pg-slot` + uma barra
+  `.doc-pager` (‹ Anterior · `.pg-info` "Página X de Y · N `unit`" · "ir p/ Nº" · Próxima ›).
+  Sem barra quando `total <= pageSize`. `afterPaint(slot)` religa cliques a cada página.
+- **`paginateTable(container, items, {cols, rowHTML, foot, bind, unit, pdf=true})`** — tabelas
+  homogêneas via `tableHTML`. **`rowHTML(item, i)` recebe o índice GLOBAL** (`i` = posição na
+  lista inteira) → `data-idx` continua batendo com a lista completa mesmo paginado (crítico para
+  Portarias, cujo clique abre `rows[+idx]`). `foot(total)` monta o rodapé com o **total**.
+- **`paginateLines(container, rows, {grouped, pdf=true})`** — listas de **linha**. `grouped`
+  insere os cabeçalhos de empresa **dentro** de cada página (contagem = total do grupo). Usado por
+  `lineResults` (o hub de ~10 cards de listagem de linha).
+- **`paginateEvents`** (bloco `Eventos — helpers compartilhados`, no MODAL) — o paginador **antigo
+  e diferente**: **um evento por página** (não N itens), com filtros próprios. Só o Histórico usa.
+
+### O que é paginado e o que NÃO é
+
+- **Paginado (tela):** listas de linha (via `lineResults`), **Portarias**, **Seções por Empresa**,
+  **Pesquisa de Evento**, **Empresas Regulares**, **Quadro "por empresa"** (`renderEmpresaQuadros`).
+- **NÃO paginado — documento de 1 linha (leitura corrida + alimenta o PDF inteiro):** Folha de
+  Rosto, Folha Divisória, Itinerários, Quadro de Horários (modo linha), Tarifas, Frota, Estrutura,
+  Seções por Ligação.
+- **NÃO paginado — relatório agregado (lido/impresso inteiro):** Relatórios Gerenciais, Frota por
+  Empresa.
+- **Deixado para depois:** `munTable` (lista de municípios de uma região, ≤~92, pick-list curto) e
+  `localidades`/`renderLocalidadeSecoes` (estrutura **compósita** agrupada com sub-tabelas — paginar
+  exigiria achatar como o `grouped` das linhas).
+
+### Regra de ouro do PDF: sai SEMPRE a lista inteira
+
+`baixarPdf` monta o documento de `currentView.pdfHTML()`. **Quando `pdfHTML` é `null`, ele faz
+fallback clonando o `.doc` visível** — que, com paginação, teria só a página atual. Por isso
+`paginateTable` e `paginateLines` **definem `currentView.pdfHTML` com a lista COMPLETA**
+(`renderSlice(0,total)` + `docHead`). Quem já expõe um PDF próprio mais rico passa **`pdf:false`**
+para não ser sobrescrito: **Quadro "por empresa"** (PDF = todos os quadros) e **Município** (PDF
+determinístico = lista completa + meta/aviso). **Ao criar uma tela nova que pagina uma tabela,**
+use estes helpers (o `pdf` cuida da completude) — não monte `tableHTML` cru sem paginar, nem
+dependa do fallback do `.doc` visível.
+
+## 5. Histórico da organização
 
 - **Parte A (2026-07-16):** adicionado o índice no topo, o sub-índice do MODAL e as sub-marcas —
   **sem mover código** (mudança puramente aditiva de comentários). Deu navegação por `grep`.
@@ -108,3 +157,13 @@ ordem/TDZ em runtime. Ao mover código, use as 3 camadas:
 > `openEmpresaLigacoes`, mas a seção de Empresas na verdade começa um pouco antes, em
 > `LOADERS.empresasRegulares` — imperfeição cosmética pré-existente, não corrigida para manter as
 > mudanças mínimas.
+
+- **Parte C (2026-07-18):** adicionada a **paginação de tela** (seção 4). Em três rodadas:
+  (1) `pageBounds`/`paginateLines` + `lineResults` para as listas de linha (25/página, agrupado
+  contando todas as linhas); (2) núcleo genérico `paginate`/`paginateTable` e aplicação a Portarias,
+  Seções por Empresa, Pesquisa de Evento, Empresas Regulares e Quadro "por empresa" (com o refactor
+  do `paginateLines` para usar o núcleo); (3) correção de completude do PDF — os wrappers passaram a
+  definir `currentView.pdfHTML` com a lista inteira (`pdf:false` p/ Quadro-por-empresa e Município),
+  fechando a regressão em que o fallback do `.doc` visível exportaria só a página atual. Verificado
+  com `node tests/check.js` + smoke tests no Chromium (dados falsos, sem rede): navegação, índice
+  global do clique (Portarias) e `pdfHTML()` com a lista completa.

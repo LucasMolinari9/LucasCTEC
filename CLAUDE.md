@@ -102,7 +102,7 @@ Visão geral:
 | `BUSCA DE LINHAS (hero)` | `doSearch`, `closeDropdown` | Busca do topo e dropdown de resultados. |
 | `LINHA ATIVA — BANNER` | `selectLine`, `bannerEmpHTML` | Banner navy da linha selecionada. |
 | `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody/loading/errorBox`, `baixarPdf`, `docHead`, `tableHTML`, `paginateEvents`, `matchEvent`, todos os `render*` | **Maior bloco**: abre/preenche o modal e renderiza TODOS os documentos (itinerário, quadro, frota, tarifas, histórico, empresas, municípios, localidades). |
-| `COMPONENTES AUXILIARES` | `linhasTable`, `bindLineRows`, `searchPanel` | Tabela de linhas + painel de busca reutilizável. |
+| `COMPONENTES AUXILIARES` | `linhasTable`, `bindLineRows`, `searchPanel`, `lineResults`, `pageBounds`, `paginate`, `paginateTable`, `paginateLines` | Tabela de linhas + painel de busca reutilizável + **paginação de tela** (25/pág; ver `docs/estrutura-frontend.md` §4). |
 | `CLIQUE NOS CARDS` | — | Liga o clique do card → abre a view. |
 | `UTILITÁRIOS` | `groupBy`, `countBy`, `fmtMoney` | Agregação dos relatórios e moeda pt-BR. |
 | `TOAST` | `toast` | Avisos transitórios. |
@@ -184,9 +184,18 @@ A lógica **pura** dessas seções (formatação, busca, filtros, `sbFetch`) tem
   para o Pro tornaria o backup automático e dispensaria a rotina manual.
 - **Truncagem silenciosa:** a maioria dos loaders avisa via `marcarTrunc`/`bannerTrunc`, mas cortes
   feitos por `slice(0,N)` no cliente **perdem** a flag não-enumerável `_trunc` (o `slice` não a copia)
-  e podem exibir listas incompletas sem aviso. O corte de 300 em `linhasTable` foi corrigido em
-  17/07/2026 (repõe `_trunc`/`_limite` à mão). Ao criar/editar uma view que faz `slice` no cliente,
-  **reponha a flag** (ou avise o usuário) quando o limite for atingido.
+  e podem exibir listas incompletas sem aviso. Ao criar/editar uma view que faz `slice` no cliente,
+  **reponha a flag** (ou avise o usuário) quando o limite for atingido. (Obs.: o antigo corte de 300 no
+  cliente em `lineResults` foi **removido** em 18/07/2026 — a paginação de tela exibe tudo em páginas e
+  o `bannerTrunc(rows)` no topo avisa o teto **da query**.)
+- **Paginação é SÓ de tela; o PDF sai INTEIRO (18/07/2026):** listas longas são paginadas (25/pág) por
+  `paginateTable`/`paginateLines` (núcleo `paginate` + `pageBounds`), reusando o CSS `.doc-pager`/`.pg-*`.
+  Como só a fatia atual entra no DOM, o **fallback do `baixarPdf`** (clonar o `.doc` visível quando
+  `currentView.pdfHTML` é null) exportaria só a página aberta — por isso os dois wrappers **definem
+  `currentView.pdfHTML` com a lista completa**. Quem já tem PDF próprio mais rico passa **`pdf:false`**
+  (Quadro "por empresa"; Município). Detalhes, o que é/não é paginado e o padrão de clique por índice
+  GLOBAL (Portarias) estão em **`docs/estrutura-frontend.md` §4**. Ao criar tela nova que lista muita
+  coisa, **use esses helpers** em vez de `tableHTML` cru — o `pdf` cuida da completude.
 - **Dependência do supabase-js — vendorada (17/07/2026):** era `@supabase/supabase-js@2` (qualquer 2.x)
   da jsDelivr, **sem versão fixa nem SRI**. Agora é **vendorada** em `vendor/supabase-js-2.110.7.min.js`
   (build UMD exato do npm, integridade sha512 conferida contra o registro), servida da **mesma origem** —

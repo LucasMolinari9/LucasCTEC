@@ -92,6 +92,7 @@ const canon = [
   ['sbFetch',              "async function sbFetch(table, qs = '') {"],
   ['resumoRelatorio',      'function resumoRelatorio(rows){'],
   ['resumoFrota',          'function resumoFrota(rows){'],
+  ['pageBounds',           'const p = Math.min(Math.max(1, (page|0) || 1), totalPages);'],
 ];
 for (const [name, snippet] of canon){
   if (html.includes(snippet)) okline(`${name}`);

@@ -135,9 +135,17 @@ function resumoFrota(rows){
   };
 }
 
+// index.html:2850 — bordas de paginação das listagens de linha (clampa a página)
+function pageBounds(total, pageSize, page){
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const p = Math.min(Math.max(1, (page|0) || 1), totalPages);
+  const start = (p - 1) * pageSize;
+  return { page:p, totalPages, start, end:Math.min(start + pageSize, total) };
+}
+
 module.exports = {
   fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, isLinhaAtiva, isVigente, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike, municipiosExatos,
   setRTState, rowMatchesActiveLine,
-  resumoRelatorio, resumoFrota,
+  resumoRelatorio, resumoFrota, pageBounds,
 };
