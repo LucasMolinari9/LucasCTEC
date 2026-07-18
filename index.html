@@ -678,7 +678,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 18/07-A</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 18/07-B</span></span>
   </div>
 </footer>
 
@@ -2845,12 +2845,56 @@ function rjOrder(a, b){
   if(isNaN(na)) return 1; if(isNaN(nb)) return -1;
   return na-nb;
 }
+// bordas de paginação: clampa `page` no intervalo válido e devolve os índices da fatia.
+// total=0 → 1 página (start=end=0). PURA (cópia em tests/pure.harness.js; testada).
+function pageBounds(total, pageSize, page){
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const p = Math.min(Math.max(1, (page|0) || 1), totalPages);
+  const start = (p - 1) * pageSize;
+  return { page:p, totalPages, start, end:Math.min(start + pageSize, total) };
+}
+// Paginador de LISTAS de linha (N por página; só a fatia atual entra no DOM). Reusa o visual
+// do paginador de eventos (.doc-pager/.pg-*). `grouped` insere os cabeçalhos de empresa DENTRO
+// de cada página; a contagem do cabeçalho é a do grupo INTEIRO (não só a da página).
+function paginateLines(container, rows, { grouped=false, pageSize=25 } = {}){
+  const total = rows.length;
+  const groupTotals = grouped ? countBy(rows, r=>r.codempresa||'—') : null;
+  const renderSlice = slice => grouped
+    ? [...groupBy(slice, r=>r.codempresa||'—')].map(([cod,seg])=>
+        `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${groupTotals.get(cod)} linha(s)</span></h3>${linhasTable(seg)}`).join('')
+    : linhasTable(slice);
+  if(total <= pageSize){ container.innerHTML = renderSlice(rows); bindLineRows(container); return; }
+  container.innerHTML = `<div class="pg-slot"></div>
+    <div class="doc-pager">
+      <button class="pg-btn" type="button" data-pg="prev">‹ Anterior</button>
+      <span class="pg-info"></span>
+      <span class="pg-goto">ir p/ <input type="number" class="pg-num" min="1" aria-label="Ir para a página nº"> <button class="pg-btn pg-go" type="button">Ir</button></span>
+      <button class="pg-btn" type="button" data-pg="next">Próxima ›</button></div>`;
+  const slot=container.querySelector('.pg-slot'), info=container.querySelector('.pg-info');
+  const prev=container.querySelector('[data-pg="prev"]'), next=container.querySelector('[data-pg="next"]'), num=container.querySelector('.pg-num');
+  let page=1;
+  const paint = ()=>{
+    const b=pageBounds(total, pageSize, page); page=b.page;
+    slot.innerHTML = renderSlice(rows.slice(b.start, b.end)); bindLineRows(slot);
+    info.textContent = `Página ${b.page} de ${b.totalPages} · ${total} linhas`;
+    prev.disabled = b.page<=1; next.disabled = b.page>=b.totalPages; num.max = b.totalPages;
+  };
+  paint();
+  const nav = d => ()=>{ page += d; paint(); container.scrollIntoView({block:'start'}); };
+  prev.addEventListener('click', ()=>{ if(!prev.disabled) nav(-1)(); });
+  next.addEventListener('click', ()=>{ if(!next.disabled) nav(1)(); });
+  const doGo = ()=>{ const v=parseInt(num.value,10); if(!isNaN(v)){ page=v; paint(); container.scrollIntoView({block:'start'}); } };
+  container.querySelector('.pg-go').addEventListener('click', doGo);
+  num.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); doGo(); } });
+}
 // Lista de linhas com barra de filtro (situação) + agrupamento por empresa LIGADO por padrão,
 // com os grupos ordenados pelo RJ (codempresa). Padrão de qualquer consulta que lista linhas.
 // `prefixHTML` entra antes da barra (contadores/banner). Requer getEmpresas() já carregado.
 function lineResults(host, rows, { prefixHTML='' } = {}){
   if(!rows || !rows.length){ host.innerHTML = prefixHTML + emptyBox('Nenhuma ligação encontrada.'); return; }
-  host.innerHTML = prefixHTML
+  // bannerTrunc(rows) uma vez no topo: avisa "Resultado parcial" quando a QUERY atingiu o teto
+  // (limit). A paginação abaixo exibe tudo em páginas — não corta mais no cliente.
+  host.innerHTML = prefixHTML + bannerTrunc(rows)
     + `<div class="loc-tools">
          <label>Situação <select id="lrStatus"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="canceladas">Canceladas</option></select></label>
          <label><input type="checkbox" id="lrGroup" checked> Agrupar por empresa</label>
@@ -2864,20 +2908,14 @@ function lineResults(host, rows, { prefixHTML='' } = {}){
             : st==='canceladas' ? rows.filter(r=>r.cancelado) : rows;
     if(!f.length){ result.innerHTML = emptyBox('Nenhuma linha com esse filtro.'); return; }
     if(groupChk.checked){
-      const groups = [...groupBy(f, r=>r.codempresa||'—')].sort((x,y)=>rjOrder(x[0],y[0]));
-      result.innerHTML = groups.map(([cod,rs])=>`<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${rs.length} linha(s)</span></h3>${linhasTable(rs)}`).join('');
+      // achata os grupos (empresas por RJ; linhas por codlinha) num array global e pagina
+      // contando TODAS as linhas — os cabeçalhos de empresa entram dentro de cada página.
+      const ordered = [...groupBy(f, r=>r.codempresa||'—')].sort((x,y)=>rjOrder(x[0],y[0]))
+        .flatMap(([,rs])=>[...rs].sort(byCodlinha));
+      paginateLines(result, ordered, { grouped:true });
     } else {
-      // corta em 300 no cliente; o slice não copia as flags não-enumeráveis, então marca
-      // _trunc/_limite à mão para o bannerTrunc (dentro de linhasTable) avisar "Resultado
-      // parcial: mostrando os primeiros 300" em vez de sumir com o excedente calado.
-      const shown = f.slice(0,300);
-      if (f.length > 300){
-        Object.defineProperty(shown, '_trunc',  { value:true, enumerable:false });
-        Object.defineProperty(shown, '_limite', { value:300,  enumerable:false });
-      }
-      result.innerHTML = linhasTable(shown);
+      paginateLines(result, [...f].sort(byCodlinha), { grouped:false });
     }
-    bindLineRows(result);
   };
   statusSel.addEventListener('change', paint);
   groupChk.addEventListener('change', paint);

@@ -282,5 +282,24 @@ console.log('classifyMunLines');
 ok((()=>{ const r=P.classifyMunLines([],'33'); return r.dentro.size===0 && r.inter.size===0; })(),
    'classifyMunLines lista vazia');
 
+// --- pageBounds (paginação das listagens de linha, 25/página) ---
+console.log('pageBounds');
+{
+  const b0 = P.pageBounds(0, 25, 1);
+  ok(b0.totalPages===1 && b0.start===0 && b0.end===0 && b0.page===1, 'pageBounds total 0 → 1 página vazia');
+  const b25 = P.pageBounds(25, 25, 1);
+  ok(b25.totalPages===1 && b25.start===0 && b25.end===25, 'pageBounds exatamente 25 → 1 página cheia');
+  const b26 = P.pageBounds(26, 25, 1);
+  ok(b26.totalPages===2, 'pageBounds 26 linhas → 2 páginas');
+  const b26p2 = P.pageBounds(26, 25, 2);
+  ok(b26p2.start===25 && b26p2.end===26, 'pageBounds última página parcial (25→26)');
+  const over = P.pageBounds(26, 25, 99);
+  ok(over.page===2 && over.start===25, 'pageBounds page acima do total clampa na última');
+  const under = P.pageBounds(60, 25, 0);
+  ok(under.page===1 && under.start===0, 'pageBounds page 0/inválida clampa em 1');
+  const mid = P.pageBounds(60, 25, 2);
+  ok(mid.start===25 && mid.end===50, 'pageBounds página do meio → fatia [25,50)');
+}
+
 console.log('\n==== PLACAR:', pass + '/' + (pass + fail), '====');
 if (fail){ console.log('FALHAS:'); fails.forEach(f => console.log('  -', f)); process.exit(1); }
