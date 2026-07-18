@@ -678,7 +678,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 18/07-B</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 18/07-C</span></span>
   </div>
 </footer>
 
@@ -1909,16 +1909,12 @@ async function renderEmpresaQuadros(host, cod, nome){
   // PDF: todos os quadros, um por página
   if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${comQuadro.map(l=>
     `<div class="ev-page">${docHead('Quadro de Horários')}${quadroDocInner(l, intervBy.get(l.codlinha)||[], predetBy.get(l.codlinha)||[], orig)}</div>`).join('')}</div>`;
-  const rowsHTML = comQuadro.map(l=>`<tr class="clickable" tabindex="0" role="button" data-cod="${esc(l.codlinha)}">
-    <td class="td-num" data-label="Número">${esc(l.numero_ligacao||fmtCode(l.codlinha))}</td>
-    <td class="td-logr" data-label="Ligação">${fmtLineName(l.nome_ligacao)}</td>
-    <td class="td-num" data-label="Código">${esc(fmtCode(l.codlinha))}</td></tr>`).join('');
   host.innerHTML = `<div class="doc-obs" style="margin:0 0 10px"><b>${esc(nomeEmp)}</b> · ${linhas.length} linha(s), ${comQuadro.length} com quadro de horários.
       Use o botão <b>PDF</b> da barra acima para baixar todos os quadros (um por página).</div>`
     + (trunc? `<div class="trunc-aviso"><b>Resultado parcial:</b> a empresa tem muitos horários e alguns podem não ter sido carregados.</div>`:'')
-    + tableHTML([{t:'Número',w:'110px'},{t:'Ligação'},{t:'Código',w:'130px'}], rowsHTML, comQuadro.length+' linha(s) com quadro · clique para ver o quadro');
-  // clique numa linha → quadro individual (com voltar)
-  host.querySelectorAll('tr[data-cod]').forEach(tr=>tr.addEventListener('click',()=>{
+    + `<div id="eqResult"></div>`;
+  // clique numa linha → quadro individual (com voltar). data-cod=codlinha → fatia-safe.
+  const abrirQuadro = tr=>{
     const l = comQuadro.find(x=>String(x.codlinha)===String(tr.dataset.cod));
     if(!l) return;
     const iv = intervBy.get(l.codlinha)||[], pd = predetBy.get(l.codlinha)||[];
@@ -1926,7 +1922,17 @@ async function renderEmpresaQuadros(host, cod, nome){
       + quadroDocInner(l, iv, pd, orig);
     if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroDocInner(l, iv, pd, orig)}</div>`;
     host.querySelector('.qh-back').addEventListener('click', ()=>renderEmpresaQuadros(host, cod, nome));
-  }));
+  };
+  paginateTable(host.querySelector('#eqResult'), comQuadro, {
+    cols:[{t:'Número',w:'110px'},{t:'Ligação'},{t:'Código',w:'130px'}],
+    rowHTML:l=>`<tr class="clickable" tabindex="0" role="button" data-cod="${esc(l.codlinha)}">
+      <td class="td-num" data-label="Número">${esc(l.numero_ligacao||fmtCode(l.codlinha))}</td>
+      <td class="td-logr" data-label="Ligação">${fmtLineName(l.nome_ligacao)}</td>
+      <td class="td-num" data-label="Código">${esc(fmtCode(l.codlinha))}</td></tr>`,
+    foot:t=>t+' linha(s) com quadro · clique para ver o quadro',
+    bind:c=>c.querySelectorAll('tr[data-cod]').forEach(tr=>tr.addEventListener('click',()=>abrirQuadro(tr))),
+    unit:'linhas',
+  });
 }
 
 LOADERS.quadroHorarios = async () => {
@@ -2093,10 +2099,11 @@ LOADERS.empresasRegulares = async () => {
       if(q && !(norm(e.nome_empresa||'').includes(q) || String(e.codempresa||'').includes(termo))) return false;
       return true;
     });
-    result.innerHTML = f.length
-      ? tableHTML(cols, f.map(rowHTML).join(''), f.length+' empresa(s)')
-      : emptyBox('Nenhuma empresa com esse filtro.');
-    result.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>openEmpresaLigacoes(tr.dataset.emp)));
+    if(!f.length){ result.innerHTML = emptyBox('Nenhuma empresa com esse filtro.'); return; }
+    paginateTable(result, f, {
+      cols, rowHTML:e=>rowHTML(e), foot:t=>t+' empresa(s)', unit:'empresas',
+      bind:c=>c.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>openEmpresaLigacoes(tr.dataset.emp))),
+    });
   };
   sel.addEventListener('change', paint);
   inp.addEventListener('input', debounce(paint));
@@ -2147,7 +2154,8 @@ LOADERS.secoesPorEmpresa = async () => {
     const paint = ()=>{
       const q = norm(inp.value.trim());
       const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${fmtCode(r.codlinha)} ${r.codlinha} ${r.nome_ligacao||''}`).includes(q)) : rows;
-      result.innerHTML = f.length ? tableHTML(cols, f.map(rowHTML).join(''), f.length+' seção(ões)') : emptyBox('Nenhuma seção com esse filtro.');
+      if(!f.length){ result.innerHTML = emptyBox('Nenhuma seção com esse filtro.'); return; }
+      paginateTable(result, f, { cols, rowHTML:r=>rowHTML(r), foot:t=>t+' seção(ões)', unit:'seções' });
     };
     inp.addEventListener('input', debounce(paint));
     paint();
@@ -2529,10 +2537,13 @@ LOADERS.pesquisaEvento = async () => {
       sbFetch('evento_teste', `or=(descricao.ilike.*${t}*,observacao.ilike.*${t}*,numero_processo.ilike.*${t}*)&select=data_registro,codlinha,codempresa,numero_processo,descricao,observacao&order=data_registro.desc&limit=200`),
       getEmpresas()
     ]);
-    host.innerHTML = rows.length? tableHTML([{t:'Data',w:'82px'},{t:'Linha',w:'100px'},{t:'Empresa'},{t:'RJ',w:'60px'},{t:'Processo',w:'100px'},{t:'Descrição'},{t:'Observação'}],
-      rows.map(r=>`<tr><td class="td-num">${esc(fmtDate(r.data_registro))}</td><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-logr">${esc(empNome(r.codempresa))}</td><td class="td-num">${esc(orDash(r.codempresa))}</td>
-        <td class="td-num">${esc(orDash(r.numero_processo))}</td><td class="td-logr">${esc(orDash(r.descricao))}</td><td class="td-logr">${esc(orDash(r.observacao))}</td></tr>`).join(''))
-      : emptyBox('Nenhum evento encontrado para "'+term+'".');
+    if(!rows.length){ host.innerHTML = emptyBox('Nenhum evento encontrado para "'+term+'".'); return; }
+    paginateTable(host, rows, {
+      cols:[{t:'Data',w:'82px'},{t:'Linha',w:'100px'},{t:'Empresa'},{t:'RJ',w:'60px'},{t:'Processo',w:'100px'},{t:'Descrição'},{t:'Observação'}],
+      rowHTML:r=>`<tr><td class="td-num">${esc(fmtDate(r.data_registro))}</td><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-logr">${esc(empNome(r.codempresa))}</td><td class="td-num">${esc(orDash(r.codempresa))}</td>
+        <td class="td-num">${esc(orDash(r.numero_processo))}</td><td class="td-logr">${esc(orDash(r.descricao))}</td><td class="td-logr">${esc(orDash(r.observacao))}</td></tr>`,
+      foot:t=>t+' evento(s)', unit:'eventos',
+    });
   }});
 };
 let _portariaAnos = null;
@@ -2571,14 +2582,17 @@ LOADERS.portarias = async () => {
       const tx=txt.value.trim(); if(tx){ const e=ilikeTerm(tx); qs+=`or=(assunto.ilike.*${e}*,conteudo.ilike.*${e}*)&`; }
       const rows = await sbFetch('portaria_teste', `${qs}select=numero_portaria,data_portaria,data_publicacao,tipo_portaria,tipo_legislacao,assunto,conteudo,vigor,portaria_anterior&order=data_portaria.desc.nullslast&limit=300`);
       if(!rows.length){ host.innerHTML=emptyBox('Nenhuma portaria para os filtros informados.'); return; }
-      host.innerHTML = tableHTML(
-        [{t:'Número',w:'110px'},{t:'Data',w:'90px'},{t:'Tipo',w:'120px'},{t:'Assunto'},{t:'Vigor',w:'90px'}],
-        rows.map((r,i)=>`<tr class="clickable" tabindex="0" role="button" data-idx="${i}"><td class="td-num">${esc(orDash(r.numero_portaria))}</td><td class="td-num">${esc(fmtDate(r.data_portaria))}</td><td class="td-tipo">${esc(orDash(r.tipo_portaria||r.tipo_legislacao))}</td><td class="td-logr">${esc(orDash(r.assunto))}</td><td>${r.vigor?'<span class="chip chip-off">Em vigor</span>':'<span class="chip chip-on">Revogada</span>'}</td></tr>`).join(''),
-        rows.length+' portaria(s)'+(rows.length>=300?' (mostrando 300)':'')+' · clique para ler');
-      host.querySelectorAll('tr[data-idx]').forEach(tr=>{
-        const open=()=>showPortaria(rows[+tr.dataset.idx], host);
-        tr.addEventListener('click', open);
-        tr.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } });
+      paginateTable(host, rows, {
+        cols:[{t:'Número',w:'110px'},{t:'Data',w:'90px'},{t:'Tipo',w:'120px'},{t:'Assunto'},{t:'Vigor',w:'90px'}],
+        // i = índice GLOBAL na `rows` completa → data-idx continua batendo mesmo paginado
+        rowHTML:(r,i)=>`<tr class="clickable" tabindex="0" role="button" data-idx="${i}"><td class="td-num">${esc(orDash(r.numero_portaria))}</td><td class="td-num">${esc(fmtDate(r.data_portaria))}</td><td class="td-tipo">${esc(orDash(r.tipo_portaria||r.tipo_legislacao))}</td><td class="td-logr">${esc(orDash(r.assunto))}</td><td>${r.vigor?'<span class="chip chip-off">Em vigor</span>':'<span class="chip chip-on">Revogada</span>'}</td></tr>`,
+        foot:t=>t+' portaria(s)'+(t>=300?' (mostrando 300)':'')+' · clique para ler',
+        bind:c=>c.querySelectorAll('tr[data-idx]').forEach(tr=>{
+          const open=()=>showPortaria(rows[+tr.dataset.idx], host);
+          tr.addEventListener('click', open);
+          tr.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } });
+        }),
+        unit:'portarias',
       });
     }catch(e){ host.innerHTML=errorBox(e.message); }
   };
@@ -2853,17 +2867,16 @@ function pageBounds(total, pageSize, page){
   const start = (p - 1) * pageSize;
   return { page:p, totalPages, start, end:Math.min(start + pageSize, total) };
 }
-// Paginador de LISTAS de linha (N por página; só a fatia atual entra no DOM). Reusa o visual
-// do paginador de eventos (.doc-pager/.pg-*). `grouped` insere os cabeçalhos de empresa DENTRO
-// de cada página; a contagem do cabeçalho é a do grupo INTEIRO (não só a da página).
-function paginateLines(container, rows, { grouped=false, pageSize=25 } = {}){
-  const total = rows.length;
-  const groupTotals = grouped ? countBy(rows, r=>r.codempresa||'—') : null;
-  const renderSlice = slice => grouped
-    ? [...groupBy(slice, r=>r.codempresa||'—')].map(([cod,seg])=>
-        `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${groupTotals.get(cod)} linha(s)</span></h3>${linhasTable(seg)}`).join('')
-    : linhasTable(slice);
-  if(total <= pageSize){ container.innerHTML = renderSlice(rows); bindLineRows(container); return; }
+// Núcleo de paginação POR FATIA, agnóstico de conteúdo. Reusa o visual do paginador de eventos
+// (.doc-pager/.pg-*) e o `pageBounds` (testado). `renderSlice(start,end)` devolve o HTML da
+// página; `afterPaint(slot)` (opcional) religa cliques; `unit` rotula o .pg-info. Sem barra
+// quando total <= pageSize. Usado por paginateLines e paginateTable.
+function paginate(container, total, renderSlice, { pageSize=25, afterPaint, unit='itens' } = {}){
+  if(total <= pageSize){
+    container.innerHTML = renderSlice(0, total);
+    if(afterPaint) afterPaint(container);
+    return;
+  }
   container.innerHTML = `<div class="pg-slot"></div>
     <div class="doc-pager">
       <button class="pg-btn" type="button" data-pg="prev">‹ Anterior</button>
@@ -2875,8 +2888,8 @@ function paginateLines(container, rows, { grouped=false, pageSize=25 } = {}){
   let page=1;
   const paint = ()=>{
     const b=pageBounds(total, pageSize, page); page=b.page;
-    slot.innerHTML = renderSlice(rows.slice(b.start, b.end)); bindLineRows(slot);
-    info.textContent = `Página ${b.page} de ${b.totalPages} · ${total} linhas`;
+    slot.innerHTML = renderSlice(b.start, b.end); if(afterPaint) afterPaint(slot);
+    info.textContent = `Página ${b.page} de ${b.totalPages} · ${total} ${unit}`;
     prev.disabled = b.page<=1; next.disabled = b.page>=b.totalPages; num.max = b.totalPages;
   };
   paint();
@@ -2886,6 +2899,28 @@ function paginateLines(container, rows, { grouped=false, pageSize=25 } = {}){
   const doGo = ()=>{ const v=parseInt(num.value,10); if(!isNaN(v)){ page=v; paint(); container.scrollIntoView({block:'start'}); } };
   container.querySelector('.pg-go').addEventListener('click', doGo);
   num.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); doGo(); } });
+}
+// Paginador de TABELA homogênea: cada página é um tableHTML da fatia. `rowHTML(item, i)` recebe
+// o índice GLOBAL (i = posição na lista inteira) — assim data-idx continua batendo com a lista
+// completa mesmo paginado. `foot(total)` monta o rodapé com o TOTAL. `bind(slot)` religa cliques.
+function paginateTable(container, items, { cols, rowHTML, foot, bind, cls='', pageSize=25, unit='itens' } = {}){
+  const total = items.length;
+  const renderSlice = (s,e)=>tableHTML(cols, items.slice(s,e).map((it,j)=>rowHTML(it, s+j)).join(''),
+    typeof foot==='function' ? foot(total) : foot, cls);
+  paginate(container, total, renderSlice, { pageSize, afterPaint:bind, unit });
+}
+// Paginador de LISTAS de linha (25/página). `grouped` insere os cabeçalhos de empresa DENTRO de
+// cada página; a contagem do cabeçalho é a do grupo INTEIRO (não só a da página).
+function paginateLines(container, rows, { grouped=false, pageSize=25 } = {}){
+  const groupTotals = grouped ? countBy(rows, r=>r.codempresa||'—') : null;
+  const renderSlice = (s,e)=>{
+    const slice = rows.slice(s,e);
+    return grouped
+      ? [...groupBy(slice, r=>r.codempresa||'—')].map(([cod,seg])=>
+          `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${groupTotals.get(cod)} linha(s)</span></h3>${linhasTable(seg)}`).join('')
+      : linhasTable(slice);
+  };
+  paginate(container, rows.length, renderSlice, { pageSize, afterPaint:bindLineRows, unit:'linhas' });
 }
 // Lista de linhas com barra de filtro (situação) + agrupamento por empresa LIGADO por padrão,
 // com os grupos ordenados pelo RJ (codempresa). Padrão de qualquer consulta que lista linhas.
