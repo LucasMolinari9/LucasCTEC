@@ -30,9 +30,10 @@ const fmtLineName = nome => nome ? esc(nome).split(' - ').map(p => p.replace(/ /
 const byCodlinha = (a, b) => String(a.codlinha||'').localeCompare(String(b.codlinha||''), undefined, { numeric:true });
 // index.html:740
 const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
-// index.html — situação na BUSCA (dropdown/banner): binário Ativa/Cancelada.
-const statusBuscaHTML = r => r.cancelado
-  ? '<span class="chip chip-on">Cancelada</span>'
+// index.html — situação na BUSCA (dropdown/banner): Cancelada, Paralisada ou Ativa.
+// "Ativa" só quando operando (não cancelada e não paralisada). Transferida não aparece na busca.
+const statusBuscaHTML = r => r.cancelado ? '<span class="chip chip-on">Cancelada</span>'
+  : r.paralisado ? '<span class="chip chip-on">Paralisada</span>'
   : '<span class="chip chip-off">Ativa</span>';
 // index.html — situação ÚNICA p/ detalhe (Folha de Rosto), por prioridade (um chip só):
 // Cancelada > Paralisada > Transferida > Sub judice > Ativa. link=true → "Transferida" vira botão.
