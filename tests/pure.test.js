@@ -88,15 +88,26 @@ console.log('boolChip');
 ok(P.boolChip(true,'X').includes('chip-on') && P.boolChip(true,'X').includes('X'), 'boolChip true → chip');
 eq(P.boolChip(false,'X'), '', 'boolChip false → vazio');
 
-// --- statusChipsHTML (situação completa; transferida distinta e opcionalmente linkada) ---
-console.log('statusChipsHTML');
-ok(P.statusChipsHTML({}).includes('chip-off') && P.statusChipsHTML({}).includes('Ativa'), 'statusChipsHTML sem flags → Ativa (verde)');
-ok(P.statusChipsHTML({cancelado:true}).includes('Cancelada') && P.statusChipsHTML({cancelado:true}).includes('chip-on'), 'statusChipsHTML cancelada → chip vermelho');
-ok(P.statusChipsHTML({paralisado:true}).includes('Paralisada'), 'statusChipsHTML paralisada → chip');
-ok(P.statusChipsHTML({sub_judice:true}).includes('Sub judice'), 'statusChipsHTML sub judice → chip');
-ok(P.statusChipsHTML({transferido:true}).includes('Transferida') && P.statusChipsHTML({transferido:true}).includes('chip-transf'), 'statusChipsHTML transferida → chip âmbar');
-ok(!P.statusChipsHTML({transferido:true}).includes('<button'), 'statusChipsHTML transferida sem link → span (não botão)');
-ok(P.statusChipsHTML({transferido:true},{link:true}).includes('<button') && P.statusChipsHTML({transferido:true},{link:true}).includes('data-hist'), 'statusChipsHTML transferida com link → botão com data-hist');
+// --- statusBuscaHTML (busca: binário Ativa/Cancelada, sem outros estados) ---
+console.log('statusBuscaHTML');
+ok(P.statusBuscaHTML({}).includes('chip-off') && P.statusBuscaHTML({}).includes('Ativa'), 'statusBuscaHTML sem flags → Ativa (verde)');
+ok(P.statusBuscaHTML({cancelado:true}).includes('Cancelada') && P.statusBuscaHTML({cancelado:true}).includes('chip-on'), 'statusBuscaHTML cancelada → chip vermelho');
+ok(P.statusBuscaHTML({paralisado:true}).includes('Ativa'), 'statusBuscaHTML paralisada (não cancelada) → Ativa (busca é binária)');
+ok(P.statusBuscaHTML({transferido:true}) === P.statusBuscaHTML({}), 'statusBuscaHTML transferida → igual a Ativa (sem Transferida na busca)');
+ok(!P.statusBuscaHTML({transferido:true}).includes('Transferida') && !P.statusBuscaHTML({transferido:true}).includes('chip-transf'), 'statusBuscaHTML nunca mostra Transferida');
+
+// --- situacaoLinhaHTML (detalhe: UM estado só, por prioridade; nunca dois chips juntos) ---
+console.log('situacaoLinhaHTML');
+ok(P.situacaoLinhaHTML({}).includes('Ativa'), 'situacaoLinhaHTML sem flags → Ativa');
+ok(P.situacaoLinhaHTML({cancelado:true}).includes('Cancelada'), 'situacaoLinhaHTML cancelada → Cancelada');
+ok(P.situacaoLinhaHTML({paralisado:true}).includes('Paralisada'), 'situacaoLinhaHTML paralisada → Paralisada');
+ok(P.situacaoLinhaHTML({sub_judice:true}).includes('Sub judice'), 'situacaoLinhaHTML sub judice → Sub judice');
+ok(P.situacaoLinhaHTML({transferido:true}).includes('Transferida') && P.situacaoLinhaHTML({transferido:true}).includes('chip-transf'), 'situacaoLinhaHTML transferida → chip âmbar');
+// prioridade: nunca dois chips na mesma tela
+eq(P.situacaoLinhaHTML({cancelado:true,transferido:true}), '<span class="chip chip-on">Cancelada</span>', 'cancelada+transferida → só Cancelada');
+eq(P.situacaoLinhaHTML({paralisado:true,transferido:true}), '<span class="chip chip-on">Paralisada</span>', 'paralisada+transferida → só Paralisada (foi paralisado)');
+ok(!P.situacaoLinhaHTML({paralisado:true,transferido:true}).includes('Transferida'), 'paralisada+transferida → sem Transferida junto');
+ok(P.situacaoLinhaHTML({transferido:true},{link:true}).includes('<button') && P.situacaoLinhaHTML({transferido:true},{link:true}).includes('data-hist'), 'situacaoLinhaHTML transferida com link → botão com data-hist');
 
 // --- isLinhaAtiva (ativa = não cancelada e não paralisada; sub judice/transferida contam como ativas) ---
 console.log('isLinhaAtiva');

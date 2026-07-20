@@ -30,15 +30,20 @@ const fmtLineName = nome => nome ? esc(nome).split(' - ').map(p => p.replace(/ /
 const byCodlinha = (a, b) => String(a.codlinha||'').localeCompare(String(b.codlinha||''), undefined, { numeric:true });
 // index.html:740
 const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
-// index.html — chips de situação da linha (espelha a Folha de Rosto). link=true → "Transferida" vira botão.
-function statusChipsHTML(r, { link=false } = {}){
-  const transf = r.transferido
-    ? (link ? `<button type="button" class="chip chip-transf" data-hist="1">Transferida ↗</button>`
-            : `<span class="chip chip-transf">Transferida</span>`)
-    : '';
-  return [ boolChip(r.cancelado,'Cancelada'), boolChip(r.paralisado,'Paralisada'),
-           boolChip(r.sub_judice,'Sub judice'), transf ].filter(Boolean).join(' ')
-         || '<span class="chip chip-off">Ativa</span>';
+// index.html — situação na BUSCA (dropdown/banner): binário Ativa/Cancelada.
+const statusBuscaHTML = r => r.cancelado
+  ? '<span class="chip chip-on">Cancelada</span>'
+  : '<span class="chip chip-off">Ativa</span>';
+// index.html — situação ÚNICA p/ detalhe (Folha de Rosto), por prioridade (um chip só):
+// Cancelada > Paralisada > Transferida > Sub judice > Ativa. link=true → "Transferida" vira botão.
+function situacaoLinhaHTML(r, { link=false } = {}){
+  if (r.cancelado)   return '<span class="chip chip-on">Cancelada</span>';
+  if (r.paralisado)  return '<span class="chip chip-on">Paralisada</span>';
+  if (r.transferido) return link
+      ? '<button type="button" class="chip chip-transf" data-hist="1">Transferida ↗</button>'
+      : '<span class="chip chip-transf">Transferida</span>';
+  if (r.sub_judice)  return '<span class="chip chip-on">Sub judice</span>';
+  return '<span class="chip chip-off">Ativa</span>';
 }
 // index.html:763 — linha ATIVA = operando (não cancelada e não paralisada). Sub judice e
 // transferida contam como ativas. Critério único de Empresas e Relatórios.
@@ -154,7 +159,7 @@ function pageBounds(total, pageSize, page){
 }
 
 module.exports = {
-  fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, statusChipsHTML, isLinhaAtiva, isVigente, norm,
+  fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, statusBuscaHTML, situacaoLinhaHTML, isLinhaAtiva, isVigente, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike, municipiosExatos,
   setRTState, rowMatchesActiveLine,
   resumoRelatorio, resumoFrota, pageBounds,
