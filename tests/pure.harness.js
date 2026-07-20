@@ -30,6 +30,16 @@ const fmtLineName = nome => nome ? esc(nome).split(' - ').map(p => p.replace(/ /
 const byCodlinha = (a, b) => String(a.codlinha||'').localeCompare(String(b.codlinha||''), undefined, { numeric:true });
 // index.html:740
 const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
+// index.html — chips de situação da linha (espelha a Folha de Rosto). link=true → "Transferida" vira botão.
+function statusChipsHTML(r, { link=false } = {}){
+  const transf = r.transferido
+    ? (link ? `<button type="button" class="chip chip-transf" data-hist="1">Transferida ↗</button>`
+            : `<span class="chip chip-transf">Transferida</span>`)
+    : '';
+  return [ boolChip(r.cancelado,'Cancelada'), boolChip(r.paralisado,'Paralisada'),
+           boolChip(r.sub_judice,'Sub judice'), transf ].filter(Boolean).join(' ')
+         || '<span class="chip chip-off">Ativa</span>';
+}
 // index.html:763 — linha ATIVA = operando (não cancelada e não paralisada). Sub judice e
 // transferida contam como ativas. Critério único de Empresas e Relatórios.
 const isLinhaAtiva = r => !r.cancelado && !r.paralisado;
@@ -144,7 +154,7 @@ function pageBounds(total, pageSize, page){
 }
 
 module.exports = {
-  fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, isLinhaAtiva, isVigente, norm,
+  fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, statusChipsHTML, isLinhaAtiva, isVigente, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike, municipiosExatos,
   setRTState, rowMatchesActiveLine,
   resumoRelatorio, resumoFrota, pageBounds,
