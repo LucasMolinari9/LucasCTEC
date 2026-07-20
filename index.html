@@ -495,6 +495,8 @@
   .chip{display:inline-block;font-size:12px;padding:2px 8px;border-radius:20px;font-weight:600}
   .chip-on{background:#fde7e6;color:#b33a2e}
   .chip-off{background:#e4f4ec;color:#1f7a45}
+  .chip-transf{background:#fdecd2;color:#8a5a00}
+  button.chip{border:0;cursor:pointer;font-family:inherit}
   /* loading / empty */
   .m-loading{text-align:center;padding:48px 0;color:var(--muted);font-size:15.5px}
   .m-loading .spin{
@@ -678,7 +680,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 18/07-D</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 20/07-A</span></span>
   </div>
 </footer>
 
@@ -788,6 +790,17 @@ const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
 // devolve HTML pronto (&nbsp; nos espaços internos) — NÃO re-escapar quem usa.
 const fmtLineName = nome => nome ? esc(nome).split(' - ').map(p => p.replace(/ /g, '&nbsp;')).join(' - ') : '—';
 const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
+// Chips de situação da linha. Espelha a Folha de Rosto (Cancelada/Paralisada/Sub judice/
+// Transferida ou "Ativa" como fallback). Com link=true, "Transferida" vira botão → Histórico.
+function statusChipsHTML(r, { link=false } = {}){
+  const transf = r.transferido
+    ? (link ? `<button type="button" class="chip chip-transf" data-hist="1">Transferida ↗</button>`
+            : `<span class="chip chip-transf">Transferida</span>`)
+    : '';
+  return [ boolChip(r.cancelado,'Cancelada'), boolChip(r.paralisado,'Paralisada'),
+           boolChip(r.sub_judice,'Sub judice'), transf ].filter(Boolean).join(' ')
+         || '<span class="chip chip-off">Ativa</span>';
+}
 // Uma linha está ATIVA quando está operando: não cancelada e não paralisada.
 // Sub judice (pendência só na Justiça) e transferida (mudou de operadora) seguem
 // operando → contam como ativas. Critério único usado por Empresas e Relatórios.
@@ -976,7 +989,7 @@ async function doSearch() {
         <button class="result-item" type="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
           <span class="r-num">${esc(r.numero_ligacao || fmtCode(r.codlinha))}</span>
           <span class="r-name">${esc(r.nome_ligacao || '—')}</span>
-          ${boolChip(r.cancelado,'Cancelada')}
+          ${statusChipsHTML(r)}
           <span class="r-emp">${esc(fmtCode(r.codlinha))} · ${esc(empNome(r.codempresa))}${r.codempresa?` (RJ ${esc(r.codempresa)})`:''}</span>
         </button>`).join('');
     }
@@ -1011,17 +1024,26 @@ function selectLine(row) {
   banner.innerHTML = `
     <span class="lb-num">${esc(row.numero_ligacao || row.codlinha)}</span>
     <div>
-      <div class="lb-name">${esc(row.nome_ligacao || '—')} ${boolChip(row.cancelado,'Cancelada')}</div>
+      <div class="lb-name">${esc(row.nome_ligacao || '—')} ${statusChipsHTML(row,{link:true})}</div>
       <div class="lb-emp">${bannerEmpHTML(row)}</div>
     </div>
     <button class="lb-clear" id="btnClearLine">✕ Limpar</button>`;
   document.getElementById('btnClearLine').addEventListener('click', () => {
     activeLine = null; banner.style.display = 'none';
   });
+  const hb = banner.querySelector('.chip-transf[data-hist]');
+  if (hb) hb.addEventListener('click', () => abrirHistoricoLinha(row));
   // se o cache de empresas ainda não chegou, atualiza o texto quando carregar
   if (!empresas.map) getEmpresas().then(() => {
     if (activeLine === row) { const el = banner.querySelector('.lb-emp'); if (el) el.innerHTML = bannerEmpHTML(row); }
   }).catch(()=>{});
+}
+// Abre o Histórico da linha (mesmo caminho do clique de card). O loader historicoLinha
+// pré-preenche pela activeLine e auto-roda o searchPanel, renderizando o histórico direto.
+function abrirHistoricoLinha(line){
+  if (line) selectLine(line);
+  runView({ title:'Histórico da Linha', tables: VIEW_TABLES.historicoLinha,
+            lineFilter:false, loader: LOADERS.historicoLinha });
 }
 // `activeLine` é um snapshot do row (congelado no clique). Sem isto, uma edição ao vivo em
 // tabela_vista_teste (nome, empresa, cancelamento) recarregava o modal mas deixava o BANNER
@@ -1569,7 +1591,7 @@ async function renderFolhaRosto(host, line){
   const L = rows[0] || line;
   const tv = tarifas[0]?.tarifa;
   const tarifa = tv != null ? 'R$ '+Number(tv).toFixed(2).replace('.',',') : '—';
-  const status = [ boolChip(L.cancelado,'Cancelada'), boolChip(L.paralisado,'Paralisada'), boolChip(L.sub_judice,'Sub judice'), boolChip(L.transferido,'Transferida') ].join(' ') || '<span class="chip chip-off">Ativa</span>';
+  const status = statusChipsHTML(L, { link:true });
   const inner = `${metaRows([
       ['Empresa', esc(empNome(L.codempresa)), true],
       ['Registro', 'RJ-'+esc(orDash(L.codempresa))],
@@ -1588,6 +1610,8 @@ async function renderFolhaRosto(host, line){
     ])}
     <div class="doc-foot">Fonte: cadastro DETRO-RJ · tabela_vista_teste</div>`;
   host.innerHTML = inner;
+  const hb = host.querySelector('.chip-transf[data-hist]');
+  if (hb) hb.addEventListener('click', () => abrirHistoricoLinha(L));
   if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Cadastro de Linhas: Folha de Rosto')}${inner}</div>`;
 }
 

@@ -76,6 +76,7 @@ const canon = [
   ['fmtLineName',          "split(' - ').map(p => p.replace(/ /g, '&nbsp;'))"],
   ['byCodlinha',           "localeCompare(String(b.codlinha||''), undefined, { numeric:true })"],
   ['boolChip',             'chip chip-on'],
+  ['statusChipsHTML',      'class="chip chip-transf" data-hist="1">Transferida ↗'],
   ['isLinhaAtiva',         'const isLinhaAtiva = r => !r.cancelado && !r.paralisado;'],
   ['isVigente',            'const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;'],
   ['norm',                 "normalize('NFD')"],
