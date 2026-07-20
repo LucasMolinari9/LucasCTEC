@@ -88,13 +88,15 @@ console.log('boolChip');
 ok(P.boolChip(true,'X').includes('chip-on') && P.boolChip(true,'X').includes('X'), 'boolChip true → chip');
 eq(P.boolChip(false,'X'), '', 'boolChip false → vazio');
 
-// --- statusBuscaHTML (busca: binário Ativa/Cancelada, sem outros estados) ---
+// --- statusBuscaHTML (busca: Ativa/Cancelada/Paralisada; "Ativa" só quando operando) ---
 console.log('statusBuscaHTML');
 ok(P.statusBuscaHTML({}).includes('chip-off') && P.statusBuscaHTML({}).includes('Ativa'), 'statusBuscaHTML sem flags → Ativa (verde)');
 ok(P.statusBuscaHTML({cancelado:true}).includes('Cancelada') && P.statusBuscaHTML({cancelado:true}).includes('chip-on'), 'statusBuscaHTML cancelada → chip vermelho');
-ok(P.statusBuscaHTML({paralisado:true}).includes('Ativa'), 'statusBuscaHTML paralisada (não cancelada) → Ativa (busca é binária)');
-ok(P.statusBuscaHTML({transferido:true}) === P.statusBuscaHTML({}), 'statusBuscaHTML transferida → igual a Ativa (sem Transferida na busca)');
+ok(P.statusBuscaHTML({paralisado:true}).includes('Paralisada') && !P.statusBuscaHTML({paralisado:true}).includes('Ativa'), 'statusBuscaHTML paralisada → Paralisada (NÃO Ativa)');
+eq(P.statusBuscaHTML({paralisado:true,transferido:true}), P.statusBuscaHTML({paralisado:true}), 'statusBuscaHTML paralisada+transferida → Paralisada (ex.: 458M)');
+ok(P.statusBuscaHTML({transferido:true}) === P.statusBuscaHTML({}), 'statusBuscaHTML só transferida → igual a Ativa (sem Transferida na busca)');
 ok(!P.statusBuscaHTML({transferido:true}).includes('Transferida') && !P.statusBuscaHTML({transferido:true}).includes('chip-transf'), 'statusBuscaHTML nunca mostra Transferida');
+eq(P.statusBuscaHTML({cancelado:true,paralisado:true}), P.statusBuscaHTML({cancelado:true}), 'statusBuscaHTML cancelada+paralisada → Cancelada (cancelada tem prioridade)');
 
 // --- situacaoLinhaHTML (detalhe: UM estado só, por prioridade; nunca dois chips juntos) ---
 console.log('situacaoLinhaHTML');

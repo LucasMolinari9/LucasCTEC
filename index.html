@@ -680,7 +680,7 @@
   <div class="footer-in">
     <span>DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 20/07-B</span></span>
+    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 20/07-C</span></span>
   </div>
 </footer>
 
@@ -790,9 +790,11 @@ const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
 // devolve HTML pronto (&nbsp; nos espaços internos) — NÃO re-escapar quem usa.
 const fmtLineName = nome => nome ? esc(nome).split(' - ').map(p => p.replace(/ /g, '&nbsp;')).join(' - ') : '—';
 const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
-// Situação na BUSCA (dropdown e banner): binário — só Ativa (verde) ou Cancelada (vermelho).
-const statusBuscaHTML = r => r.cancelado
-  ? '<span class="chip chip-on">Cancelada</span>'
+// Situação na BUSCA (dropdown e banner): Cancelada, Paralisada ou Ativa. "Ativa" (verde) só
+// quando a linha está operando (não cancelada e não paralisada) — igual ao critério isLinhaAtiva.
+// Transferida NÃO aparece na busca (linha só transferida conta como Ativa).
+const statusBuscaHTML = r => r.cancelado ? '<span class="chip chip-on">Cancelada</span>'
+  : r.paralisado ? '<span class="chip chip-on">Paralisada</span>'
   : '<span class="chip chip-off">Ativa</span>';
 // Situação ÚNICA da linha p/ telas de detalhe (Folha de Rosto): mostra UM estado só, por
 // prioridade (nunca dois chips juntos): Cancelada > Paralisada > Transferida > Sub judice > Ativa.
