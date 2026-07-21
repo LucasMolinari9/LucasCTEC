@@ -14,10 +14,18 @@
 <meta property="og:url" content="https://divatdetro.vercel.app/">
 <meta property="og:locale" content="pt_BR">
 <meta name="twitter:card" content="summary">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+  /* Fontes vendoradas em vendor/fonts/ (subset latin, cobre pt-BR) — sem Google Fonts em
+     runtime. Origem: pacotes @fontsource v5.3.0 via npm (como o supabase-js). Para atualizar:
+     npm pack @fontsource/<família>, extrair files/<família>-latin-<peso>-normal.woff2. */
+  @font-face{font-family:'Archivo';font-style:normal;font-display:swap;font-weight:600;src:url(vendor/fonts/archivo-latin-600-normal.woff2) format('woff2')}
+  @font-face{font-family:'Archivo';font-style:normal;font-display:swap;font-weight:700;src:url(vendor/fonts/archivo-latin-700-normal.woff2) format('woff2')}
+  @font-face{font-family:'Archivo';font-style:normal;font-display:swap;font-weight:800;src:url(vendor/fonts/archivo-latin-800-normal.woff2) format('woff2')}
+  @font-face{font-family:'IBM Plex Mono';font-style:normal;font-display:swap;font-weight:500;src:url(vendor/fonts/ibm-plex-mono-latin-500-normal.woff2) format('woff2')}
+  @font-face{font-family:'IBM Plex Mono';font-style:normal;font-display:swap;font-weight:600;src:url(vendor/fonts/ibm-plex-mono-latin-600-normal.woff2) format('woff2')}
+  @font-face{font-family:'IBM Plex Sans';font-style:normal;font-display:swap;font-weight:400;src:url(vendor/fonts/ibm-plex-sans-latin-400-normal.woff2) format('woff2')}
+  @font-face{font-family:'IBM Plex Sans';font-style:normal;font-display:swap;font-weight:500;src:url(vendor/fonts/ibm-plex-sans-latin-500-normal.woff2) format('woff2')}
+  @font-face{font-family:'IBM Plex Sans';font-style:normal;font-display:swap;font-weight:600;src:url(vendor/fonts/ibm-plex-sans-latin-600-normal.woff2) format('woff2')}
   :root{
     --navy:#0a3a63;
     --navy-deep:#072a49;
