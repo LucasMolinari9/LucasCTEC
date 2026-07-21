@@ -1,5 +1,5 @@
 'use strict';
-/* Harness reproducing the SUPABASE CONFIG functions from index.html (lines 618-684).
+/* Harness reproducing the SUPABASE CONFIG functions from app.js (lines 618-684).
    SB_TIMEOUT_MS is made mutable (let) so the timeout test can shrink it.
    Everything else is copied verbatim. */
 

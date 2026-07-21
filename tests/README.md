@@ -1,9 +1,9 @@
-# Testes — lógica pura do `index.html` (sem navegador, sem rede)
+# Testes — lógica pura do `app.js` (sem navegador, sem rede)
 
-Testes unitários isolados (Node, **sem dependências**) da lógica do `index.html`.
+Testes unitários isolados (Node, **sem dependências**) da lógica do `app.js`.
 Não precisam de navegador nem de rede: o `fetch` é mockado, o `AbortController` é o
 nativo do Node, e as funções puras (formatação, busca, filtros) são copiadas
-**verbatim** dos respectivos blocos do `index.html`.
+**verbatim** dos respectivos blocos do `app.js`.
 
 ## Como rodar
 
@@ -11,8 +11,8 @@ nativo do Node, e as funções puras (formatação, busca, filtros) são copiada
 ```bash
 node tests/check.js
 ```
-Esse comando: (1) valida a **sintaxe** do `<script>` inline do `index.html` sem
-executá-lo; (2) confere que as cópias verbatim ainda batem com o `index.html`
+Esse comando: (1) valida a **sintaxe** do `app.js` sem
+executá-lo; (2) confere que as cópias verbatim ainda batem com o `app.js`
 (**guarda anti-drift**); (3) roda todos os `*.test.js`. Sai com código ≠ 0 se algo
 falhar — **rode-o antes de cada publicação**.
 
@@ -51,13 +51,13 @@ cada teste novo).
 - `sbFetch.test.js` — casos de `sbFetch`/`marcarTrunc`/`bannerTrunc`.
 - `pure.harness.js` — cópia **verbatim** das funções puras (com a linha de origem citada).
 - `pure.test.js` — casos das funções puras.
-- `realtime.test.js` — guarda a sincronização `VIEW_TABLES`/`RT_TABLES` (extrai os literais do `index.html`).
+- `realtime.test.js` — guarda a sincronização `VIEW_TABLES`/`RT_TABLES` (extrai os literais do `app.js`).
 
 ## ⚠️ Regra de ouro (anti-drift)
-Os harness **copiam o código do `index.html` à mão**. Ao **editar uma dessas funções
-no `index.html`, atualize a cópia** no harness correspondente. O `check.js` tem uma
+Os harness **copiam o código do `app.js` à mão**. Ao **editar uma dessas funções
+no `app.js`, atualize a cópia** no harness correspondente. O `check.js` tem uma
 guarda que falha avisando "harness DESATUALIZADO" se um trecho canônico sumir do
-`index.html` — mas ela cobre só os trechos listados; mantenha a disciplina.
+`app.js` — mas ela cobre só os trechos listados; mantenha a disciplina.
 
 > Observação: estes testes cobrem a camada de dados/lógica pura. A renderização (DOM)
 > e o PDF não são testados aqui — exigiriam um navegador headless.

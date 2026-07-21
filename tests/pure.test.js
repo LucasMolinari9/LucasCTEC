@@ -181,7 +181,7 @@ console.log('yearOf');
 eq(P.yearOf('2020-06-19'), 2020, 'yearOf extrai o ano');
 eq(P.yearOf(null),         null, 'yearOf null');
 
-// --- matchEvent (critérios já normalizados, como no readCriteria do index.html) ---
+// --- matchEvent (critérios já normalizados, como no readCriteria do app.js) ---
 console.log('matchEvent');
 {
   const r = { descricao:'Reformulação do itinerário', observacao:'trecho novo',

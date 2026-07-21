@@ -1,50 +1,50 @@
 'use strict';
-/* Cópias VERBATIM de funções PURAS do index.html, para teste unitário em Node
+/* Cópias VERBATIM de funções PURAS do app.js, para teste unitário em Node
    (sem navegador, sem rede, sem dependências).
 
-   IMPORTANTE: ao editar uma destas funções no index.html, atualize a cópia aqui.
+   IMPORTANTE: ao editar uma destas funções no app.js, atualize a cópia aqui.
    O tests/check.js tem uma guarda anti-drift que avisa se a versão original mudar.
    A linha de origem está citada em cada bloco. */
 
-// index.html:728 — 101001001 → 101-001-001 (código da ligação no PDF oficial)
+// app.js:728 — 101001001 → 101-001-001 (código da ligação no PDF oficial)
 function fmtCode(code) {
   if (!code) return '';
   const s = String(code);
   return s.length === 9 ? `${s.slice(0,3)}-${s.slice(3,6)}-${s.slice(6)}` : s;
 }
-// index.html:734 — HH:MM:SS → HH:MM
+// app.js:734 — HH:MM:SS → HH:MM
 function fmtTime(t){ if(!t) return '—'; const m=String(t).match(/^(\d{2}):(\d{2})/); return m?`${m[1]}:${m[2]}`:t; }
-// index.html:736 — data ISO (YYYY-MM-DD) → DD/MM/YYYY
+// app.js:736 — data ISO (YYYY-MM-DD) → DD/MM/YYYY
 function fmtDate(d){ if(!d) return '—'; const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:d; }
-// index.html:737 — escape de HTML (relevante p/ XSS)
+// app.js:737 — escape de HTML (relevante p/ XSS)
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
-// index.html:738
+// app.js:738
 const enc = s => encodeURIComponent(s);
-// index.html:760 — sanitiza termo p/ uso dentro de padrão ilike do PostgREST
+// app.js:760 — sanitiza termo p/ uso dentro de padrão ilike do PostgREST
 const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));
-// index.html:739
+// app.js:739
 const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
-// index.html — nome "Origem - Destino": quebra só no " - ", cada lado inteiro (&nbsp;)
+// app.js — nome "Origem - Destino": quebra só no " - ", cada lado inteiro (&nbsp;)
 const fmtLineName = nome => nome ? esc(nome).split(' - ').map(p => p.replace(/ /g, '&nbsp;')).join(' - ') : '—';
-// index.html — ordena listagem de linhas pelo código (codlinha), natural/numérico
+// app.js — ordena listagem de linhas pelo código (codlinha), natural/numérico
 const byCodlinha = (a, b) => String(a.codlinha||'').localeCompare(String(b.codlinha||''), undefined, { numeric:true });
-// index.html:740
+// app.js:740
 const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
-// index.html — situação da linha (busca e documentos): Cancelada, Paralisada ou Ativa.
+// app.js — situação da linha (busca e documentos): Cancelada, Paralisada ou Ativa.
 // "Ativa" só quando operando (não cancelada e não paralisada). Transferida/sub judice contam como Ativa.
 const situacaoHTML = r => r.cancelado ? '<span class="chip chip-on">Cancelada</span>'
   : r.paralisado ? '<span class="chip chip-on">Paralisada</span>'
   : '<span class="chip chip-off">Ativa</span>';
-// index.html:763 — linha ATIVA = operando (não cancelada e não paralisada). Sub judice e
+// app.js:763 — linha ATIVA = operando (não cancelada e não paralisada). Sub judice e
 // transferida contam como ativas. Critério único de Empresas e Relatórios.
 const isLinhaAtiva = r => !r.cancelado && !r.paralisado;
-// index.html — VIGENTE (seção/tarifa) = critério estrito: além de ativa, exclui sub judice e transferida.
+// app.js — VIGENTE (seção/tarifa) = critério estrito: além de ativa, exclui sub judice e transferida.
 const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;
-// index.html:842 — normaliza acento/caixa para busca
+// app.js:842 — normaliza acento/caixa para busca
 const norm = s => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
-// index.html:1510
+// app.js:1510
 const yearOf = d => d ? parseInt(String(d).slice(0,4),10) : null;
-// index.html:1511 — filtro do histórico de eventos (depende de norm e yearOf)
+// app.js:1511 — filtro do histórico de eventos (depende de norm e yearOf)
 function matchEvent(r, c){
   if (c.text && !norm((r.descricao||'')+' '+(r.observacao||'')).includes(c.text)) return false;
   if (c.proc && !norm(r.numero_processo||'').includes(c.proc)) return false;
@@ -56,28 +56,28 @@ function matchEvent(r, c){
   }
   return true;
 }
-// index.html — nomes canônicos da lista de localidades que casam o termo (insensível a acento/caixa) —
+// app.js — nomes canônicos da lista de localidades que casam o termo (insensível a acento/caixa) —
 // permite digitar "sao goncalo" e buscar no servidor por "SÃO GONÇALO" (o ilike do PostgREST
 // NÃO ignora acento)
 function localidadesQueCasam(lista, term){
   const nt = norm(term);
   return nt ? lista.filter(n => norm(n).includes(nt)).slice(0, 5) : [];
 }
-// index.html — filtro or=() do PostgREST: cada coluna ilike cada termo (depende de ilikeTerm)
+// app.js — filtro or=() do PostgREST: cada coluna ilike cada termo (depende de ilikeTerm)
 const orIlike = (cols, termos) => 'or=(' + termos.map(t => { const e = ilikeTerm(t); return cols.map(c => `${c}.ilike.*${e}*`).join(','); }).join(',') + ')';
-// index.html — cod_ibge cujo nome de município é EXATAMENTE um dos termos (insens. a acento/caixa) —
+// app.js — cod_ibge cujo nome de município é EXATAMENTE um dos termos (insens. a acento/caixa) —
 // exato de propósito: "rio" não pode puxar Rio de Janeiro/Rio Bonito/Rio Claro inteiros
 function municipiosExatos(ibge, termos){
   const nts = new Set(termos.map(norm).filter(Boolean));
   return Object.entries(ibge).filter(([,v])=>nts.has(norm(v.nome))).map(([c])=>c);
 }
-// index.html:2356
+// app.js:2356
 function groupBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); if(!m.has(k))m.set(k,[]); m.get(k).push(x); } return m; }
-// index.html:2357
+// app.js:2357
 function countBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); m.set(k,(m.get(k)||0)+1); } return m; }
-// index.html:2358
+// app.js:2358
 function fmtMoney(v){ if(v===null||v===undefined||v==='') return '—'; const n=Number(v); return isNaN(n)?String(v):n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-// index.html — classifica linhas por município (dentro × intermunicipal) a partir das linhas de
+// app.js — classifica linhas por município (dentro × intermunicipal) a partir das linhas de
 // itinerário (codlinha, cod_municipio_origem). "dentro" = todos os trechos no próprio município (M);
 // "inter" = tem ao menos um trecho em OUTRO município (cod_municipio_origem não-vazio e != M).
 function classifyMunLines(itRows, codibge){
@@ -99,7 +99,7 @@ function classifyMunLines(itRows, codibge){
   return { dentro, inter };
 }
 
-/* index.html:2401 — filtro do Realtime. No index.html depende do estado de módulo
+/* app.js:2401 — filtro do Realtime. No app.js depende do estado de módulo
    `currentView` e `activeLine`; aqui são variáveis locais ajustáveis via setRTState()
    só para teste (o corpo da função é cópia verbatim). */
 let currentView = null, activeLine = null;
@@ -112,7 +112,7 @@ function rowMatchesActiveLine(payload){
   return String(cod) === String(activeLine.codlinha);
 }
 
-// index.html:2303 — agregação do Relatório Gerencial (depende de isLinhaAtiva e countBy)
+// app.js:2303 — agregação do Relatório Gerencial (depende de isLinhaAtiva e countBy)
 function resumoRelatorio(rows){
   return {
     total: rows.length,
@@ -124,7 +124,7 @@ function resumoRelatorio(rows){
     porEmp: [...countBy(rows, r=>r.codempresa||'—')].sort((a,b)=>b[1]-a[1]).slice(0,15),
   };
 }
-// index.html:2327 — agregação da Frota por Empresa (depende de groupBy)
+// app.js:2327 — agregação da Frota por Empresa (depende de groupBy)
 function resumoFrota(rows){
   const num = v => { const n = Number(v); return isNaN(n) ? 0 : n; };
   const sum = (arr,f) => arr.reduce((s,r)=>s+num(r[f]),0);
@@ -140,7 +140,7 @@ function resumoFrota(rows){
   };
 }
 
-// index.html:2850 — bordas de paginação das listagens de linha (clampa a página)
+// app.js:2850 — bordas de paginação das listagens de linha (clampa a página)
 function pageBounds(total, pageSize, page){
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const p = Math.min(Math.max(1, (page|0) || 1), totalPages);

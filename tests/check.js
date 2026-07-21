@@ -1,9 +1,10 @@
 'use strict';
 /* GATE DE PRÉ-PUBLICAÇÃO — rode `node tests/check.js` antes de publicar.
    Faz, em sequência, e agrega o resultado:
-     [1] valida a SINTAXE do <script> inline do index.html (sem executar o código);
+     [1] valida a SINTAXE do app.js (sem executar o código) e garante que o
+         index.html NÃO tem <script> inline (a CSP publica script-src 'self');
      [2] guarda anti-drift: confere que as funções copiadas nos *.harness.js ainda
-         existem iguais no index.html (avisa se a original mudou e a cópia ficou velha);
+         existem iguais no app.js (avisa se a original mudou e a cópia ficou velha);
      [3] roda todos os *.test.js desta pasta.
    Sai com código != 0 se QUALQUER etapa falhar. Node puro, sem dependências. */
 const fs = require('fs');
@@ -13,43 +14,41 @@ const { spawnSync } = require('child_process');
 
 const TESTS_DIR = __dirname;
 const INDEX = path.join(__dirname, '..', 'index.html');
+const APPJS = path.join(__dirname, '..', 'app.js');
 
 let problems = 0;
 const fail   = msg => { console.log('  ✗', msg); problems++; };
 const okline = msg => console.log('  ✓', msg);
 
 const html = fs.readFileSync(INDEX, 'utf8');
+const js   = fs.readFileSync(APPJS, 'utf8');
 
-// ---------- [1] sintaxe do <script> inline ----------
-console.log('\n[1] Sintaxe do <script> inline (index.html)');
-// pega só o bloco bare <script>…</script> (os de CDN têm src=, então não casam)
-const m = /<script>\s*\n([\s\S]*?)<\/script>/.exec(html);
-if (!m){
-  fail('não encontrei o bloco <script> inline (sem src) no index.html');
+// ---------- [1] sintaxe do app.js + nenhum <script> inline no index.html ----------
+console.log('\n[1] Sintaxe do app.js + index.html sem <script> inline');
+try {
+  new vm.Script(js, { filename: 'app.js' });                    // só COMPILA — não roda
+  okline(`sintaxe OK (${js.split('\n').length} linhas em app.js)`);
+} catch (e){
+  const first = String(e.stack || '').split('\n')[0];
+  const mm = /:(\d+)\s*$/.exec(first);
+  fail(`erro de sintaxe no app.js${mm ? ` (linha ${mm[1]})` : ''}: ${e.message}`);
+}
+// guard anti-regressão da CSP: script-src é 'self' (sem 'unsafe-inline') —
+// qualquer <script> sem src= no index.html seria BLOQUEADO no navegador.
+if (/<script(?![^>]*\bsrc=)[^>]*>/.test(html)) {
+  fail('<script> inline no index.html — a CSP (script-src \'self\') bloqueia; mova o código para o app.js.');
 } else {
-  const code = m[1];
-  const startIdx = m.index + m[0].indexOf(code);
-  const startLine = html.slice(0, startIdx).split('\n').length; // linha real do início do JS
-  try {
-    new vm.Script(code, { filename: 'index.html' });            // só COMPILA — não roda
-    okline(`sintaxe OK (${code.split('\n').length} linhas de JS inline)`);
-  } catch (e){
-    // mapeia a linha do erro (relativa ao trecho) para a linha real do index.html
-    const first = String(e.stack || '').split('\n')[0];
-    const mm = /:(\d+)\s*$/.exec(first);
-    const real = mm ? (startLine + parseInt(mm[1], 10) - 1) : null;
-    fail(`erro de sintaxe no JS inline${real ? ` (≈ index.html linha ${real})` : ''}: ${e.message}`);
-  }
+  okline('index.html sem <script> inline (compatível com a CSP)');
 }
 
-// ---------- [1b] nenhuma chave service_role embutida no HTML servido ----------
+// ---------- [1b] nenhuma chave service_role nos arquivos servidos ----------
 // A chave anon (role=anon) é pública por design; a service_role IGNORA o RLS e
 // jamais pode ir para um arquivo entregue ao cliente. Decodifica cada JWT do
-// index.html e falha se algum tiver role=service_role (sem falso-positivo na
-// palavra "service_role" de comentários/docs).
-console.log('\n[1b] Segredo: nenhuma JWT service_role no index.html');
+// index.html e do app.js e falha se algum tiver role=service_role (sem
+// falso-positivo na palavra "service_role" de comentários/docs).
+console.log('\n[1b] Segredo: nenhuma JWT service_role no index.html/app.js');
 {
-  const jwts = html.match(/eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+/g) || [];
+  const jwts = (html + '\n' + js).match(/eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+/g) || [];
   let vazou = false;
   for (const tok of jwts){
     try {
@@ -58,13 +57,13 @@ console.log('\n[1b] Segredo: nenhuma JWT service_role no index.html');
       if (payload && payload.role === 'service_role') vazou = true;
     } catch (_) { /* token não-JWT: ignora */ }
   }
-  if (vazou) fail('CHAVE service_role embutida no index.html — ignora o RLS, NÃO publicar.');
-  else okline(`ok (${jwts.length} token(s) JWT no HTML, nenhum service_role)`);
+  if (vazou) fail('CHAVE service_role embutida em arquivo servido — ignora o RLS, NÃO publicar.');
+  else okline(`ok (${jwts.length} token(s) JWT, nenhum service_role)`);
 }
 
 // ---------- [2] guarda anti-drift ----------
-console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o index.html)');
-// trecho distintivo de cada função copiada nos harness; se sumir do index.html,
+console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
+// trecho distintivo de cada função copiada nos harness; se sumir do app.js,
 // a cópia no harness provavelmente ficou desatualizada.
 const canon = [
   ['fmtCode',              's.slice(3,6)'],
@@ -96,8 +95,8 @@ const canon = [
   ['pageBounds',           'const p = Math.min(Math.max(1, (page|0) || 1), totalPages);'],
 ];
 for (const [name, snippet] of canon){
-  if (html.includes(snippet)) okline(`${name}`);
-  else fail(`harness DESATUALIZADO p/ "${name}": não achei no index.html → ${snippet}`);
+  if (js.includes(snippet)) okline(`${name}`);
+  else fail(`harness DESATUALIZADO p/ "${name}": não achei no app.js → ${snippet}`);
 }
 
 // ---------- [3] roda os testes unitários ----------

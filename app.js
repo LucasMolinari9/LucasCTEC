@@ -1,0 +1,2530 @@
+/* ================================================================
+   ÍNDICE DO ARQUIVO  —  navegue por `grep` da marca da seção.
+   ----------------------------------------------------------------
+   SUPABASE CONFIG · ÍCONES · SEÇÕES/CARDS · RENDER CARDS ·
+   STATE + CACHES · BUSCA DE LINHAS · LINHA ATIVA — BANNER ·
+   MODAL / SISTEMA DE VIEWS (maior bloco — tem sub-índice próprio) ·
+   COMPONENTES AUXILIARES · CLIQUE NOS CARDS · UTILITÁRIOS ·
+   TOAST · REALTIME · AUTO-ATUALIZAÇÃO
+   ================================================================ */
+/* ================================================================
+   SUPABASE CONFIG
+   ================================================================ */
+const SB_URL = 'https://lwzsxuaqqeoamukduhev.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3enN4dWFxcWVvYW11a2R1aGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTk4NjYsImV4cCI6MjA5NTQ5NTg2Nn0.90R-n9pu_gpDfmRr7O4DMAdjtIUkIDGyEKfG9zXXV1s';
+
+const esperar = ms => new Promise(r => setTimeout(r, ms));
+
+const SB_TIMEOUT_MS = 20000;   // teto por requisição: evita a tela presa em "Carregando…" pra sempre
+const SB_RETRIES    = 2;       // tentativas extras só p/ erros transitórios (rede / 5xx / 429)
+
+// fetch com timeout via AbortController — cancela a requisição se passar do teto
+async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS){
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
+  finally { clearTimeout(t); }
+}
+
+async function sbFetch(table, qs = '') {
+  const url = `${SB_URL}/rest/v1/${table}?${qs}`;
+  let ultimoErro;
+  for (let tentativa = 0; tentativa <= SB_RETRIES; tentativa++) {
+    try {
+      const res = await fetchComTimeout(url, {
+        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+      });
+      if (!res.ok) {
+        // 5xx/429 são transitórios → vale repetir; demais 4xx são definitivos
+        if ((res.status >= 500 || res.status === 429) && tentativa < SB_RETRIES) {
+          ultimoErro = new Error(`HTTP ${res.status}`);
+          await esperar(400 * 2 ** tentativa);          // backoff: 400ms, 800ms
+          continue;
+        }
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `HTTP ${res.status}`);
+      }
+      return marcarTrunc(await res.json(), qs);
+    } catch (e) {
+      ultimoErro = e;
+      const transitorio = (e.name === 'AbortError') || (e instanceof TypeError); // timeout ou falha de rede
+      if (transitorio && tentativa < SB_RETRIES) { await esperar(400 * 2 ** tentativa); continue; }
+      if (e.name === 'AbortError') throw new Error('Tempo de resposta esgotado — verifique a conexão e tente novamente.');
+      throw ultimoErro;
+    }
+  }
+  throw ultimoErro;
+}
+
+// Marca (sem alterar o conteúdo) um array de resultados que provavelmente foi CORTADO:
+// só sinaliza quando a consulta tinha um limit "de lista" (>=50) e veio cheio até o teto.
+// A flag é não-enumerável → JSON.stringify/map/spread ignoram; só quem checa rows._trunc vê.
+function marcarTrunc(data, qs){
+  if (!Array.isArray(data)) return data;
+  const m = /(?:^|&)limit=(\d+)/.exec(qs || '');
+  if (m){
+    const lim = +m[1];
+    if (lim >= 50 && data.length >= lim){
+      Object.defineProperty(data, '_trunc',  { value:true, enumerable:false });
+      Object.defineProperty(data, '_limite', { value:lim,  enumerable:false });
+    }
+  }
+  return data;
+}
+// Banner de aviso quando a lista foi truncada (atingiu o limite da consulta).
+function bannerTrunc(rows){
+  return (rows && rows._trunc)
+    ? `<div class="trunc-aviso"><b>Resultado parcial:</b> mostrando os primeiros ${rows._limite}. Refine a busca para encontrar itens mais específicos.</div>`
+    : '';
+}
+
+// 101001001 → 101-001-001 (formato do código da ligação no PDF oficial)
+function fmtCode(code) {
+  if (!code) return '';
+  const s = String(code);
+  return s.length === 9 ? `${s.slice(0,3)}-${s.slice(3,6)}-${s.slice(6)}` : s;
+}
+// HH:MM:SS → HH:MM
+function fmtTime(t){ if(!t) return '—'; const m=String(t).match(/^(\d{2}):(\d{2})/); return m?`${m[1]}:${m[2]}`:t; }
+// data ISO (YYYY-MM-DD) → DD/MM/YYYY
+function fmtDate(d){ if(!d) return '—'; const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:d; }
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const enc = s => encodeURIComponent(s);
+// Sanitiza um termo do usuário para uso DENTRO de um padrão ilike do PostgREST.
+// encodeURIComponent não escapa ( ) * — que delimitam o grupo or=(...) e são curinga;
+// neutralizá-los impede que o termo quebre o filtro ou injete curingas. Depois codifica.
+const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));
+const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
+// Nome de ligação "Origem - Destino": só permite quebra de linha no separador " - ",
+// mantendo cada lado inteiro (não pica "Rio de Janeiro" palavra a palavra). Escapa e
+// devolve HTML pronto (&nbsp; nos espaços internos) — NÃO re-escapar quem usa.
+const fmtLineName = nome => nome ? esc(nome).split(' - ').map(p => p.replace(/ /g, '&nbsp;')).join(' - ') : '—';
+const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
+// Situação da linha (busca e documentos): Cancelada, Paralisada ou Ativa. "Ativa" (verde) só
+// quando a linha está operando (não cancelada e não paralisada) — igual ao critério isLinhaAtiva.
+// Transferida/Sub judice contam como Ativa (a linha segue operando).
+const situacaoHTML = r => r.cancelado ? '<span class="chip chip-on">Cancelada</span>'
+  : r.paralisado ? '<span class="chip chip-on">Paralisada</span>'
+  : '<span class="chip chip-off">Ativa</span>';
+// Uma linha está ATIVA quando está operando: não cancelada e não paralisada.
+// Sub judice (pendência só na Justiça) e transferida (mudou de operadora) seguem
+// operando → contam como ativas. Critério único usado por Empresas e Relatórios.
+const isLinhaAtiva = r => !r.cancelado && !r.paralisado;
+// VIGENTE (seção/tarifa) é o critério ESTRITO: além de ativa, exclui sub judice e transferida.
+// Repare que sub_judice/transferido têm efeito OPOSTO aqui vs. em isLinhaAtiva — por isso as
+// duas noções são explícitas e derivam de um ponto só (não confundir "ativa" com "vigente").
+const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;
+
+/* ================================================================
+   ÍCONES
+   ================================================================ */
+const I = {
+  file:'<path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/>',
+  divider:'<path d="M4 5h16M4 12h10M4 19h16"/><path d="M16 9l3 3-3 3"/>',
+  history:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/>',
+  route:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h6.5"/>',
+  clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  ticket:'<path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2 2 2 0 0 0 0 6 2 2 0 0 1-2 2H5a2 2 0 0 1-2-2 2 2 0 0 0 0-6Z"/><path d="M13 7v10"/>',
+  bus:'<rect x="4" y="4" width="16" height="13" rx="2"/><path d="M4 11h16"/><circle cx="8" cy="19" r="1.4"/><circle cx="16" cy="19" r="1.4"/><path d="M4 17v2M20 17v2"/>',
+  structure:'<rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="15" width="6" height="5" rx="1"/><rect x="15" y="15" width="6" height="5" rx="1"/><path d="M12 8v3M6 15v-2h12v2"/>',
+  building:'<path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16"/><path d="M15 9h3a2 2 0 0 1 2 2v10"/><path d="M8 7h2M8 11h2M8 15h2M3 21h18"/>',
+  link:'<path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8"/>',
+  segments:'<path d="M3 12h4M10 12h4M17 12h4"/><circle cx="8.5" cy="12" r="1.2"/><circle cx="15.5" cy="12" r="1.2"/>',
+  alpha:'<path d="M4 18 7 9l3 9M5 15h4"/><path d="M14 9h5l-5 9h5"/>',
+  hash:'<path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16"/>',
+  signpost:'<path d="M12 3v18"/><path d="M5 6h11l3 2.5L16 11H5z"/>',
+  map:'<path d="m9 4 6 2 6-2v14l-6 2-6-2-6 2V6z"/><path d="M9 4v14M15 6v14"/>',
+  pin:'<path d="M12 21s7-6.5 7-11a7 7 0 1 0-14 0c0 4.5 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/>',
+  hub:'<circle cx="12" cy="12" r="2.5"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3M6.5 6.5 8.6 8.6M15.4 15.4l2.1 2.1M17.5 6.5 15.4 8.6M8.6 15.4l-2.1 2.1"/>',
+  chart:'<path d="M4 20V4M4 20h16"/><rect x="7" y="12" width="3" height="5"/><rect x="12" y="8" width="3" height="9"/><rect x="17" y="5" width="3" height="12"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  law:'<path d="M12 3v18M5 21h14M7 7l-3 6h6zM17 7l-3 6h6z"/><path d="M5 7h14"/><circle cx="12" cy="4" r="1"/>'
+};
+
+/* ================================================================
+   SEÇÕES / CARDS  — [icone, titulo, descricao, view, precisaLinha]
+   ================================================================ */
+const SECTIONS = [
+  { key:'doc', name:'Documentos da Linha', color:'var(--c-doc)', soft:'#e7f0f8',
+    items:[
+      ['file','Folha de Rosto','Busque a linha por nome, código ou número','folhaRosto',false],
+      ['divider','Folha Divisória','Busque a linha por nome, código ou número','folhaDivisoria',false],
+      ['history','Histórico da Linha','Alterações e eventos registrados','historicoLinha',false],
+      ['route','Itinerários','Busque a linha por nome, código ou número','itinerarios',false],
+      ['clock','Quadro de Horários','Busque por linha (nº/nome/código) ou empresa (PDF de todos)','quadroHorarios',false],
+      ['ticket','Tarifas','Busque a linha por nome, código ou número','tarifas',false],
+      ['bus','Frota','Busque a linha por nome, código ou número','frota',false],
+      ['structure','Estrutura Operacional','Busque a linha por nome, código ou número','estrutura',false],
+    ]},
+  { key:'emp', name:'Empresas', color:'var(--c-emp)', soft:'#e4f4ec',
+    items:[
+      ['building','Empresas Regulares','Operadoras com linhas regulares ativas','empresasRegulares',false],
+      ['history','Histórico da Empresa','Eventos e alterações por operadora','historicoEmpresa',false],
+      ['link','Ligações por Empresa','Linhas operadas por uma empresa','ligacoesPorEmpresa',false],
+      ['segments','Seções por Empresa','Seções atendidas por operadora','secoesPorEmpresa',false],
+    ]},
+  { key:'lig', name:'Consultas de Ligações', color:'var(--c-lig)', soft:'#f8efe0',
+    items:[
+      ['alpha','Ligações pelo Nome','Buscar em ordem alfabética crescente','ligacoesPorNome',false],
+      ['hash','Identificar pelo Número','Localizar uma linha pelo código','ligacoesPorNumero',false],
+      ['signpost','Ligações por Logradouro','Linhas que passam por uma via','ligacoesPorLogradouro',false],
+      ['map','Município e Região','Linhas por origem e destino','municipioRegiao',false],
+      ['pin','Linhas por Localidade e Município','Busque por seção, "via" ou cruze localidades/municípios','localidades',false],
+      ['hub','Ligações por Terminais','Linhas que atendem um terminal','ligacoesPorTerminal',false],
+      ['segments','Seções por Ligação','Seções que compõem uma linha','secoesPorLigacao',true],
+    ]},
+  { key:'ger', name:'Gerenciais e Pesquisa', color:'var(--c-ger)', soft:'#efe9f7',
+    items:[
+      ['chart','Relatórios Gerenciais','Indicadores e consolidados da DIVAT','relatoriosGerenciais',false],
+      ['bus','Frota por Empresa','Frota consolidada por operadora e hierarquia','frotaPorEmpresa',false],
+      ['search','Pesquisa de Evento','Buscar eventos por termo livre','pesquisaEvento',false],
+      ['law','Portarias / Legislação','Buscar portarias por número, assunto ou texto','portarias',false],
+    ]},
+];
+
+/* ================================================================
+   RENDER CARDS
+   ================================================================ */
+const app = document.getElementById('app');
+const svg = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+
+SECTIONS.forEach(sec => {
+  const cards = sec.items.map(([ic, title, desc, view, needsLine]) => `
+    <button class="card${needsLine?' needs-line':''}" type="button"
+      style="--accent:${sec.color};--accent-soft:${sec.soft}"
+      data-view="${view}" data-needs-line="${needsLine?1:0}" data-title="${esc(title)}">
+      <span class="ico">${svg(I[ic])}</span>
+      <span class="card-txt"><h3>${title}</h3><p>${desc}</p></span>
+    </button>`).join('');
+  app.insertAdjacentHTML('beforeend', `
+    <section class="section">
+      <div class="sec-head" style="--accent:${sec.color}"><h2>${sec.name}</h2></div>
+      <div class="grid">${cards}</div>
+    </section>`);
+});
+
+/* ================================================================
+   STATE + CACHES
+   ================================================================ */
+let activeLine = null;   // { codlinha, numero_ligacao, nome_ligacao, codempresa, ... }
+let ibgeMap   = null;    // { [codibge]: {nome,regiao,regiaoPrograma} }
+let origemMap = null;    // { [cod_origem]: nome_origem }
+// caches carregados e invalidados JUNTOS → cada grupo num objeto só (ver CACHE_INVALIDATORS)
+const evLookups = { emp:null, lin:null };  // lookups de evento: emp={[id]:evento_empresa}, lin={[id]:evento_linha}
+const empresas  = { map:null, list:null }; // cadastro (nome↔RJ): map={[codempresa]:nome_empresa}, list=linhas cruas p/ busca client-side
+
+// normaliza p/ busca insensível a maiúsc./minúsc. E acento
+const norm = s => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+
+async function getIbge() {
+  if (ibgeMap) return ibgeMap;
+  const rows = await sbFetch('municipio_teste', 'select=cod_ibge,nome_municipio,regiao_municipio,regiao_novo&limit=2000');
+  ibgeMap = {};
+  // `regiao` = regionalização nova (usada na coluna "Região" dos outros cards);
+  // `regiaoPrograma` = Região Programa clássica (regiao_municipio) — é a do print DETRO.
+  rows.forEach(r => { ibgeMap[r.cod_ibge] = { nome:r.nome_municipio, regiao:r.regiao_novo||r.regiao_municipio, regiaoPrograma:r.regiao_municipio }; });
+  return ibgeMap;
+}
+async function getOrigem() {
+  if (origemMap) return origemMap;
+  const rows = await sbFetch('origem_teste', 'select=cod_origem,nome_origem&limit=2000');
+  origemMap = {}; rows.forEach(r => { origemMap[r.cod_origem] = r.nome_origem; });
+  return origemMap;
+}
+async function getEmpresas() {
+  if (empresas.map) return empresas.map;
+  const rows = await sbFetch('codempresa_teste', 'select=codempresa,nome_empresa,situacao,cassada,sob_intervencao&limit=2000');
+  empresas.list = rows;
+  empresas.map = {};
+  // alguns RJ aparecem duplicados (ex.: 103) → prioriza a entrada REGULAR/não cassada
+  const melhor = r => (r && !r.cassada && String(r.situacao||'').toUpperCase()==='REGULAR') ? 2 : (r && !r.cassada ? 1 : 0);
+  const best = {};
+  rows.forEach(r => {
+    const k = r.codempresa;
+    if (k==null) return;
+    if (!(k in empresas.map) || melhor(r) > best[k]) { empresas.map[k] = r.nome_empresa; best[k] = melhor(r); }
+  });
+  return empresas.map;
+}
+// nome da empresa (síncrono; cai no próprio código se o cache ainda não carregou)
+const empNome = cod => (empresas.map && empresas.map[cod]) ? empresas.map[cod] : (cod ?? '—');
+// busca empresas por nome (insensível a acento) ou código — assume getEmpresas() já carregado
+function searchEmpresas(term, { limit = 40 } = {}){
+  const nt = norm(term);
+  return (empresas.list||[])
+    .filter(e => norm(e.nome_empresa).includes(nt) || String(e.codempresa||'').includes(term))
+    .sort((a,b)=> String(a.nome_empresa||'').localeCompare(String(b.nome_empresa||'')))
+    .slice(0, limit);
+}
+
+async function getEvLookups() {
+  if (!evLookups.emp) { const r = await sbFetch('evento_empresa_teste','select=id,evento_empresa').catch(()=>[]); evLookups.emp={}; r.forEach(x=>evLookups.emp[x.id]=x.evento_empresa); }
+  if (!evLookups.lin) { const r = await sbFetch('evento_linha_teste','select=id,evento_linha').catch(()=>[]); evLookups.lin={}; r.forEach(x=>evLookups.lin[x.id]=x.evento_linha); }
+  return evLookups;
+}
+
+/* ================================================================
+   BUSCA DE LINHAS (hero)
+   ================================================================ */
+const searchInput = document.getElementById('lineInput');
+const searchBtn   = document.getElementById('openLine');
+const selector    = document.querySelector('.selector');
+const dropdown = document.createElement('div');
+dropdown.className = 'results-drop';
+selector.appendChild(dropdown);
+function closeDropdown() { dropdown.classList.remove('open'); }
+
+const LINE_FIELDS = 'codlinha,numero_ligacao,nome_ligacao,nome_lig_cresc,via,codempresa,tipo,caracteristica,licitado,cancelado,paralisado,sub_judice,transferido,data_criacao,processo_criacao';
+
+async function doSearch() {
+  const term = searchInput.value.trim();
+  if (!term) { toast('Digite o número ou nome da linha.', 'warn'); return; }
+  searchBtn.textContent = '…'; searchBtn.disabled = true;
+  try {
+    const e1 = ilikeTerm(term);
+    const encCode = ilikeTerm(term.replace(/[-.\s]/g, ''));
+    const rows = await sbFetch('tabela_vista_teste',
+      `select=${LINE_FIELDS}` +
+      `&or=(numero_ligacao.ilike.*${e1}*,nome_ligacao.ilike.*${e1}*,codlinha.ilike.*${encCode}*)` +
+      `&limit=15`);
+    if (!rows.length) {
+      dropdown.innerHTML = '<div class="drop-empty">Nenhuma linha encontrada.</div>';
+    } else {
+      dropdown.innerHTML = rows.sort(byCodlinha).map(r => `
+        <button class="result-item" type="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
+          <span class="r-num">${esc(r.numero_ligacao || fmtCode(r.codlinha))}</span>
+          <span class="r-name">${esc(r.nome_ligacao || '—')}</span>
+          ${situacaoHTML(r)}
+          <span class="r-emp">${esc(fmtCode(r.codlinha))} · ${esc(empNome(r.codempresa))}${r.codempresa?` (RJ ${esc(r.codempresa)})`:''}</span>
+        </button>`).join('');
+    }
+    dropdown.classList.add('open');
+  } catch (e) {
+    dropdown.innerHTML = `<div class="drop-error">Erro: ${esc(e.message)}</div>`;
+    dropdown.classList.add('open');
+  } finally {
+    searchBtn.textContent = 'Abrir linha'; searchBtn.disabled = false;
+  }
+}
+searchBtn.addEventListener('click', doSearch);
+searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+dropdown.addEventListener('click', e => {
+  const item = e.target.closest('.result-item');
+  if (!item) return;
+  selectLine(JSON.parse(item.dataset.row));
+  closeDropdown(); searchInput.value = '';
+});
+document.addEventListener('click', e => { if (!selector.contains(e.target)) closeDropdown(); });
+
+/* ================================================================
+   LINHA ATIVA — BANNER
+   ================================================================ */
+const banner = document.getElementById('lineBanner');
+function bannerEmpHTML(row){
+  return `Empresa: ${esc(empNome(row.codempresa))} · RJ ${esc(row.codempresa || '—')} · Cód.: ${esc(fmtCode(row.codlinha))}`;
+}
+function selectLine(row) {
+  activeLine = row;
+  banner.style.display = 'flex';
+  banner.innerHTML = `
+    <span class="lb-num">${esc(row.numero_ligacao || row.codlinha)}</span>
+    <div>
+      <div class="lb-name">${esc(row.nome_ligacao || '—')} ${situacaoHTML(row)}</div>
+      <div class="lb-emp">${bannerEmpHTML(row)}</div>
+    </div>
+    <button class="lb-clear" id="btnClearLine">✕ Limpar</button>`;
+  document.getElementById('btnClearLine').addEventListener('click', () => {
+    activeLine = null; banner.style.display = 'none';
+  });
+  // se o cache de empresas ainda não chegou, atualiza o texto quando carregar
+  if (!empresas.map) getEmpresas().then(() => {
+    if (activeLine === row) { const el = banner.querySelector('.lb-emp'); if (el) el.innerHTML = bannerEmpHTML(row); }
+  }).catch(()=>{});
+}
+// `activeLine` é um snapshot do row (congelado no clique). Sem isto, uma edição ao vivo em
+// tabela_vista_teste (nome, empresa, cancelamento) recarregava o modal mas deixava o BANNER
+// exibindo os dados antigos. Rebusca a linha ativa e re-renderiza o banner (chamado pelo Realtime).
+async function refreshActiveLine(){
+  if (!activeLine) return;
+  const cod = activeLine.codlinha;
+  try {
+    const rows = await sbFetch('tabela_vista_teste', `codlinha=eq.${enc(cod)}&select=${LINE_FIELDS}&limit=1`);
+    // só reaplica se a linha ativa ainda é a mesma (usuário pode ter trocado durante a busca)
+    if (rows && rows[0] && activeLine && String(activeLine.codlinha) === String(cod)) selectLine(rows[0]);
+  } catch(_){ /* transitório → banner segue com o último valor conhecido */ }
+}
+
+/* ================================================================
+   MODAL / SISTEMA DE VIEWS
+   currentView = { title, tables:[], lineFilter, loader, _panelRun }
+   ----------------------------------------------------------------
+   SUB-ÍNDICE (grep `--- ` para pular). Na ordem atual do arquivo:
+     Chrome do modal · Dispatcher — runView ·
+     Helpers de documento e busca de linha · DOC · Folha de Rosto ·
+     Eventos — helpers compartilhados · DOC · Histórico (linha) ·
+     DOC · Itinerários · DOC · Quadro de Horários · DOC · Tarifas ·
+     DOC · Frota · DOC · Estrutura Operacional ·
+     DOC · Empresas · DOC · Municípios / entre-municípios ·
+     Relatórios · DOC · Portaria · DOC · Localidades
+   ================================================================ */
+/* --- Chrome do modal --------------------------------------------- */
+const overlay    = document.getElementById('modalOverlay');
+const modalClose = document.getElementById('modalClose');
+const modalBody  = document.getElementById('modalBody');
+const mtTitle    = document.getElementById('mtTitle');
+const mtLive     = document.getElementById('mtLive');
+document.getElementById('btnPrint').addEventListener('click', () => window.print());
+document.getElementById('btnPdf').addEventListener('click', baixarPdf);
+modalClose.addEventListener('click', closeModal);
+overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (overlay.classList.contains('fs-fallback')) { exitFull(); return; }
+  if (!document.fullscreenElement && !document.webkitFullscreenElement) closeModal();
+});
+// Mantém o foco preso dentro do modal enquanto ele está aberto (Tab/Shift+Tab)
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Tab' || !overlay.classList.contains('open')) return;
+  const f = overlay.querySelectorAll('button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])');
+  if (!f.length) return;
+  const first = f[0], last = f[f.length-1], a = document.activeElement;
+  if (!overlay.contains(a)) { e.preventDefault(); first.focus(); return; }   // foco escapou → traz de volta
+  if (e.shiftKey && a === first){ e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && a === last){ e.preventDefault(); first.focus(); }
+});
+// Linhas de tabela clicáveis: Enter/Espaço disparam o clique (reaproveita os handlers de click)
+modalBody.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const tr = e.target.closest('tr.clickable');
+  if (!tr) return;
+  e.preventDefault();   // Espaço não rola a página
+  tr.click();
+});
+
+// Tela cheia do modal: tenta a Fullscreen API nativa; se o navegador recusar
+// (ex.: dentro de iframe/preview), cai para uma maximização via classe CSS.
+const btnFull = document.getElementById('btnFull');
+function isFull(){ return !!(document.fullscreenElement || document.webkitFullscreenElement) || overlay.classList.contains('fs-fallback'); }
+async function exitFull(){
+  overlay.classList.remove('fs-fallback');
+  const exit = document.exitFullscreen || document.webkitExitFullscreen;
+  if (exit && (document.fullscreenElement || document.webkitFullscreenElement)) { try { await exit.call(document); } catch(_){} }
+  syncFullLabel();
+}
+btnFull.addEventListener('click', async () => {
+  if (isFull()) { exitFull(); return; }
+  // 1) maximização por CSS — efeito garantido em qualquer contexto (inclusive iframe)
+  overlay.classList.add('fs-fallback');
+  syncFullLabel();
+  // 2) fullscreen nativo do navegador como bônus, quando permitido
+  const req = overlay.requestFullscreen || overlay.webkitRequestFullscreen;
+  if (req) { try { await req.call(overlay); } catch(_){} }
+});
+function syncFullLabel(){
+  const lbl = btnFull.querySelector('.mt-btn-label');
+  if (lbl) lbl.textContent = isFull() ? 'Sair da tela cheia' : 'Tela cheia';
+}
+// Se o usuário sair do fullscreen nativo (Esc/botão do navegador), tira também a maximização
+function onFsChange(){ if (!(document.fullscreenElement || document.webkitFullscreenElement)) overlay.classList.remove('fs-fallback'); syncFullLabel(); }
+document.addEventListener('fullscreenchange', onFsChange);
+document.addEventListener('webkitfullscreenchange', onFsChange);
+
+// Gera o PDF do documento aberto via impressão nativa do navegador
+let _exportandoPdf = false;
+async function baixarPdf(){
+  if (_exportandoPdf) return;          // evita 2º clique com o diálogo aberto (título preso / containers duplicados)
+  const liveDoc = modalBody.querySelector('.doc');
+  const base = (mtTitle.textContent || 'documento')
+    .replace(/[^a-zA-Z0-9]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase() || 'documento';
+  const code = activeLine && activeLine.codlinha ? '-' + activeLine.codlinha : '';
+  const filename = `${base}${code}.pdf`;
+
+  // Monta o documento COMPLETO (sem a paginação de tela) num container oculto de largura A4 fixa,
+  // para o PDF não depender do tamanho da janela/tela cheia e não sair cortado.
+  // Painéis longos (ex.: Histórico) expõem pdfHTML() com todos os eventos; os demais clonam o .doc.
+  let inner;
+  if (currentView && currentView.pdfHTML) inner = currentView.pdfHTML();
+  else if (liveDoc) inner = liveDoc.outerHTML;
+  else inner = `<div class="doc">${modalBody.innerHTML}</div>`;
+  const temp = document.createElement('div');
+  temp.className = 'pdf-export';
+  temp.innerHTML = inner;
+  document.body.appendChild(temp);
+
+  // Caminho vetorial: imprime só este container pelo motor nativo do navegador → texto nítido,
+  // selecionável e sem limite de tamanho (qualidade do "Imprimir → Salvar como PDF").
+  // Trocamos o document.title pelo nome do arquivo p/ o diálogo "Salvar como PDF" sugeri-lo;
+  // restauramos no cleanup. (filename já vem com ".pdf"; o navegador adiciona a extensão sozinho.)
+  const tituloOriginal = document.title;
+  const cleanupPrint = () => {
+    document.documentElement.classList.remove('exporting');
+    document.title = tituloOriginal;
+    if (temp.parentNode) temp.remove();
+    _exportandoPdf = false;
+  };
+  const exportViaPrint = () => {
+    _exportandoPdf = true;             // a partir daqui o título muda → trava reentrância até o cleanup
+    window.addEventListener('afterprint', cleanupPrint, { once:true });
+    document.title = filename.replace(/\.pdf$/i, '');
+    document.documentElement.classList.add('exporting');
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{ try { window.print(); } catch(_){ cleanupPrint(); } }));
+    setTimeout(cleanupPrint, 60000);   // rede de segurança caso 'afterprint' não dispare (ex.: Safari)
+  };
+
+  // Garante as fontes carregadas antes de imprimir (evita fonte trocada e layout desalinhado)
+  try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch(_){}
+
+  toast('Abrindo impressão — escolha “Salvar como PDF”', 'info');
+  exportViaPrint();
+}
+
+let currentView = null, lastFocused = null;
+const btnBack = document.getElementById('btnBack');
+// Pilha de navegação do modal (voltar). Estado que muda junto — pilha, flag de "indo p/ trás"
+// e o botão Voltar — encapsulado aqui em vez de três variáveis soltas espalhadas por
+// runView/btnBack/closeModal (o flag solto `_goingBack` era fácil de dessincronizar).
+const nav = {
+  stack: [],
+  goingBack: false,
+  get length(){ return this.stack.length; },
+  push(view){ this.stack.push(view); btnBack.style.display = ''; },
+  pop(){ const v = this.stack.pop(); btnBack.style.display = this.stack.length ? '' : 'none'; return v; },
+  reset(){ this.stack = []; this.goingBack = false; btnBack.style.display = 'none'; },
+};
+function closeModal(){
+  if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); }
+  overlay.classList.remove('open','fs-fallback'); currentView = null;
+  nav.reset();
+  // devolve o foco ao elemento que abriu o modal (acessibilidade)
+  if (lastFocused && lastFocused.focus) { try { lastFocused.focus(); } catch(_){} lastFocused = null; }
+  if (window.__divatReload) location.reload();
+}
+btnBack.addEventListener('click', () => {
+  if (!nav.length) return;
+  const prev = nav.pop();
+  nav.goingBack = true;
+  runView(prev, { silent: false });
+});
+function setBody(html){ modalBody.innerHTML = html; }
+function loading(msg='Carregando…'){ return `<div class="m-loading"><div class="spin"></div>${esc(msg)}</div>`; }
+function emptyBox(msg){ return `<div class="m-loading">${esc(msg)}</div>`; }
+function errorBox(msg){ return `<div class="m-loading" style="color:#b33a2e">Erro ao carregar: ${esc(msg)}</div>`; }
+
+/* --- Dispatcher — runView ---------------------------------------- */
+async function runView(view, { silent=false } = {}){
+  if (!nav.goingBack && overlay.classList.contains('open') && currentView) {
+    nav.push(currentView);
+  }
+  nav.goingBack = false;
+  if (!overlay.classList.contains('open')) lastFocused = document.activeElement;
+  currentView = view;
+  mtTitle.textContent = view.title;
+  overlay.classList.add('open');
+  modalClose.focus();                     // move o foco p/ dentro do diálogo
+  if (!silent) setBody(loading());
+  try { await view.loader(); }
+  catch(e){ setBody(errorBox(e.message)); }
+}
+
+// header institucional reutilizável
+const DETRO_LOGO_SVG = `<svg class="logo-detro" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3200 847" role="img" aria-label="DETRO - Departamento de Transportes Rodoviários do RJ" fill="currentColor">
+        <title>DETRO-RJ</title>
+        <g transform="translate(0.000000,847.000000) scale(0.100000,-0.100000)">
+        <path d="M16155 7148 c-59 -30 -114 -86 -141 -143 l-24 -50 0 -2160 c0 -2092
+      1 -2161 19 -2201 27 -59 86 -121 145 -152 l51 -27 2240 0 2240 0 50 27 c60 32
+      114 87 146 148 l24 45 0 2160 0 2160 -27 50 c-14 28 -47 70 -71 92 -87 80 141
+      73 -2366 73 l-2246 -1 -40 -21z m4515 -163 c65 -33 60 136 60 -2190 0 -1942
+      -1 -2119 -16 -2145 -9 -15 -29 -35 -44 -44 -26 -15 -210 -16 -2230 -16 l-2202
+      0 -39 39 -39 39 0 2122 c0 1940 1 2124 16 2149 9 15 28 35 43 44 24 15 210 16
+      2224 17 1945 0 2201 -2 2227 -15z"/>
+        <path d="M16496 6935 c-21 -7 -54 -28 -72 -46 -67 -65 -65 -30 -62 -896 l3
+      -781 30 -43 c18 -26 50 -53 80 -68 l49 -26 496 -2 495 -3 5 -1107 c6 -1221 1
+      -1132 67 -1195 63 -60 31 -58 868 -58 837 0 805 -2 868 58 66 63 61 -26 67
+      1194 l5 1108 485 2 486 3 49 25 c65 33 111 100 120 173 3 28 5 381 3 782 -3
+      729 -3 730 -25 771 -28 53 -83 100 -130 113 -26 8 -643 11 -1943 11 -1595 -1
+      -1911 -3 -1944 -15z m2149 -220 c222 -39 415 -141 575 -305 110 -113 183 -230
+      231 -373 67 -197 74 -356 25 -549 -96 -380 -396 -663 -800 -755 -112 -26 -356
+      -23 -469 5 -199 50 -352 132 -493 266 -145 136 -237 287 -286 468 -20 72 -23
+      106 -23 253 1 203 17 274 95 431 144 288 431 501 753 559 100 18 287 18 392 0z"/>
+        <path d="M18325 6559 c-279 -38 -540 -218 -663 -458 -130 -252 -129 -508 4
+      -761 69 -132 214 -275 353 -349 86 -45 236 -90 338 -102 161 -19 361 19 522
+      100 82 42 200 138 266 218 67 80 148 240 171 338 23 92 23 278 1 361 -55 205
+      -182 387 -352 504 -69 48 -204 108 -290 130 -91 23 -254 32 -350 19z"/>
+        <path d="M28945 7159 c-16 -4 -79 -18 -140 -29 -439 -84 -903 -286 -1251 -545
+      -368 -274 -663 -620 -860 -1010 -80 -159 -100 -206 -154 -360 -149 -426 -191
+      -933 -108 -1330 42 -204 125 -420 226 -590 227 -381 632 -687 1107 -836 290
+      -90 555 -129 889 -129 414 0 782 65 1161 205 130 48 435 198 550 270 242 154
+      532 407 691 605 342 425 539 896 611 1465 18 141 28 495 14 495 -5 0 -12 28
+      -16 63 -8 77 -33 222 -45 262 -5 17 -24 76 -41 132 -37 122 -128 312 -205 431
+      -198 304 -508 562 -859 716 -190 83 -461 164 -580 173 -33 3 -64 9 -70 14 -12
+      11 -879 10 -920 -2z m455 -1550 c234 -58 408 -219 485 -447 109 -323 6 -746
+      -245 -1015 -147 -157 -291 -242 -506 -298 -128 -33 -352 -34 -473 -1 -200 55
+      -349 167 -434 330 -146 277 -99 698 114 1014 55 81 186 213 268 268 233 157
+      532 213 791 149z"/>
+        <path d="M7020 7148 c0 -14 -17 -120 -120 -778 -40 -250 -83 -522 -95 -605
+      -13 -82 -31 -193 -39 -245 -9 -52 -32 -194 -52 -315 -20 -121 -38 -236 -40
+      -255 -4 -39 -33 -220 -65 -405 -11 -66 -24 -152 -29 -192 -5 -39 -21 -138 -34
+      -220 -14 -81 -44 -273 -67 -425 l-43 -278 -1823 0 -1823 0 0 -40 0 -40 1816 0
+      1816 0 -8 -42 c-4 -24 -8 -52 -9 -63 -2 -11 -11 -71 -20 -132 l-18 -113 -2393
+      0 -2394 0 0 -60 0 -60 2386 0 c2267 0 2385 -1 2380 -17 -3 -10 -15 -80 -26
+      -157 -11 -76 -23 -142 -26 -147 -3 -5 -1254 -9 -2995 -9 l-2989 0 0 -75 0 -75
+      4218 3 4217 2 170 27 c408 66 733 180 1050 371 698 419 1146 1113 1270 1967 8
+      52 19 177 26 276 31 461 -54 864 -250 1187 -240 395 -654 671 -1217 812 -221
+      56 -420 87 -659 105 -217 15 -2115 13 -2115 -2z m1945 -1513 c364 -82 545
+      -311 545 -689 0 -499 -234 -870 -645 -1025 -158 -59 -336 -91 -511 -91 l-117
+      0 6 43 c12 96 109 714 132 842 8 44 19 116 25 160 6 44 22 145 35 225 13 80
+      38 235 55 345 17 110 33 206 36 214 8 23 301 8 439 -24z"/>
+        <path d="M12196 7133 c-6 -29 -36 -219 -86 -543 -16 -102 -40 -255 -54 -340
+      -14 -85 -34 -216 -46 -290 -38 -245 -69 -443 -100 -630 -16 -102 -38 -243 -49
+      -315 -11 -71 -31 -200 -45 -285 -14 -85 -43 -272 -66 -415 -23 -143 -54 -343
+      -70 -445 -16 -102 -43 -273 -60 -380 -17 -107 -40 -252 -51 -322 -10 -70 -32
+      -210 -48 -310 -17 -101 -37 -231 -45 -289 -9 -59 -19 -120 -22 -138 l-7 -31
+      1629 2 1628 3 8 45 c8 43 45 274 108 674 17 104 33 202 35 218 21 118 55 351
+      52 355 -2 2 -339 3 -749 3 -409 0 -747 2 -749 5 -3 2 0 39 7 82 7 43 22 143
+      34 223 12 80 23 146 25 148 1 2 297 3 656 2 360 0 659 3 665 8 7 4 21 70 33
+      147 12 77 23 152 26 166 3 15 16 98 30 185 13 88 45 287 70 443 25 157 45 288
+      45 293 0 4 -299 8 -664 8 l-664 0 5 38 c3 20 19 120 37 222 l31 185 730 5 729
+      5 13 80 c7 44 27 172 43 285 17 113 33 212 35 220 3 8 13 76 24 150 36 244 81
+      524 87 542 5 17 -64 18 -1600 18 l-1604 0 -6 -27z"/>
+        <path d="M22227 7083 c-30 -202 -137 -884 -143 -908 -2 -11 -18 -110 -34 -220
+      -17 -110 -41 -270 -55 -355 -14 -85 -36 -229 -50 -319 -14 -90 -36 -232 -50
+      -315 -14 -83 -33 -209 -44 -281 -11 -71 -31 -200 -45 -285 -60 -379 -109 -689
+      -136 -860 -74 -477 -168 -1073 -176 -1113 l-6 -27 844 2 843 3 17 110 c10 61
+      25 155 34 210 8 55 31 201 50 325 40 253 71 451 108 685 14 88 26 164 26 168
+      0 5 7 7 17 5 12 -2 42 -79 109 -278 51 -151 156 -462 234 -690 78 -228 150
+      -443 161 -477 l20 -63 989 0 c545 0 990 3 990 6 0 7 -88 180 -553 1088 -263
+      514 -305 582 -416 675 -75 63 -69 75 50 116 648 219 941 587 1025 1290 18 149
+      13 385 -10 500 -51 251 -154 444 -324 607 -230 222 -522 345 -982 416 -91 14
+      -263 16 -1296 19 l-1191 4 -6 -38z m1878 -1278 c83 -22 155 -65 187 -111 74
+      -107 55 -335 -38 -471 -45 -65 -132 -125 -221 -153 -70 -21 -238 -40 -366 -40
+      l-79 0 6 28 c3 15 13 72 21 127 9 55 18 114 21 130 3 17 16 100 29 185 38 248
+      47 304 51 319 6 19 303 8 389 -14z"/>
+        <path d="M25368 2273 c-11 -27 -36 -81 -54 -122 -19 -41 -34 -76 -34 -78 0 -2
+      19 -3 42 -1 41 3 43 5 124 120 45 64 79 119 76 122 -3 3 -34 6 -69 6 l-64 0
+      -21 -47z"/>
+        <path d="M22718 2100 c2 -109 -1 -190 -6 -190 -5 0 -17 10 -28 21 -51 58 -188
+      80 -291 45 -60 -20 -133 -92 -164 -162 -85 -191 -55 -473 64 -595 55 -57 100
+      -74 192 -74 91 0 146 22 203 82 l32 34 0 -55 0 -56 85 0 85 0 0 570 0 570 -87
+      0 -88 0 3 -190z m-90 -217 c64 -47 91 -122 99 -273 8 -146 -33 -285 -100 -334
+      -22 -16 -43 -21 -90 -21 -77 0 -107 19 -144 95 -26 51 -28 65 -31 202 -3 129
+      -1 155 17 210 25 73 43 98 91 128 43 26 118 23 158 -7z"/>
+        <path d="M320 1680 l0 -530 213 0 c231 0 285 8 386 57 108 52 206 179 246 318
+      27 95 24 250 -8 347 -44 137 -107 213 -227 277 -92 49 -167 61 -402 61 l-208
+      0 0 -530z m368 430 c120 -22 213 -96 264 -208 28 -59 32 -80 36 -182 7 -182
+      -35 -309 -129 -394 -66 -59 -122 -76 -255 -76 l-103 0 0 428 c-1 236 2 432 6
+      435 10 10 123 8 181 -3z"/>
+        <path d="M12232 2163 l3 -47 148 3 147 3 0 -484 -1 -483 93 -3 93 -3 0 483 0
+      483 140 1 c77 0 141 4 143 7 1 4 2 25 2 47 l0 40 -386 0 -385 0 3 -47z"/>
+        <path d="M20520 1680 l0 -530 96 0 95 0 -3 240 c-2 132 -1 240 2 239 8 -1 303
+      -417 319 -450 l15 -29 113 0 c62 0 113 2 113 5 0 3 -8 13 -17 23 -33 32 -348
+      453 -351 468 -2 8 4 14 17 14 41 0 136 44 177 82 58 53 77 107 73 201 -4 61
+      -10 82 -34 122 -39 62 -87 100 -158 125 -49 17 -82 20 -257 20 l-200 0 0 -530z
+      m338 435 c61 -18 105 -66 121 -131 40 -159 -47 -273 -209 -274 l-65 0 2 207
+      c2 115 3 209 3 211 0 8 105 -1 148 -13z"/>
+        <path d="M24683 2198 c-30 -15 -48 -60 -34 -87 18 -32 52 -51 94 -51 93 0 139
+      69 82 125 -19 20 -34 25 -72 24 -26 0 -58 -5 -70 -11z"/>
+        <path d="M26362 2200 c-26 -11 -45 -55 -37 -87 11 -47 106 -69 164 -38 48 24
+      55 72 16 110 -19 20 -34 25 -72 24 -26 0 -58 -4 -71 -9z"/>
+        <path d="M30627 1683 l3 -528 91 0 90 0 -1 240 c0 142 3 236 8 230 23 -25 305
+      -421 318 -446 l15 -29 114 0 c103 0 140 8 102 23 -12 5 -367 468 -367 479 0 3
+      19 8 42 12 92 15 173 69 210 140 31 58 31 184 1 242 -30 57 -79 102 -143 133
+      -53 25 -62 26 -270 29 l-215 3 2 -528z m359 424 c97 -51 138 -192 85 -295 -33
+      -66 -86 -94 -182 -100 l-79 -5 0 213 0 213 74 -6 c40 -3 87 -12 102 -20z"/>
+        <path d="M31488 1619 l-3 -592 -26 -19 c-22 -17 -29 -18 -55 -7 -16 7 -37 19
+      -47 28 -20 17 -18 19 -50 -46 l-26 -51 42 -17 c23 -10 78 -20 122 -22 73 -4
+      85 -2 134 24 95 49 90 9 93 696 l3 597 -92 0 -93 0 -2 -591z"/>
+        <path d="M4498 2148 l-67 -10 -3 -77 -3 -76 -62 -3 -63 -3 0 -39 0 -39 63 -3
+      62 -3 5 -335 c6 -376 6 -377 78 -407 41 -17 145 -14 195 6 24 9 27 16 27 57 0
+      40 -2 45 -17 38 -10 -4 -34 -9 -54 -12 -68 -8 -69 -1 -69 350 l0 308 70 0 70
+      0 0 40 0 39 -67 3 -68 3 -1 85 c0 97 5 92 -96 78z"/>
+        <path d="M8808 2148 l-67 -10 -3 -77 -3 -76 -61 -3 -62 -3 3 -37 2 -37 59 -5
+      59 -5 5 -335 c6 -375 5 -371 76 -405 40 -19 141 -17 197 4 24 9 27 16 27 57 0
+      40 -2 45 -17 38 -35 -15 -89 -16 -101 -2 -8 10 -12 105 -12 329 l-1 314 65 3
+      66 3 0 39 0 39 -67 3 -67 3 0 85 c-1 97 4 93 -98 78z"/>
+        <path d="M18208 2147 l-68 -10 0 -79 0 -78 -60 0 -60 0 0 -40 0 -40 59 0 60 0
+      3 -334 c3 -320 4 -336 24 -363 35 -47 80 -65 154 -60 36 3 77 10 93 16 24 9
+      27 16 27 56 0 42 -2 45 -19 35 -29 -15 -77 -12 -95 6 -14 13 -16 57 -16 330
+      l0 314 65 0 65 0 0 40 0 40 -65 0 -64 0 -3 87 c-3 100 2 95 -100 80z"/>
+        <path d="M10877 1960 c1 -88 0 -160 -2 -160 -2 0 -24 14 -48 31 -86 60 -224
+      48 -302 -28 -108 -104 -137 -361 -60 -519 75 -153 251 -192 371 -82 l44 41 0
+      -47 0 -47 73 3 c39 2 71 6 70 11 -2 4 -3 221 -3 482 l0 475 -72 0 -73 0 2
+      -160z m-55 -209 c40 -44 60 -127 60 -241 0 -168 -39 -253 -129 -280 -36 -11
+      -46 -10 -79 6 -51 25 -79 69 -94 150 -14 73 -8 223 10 287 15 49 64 105 104
+      115 46 12 97 -3 128 -37z"/>
+        <path d="M29110 1960 c0 -88 -3 -160 -6 -160 -3 0 -19 11 -36 25 -82 69 -239
+      54 -320 -32 -100 -105 -123 -354 -47 -510 48 -99 115 -143 220 -143 55 0 143
+      41 167 78 l17 26 5 -44 5 -45 68 0 67 0 3 483 2 482 -72 0 -73 0 0 -160z m-71
+      -187 c14 -11 37 -41 51 -69 23 -45 25 -60 25 -189 0 -133 -1 -143 -28 -197
+      -31 -62 -62 -88 -117 -95 -80 -11 -141 54 -161 171 -13 75 -7 216 11 279 12
+      41 62 104 94 118 30 13 95 3 125 -18z"/>
+        <path d="M1614 1985 c-81 -17 -136 -46 -186 -98 -154 -157 -152 -502 3 -642
+      117 -105 332 -135 504 -70 39 14 73 29 77 33 6 6 -9 89 -18 100 -1 2 -20 -8
+      -41 -21 -133 -84 -294 -81 -379 8 -50 52 -74 115 -81 218 l-6 77 287 0 c325 0
+      295 -11 275 95 -31 167 -121 270 -265 300 -82 17 -91 17 -170 0z m156 -95 c47
+      -24 85 -78 99 -140 20 -87 35 -80 -178 -80 -105 0 -192 3 -194 8 -8 14 24 117
+      48 153 28 43 95 79 148 79 21 0 56 -9 77 -20z"/>
+        <path d="M2553 1990 c-55 -12 -112 -42 -147 -79 -17 -17 -32 -31 -35 -31 -3 0
+      -4 22 -3 50 l4 50 -86 0 -86 0 0 -535 0 -535 85 0 85 0 0 159 0 160 51 -34
+      c64 -44 119 -59 190 -52 101 9 197 76 246 170 67 132 69 387 4 516 -61 119
+      -187 185 -308 161z m86 -129 c65 -47 91 -128 91 -293 0 -206 -42 -305 -142
+      -338 -30 -9 -46 -9 -75 1 -58 19 -78 35 -106 87 -53 97 -56 365 -7 467 43 90
+      166 129 239 76z"/>
+        <path d="M3282 1990 c-30 -5 -85 -18 -124 -31 l-70 -22 7 -51 c8 -61 10 -64
+      38 -46 131 83 239 94 307 30 28 -26 31 -34 28 -82 -3 -47 -7 -55 -36 -75 -19
+      -12 -91 -40 -160 -62 -209 -66 -267 -127 -267 -277 0 -72 3 -86 30 -129 22
+      -36 45 -57 85 -78 49 -26 63 -28 125 -25 80 5 144 30 198 78 21 18 39 31 40
+      29 1 -2 10 -21 20 -42 27 -59 94 -80 179 -57 52 15 68 34 68 82 0 34 -3 39
+      -17 33 -38 -16 -61 -16 -76 0 -15 15 -17 49 -17 302 0 269 -1 287 -21 322 -28
+      50 -74 79 -155 96 -75 16 -101 17 -182 5z m163 -655 c-51 -89 -186 -114 -246
+      -47 -47 52 -50 132 -9 199 25 42 49 57 172 107 l103 41 3 -128 c2 -123 1 -131
+      -23 -172z"/>
+        <path d="M4131 1987 c-29 -7 -58 -24 -83 -49 l-38 -38 0 40 0 40 -82 0 -83 0
+      2 -412 3 -413 85 -3 85 -3 0 297 c0 280 1 300 21 340 23 49 82 84 142 84 l37
+      0 0 65 c0 73 0 73 -89 52z"/>
+        <path d="M5090 1989 c-61 -8 -176 -42 -193 -58 -4 -5 -2 -29 5 -54 12 -45 29
+      -59 44 -36 15 24 129 69 177 69 127 0 199 -98 131 -179 -20 -25 -49 -38 -150
+      -70 -202 -63 -269 -118 -294 -236 -20 -99 24 -205 107 -257 32 -19 51 -23 123
+      -23 95 1 146 20 209 79 21 19 35 27 38 19 11 -30 51 -79 73 -90 36 -18 99 -15
+      148 7 41 18 42 20 42 66 0 40 -2 45 -17 39 -39 -16 -54 -17 -68 -5 -13 10 -15
+      56 -15 289 -1 336 -8 364 -100 411 -33 16 -150 42 -181 39 -8 -1 -43 -5 -79
+      -10z m190 -474 c0 -105 -3 -132 -20 -164 -25 -50 -71 -88 -116 -97 -94 -18
+      -163 28 -172 114 -10 108 43 171 190 223 49 18 91 36 94 40 17 29 24 -4 24
+      -116z"/>
+        <path d="M5995 1986 c-56 -14 -86 -28 -132 -63 l-33 -24 0 40 0 41 -82 0 -83
+      0 2 -412 3 -413 82 -3 83 -3 0 314 c0 285 2 315 18 340 53 82 195 98 258 31
+      l24 -26 2 -326 3 -327 82 -3 83 -3 0 315 c0 304 1 315 21 343 35 47 82 68 149
+      67 67 0 111 -22 126 -61 5 -14 9 -168 9 -344 l0 -319 85 0 85 0 0 320 c0 366
+      -5 403 -58 460 -84 87 -273 85 -391 -4 l-44 -33 -37 37 c-54 54 -165 79 -255
+      56z"/>
+        <path d="M7252 1989 c-89 -15 -148 -46 -206 -110 -87 -94 -127 -238 -107 -384
+      24 -172 96 -270 240 -327 47 -18 76 -22 181 -22 113 0 132 2 200 28 41 16 76
+      30 78 31 3 2 -19 97 -23 103 -2 2 -24 -10 -50 -27 -26 -16 -80 -38 -120 -47
+      -70 -17 -77 -17 -140 1 -79 21 -117 51 -150 115 -24 47 -45 144 -45 208 l0 32
+      285 0 285 0 0 24 c0 157 -108 325 -231 360 -76 21 -136 26 -197 15z m163 -114
+      c42 -31 72 -91 81 -159 l7 -46 -191 0 c-105 0 -193 3 -195 8 -9 14 23 112 49
+      151 55 84 172 105 249 46z"/>
+        <path d="M8170 1987 c-69 -16 -95 -30 -142 -75 l-38 -36 0 52 0 52 -82 0 -83
+      0 2 -412 3 -413 82 -3 83 -3 0 288 c0 158 3 300 7 315 11 36 53 85 92 105 44
+      23 143 22 184 -2 60 -36 63 -51 62 -392 l-1 -308 86 -3 86 -3 -3 343 c-3 378
+      -2 371 -69 436 -56 55 -173 80 -269 59z"/>
+        <path d="M9435 1989 c-204 -30 -329 -212 -312 -454 8 -105 28 -170 76 -241 74
+      -111 190 -162 340 -151 183 14 310 143 342 345 30 198 -52 392 -198 465 -43
+      22 -72 29 -163 41 -14 2 -52 0 -85 -5z m169 -113 c139 -105 142 -495 6 -609
+      -88 -74 -205 -47 -263 62 -38 70 -49 125 -48 245 1 147 26 230 88 288 40 38
+      70 48 130 45 37 -3 61 -11 87 -31z"/>
+        <path d="M13282 1985 c-55 -17 -89 -40 -97 -65 -8 -25 -27 -27 -24 -2 6 61 5
+      62 -81 62 l-80 0 0 -415 0 -416 85 3 85 3 3 307 c2 292 3 308 23 334 34 46 70
+      67 123 72 l51 5 0 63 c0 60 -1 64 -22 63 -13 0 -42 -6 -66 -14z"/>
+        <path d="M13715 1990 c-59 -8 -183 -45 -197 -58 -8 -9 13 -102 23 -102 5 0 30
+      14 56 30 105 67 219 66 282 -1 23 -25 29 -86 11 -120 -14 -25 -67 -51 -165
+      -78 -167 -48 -261 -113 -284 -198 -31 -112 5 -231 87 -288 41 -28 50 -30 130
+      -30 99 1 152 20 214 80 l36 36 11 -34 c20 -60 54 -82 124 -82 35 0 75 7 92 15
+      26 13 30 21 33 63 3 44 -8 61 -23 37 -9 -14 -52 -12 -62 3 -4 6 -10 146 -13
+      309 -5 281 -6 298 -26 325 -58 78 -182 113 -329 93z m180 -605 c-7 -41 -60
+      -104 -101 -121 -41 -17 -101 -18 -134 -1 -13 7 -35 28 -48 47 -20 29 -23 45
+      -20 92 7 98 49 134 243 210 l60 23 3 -110 c2 -60 1 -124 -3 -140z"/>
+        <path d="M14665 1996 c-5 -2 -36 -9 -67 -16 -45 -9 -68 -21 -108 -57 l-50 -45
+      0 51 0 51 -82 0 -83 0 2 -412 3 -413 82 -3 83 -3 0 298 0 298 25 44 c55 95
+      199 119 279 45 l36 -32 2 -324 3 -323 85 -3 85 -3 0 319 c0 257 -3 328 -15
+      370 -27 90 -102 142 -225 156 -25 3 -49 4 -55 2z"/>
+        <path d="M15350 1990 c-183 -31 -279 -188 -205 -336 27 -55 85 -99 172 -133
+      90 -35 171 -80 187 -103 22 -31 20 -86 -4 -125 -53 -88 -199 -90 -323 -5 -25
+      18 -47 32 -50 32 -5 0 -30 -111 -25 -114 1 -2 34 -15 72 -30 134 -53 300 -45
+      393 17 69 47 103 101 110 174 8 85 -2 123 -43 171 -34 41 -78 65 -252 143 -40
+      18 -80 42 -88 53 -30 43 -9 117 43 152 21 14 46 19 98 19 66 0 105 -13 196
+      -62 6 -3 29 73 29 95 0 11 -91 38 -174 52 -66 11 -71 11 -136 0z"/>
+        <path d="M16173 1990 c-54 -11 -95 -33 -144 -77 l-39 -35 0 51 0 51 -82 0 -83
+      0 0 -535 0 -536 83 3 84 3 -1 158 c-1 86 1 157 3 157 3 0 26 -16 51 -35 73
+      -55 156 -69 249 -41 145 44 222 168 233 376 10 187 -27 312 -118 394 -64 58
+      -154 83 -236 66z m94 -133 c65 -44 100 -178 90 -342 -8 -116 -30 -187 -72
+      -234 -85 -94 -206 -68 -267 58 -19 40 -22 67 -26 192 -3 115 -1 159 12 202 39
+      134 163 192 263 124z"/>
+        <path d="M16965 1989 c-216 -31 -339 -228 -307 -491 22 -176 112 -296 254
+      -339 127 -39 273 -13 366 66 163 138 186 457 46 641 -73 95 -212 143 -359 123z
+      m144 -99 c22 -11 48 -31 60 -46 80 -102 94 -369 26 -504 -78 -155 -248 -154
+      -324 2 -74 150 -55 413 37 512 54 57 132 71 201 36z"/>
+        <path d="M17855 1985 c-36 -9 -59 -24 -82 -51 l-33 -37 0 41 0 42 -82 0 -83 0
+      2 -412 3 -413 82 -3 83 -3 0 298 c0 283 1 300 21 338 26 50 84 85 142 85 l42
+      0 0 65 c0 74 -2 75 -95 50z"/>
+        <path d="M18840 1989 c-76 -13 -151 -50 -198 -97 -122 -122 -156 -377 -72
+      -548 69 -142 219 -214 420 -201 78 5 208 41 231 64 7 7 -7 89 -17 102 -2 2
+      -17 -7 -34 -19 -46 -33 -139 -62 -200 -63 -83 -2 -139 18 -186 68 -50 51 -73
+      113 -81 218 l-6 77 287 0 286 0 0 23 c-1 46 -29 156 -54 204 -65 130 -217 199
+      -376 172z m163 -112 c41 -31 73 -93 82 -159 l7 -48 -190 0 c-105 0 -193 3
+      -195 8 -9 14 24 117 49 155 52 79 174 100 247 44z"/>
+        <path d="M19585 1986 c-116 -28 -187 -93 -207 -187 -15 -71 1 -132 47 -187 31
+      -36 68 -56 245 -134 74 -33 100 -64 100 -120 0 -95 -92 -154 -202 -128 -57 14
+      -116 40 -160 73 -15 11 -29 19 -31 16 -2 -2 -9 -26 -15 -54 -13 -60 -10 -64
+      87 -97 94 -33 254 -33 326 0 144 66 204 218 133 343 -32 57 -59 74 -281 172
+      -54 24 -97 68 -97 99 0 42 31 87 77 109 60 29 131 23 215 -19 69 -34 73 -33
+      84 32 8 46 3 50 -86 70 -100 22 -180 26 -235 12z"/>
+        <path d="M21635 1993 c-193 -26 -310 -147 -335 -348 -26 -207 53 -388 205
+      -465 65 -34 72 -35 174 -35 95 0 112 3 161 27 66 32 142 105 170 162 49 104
+      63 244 35 364 -38 159 -132 255 -281 287 -70 15 -75 15 -129 8z m102 -94 c108
+      -40 168 -215 143 -414 -18 -141 -71 -224 -163 -254 -70 -23 -159 23 -200 104
+      -67 133 -60 373 14 489 45 72 132 103 206 75z"/>
+        <path d="M23358 1989 c-203 -30 -333 -215 -314 -450 15 -183 88 -305 220 -366
+      54 -24 73 -28 161 -28 89 0 107 3 162 29 121 55 194 165 215 320 20 151 -14
+      287 -98 384 -48 56 -107 89 -190 107 -76 16 -75 16 -156 4z m136 -93 c45 -19
+      90 -77 112 -144 15 -45 19 -87 19 -192 -1 -161 -20 -225 -85 -284 -54 -49
+      -110 -63 -166 -41 -101 38 -154 153 -154 331 0 135 33 248 87 296 49 45 128
+      59 187 34z"/>
+        <path d="M25260 1989 c-30 -5 -86 -19 -123 -31 l-69 -22 7 -46 c9 -63 18 -68
+      66 -36 121 81 257 73 302 -17 24 -48 12 -94 -32 -124 -19 -13 -84 -38 -145
+      -57 -142 -45 -211 -86 -250 -150 -27 -43 -30 -58 -31 -125 0 -88 21 -138 79
+      -188 47 -42 96 -57 171 -51 73 6 137 33 188 78 21 18 39 31 40 29 1 -2 11 -22
+      22 -43 25 -49 71 -70 137 -63 26 3 61 13 77 22 28 14 31 20 31 61 0 40 -2 45
+      -17 39 -39 -16 -54 -17 -68 -5 -13 10 -15 54 -15 277 0 298 -6 338 -56 389
+      -56 55 -196 84 -314 63z m198 -486 c-4 -134 -19 -177 -74 -219 -44 -34 -127
+      -43 -173 -19 -87 45 -87 203 0 266 41 29 233 107 243 98 4 -4 6 -60 4 -126z"/>
+        <path d="M26112 1985 c-55 -17 -89 -40 -97 -65 -11 -34 -25 -22 -25 20 l0 40
+      -80 0 -80 0 0 -415 0 -415 84 0 85 0 3 309 c3 295 4 311 24 337 34 46 70 67
+      123 72 l51 5 0 63 c0 60 -1 64 -22 63 -13 0 -42 -6 -66 -14z"/>
+        <path d="M27000 1989 c-58 -10 -142 -46 -176 -76 -47 -42 -95 -118 -115 -184
+      -28 -92 -24 -253 9 -343 34 -93 95 -165 176 -206 66 -34 73 -35 175 -35 92 1
+      113 4 161 26 151 71 228 219 217 424 -6 118 -26 185 -76 251 -87 115 -223 168
+      -371 143z m163 -108 c146 -90 152 -519 9 -619 -72 -50 -138 -49 -211 6 -113
+      84 -134 420 -36 562 54 79 158 101 238 51z"/>
+        <path d="M27782 1985 c-133 -29 -212 -116 -212 -232 1 -97 66 -179 178 -224
+      101 -40 190 -88 206 -111 22 -31 20 -86 -4 -125 -52 -87 -193 -90 -317 -8 -29
+      19 -54 35 -56 35 -6 0 -29 -111 -25 -116 3 -2 38 -16 79 -31 63 -23 90 -27
+      184 -27 94 -1 117 3 160 22 103 47 154 123 155 230 0 112 -42 167 -175 227
+      -219 98 -225 102 -225 160 0 43 32 89 75 110 63 29 162 10 276 -52 6 -3 29 73
+      29 95 0 11 -96 39 -180 52 -77 12 -69 12 -148 -5z"/>
+        <path d="M23844 1965 c3 -9 40 -109 82 -223 41 -114 91 -250 111 -302 49 -134
+      95 -263 99 -277 4 -16 134 -18 134 -3 0 8 262 720 295 803 6 15 1 17 -36 17
+      l-44 0 -104 -283 c-58 -155 -111 -298 -119 -317 l-14 -35 -105 290 c-57 160
+      -107 302 -110 318 l-5 27 -95 0 c-82 0 -94 -2 -89 -15z"/>
+        <path d="M24660 1565 l0 -415 85 0 85 0 0 415 0 415 -85 0 -85 0 0 -415z"/>
+        <path d="M26340 1575 c0 -223 -1 -408 -2 -412 -2 -5 36 -9 85 -11 l87 -3 0
+      416 0 415 -85 0 -85 0 0 -405z"/>
+        <path d="M11371 1851 c-149 -56 -217 -178 -209 -375 7 -159 59 -246 180 -302
+      57 -26 73 -29 173 -29 91 0 121 4 173 24 67 26 74 38 52 97 -10 24 -12 25 -28
+      11 -92 -81 -272 -82 -343 -1 -37 43 -50 84 -64 202 l-5 42 246 0 245 0 -6 48
+      c-19 138 -65 218 -155 266 -72 39 -179 46 -259 17z m169 -73 c49 -25 83 -80
+      93 -150 l6 -38 -166 0 -166 0 7 43 c11 64 49 121 98 146 54 27 73 26 128 -1z"/>
+        <path d="M29625 1860 c-156 -39 -245 -164 -245 -349 0 -155 65 -280 175 -336
+      52 -27 68 -30 149 -30 72 0 101 5 137 22 129 59 199 204 186 382 -7 95 -58
+      204 -117 251 -74 59 -192 84 -285 60z m155 -89 c71 -51 107 -161 98 -305 -12
+      -188 -115 -293 -232 -236 -83 40 -120 137 -114 298 3 91 8 116 31 164 48 98
+      141 132 217 79z"/>
+        </g>
+      </svg>`;
+/* --- Helpers de documento e busca de linha ----------------------- */
+function docHead(subtitle){
+  return `<div class="doc-head">
+    <span class="brand-logo brand-logo-doc" role="img" aria-label="DETRO — Departamento de Transportes Rodoviários do RJ">${DETRO_LOGO_SVG.replace(/currentColor/g,'#0a3a63')}</span>
+    <div class="doc-head-titles"><div class="sub">DIVAT · ${esc(subtitle)}</div></div></div>`;
+}
+function metaRows(pairs){
+  return `<div class="doc-meta">${pairs.map(([k,v,full])=> k===''? '<div class="row"></div>' : `<div class="row${full?' full':''}"><b>${esc(k)}:</b><span>${v}</span></div>`).join('')}</div>`;
+}
+function tableHTML(cols, bodyRows, foot, cls=''){
+  return `<div class="doc-table-wrap"><table class="doc-table${cls?' '+cls:''}"><thead><tr>${cols.map(c=>`<th${c.w?` style="width:${c.w}"`:''}>${esc(c.t)}</th>`).join('')}</tr></thead>
+    <tbody>${bodyRows}</tbody></table></div>${foot?`<div class="doc-foot">${esc(foot)}</div>`:''}`;
+}
+
+/* ----------------------------------------------------------------
+   LOADERS POR CARD — cada um desenha em modalBody e é re-executável
+   ---------------------------------------------------------------- */
+const LOADERS = {};
+
+/* ---- Documentos da Linha — busca embutida no card (nome, número ou código) ----
+   Cada documento abre com um campo de busca de linha dentro do próprio card. Havendo
+   linha já selecionada no topo, mostra o documento dela de imediato; pode-se trocar de
+   linha pesquisando ali mesmo. `render(host, line)` desenha o documento de UMA linha
+   em `host`; o wrapper cuida da busca, da escolha entre várias linhas e do PDF. */
+function lineDocView({ subtitle, render }){
+  searchPanel({ title:subtitle, placeholder:'Nome, número ou código da linha',
+    onRun:(term, host)=>lineDocRun(term, host, render) });
+  const host = modalBody.querySelector('#spHost');
+  if (activeLine){
+    const i = modalBody.querySelector('#spInput');
+    if (i) i.value = activeLine.numero_ligacao || activeLine.codlinha || '';
+    render(host, activeLine);
+  } else {
+    host.innerHTML = emptyBox('Busque a linha pelo nome, número ou código.');
+  }
+}
+// o termo casa exatamente a linha já ativa? (evita re-buscar ao recarregar ao vivo)
+const lineMatchesTerm = (line, term) => { const t=norm(term); return !!t && (norm(line.codlinha)===t || norm(line.numero_ligacao)===t || norm(fmtCode(line.codlinha))===t); };
+// Busca linhas por nome/número/código (query única usada por todos os cards de linha).
+async function searchLines(term){
+  const e1 = ilikeTerm(term), code = ilikeTerm(term.replace(/[-.\s]/g,''));
+  return sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${e1}*,numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=40`);
+}
+// Resolve o termo → renderiza a linha ativa, 1 resultado, ou lista p/ escolher (N).
+// `render(host, line)` desenha o documento; `useActive` liga o atalho da linha já selecionada.
+async function lineSearchRun(term, host, { render, emptyMsg, prompt, useActive = true }){
+  term = (term||'').trim();
+  if (!term){
+    if (useActive && activeLine) return render(host, activeLine);
+    host.innerHTML = emptyBox(emptyMsg); if (currentView) currentView.pdfHTML = null; return;
+  }
+  if (useActive && activeLine && lineMatchesTerm(activeLine, term)) return render(host, activeLine);
+  const lines = await searchLines(term);
+  if (!lines.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para “'+esc(term)+'”.'); if (currentView) currentView.pdfHTML = null; return; }
+  if (lines.length === 1){ selectLine(lines[0]); return render(host, lines[0]); }
+  await getEmpresas();
+  host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin:2px 0 8px">${lines.length} linha(s) encontradas — ${prompt}:</p>` + linhasTable(lines);
+  host.querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{ const l=JSON.parse(tr.dataset.row); selectLine(l); render(host, l); }));
+  if (currentView) currentView.pdfHTML = null;
+}
+// resolve o termo → 1 linha (renderiza o documento) ou várias (lista p/ escolher)
+function lineDocRun(term, host, render){
+  return lineSearchRun(term, host, { render, emptyMsg:'Busque a linha pelo nome, número ou código.', prompt:'clique para abrir o documento' });
+}
+
+LOADERS.folhaRosto = () => lineDocView({ subtitle:'Cadastro de Linhas: Folha de Rosto', render:renderFolhaRosto });
+/* --- DOC · Folha de Rosto ----------------------------------------- */
+async function renderFolhaRosto(host, line){
+  host.innerHTML = loading();
+  const [rows, , tarifas] = await Promise.all([
+    sbFetch('tabela_vista_teste', `codlinha=eq.${enc(line.codlinha)}&select=${LINE_FIELDS}&limit=1`),
+    getEmpresas(),
+    sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=tarifa,secao&order=secao&limit=1`)
+  ]);
+  const L = rows[0] || line;
+  const tv = tarifas[0]?.tarifa;
+  const tarifa = tv != null ? 'R$ '+Number(tv).toFixed(2).replace('.',',') : '—';
+  const status = situacaoHTML(L);
+  const inner = `${metaRows([
+      ['Empresa', esc(empNome(L.codempresa)), true],
+      ['Registro', 'RJ-'+esc(orDash(L.codempresa))],
+      ['Código da Ligação', esc(fmtCode(L.codlinha))],
+      ['Número da Ligação', esc(orDash(L.numero_ligacao))],
+      ['Ligação', esc(L.nome_ligacao||'—'), true],
+      ['Nome (ordem crescente)', esc(orDash(L.nome_lig_cresc)), true],
+      ['Via', esc(orDash(L.via))],
+      ['Característica', esc(orDash(L.caracteristica))],
+      ['Tipo', esc(orDash(L.tipo))],
+      ['Tarifa', tarifa],
+      ['Licitada', L.licitado?'Sim':'Não'],
+      ['Data de criação', fmtDate(L.data_criacao)],
+      ['Processo de criação', esc(orDash(L.processo_criacao))],
+      ['Situação', status, true],
+    ])}
+    <div class="doc-foot">Fonte: cadastro DETRO-RJ · tabela_vista_teste</div>`;
+  host.innerHTML = inner;
+  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Cadastro de Linhas: Folha de Rosto')}${inner}</div>`;
+}
+
+LOADERS.folhaDivisoria = () => lineDocView({ subtitle:'Folha Divisória', render:renderFolhaDivisoria });
+async function renderFolhaDivisoria(host, line){
+  host.innerHTML = loading();
+  await getEmpresas();
+  const corpo = `<div style="margin-top:20px">
+      <div style="font-family:'Archivo';font-weight:800;font-size:31.5px;color:var(--navy)">${esc(line.nome_ligacao||'—')}</div>
+      <div class="mono" style="margin-top:10px;font-size:17px;color:var(--blue)">${esc(fmtCode(line.codlinha))} · ${esc(empNome(line.codempresa))} · RJ-${esc(line.codempresa||'—')}</div>
+      <div style="margin-top:14px">${situacaoHTML(line)}</div>
+      <div style="margin-top:40px;color:var(--muted);font-size:14.5px">Página de separação do processo da linha</div>
+    </div>`;
+  host.innerHTML = `<div style="text-align:center;padding:40px 30px">${corpo}</div>`;
+  if (currentView) currentView.pdfHTML = ()=>`<div class="doc" style="text-align:center;padding:80px 30px">${docHead('Folha Divisória')}<div style="margin-top:60px">${corpo}</div></div>`;
+}
+
+/* Histórico (linha e empresa): um evento por página, descrição/observação por extenso.
+   A impressão e o PDF saem com todos os eventos, um por página. */
+/* --- Eventos — helpers compartilhados ---------------------------- */
+function evBlocksHTML(r){
+  return `<div class="ev-block"><div class="ev-label">Descrição:</div><div class="ev-text${r.descricao?'':' empty'}">${r.descricao?esc(r.descricao):'—'}</div></div>
+    <div class="ev-block"><div class="ev-label">Observação:</div><div class="ev-text${r.observacao?'':' empty'}">${r.observacao?esc(r.observacao):'—'}</div></div>`;
+}
+function evBandHTML(r, tipoLabel, tipoVal, showLine){
+  return `<div class="ev-grid${showLine?' ev5':''}">
+    <div class="ev-cell"><span class="ev-h">Data do Registro</span><span class="ev-v mono">${esc(fmtDate(r.data_registro))}</span></div>
+    ${showLine?`<div class="ev-cell"><span class="ev-h">Linha</span><span class="ev-v mono">${esc(fmtCode(r.codlinha))}</span></div>`:''}
+    <div class="ev-cell"><span class="ev-h">Nº do Processo/Doc.</span><span class="ev-v mono">${esc(orDash(r.numero_processo))}</span></div>
+    <div class="ev-cell"><span class="ev-h">${esc(tipoLabel)}</span><span class="ev-v">${esc(tipoVal)}</span></div>
+    <div class="ev-cell"><span class="ev-h">Data da Publicação</span><span class="ev-v mono">${esc(fmtDate(r.data_publicacao))}</span></div></div>`;
+}
+function pagerHTML(total){
+  if (total <= 1) return '';
+  return `<div class="doc-pager">
+    <button class="pg-btn" type="button" data-pg="prev">‹ Evento anterior</button>
+    <span class="pg-info"></span>
+    <span class="pg-goto">ir p/ <input type="number" class="pg-num" min="1" max="${total}" aria-label="Ir para o evento nº"> <button class="pg-btn pg-go" type="button">Ir</button></span>
+    <button class="pg-btn" type="button" data-pg="next">Próximo evento ›</button></div>`;
+}
+// barra de filtros do histórico (texto, nº do processo e ano)
+function eventFilterBarHTML(){
+  return `<div class="ev-filters">
+    <label class="evf evf-wide">Texto (descrição/observação)<input type="text" data-f="text" placeholder="ex.: reformulação"></label>
+    <label class="evf">Nº do processo<input type="text" data-f="proc" placeholder="ex.: 2.599/46"></label>
+    <label class="evf">Ano<input type="number" data-f="ano" min="1900" max="2100" placeholder="aaaa"></label>
+    <button type="button" class="evf-clear">Limpar filtros</button>
+  </div>`;
+}
+const yearOf = d => d ? parseInt(String(d).slice(0,4),10) : null;
+function matchEvent(r, c){
+  if (c.text && !norm((r.descricao||'')+' '+(r.observacao||'')).includes(c.text)) return false;
+  if (c.proc && !norm(r.numero_processo||'').includes(c.proc)) return false;
+  if (c.ano!=null){
+    // usa o ano do Registro (campo que ordena); sem registro, cai p/ a publicação
+    const reg = yearOf(r.data_registro);
+    const y = reg!=null ? reg : yearOf(r.data_publicacao);
+    if (y !== c.ano) return false;
+  }
+  return true;
+}
+// Paginador (um evento por vez) com filtros, "ir para a página N" e callback de filtro p/ PDF
+function paginateEvents(container, rows, buildPage, headerHTML='', opts={}){
+  const total = rows.length;
+  let visible = rows.map((_,i)=>i);   // índices visíveis após o filtro
+  let page = 1;
+  const filtersHTML = total > 1 ? eventFilterBarHTML() : '';
+  container.innerHTML = (headerHTML||'') + filtersHTML
+    + `<div class="ev-empty hid">Nenhum evento corresponde ao filtro.</div>`
+    + rows.map((r,i)=>`<div class="ev-page" data-idx="${i}">${buildPage(r)}</div>`).join('') + pagerHTML(total);
+  const pages = [...container.querySelectorAll('.ev-page[data-idx]')];
+  const emptyMsg = container.querySelector('.ev-empty');
+  const paint = ()=>{
+    if (page > visible.length) page = visible.length; if (page < 1) page = 1;
+    const cur = visible.length ? visible[page-1] : -1;
+    pages.forEach(p=>p.classList.toggle('hid', (+p.dataset.idx) !== cur));
+    if (emptyMsg) emptyMsg.classList.toggle('hid', visible.length>0);
+    const info = container.querySelector('.pg-info');
+    if (info) info.textContent = !visible.length ? '0 eventos'
+      : (visible.length===total ? `Evento ${page} de ${total}` : `Evento ${page} de ${visible.length} (de ${total})`);
+    const prev = container.querySelector('[data-pg="prev"]'); if (prev) prev.disabled = page <= 1;
+    const next = container.querySelector('[data-pg="next"]'); if (next) next.disabled = page >= visible.length;
+    const num = container.querySelector('.pg-num'); if (num) num.max = visible.length;
+  };
+  paint();
+  container.querySelectorAll('.pg-btn[data-pg]').forEach(b=>b.addEventListener('click',()=>{
+    if (b.disabled) return; page += (b.dataset.pg === 'next' ? 1 : -1); paint();
+    container.scrollIntoView({block:'start'});
+  }));
+  const num = container.querySelector('.pg-num'), go = container.querySelector('.pg-go');
+  const doGo = ()=>{ const v = parseInt(num.value,10); if(!isNaN(v)){ page = v; paint(); container.scrollIntoView({block:'start'}); } };
+  if (go) go.addEventListener('click', doGo);
+  if (num) num.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); doGo(); } });
+  // filtros
+  const fEls = [...container.querySelectorAll('.ev-filters [data-f]')];
+  const readCriteria = ()=>{
+    const g = k => (container.querySelector(`.ev-filters [data-f="${k}"]`)?.value || '').trim();
+    const a=g('ano');
+    return { text:norm(g('text')), proc:norm(g('proc')), ano:a?parseInt(a,10):null };
+  };
+  const applyFilters = ()=>{
+    const c = readCriteria();
+    visible = rows.map((_,i)=>i).filter(i=>matchEvent(rows[i], c));
+    page = 1; paint();
+    if (opts.onFilter) opts.onFilter(visible.map(i=>rows[i]));
+  };
+  fEls.forEach(el=>el.addEventListener('input', debounce(applyFilters)));
+  const clear = container.querySelector('.evf-clear');
+  if (clear) clear.addEventListener('click', ()=>{ fEls.forEach(el=>el.value=''); applyFilters(); });
+}
+// Renderiza o histórico (paginado) de UMA linha dentro de um container
+/* --- DOC · Histórico (linha) -------------------------------------- */
+async function renderLineHistory(host, line){
+  selectLine(line);   // sincroniza a linha ativa e o banner do topo
+  const [rows, lk] = await Promise.all([
+    sbFetch('evento_teste', `codlinha=eq.${enc(line.codlinha)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.asc&limit=2000`),
+    getEvLookups(), getEmpresas()
+  ]);
+  const head = docHead('Histórico da Linha');
+  const meta = metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(orDash(line.codempresa))],['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—'),true]]);
+  if (!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento registrado para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
+  const build = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin[r.evento_linha] || lk.emp[r.evento_empresa] || '—', false) + evBlocksHTML(r);
+  // PDF/impressão: um evento por página (cabeçalho repetido); segue o filtro aplicado na tela
+  const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
+  paginateEvents(host, rows, build, meta, { onFilter:(vis)=>{ if (currentView) currentView.pdfHTML = ()=>pdfFrom(vis); } });
+  if (currentView) currentView.pdfHTML = ()=>pdfFrom(rows);
+}
+LOADERS.historicoLinha = async () => {
+  const pre = activeLine ? (activeLine.numero_ligacao || activeLine.codlinha || '') : '';
+  searchPanel({ title:'Histórico da Linha', placeholder:'Nome, número ou código da linha', value:pre,
+    onRun: (term, host) => lineSearchRun(term, host, { render:renderLineHistory,
+      emptyMsg:'Busque pelo nome, número ou código da linha.', prompt:'clique para ver o histórico' }) });
+};
+
+/* --- DOC · Itinerários ---------------------------------------- */
+const SENTIDO_ORDER = { 'Ida':1, 'Volta':2, 'Circular':3 };
+const normSentido = s => { const t=String(s||'').trim().toLowerCase(); if(t.startsWith('ida'))return'Ida'; if(t.startsWith('volta'))return'Volta'; if(t.startsWith('circ'))return'Circular'; return s?String(s):'—'; };
+
+function itinerarioTableHTML(rows, ibge){
+  if(!rows.length) return emptyBox('Nenhum itinerário cadastrado para esta linha.');
+  rows.forEach(r=>r._sn=normSentido(r.sentido));
+  rows.sort((a,b)=>{ const oa=SENTIDO_ORDER[a._sn]||9, ob=SENTIDO_ORDER[b._sn]||9; return oa!==ob?oa-ob:(a.id-b.id); });
+  let last=null;
+  const body = rows.map(r=>{
+    let sep=''; if(r._sn!==last){ sep=`<tr class="sentido-sep"><td colspan="4">Sentido: ${esc(r._sn)}</td></tr>`; last=r._sn; }
+    const mun = (ibge[r.cod_municipio_origem]?.nome) || (r.cod_municipio_origem?String(r.cod_municipio_origem):'');
+    return sep+`<tr><td class="td-sentido">${esc(r._sn||'')}</td><td class="td-tipo">${esc(r.tipo_logradouro||'')}</td>
+      <td class="td-logr">${esc(r.nome_logradouro||'—')}</td><td class="td-mun">${esc(mun)}</td></tr>`;
+  }).join('');
+  return tableHTML([{t:'Sentido',w:'62px'},{t:'Tipo',w:'84px'},{t:'Nome do Logradouro'},{t:'Município',w:'110px'}], body, `${rows.length} logradouro(s) · cadastro DETRO-RJ`);
+}
+
+async function renderItinerarios(host, line){
+  host.innerHTML = loading();
+  const [rows, ibge] = await Promise.all([
+    sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_municipio_origem,codempresa&order=id`),
+    getIbge(), getEmpresas()
+  ]);
+  if (!rows.length) { host.innerHTML = emptyBox('Nenhum itinerário encontrado para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
+  const codEmp = rows[0]?.codempresa || line.codempresa || '';
+  const meta = metaRows([['Empresa',esc(empNome(codEmp)),true],['Registro','RJ-'+esc(codEmp)],
+      ['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
+      ['Ligação',esc(line.nome_ligacao||'—'),true],['Via',esc(orDash(line.via))],
+      ['Característica',esc(orDash(line.caracteristica))],['Tipo da Ligação',esc(orDash(line.tipo))],
+      ['Situação',situacaoHTML(line),true]]);
+  const inner = `${meta}${itinerarioTableHTML(rows, ibge)}`;   // documento completo (p/ PDF)
+  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}${inner}</div>`;
+  // filtro por sentido — o PDF segue com os dois sentidos
+  rows.forEach(r=>r._sn=normSentido(r.sentido));
+  const sentidos = [...new Set(rows.map(r=>r._sn))].filter(Boolean).sort((a,b)=>(SENTIDO_ORDER[a]||9)-(SENTIDO_ORDER[b]||9));
+  const tools = sentidos.length>1 ? `<div class="loc-tools"><label>Sentido <select id="itiSent"><option value="">Todos</option>${sentidos.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select></label></div>` : '';
+  host.innerHTML = `${meta}${tools}<div id="itiResult"></div>`;
+  const result = host.querySelector('#itiResult'), sel = host.querySelector('#itiSent');
+  const paint = ()=>{
+    const s = sel?sel.value:'';
+    const f = s ? rows.filter(r=>r._sn===s) : rows;
+    result.innerHTML = itinerarioTableHTML(f, ibge);
+  };
+  if(sel) sel.addEventListener('change', paint);
+  paint();
+}
+
+LOADERS.itinerarios = () => lineDocView({ subtitle:'Cadastro de Linhas: Itinerários', render:renderItinerarios });
+
+/* --- DOC · Quadro de Horários --------------------------------- */
+function quadroHorariosBodyHTML(interv, predet, orig){
+  if(!interv.length && !predet.length) return emptyBox('Nenhum quadro de horários cadastrado para esta linha.');
+  // Rótulo do SENTIDO: a origem AUTORITATIVA (origem_teste, via `orig`) tem prioridade sobre o
+  // nome_origem denormalizado das tabelas de QH (que vem inconsistente/trocado na base). Agrupa
+  // pelo rótulo resolvido → códigos diferentes com a mesma origem não geram blocos repetidos.
+  const sentidoKey = (cod, nome) => orig[cod] || nome || ('Origem '+orDash(cod));
+  let html='';
+  if (interv.length){
+    html += `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:14px 0 4px">Por intervalo / frequência</h3>`;
+    for (const [label, list] of groupBy(interv, r=>sentidoKey(r.cod_origem, r.nome_origem))){
+      html += `<div class="qh-sentido">Sentido · partidas de ${esc(label)}</div>`;
+      for (const [dia, rows] of groupBy(list, r=>r.dia_semana||'—')){
+        const body = rows.map(r=>`<tr><td class="td-num">${esc(fmtTime(r.hora_inicio))}</td>
+          <td class="td-num">${esc(fmtTime(r.hora_fim))}</td><td class="td-tipo">${esc(orDash(r.intervalo))} min</td></tr>`).join('');
+        html += `<div style="margin-top:6px"><div class="sentido-sep" style="padding:5px 8px">${esc(dia)}</div>
+          <div class="doc-table-wrap"><table class="doc-table"><thead><tr><th style="width:33%">Início</th><th style="width:33%">Fim</th><th>Intervalo</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
+      }
+    }
+  }
+  if (predet.length){
+    html += `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:18px 0 4px">Horários predeterminados</h3>`;
+    for (const [label, list] of groupBy(predet, r=>sentidoKey(r.cod_origem, r.nome_origem))){
+      html += `<div class="qh-sentido">Sentido · partidas de ${esc(label)}</div>`;
+      for (const [dia, rows] of groupBy(list, r=>r.dia_semana||'—')){
+        const horas = rows.map(r=>`<span class="mono" style="display:inline-block;background:#eef4f9;color:var(--blue);padding:2px 7px;border-radius:5px;margin:2px;font-size:12.5px">${esc(fmtTime(r.saida))}</span>`).join('');
+        html += `<div style="margin-top:6px"><div class="sentido-sep" style="padding:5px 8px">${esc(dia)} · ${rows.length} partida(s)</div><div style="padding:8px 4px">${horas}</div></div>`;
+      }
+    }
+  }
+  return html;
+}
+
+// Corpo de UM quadro (meta + tabelas) para uma linha qualquer — reusado na linha ativa,
+// no clique da lista por empresa e na montagem do PDF de todos os quadros.
+function quadroMetaHTML(line, ultimaAlteracao){
+  const pares = [['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(line.codempresa||'—')],['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—'),true],['Via',esc(orDash(line.via))],['Característica',esc(orDash(line.caracteristica))],['Tipo',esc(orDash(line.tipo))],['Situação',situacaoHTML(line),true]];
+  if(ultimaAlteracao!==undefined) pares.push(['Última alteração',fmtDate(ultimaAlteracao)]);
+  return metaRows(pares);
+}
+
+function quadroDocInner(line, interv, predet, orig){
+  return `${quadroMetaHTML(line)}
+    ${quadroHorariosBodyHTML(interv, predet, orig)}`;
+}
+
+// Busca os quadros (intervalo + predeterminado) de várias linhas de uma vez e agrupa por codlinha.
+async function fetchQHByLines(codlinhas){
+  const inList = codlinhas.map(enc).join(',');
+  const [interv, predet] = await Promise.all([
+    sbFetch('qh_intervalo_teste', `codlinha=in.(${inList})&select=codlinha,cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id&limit=20000`),
+    sbFetch('qh_predeterminado_teste', `codlinha=in.(${inList})&select=codlinha,cod_origem,nome_origem,dia_semana,saida&order=id&limit=30000`)
+  ]);
+  return { intervBy: groupBy(interv, r=>r.codlinha), predetBy: groupBy(predet, r=>r.codlinha),
+           trunc: !!(interv._trunc || predet._trunc) };
+}
+
+// Modo linha: resolve o termo (número, nome ou código) → 1 linha (mostra o quadro) ou várias (lista)
+function quadroLinhaRun(term, host){
+  return lineSearchRun(term, host, { render:renderLinhaQuadro, emptyMsg:'Busque a linha pelo número, nome ou código.', prompt:'clique para ver o quadro' });
+}
+
+// Quadro de UMA linha (comportamento clássico do card)
+async function renderLinhaQuadro(host, line){
+  if(!host || !line) return;
+  host.innerHTML = loading();
+  try {
+    const [interv, predet, qh, secoes, orig] = await Promise.all([
+      sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(line.codlinha)}&select=cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
+      sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(line.codlinha)}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
+      sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=ultima_alteracao&limit=1`),
+      sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`),
+      getOrigem(), getEmpresas()
+    ]);
+    if (!interv.length && !predet.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para esta linha.'); if(currentView) currentView.pdfHTML=null; return; }
+    const ultima = qh[0]?.ultima_alteracao;
+    // bloco de Seções e Tarifas da linha (mesma tabela/builder da Estrutura), fora do #qhResult
+    const h3sec = `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:18px 0 4px">Seções e Tarifas</h3>`;
+    const secBlock = secoes.length ? `${h3sec}${secoesTarifasHTML(secoes)}` : '';
+    if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroMetaHTML(line, ultima)}${secBlock}${quadroHorariosBodyHTML(interv, predet, orig)}</div>`;
+    // filtros por sentido (origem das partidas) e por dia — o PDF segue completo
+    const sentidoKey = (cod,nome)=> orig[cod] || nome || ('Origem '+orDash(cod));
+    const sentidos = [...new Set([...interv.map(r=>sentidoKey(r.cod_origem,r.nome_origem)), ...predet.map(r=>sentidoKey(r.cod_origem,r.nome_origem))])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+    const dias = [...new Set([...interv,...predet].map(r=>r.dia_semana||'—'))].filter(v=>v&&v!=='—').sort((a,b)=>a.localeCompare(b));
+    const sentSel = sentidos.length>1 ? `<label>Sentido <select id="qhSent"><option value="">Todos</option>${sentidos.map(s=>`<option value="${esc(s)}">de ${esc(s)}</option>`).join('')}</select></label>` : '';
+    const diaSel  = dias.length>1 ? `<label>Dia <select id="qhDia"><option value="">Todos</option>${dias.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('')}</select></label>` : '';
+    const tools = (sentSel||diaSel) ? `<div class="loc-tools">${sentSel}${diaSel}</div>` : '';
+    host.innerHTML = `${quadroMetaHTML(line, ultima)}${secBlock}${tools}<div id="qhResult"></div>`;
+    const result = host.querySelector('#qhResult'), ss = host.querySelector('#qhSent'), ds = host.querySelector('#qhDia');
+    const paint = ()=>{
+      const s = ss?ss.value:'', d = ds?ds.value:'';
+      const fi = interv.filter(r=>(!s||sentidoKey(r.cod_origem,r.nome_origem)===s)&&(!d||(r.dia_semana||'—')===d));
+      const fp = predet.filter(r=>(!s||sentidoKey(r.cod_origem,r.nome_origem)===s)&&(!d||(r.dia_semana||'—')===d));
+      result.innerHTML = quadroHorariosBodyHTML(fi, fp, orig);
+    };
+    if(ss) ss.addEventListener('change', paint);
+    if(ds) ds.addEventListener('change', paint);
+    paint();
+  } catch(e){ host.innerHTML = errorBox(e.message); }
+}
+
+// compat: alguns caminhos chamam o quadro da linha ativa
+const renderActiveLineQuadro = host => renderLinhaQuadro(host, activeLine);
+
+// Modo empresa: resolve a empresa e lista as linhas com quadro
+async function quadroEmpresaRun(term, host){
+  term = (term||'').trim();
+  if(!term){
+    if(activeLine) return renderActiveLineQuadro(host);
+    host.innerHTML = emptyBox('Busque por uma empresa (nome ou código), ou selecione uma linha.');
+    if(currentView) currentView.pdfHTML=null; return;
+  }
+  await getEmpresas();
+  const emps = searchEmpresas(term);
+  if(emps.length > 1){
+    host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para abrir os quadros' });
+    bindEmpresaRows(host, (cod,nome)=>renderEmpresaQuadros(host, cod, nome));
+    if(currentView) currentView.pdfHTML=null; return;
+  }
+  const cod = emps.length===1 ? emps[0].codempresa : term;
+  const nome = emps.length===1 ? emps[0].nome_empresa : null;
+  await renderEmpresaQuadros(host, cod, nome);
+}
+
+// Lista as linhas (com quadro) de uma empresa e prepara o PDF de todos os quadros
+async function renderEmpresaQuadros(host, cod, nome){
+  host.innerHTML = loading();
+  const [linhas, orig] = await Promise.all([
+    sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=codlinha&limit=500`),
+    getOrigem(), getEmpresas()
+  ]);
+  const nomeEmp = nome || empNome(cod);
+  if(!linhas.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para a empresa '+esc(nomeEmp)+'.'); if(currentView) currentView.pdfHTML=null; return; }
+  const { intervBy, predetBy, trunc } = await fetchQHByLines(linhas.map(l=>l.codlinha));
+  const comQuadro = linhas.filter(l => intervBy.has(l.codlinha) || predetBy.has(l.codlinha));
+  if(!comQuadro.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para as linhas da empresa '+esc(nomeEmp)+'.'); if(currentView) currentView.pdfHTML=null; return; }
+  // PDF: todos os quadros, um por página
+  if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${comQuadro.map(l=>
+    `<div class="ev-page">${docHead('Quadro de Horários')}${quadroDocInner(l, intervBy.get(l.codlinha)||[], predetBy.get(l.codlinha)||[], orig)}</div>`).join('')}</div>`;
+  host.innerHTML = `<div class="doc-obs" style="margin:0 0 10px"><b>${esc(nomeEmp)}</b> · ${linhas.length} linha(s), ${comQuadro.length} com quadro de horários.
+      Use o botão <b>PDF</b> da barra acima para baixar todos os quadros (um por página).</div>`
+    + (trunc? `<div class="trunc-aviso"><b>Resultado parcial:</b> a empresa tem muitos horários e alguns podem não ter sido carregados.</div>`:'')
+    + `<div id="eqResult"></div>`;
+  // clique numa linha → quadro individual (com voltar). data-cod=codlinha → fatia-safe.
+  const abrirQuadro = tr=>{
+    const l = comQuadro.find(x=>String(x.codlinha)===String(tr.dataset.cod));
+    if(!l) return;
+    const iv = intervBy.get(l.codlinha)||[], pd = predetBy.get(l.codlinha)||[];
+    host.innerHTML = `<button type="button" class="qh-back" style="background:none;border:0;color:var(--blue);font:inherit;font-weight:600;cursor:pointer;padding:4px 0;margin-bottom:6px">‹ Voltar à lista da empresa</button>`
+      + quadroDocInner(l, iv, pd, orig);
+    if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroDocInner(l, iv, pd, orig)}</div>`;
+    host.querySelector('.qh-back').addEventListener('click', ()=>renderEmpresaQuadros(host, cod, nome));
+  };
+  paginateTable(host.querySelector('#eqResult'), comQuadro, {
+    cols:[{t:'Número',w:'110px'},{t:'Ligação'},{t:'Código',w:'130px'}],
+    rowHTML:l=>`<tr class="clickable" tabindex="0" role="button" data-cod="${esc(l.codlinha)}">
+      <td class="td-num" data-label="Número">${esc(l.numero_ligacao||fmtCode(l.codlinha))}</td>
+      <td class="td-logr" data-label="Ligação">${fmtLineName(l.nome_ligacao)}</td>
+      <td class="td-num" data-label="Código">${esc(fmtCode(l.codlinha))}</td></tr>`,
+    foot:t=>t+' linha(s) com quadro · clique para ver o quadro',
+    bind:c=>c.querySelectorAll('tr[data-cod]').forEach(tr=>tr.addEventListener('click',()=>abrirQuadro(tr))),
+    unit:'linhas', pdf:false,   // o PDF desta tela é "todos os quadros" (definido acima), não a lista
+  });
+}
+
+LOADERS.quadroHorarios = async () => {
+  searchPanel({
+    title:'Quadro de Horários',
+    placeholder:'Número, nome ou código da linha (ou empresa)',
+    selectOpts:[['linha','Por linha'],['empresa','Por empresa (PDF de todos)']],
+    note: 'Por linha: número, nome ou código → mostra o quadro dela. Por empresa: nome ou código → baixa o PDF de todos os quadros da operadora.',
+    onRun: (term, host, modo) => modo==='empresa' ? quadroEmpresaRun(term, host) : quadroLinhaRun(term, host)
+  });
+  // havendo linha ativa, prefill com a linha e mostra o quadro dela (modo "Por linha", padrão)
+  if (activeLine){
+    const i = modalBody.querySelector('#spInput'); if(i) i.value = activeLine.numero_ligacao || activeLine.codlinha || '';
+    await renderLinhaQuadro(modalBody.querySelector('#spHost'), activeLine);
+  }
+};
+
+/* --- DOC · Tarifas -------------------------------------------- */
+function secoesTarifasHTML(rows){
+  if(!rows.length) return emptyBox('Nenhuma seção/tarifa cadastrada para esta linha.');
+  const body = rows.map(r=>{
+    // chip de status com a data do evento ao lado (quando a coluna de data está disponível)
+    const dChip = (v,label,date) => v ? `<span class="chip chip-on">${label}${date?' '+fmtDate(date):''}</span>` : '';
+    const st = [ dChip(r.cancelado,'Canc.',r.data_cancelamento), dChip(r.paralisado,'Paral.',r.data_paralisacao), dChip(r.sub_judice,'Sub jud.',r.data_sub_judice), dChip(r.transferido,'Transf.',r.data_transferencia) ].filter(Boolean).join(' ') || '<span class="chip chip-off">OK</span>';
+    return `<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-num">${esc(orDash(r.numero_linha))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td>
+    <td class="td-tipo">${esc(orDash(r.via))}</td><td class="td-tipo">${esc(orDash(r.caracteristica))}</td><td class="td-tipo">${esc(orDash(r.tipo_ligacao))}</td><td class="td-num">${esc(orDash(r.rm))}</td>
+    <td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td><td class="td-num">R$ ${esc(fmtMoney(r.piso_i))}</td>
+    <td class="td-tipo">${esc(orDash(r.situacao))}</td><td class="td-num">${fmtDate(r.data_criacao)}</td><td>${st}</td></tr>`;
+  }).join('');
+  return tableHTML([{t:'Seção',w:'60px'},{t:'Nº Linha',w:'80px'},{t:'Ligação'},{t:'Via',w:'90px'},{t:'Caract.',w:'90px'},{t:'Tipo',w:'90px'},{t:'RM',w:'55px'},{t:'Tarifa',w:'80px'},{t:'Piso I',w:'80px'},{t:'Situação',w:'90px'},{t:'Criação',w:'90px'},{t:'Status',w:'150px'}], body, rows.length+' seção(ões)');
+}
+
+async function renderTarifas(host, line){
+  host.innerHTML = loading();
+  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`);
+  if (!rows.length) { host.innerHTML = emptyBox('Nenhuma tarifa cadastrada para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
+  const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]]);
+  const inner = `${meta}${secoesTarifasHTML(rows)}`;            // documento completo (p/ PDF)
+  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Tarifas Vigentes')}${inner}</div>`;
+  // filtro por situação da seção — reusa isVigente (critério estrito compartilhado; ver junto a isLinhaAtiva)
+  const temInativa = rows.some(r=>!isVigente(r));
+  const tools = temInativa ? `<div class="loc-tools"><label>Situação <select id="tarSit"><option value="todas">Todas</option><option value="vigentes">Vigentes</option><option value="inativas">Canceladas/inativas</option></select></label></div>` : '';
+  host.innerHTML = `${meta}${tools}<div id="tarResult"></div>`;
+  const result = host.querySelector('#tarResult'), sel = host.querySelector('#tarSit');
+  const paint = ()=>{
+    const s = sel?sel.value:'todas';
+    const f = s==='vigentes' ? rows.filter(isVigente) : s==='inativas' ? rows.filter(r=>!isVigente(r)) : rows;
+    result.innerHTML = f.length ? secoesTarifasHTML(f) : emptyBox('Nenhuma seção com esse filtro.');
+  };
+  if(sel) sel.addEventListener('change', paint);
+  paint();
+}
+
+LOADERS.tarifas = () => lineDocView({ subtitle:'Tarifas Vigentes', render:renderTarifas });
+
+/* --- DOC · Frota ---------------------------------------------- */
+function frotaBlockHTML(f){
+  return `<div class="kpi-grid">
+      <div class="kpi"><b>${esc(orDash(f.frota_operacional))}</b><span>Operacional</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_a))}</b><span>Comum (A)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_sa))}</b><span>Comum (SA)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_ac))}</b><span>Ar cond. (AC)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_sac))}</b><span>Ar cond. (SAC)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_a))}</b><span>Micro (A)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_sa))}</b><span>Micro (SA)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_ac))}</b><span>Micro (AC)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_sac))}</b><span>Micro (SAC)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_micro_e))}</b><span>Micro (E)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.frota_e))}</b><span>Especial (E)</span></div>
+      <div class="kpi"><b>${esc(orDash(f.reserva))}</b><span>Reserva</span></div>
+    </div>`;
+}
+
+async function renderFrota(host, line){
+  host.innerHTML = loading();
+  const [rows] = await Promise.all([
+    sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e&limit=1`),
+    getEmpresas()
+  ]);
+  if (!rows.length) { host.innerHTML = emptyBox('Nenhuma frota cadastrada para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
+  const f = rows[0];
+  const inner = `${metaRows([['Empresa',esc(empNome(f.codempresa)),true],['Registro','RJ-'+esc(orDash(f.codempresa))],
+      ['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
+      ['Ligação',esc(line.nome_ligacao||'—'),true],['Hierarquia',esc(orDash(f.hierarquia))],['Última alteração',fmtDate(f.ultima_alteracao)]])}
+    ${frotaBlockHTML(f)}`;
+  host.innerHTML = inner;
+  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Frota da Linha')}${inner}</div>`;
+}
+
+LOADERS.frota = () => lineDocView({ subtitle:'Frota da Linha', render:renderFrota });
+
+/* --- DOC · Estrutura Operacional ------------------------------ */
+async function renderEstrutura(host, line){
+  host.innerHTML = loading();
+  const cod = enc(line.codlinha);
+  const [lineRows, secoes, itin, interv, predet, qh, orig, ibge] = await Promise.all([
+    sbFetch('tabela_vista_teste', `codlinha=eq.${cod}&select=${LINE_FIELDS}&limit=1`),
+    sbFetch('tarifa_atual_teste', `codlinha=eq.${cod}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`),
+    sbFetch('itinerario_teste', `codlinha=eq.${cod}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_municipio_origem,codempresa&order=id`),
+    sbFetch('qh_intervalo_teste', `codlinha=eq.${cod}&select=cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
+    sbFetch('qh_predeterminado_teste', `codlinha=eq.${cod}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
+    sbFetch('qh_teste', `codlinha=eq.${cod}&select=codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e&limit=1`),
+    getOrigem(), getIbge(), getEmpresas()
+  ]);
+  const L = lineRows[0] || line;
+  const f = qh[0] || {};
+  const h3 = t => `<h3 style="font-family:'Archivo';font-size:15.5px;color:var(--navy);border-bottom:2px solid var(--green);padding-bottom:4px;margin:22px 0 6px">${t}</h3>`;
+  const frotaMeta = metaRows([['Hierarquização',esc(orDash(f.hierarquia))],['Frota operacional',esc(orDash(f.frota_operacional))],['Reserva',esc(orDash(f.reserva))],['Última alteração',fmtDate(f.ultima_alteracao)]]);
+  const inner = `${metaRows([
+      ['Empresa',esc(empNome(L.codempresa)),true],['Registro','RJ-'+esc(orDash(L.codempresa))],
+      ['Código da Ligação',esc(fmtCode(L.codlinha))],['Número da Ligação',esc(orDash(L.numero_ligacao))],
+      ['Ligação',esc(L.nome_ligacao||'—'),true],['Via',esc(orDash(L.via))],
+      ['Característica',esc(orDash(L.caracteristica))],['Tipo da Ligação',esc(orDash(L.tipo))],
+      ['Data de criação',fmtDate(L.data_criacao)],['Processo Nº',esc(orDash(L.processo_criacao)),true],
+      ['Situação',situacaoHTML(L),true],
+    ])}
+    ${h3('Seções e Tarifas')}${secoesTarifasHTML(secoes)}
+    ${h3('Itinerário')}${itinerarioTableHTML(itin, ibge)}
+    ${h3('Quadro de Horários e Frota')}${frotaMeta}${f&&Object.keys(f).length?frotaBlockHTML(f):''}${quadroHorariosBodyHTML(interv, predet, orig)}
+    <div class="doc-foot">Fonte: cadastro DETRO-RJ · DIVAT</div>`;
+  host.innerHTML = inner;
+  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Cadastro de Linhas: Estrutura Operacional')}${inner}</div>`;
+}
+
+// Documento consolidado (igual ao Relatório oficial): cadastro + Seções/Tarifas +
+// Itinerário + Quadro de Horários e Frota, num único .doc (também usado no PDF).
+LOADERS.estrutura = () => lineDocView({ subtitle:'Cadastro de Linhas: Estrutura Operacional', render:renderEstrutura });
+
+/* ---- Empresas ---- */
+LOADERS.empresasRegulares = async () => {
+  // lista TODAS as empresas do cadastro (codempresa_teste), inclusive sem linhas
+  const [lineRows] = await Promise.all([
+    sbFetch('tabela_vista_teste', `select=codempresa,cancelado,paralisado&limit=5000`),
+    getEmpresas()
+  ]);
+  const cnt = {};
+  lineRows.forEach(r=>{ const k=r.codempresa||'—'; cnt[k]=cnt[k]||{total:0,ativas:0}; cnt[k].total++; if(isLinhaAtiva(r))cnt[k].ativas++; });
+  // dedup do cadastro por RJ (prioriza a entrada REGULAR/não cassada — resolve o RJ 103)
+  const best = {};
+  (empresas.list||[]).forEach(e=>{ const k=e.codempresa; if(k==null) return;
+    const sc = (!e.cassada && String(e.situacao||'').toUpperCase()==='REGULAR')?2:(!e.cassada?1:0);
+    if(!(k in best) || sc>best[k]._s) best[k] = {...e, _s:sc}; });
+  const list = Object.values(best).map(e=>({ ...e, total:(cnt[e.codempresa]?.total)||0, ativas:(cnt[e.codempresa]?.ativas)||0 }));
+  list.sort((a,b)=> b.total-a.total || String(a.nome_empresa||'').localeCompare(String(b.nome_empresa||'')));
+  const semLinha = list.filter(e=>!e.total).length;
+  const statusCol = e => [boolChip(e.cassada,'Cassada'), boolChip(e.sob_intervencao,'Interv.')].filter(Boolean).join(' ') || `<span class="chip chip-off">${esc(orDash(e.situacao))}</span>`;
+  const rowHTML = e => `<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}"><td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td><td class="td-tipo">${statusCol(e)}</td><td class="td-sentido">${e.total}</td><td class="td-tipo">${e.ativas}</td></tr>`;
+  const cols = [{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Situação',w:'150px'},{t:'Total de linhas',w:'120px'},{t:'Linhas ativas',w:'110px'}];
+  setBody(`<div class="doc">${docHead('Empresas Regulares')}
+    <p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${list.length} empresas no cadastro${semLinha?` · ${semLinha} sem linhas`:''}. Clique para ver as ligações da empresa.</p>
+    <div class="loc-tools">
+      <label>Situação <select id="empSit"><option value="todas">Todas</option><option value="regular">Regulares</option><option value="cassada">Cassadas</option><option value="interv">Sob intervenção</option></select></label>
+      <label>Buscar <input type="text" id="empBusca" placeholder="nome ou RJ" autocomplete="off"></label>
+    </div>
+    <div id="empResult"></div></div>`);
+  const result = modalBody.querySelector('#empResult');
+  const sel = modalBody.querySelector('#empSit'), inp = modalBody.querySelector('#empBusca');
+  const paint = ()=>{
+    const s = sel.value, termo = inp.value.trim(), q = norm(termo);
+    const f = list.filter(e=>{
+      const cass = !!e.cassada, interv = !!e.sob_intervencao, reg = !cass && !interv;
+      if(s==='cassada' && !cass) return false;
+      if(s==='interv'  && !interv) return false;
+      if(s==='regular' && !reg) return false;
+      if(q && !(norm(e.nome_empresa||'').includes(q) || String(e.codempresa||'').includes(termo))) return false;
+      return true;
+    });
+    if(!f.length){ result.innerHTML = emptyBox('Nenhuma empresa com esse filtro.'); return; }
+    paginateTable(result, f, {
+      cols, rowHTML:e=>rowHTML(e), foot:t=>t+' empresa(s)', unit:'empresas',
+      bind:c=>c.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>openEmpresaLigacoes(tr.dataset.emp))),
+    });
+  };
+  sel.addEventListener('change', paint);
+  inp.addEventListener('input', debounce(paint));
+  paint();
+};
+
+/* --- DOC · Empresas ----------------------------------------------- */
+function openEmpresaLigacoes(cod){
+  runView({ title:'Ligações por Empresa', tables:['tabela_vista_teste','codempresa_teste'], loader: async()=>{
+    const [rows] = await Promise.all([
+      sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`),
+      getEmpresas()
+    ]);
+    setBody(`<div class="doc">${docHead('Ligações por Empresa')}
+      ${metaRows([['Empresa',esc(empNome(cod)),true],['Registro','RJ-'+esc(cod)],['Total',rows.length+' ligação(ões)']])}
+      <div id="empLigResult"></div></div>`);
+    lineResults(modalBody.querySelector('#empLigResult'), rows);
+  }});
+}
+LOADERS.ligacoesPorEmpresa = async () => {
+  const pre = activeLine?.codempresa || '';
+  searchPanel({ title:'Ligações por Empresa', placeholder:'Código (ex. 101) ou nome da empresa', value:pre, onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Informe o código ou nome da empresa.'); return; }
+    await getEmpresas();
+    let cods = [];
+    if(/^\d+$/.test(term.trim())){
+      cods = [term.trim()];
+    } else {
+      const t = norm(term);
+      cods = Object.entries(empresas.map).filter(([,n])=>norm(n||'').includes(t)).map(([c])=>c);
+      if(!cods.length){ host.innerHTML=emptyBox('Nenhuma empresa encontrada para "'+esc(term)+'".'); return; }
+    }
+    const filter = cods.length===1 ? `codempresa=eq.${enc(cods[0])}` : `codempresa=in.(${cods.map(enc).join(',')})`;
+    const rows = await sbFetch('tabela_vista_teste', `${filter}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`);
+    lineResults(host, rows);
+  }});
+};
+LOADERS.secoesPorEmpresa = async () => {
+  const pre = activeLine?.codempresa || '';
+  searchPanel({ title:'Seções por Empresa', placeholder:'Código da empresa (ex. 101)', value:pre, onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Informe o código da empresa.'); return; }
+    const rows = await sbFetch('tarifa_atual_teste', `codempresa=eq.${enc(term)}&select=codlinha,secao,nome_ligacao&order=codlinha&limit=1000`);
+    if(!rows.length){ host.innerHTML=emptyBox('Nenhuma seção cadastrada para a empresa '+esc(term)+'.'); return; }
+    const cols = [{t:'Linha',w:'110px'},{t:'Seção',w:'70px'},{t:'Descrição'}];
+    const rowHTML = r=>`<tr><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td></tr>`;
+    host.innerHTML = `<div class="loc-tools"><label>Filtrar <input type="text" id="secF" placeholder="seção, linha ou descrição" autocomplete="off"></label></div><div id="secResult"></div>`;
+    const result = host.querySelector('#secResult'), inp = host.querySelector('#secF');
+    const paint = ()=>{
+      const q = norm(inp.value.trim());
+      const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${fmtCode(r.codlinha)} ${r.codlinha} ${r.nome_ligacao||''}`).includes(q)) : rows;
+      if(!f.length){ result.innerHTML = emptyBox('Nenhuma seção com esse filtro.'); return; }
+      paginateTable(result, f, { cols, rowHTML:r=>rowHTML(r), foot:t=>t+' seção(ões)', unit:'seções' });
+    };
+    inp.addEventListener('input', debounce(paint));
+    paint();
+  }});
+};
+// Renderiza o histórico (paginado) de UMA empresa dentro de um container
+async function renderEmpresaHistory(host, cod, nome){
+  const [rows, lk, empRows] = await Promise.all([
+    sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.asc&limit=500`),
+    getEvLookups(),
+    sbFetch('codempresa_teste', `codempresa=eq.${enc(cod)}&select=nome_empresa,situacao,processo,data_publicacao,cassada,sob_intervencao&limit=1`)
+  ]);
+  const E = empRows[0] || {};
+  const head = docHead('Histórico da Empresa');
+  const empSit = [ boolChip(E.cassada,'Cassada'), boolChip(E.sob_intervencao,'Sob intervenção') ].filter(Boolean).join(' ') || '<span class="chip chip-off">Regular</span>';
+  const meta = metaRows([['Empresa',esc(nome||E.nome_empresa||'—'),true],['Código da Empresa',esc(cod)],['Situação',esc(orDash(E.situacao))],['Processo',esc(orDash(E.processo))],['Publicação',fmtDate(E.data_publicacao)],['Situação cadastral',empSit,true],['Total',rows.length+' evento(s)']]);
+  if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento para a empresa '+esc(cod)+'.'); if(currentView) currentView.pdfHTML=null; return; }
+  const build = r => evBandHTML(r, 'Tipo Evento Empresa', lk.emp[r.evento_empresa]||lk.lin[r.evento_linha]||'—', !!(r.codlinha)) + evBlocksHTML(r);
+  const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
+  paginateEvents(host, rows, build, meta, { onFilter:(vis)=>{ if(currentView) currentView.pdfHTML = ()=>pdfFrom(vis); } });
+  if(currentView) currentView.pdfHTML = ()=>pdfFrom(rows);
+}
+LOADERS.historicoEmpresa = async () => {
+  const pre = activeLine?.codempresa || '';
+  searchPanel({ title:'Histórico da Empresa', placeholder:'Nome ou código da empresa (ex. 1001 ou AUTO VIAÇÃO)', value:pre,
+    onRun: async(term, host)=>{
+      term = (term||'').trim();
+      if(!term){ host.innerHTML=emptyBox('Busque pelo nome ou código da empresa.'); if(currentView) currentView.pdfHTML=null; return; }
+      // busca client-side sobre o cadastro completo → insensível a maiúsc./minúsc. E acento
+      await getEmpresas();
+      const emps = searchEmpresas(term);
+      if(emps.length === 1){ await renderEmpresaHistory(host, emps[0].codempresa, emps[0].nome_empresa); return; }
+      if(emps.length > 1){
+        host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para ver o histórico', sitWidth:'170px',
+          extraChips:e=>boolChip(e.cassada,'cassada')+boolChip(e.sob_intervencao,'interv.') });
+        bindEmpresaRows(host, (cod,nome)=>renderEmpresaHistory(host, cod, nome));
+        if(currentView) currentView.pdfHTML=null; return;
+      }
+      // não achou no cadastro de nomes → tenta o termo como código direto nos eventos
+      await renderEmpresaHistory(host, term, null);
+    } });
+};
+
+/* ---- Consultas de Ligações ---- */
+LOADERS.ligacoesPorNome = async () => {
+  searchPanel({ title:'Ligações pelo Nome', placeholder:'Parte do nome da ligação', note:'Esta consulta casa apenas o NOME da ligação (ordem alfabética). Para localizar por número ou código, use a busca do topo da página.', onRun: async(term, host)=>{
+    const qs = term? `nome_ligacao=ilike.*${ilikeTerm(term)}*&` : '';
+    const [rows] = await Promise.all([
+      sbFetch('tabela_vista_teste', `${qs}select=${LINE_FIELDS}&order=nome_ligacao&limit=80`),
+      getEmpresas()
+    ]);
+    lineResults(host, rows);
+  }, auto:true});
+};
+LOADERS.ligacoesPorNumero = async () => {
+  searchPanel({ title:'Identificar pelo Número', placeholder:'Número ou código da linha', onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Digite o número ou código.'); return; }
+    const e1=ilikeTerm(term), code=ilikeTerm(term.replace(/[-.\s]/g,''));
+    const [rows] = await Promise.all([
+      sbFetch('tabela_vista_teste', `or=(numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=codlinha&limit=80`),
+      getEmpresas()
+    ]);
+    lineResults(host, rows);
+  }});
+};
+LOADERS.ligacoesPorLogradouro = async () => {
+  searchPanel({ title:'Ligações por Logradouro', placeholder:'Nome da via / logradouro', onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Digite o nome do logradouro.'); return; }
+    // RPC divat_busca_logradouro: busca sem acento e sem depender de maiúsc./minúsc.
+    // (o ilike direto na coluna é sensível a acento — "getulio" não achava "Getúlio").
+    const it = await sbFetch('rpc/divat_busca_logradouro', `termo=${ilikeTerm(term)}&select=codlinha&limit=2000`);
+    const cods=distinctCods(it,500);
+    if(!cods.length){ host.innerHTML=emptyBox('Nenhuma linha passa por esse logradouro.'); return; }
+    const rows = await fetchLinesByCods(cods,{limit:500});
+    const prefix = bannerTrunc(it) + `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${cods.length} linha(s) passam por "${esc(term)}"</p>`;
+    lineResults(host, rows, { prefixHTML: prefix });
+  }});
+};
+LOADERS.municipioRegiao = async () => {
+  const ibge = await getIbge();
+  // Região Programa clássica (regiao_municipio) — é a classificação do print DETRO.
+  const regioes = [...new Set(Object.values(ibge).map(x=>x.regiaoPrograma).filter(Boolean))].sort();
+  // tabela de municípios clicáveis (drill-down → openLinhasPorIbge)
+  const munTable = (entries, host)=>{
+    const body = entries.sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>
+      `<tr class="clickable" tabindex="0" role="button" data-ibge="${esc(cod)}"><td class="td-logr">${esc(v.nome)}</td><td class="td-tipo">${esc(orDash(v.regiaoPrograma))}</td><td class="td-num">cód. ${esc(cod)}</td></tr>`).join('');
+    host.innerHTML = body? tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}], body, entries.length+' município(s) · clique para ver as linhas'):emptyBox('Nenhum município.');
+    host.querySelectorAll('tr[data-ibge]').forEach(tr=>tr.addEventListener('click',()=>openLinhasPorIbge(tr.dataset.ibge, ibge[tr.dataset.ibge]?.nome)));
+  };
+  searchPanel({ title:'Município e Região', placeholder:'Nome do município (ou escolha uma região)', selectOpts:[['','Todas as regiões'],...regioes.map(r=>[r,r])], onRun: async(term, host, region)=>{
+    await getEmpresas();
+    // 1) município digitado → vai pras linhas do município (lista se houver vários)
+    if(term){
+      const municipios = Object.entries(ibge).filter(([,v])=> (!region||v.regiaoPrograma===region) && norm(v.nome).includes(norm(term)) );
+      if(!municipios.length){ host.innerHTML = emptyBox('Nenhum município.'); return; }
+      if(municipios.length===1){ openLinhasPorIbge(municipios[0][0], municipios[0][1].nome); return; }
+      munTable(municipios, host); return;
+    }
+    // 2) Região Programa escolhida → duas métricas do print (RPC divat_linhas_regiao):
+    //    "origem na região" (1º trecho da linha na região) × "trafega dentro da região"
+    //    (todos os trechos na região). O usuário alterna pelo seletor de escopo.
+    if(region){
+      const muns = Object.entries(ibge).filter(([,v])=>v.regiaoPrograma===region).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||''));
+      const chips = muns.map(([cod,v])=>`<button type="button" class="mun-chip" data-ibge="${esc(cod)}">${esc(v.nome)}</button>`).join('');
+      host.innerHTML = `<div class="loc-tools"><label>Mostrar <select id="regScope">
+          <option value="origem">Linhas com origem na Região Programa</option>
+          <option value="dentro">Linhas que trafegam dentro da Região Programa</option>
+        </select></label></div>
+        <div class="mun-chips"><span class="mun-chips-lbl">Filtrar por município:</span>${chips}</div>
+        <div id="regResult"></div>`;
+      const result = host.querySelector('#regResult');
+      const scope  = host.querySelector('#regScope');
+      host.querySelectorAll('.mun-chip').forEach(b=>b.addEventListener('click',()=>openLinhasPorIbge(b.dataset.ibge, ibge[b.dataset.ibge]?.nome)));
+      async function paint(){
+        result.innerHTML = loading();
+        const modo = scope.value;
+        const it = await sbFetch('rpc/divat_linhas_regiao', `p_regiao=${enc(region)}&p_modo=${enc(modo)}&select=codlinha&limit=2000`);
+        const lc = distinctCods(it,500);
+        if(!lc.length){ result.innerHTML = emptyBox('Nenhuma linha para esse critério na região '+esc(region)+'.'); return; }
+        const rows = await fetchLinesByCods(lc,{limit:500});
+        const label = modo==='origem' ? 'com origem na' : 'que trafegam dentro da';
+        const prefix = bannerTrunc(it)
+          + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${lc.length} linha(s) ${label} região ${esc(region)}</p>`;
+        lineResults(result, rows, { prefixHTML: prefix });
+      }
+      scope.addEventListener('change', ()=>{ paint().catch(e=>{ result.innerHTML = errorBox(e.message); }); });
+      paint().catch(e=>{ result.innerHTML = errorBox(e.message); });
+      return;
+    }
+    // 3) nada informado → orienta
+    host.innerHTML = emptyBox('Escolha uma região para ver as linhas, ou digite o nome de um município.');
+  }, auto:true});
+};
+/* --- DOC · Municípios / entre-municípios -------------------------- */
+function openLinhasPorIbge(codibge, nome){
+  runView({ title:'Linhas no Município', tables:['itinerario_teste','tabela_vista_teste','codempresa_teste'], loader: async()=>{
+    const it = await sbFetch('itinerario_teste', `cod_municipio_origem=eq.${enc(codibge)}&select=codlinha&limit=4000`);
+    const allCods=distinctCods(it);          // total real (sem corte) para o "Total"
+    const cods=allCods.slice(0,500);         // teto de listagem (alinha com as views irmãs)
+    if(!cods.length){ setBody(`<div class="doc">${docHead('Linhas no Município')}${emptyBox('Nenhuma linha registrada em '+(nome||codibge)+'.')}</div>`); return; }
+    const rows = await fetchLinesByCods(cods,{limit:500});
+    const avisoTrunc = allCods.length>cods.length
+      ? `<div class="trunc-aviso"><b>Lista parcial:</b> ${allCods.length} linhas no total; mostrando as primeiras ${cods.length}.</div>` : '';
+    setBody(`<div class="doc">${docHead('Linhas no Município')}
+      ${metaRows([['Município',esc(nome||codibge),true],['Total',allCods.length+' linha(s)']])}
+      ${avisoTrunc}
+      <div class="loc-tools"><label>Mostrar <select id="munScope">
+        <option value="todas">Todas as linhas</option>
+        <option value="dentro">Só dentro do município</option>
+        <option value="inter">Que vão para outros municípios</option>
+      </select></label></div>
+      <div id="munResult"></div></div>`);
+    const result = modalBody.querySelector('#munResult');
+    const scope  = modalBody.querySelector('#munScope');
+    const metaPdf = metaRows([['Município',esc(nome||codibge),true],['Total',allCods.length+' linha(s)']]);
+    // PDF determinístico: lista completa, sem a barra de filtro (evita espaço em branco / subconjunto filtrado)
+    if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Linhas no Município')}${metaPdf}${avisoTrunc}${linhasTable(rows)}</div>`;
+    // classificação dentro×intermunicipal PREGUIÇOSA: só busca o itinerário completo das
+    // linhas quando o usuário escolhe um filtro (o padrão "todas" mantém o custo atual).
+    let cls = null;
+    async function ensureCls(){
+      if(cls) return cls;
+      const it2 = await sbFetch('itinerario_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=codlinha,cod_municipio_origem&limit=30000`);
+      cls = classifyMunLines(it2, codibge);
+      return cls;
+    }
+    async function paint(){
+      // pdf:false → o PDF do Município é o determinístico definido acima (lista completa + meta)
+      if(scope.value==='todas'){ lineResults(result, rows, { pdf:false }); return; }
+      result.innerHTML = loading();
+      const c = await ensureCls();
+      const set = scope.value==='dentro' ? c.dentro : c.inter;
+      lineResults(result, rows.filter(r=>set.has(String(r.codlinha))), { pdf:false });
+    }
+    scope.addEventListener('change', ()=>{ paint().catch(e=>{ result.innerHTML = errorBox(e.message); }); });
+    paint();
+  }});
+}
+// classifica linhas por município (dentro × intermunicipal) a partir das linhas de
+// itinerário (codlinha, cod_municipio_origem). "dentro" = todos os trechos no próprio município (M);
+// "inter" = tem ao menos um trecho em OUTRO município (cod_municipio_origem não-vazio e != M).
+function classifyMunLines(itRows, codibge){
+  const M = String(codibge);
+  const bySet = new Map();                       // codlinha(String) → Set de cod_municipio_origem (não vazios)
+  for(const r of itRows){
+    if(r.codlinha==null || r.codlinha==='') continue;
+    const cl = String(r.codlinha);
+    let s = bySet.get(cl); if(!s){ s = new Set(); bySet.set(cl, s); }
+    const co = r.cod_municipio_origem==null ? '' : String(r.cod_municipio_origem);
+    if(co) s.add(co);
+  }
+  const dentro = new Set(), inter = new Set();
+  for(const [cl, s] of bySet){
+    let outro = false;
+    for(const co of s){ if(co !== M){ outro = true; break; } }
+    (outro ? inter : dentro).add(cl);
+  }
+  return { dentro, inter };
+}
+// linhas (codlinha distintos) cujo itinerário passa por um município (codibge)
+async function linhasNoMunicipio(codibge){
+  // limite alto de propósito: Rio de Janeiro tem ~13,5 mil trechos de itinerário — com
+  // limite menor o conjunto chega incompleto e as interseções entre municípios encolhem
+  const rows = await sbFetch('itinerario_teste', `cod_municipio_origem=eq.${enc(codibge)}&select=codlinha&limit=30000`);
+  return distinctCods(rows);
+}
+async function mostrarLinhasResultado(host, cods, titulo){
+  if(!cods.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para este critério.'); return; }
+  const slice = cods.slice(0,250);
+  const rows = await fetchLinesByCods(slice,{limit:250});
+  const extra = cods.length>slice.length ? ` (mostrando ${slice.length})` : '';
+  const prefix = `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${cods.length} linha(s) — ${esc(titulo)}${extra}</p>`;
+  lineResults(host, rows, { prefixHTML: prefix });
+}
+// Município A × Município B — filtro direcional (A→B, respeita a ordem do itinerário) e
+// filtro "trafega pelos dois" (qualquer ordem). `inter` é o próprio resultado não-direcional;
+// o direcional refina `inter` consultando a sequência de trechos do itinerário.
+async function mostrarLinhasEntreMunicipios(host, aTerm, bTerm, directional){
+  const ibge = await getIbge();
+  const nameOf = c => ibge[c]?.nome || c;
+  const findCods = t => Object.entries(ibge).filter(([,v])=>norm(v.nome).includes(norm(t))).map(([c])=>c);
+  const a = (aTerm||'').trim(), b = (bTerm||'').trim();
+  if(!a){ host.innerHTML = emptyBox('Informe ao menos o primeiro município.'); return; }
+  const codsA = findCods(a);
+  if(!codsA.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(a)}".`); return; }
+  if(!b){
+    if(codsA.length===1){ openLinhasPorIbge(codsA[0], nameOf(codsA[0])); return; }
+    host.innerHTML = tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}],
+      codsA.map(c=>`<tr class="clickable" tabindex="0" role="button" data-ibge="${esc(c)}"><td class="td-logr">${esc(nameOf(c))}</td><td class="td-tipo">${esc(orDash(ibge[c].regiao))}</td><td class="td-num">cód. ${esc(c)}</td></tr>`).join(''),
+      codsA.length+' município(s) · clique para ver as linhas');
+    host.querySelectorAll('tr[data-ibge]').forEach(tr=>tr.addEventListener('click',()=>openLinhasPorIbge(tr.dataset.ibge, nameOf(tr.dataset.ibge))));
+    return;
+  }
+  if(a.toLowerCase()===b.toLowerCase()){ host.innerHTML = emptyBox('Use municípios diferentes nos dois campos.'); return; }
+  const codsB = findCods(b);
+  if(!codsB.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(b)}".`); return; }
+  host.innerHTML = loading();
+  try{
+    const all = new Set();    // direcional: A→B, nessa ordem
+    const inter = new Set();  // trafega pelos dois, qualquer ordem
+    for(const ca of codsA.slice(0,5)){
+      for(const cb of codsB.slice(0,5)){
+        if(ca===cb) continue;
+        const lA = await linhasNoMunicipio(ca);
+        const sB = new Set(await linhasNoMunicipio(cb));
+        const interPar = lA.filter(c=>sB.has(c));
+        interPar.forEach(c=>inter.add(c));
+        if(!directional || !interPar.length) continue;
+        const it = await sbFetch('itinerario_teste', `codlinha=in.(${interPar.slice(0,200).map(enc).join(',')})&select=codlinha,cod_municipio_origem,sentido&order=id&limit=30000`);
+        for(const [k,seq] of groupBy(it, r=>r.codlinha+'¦'+(r.sentido||''))){
+          const iA=seq.findIndex(r=>String(r.cod_municipio_origem)===String(ca));
+          const iB=seq.findIndex(r=>String(r.cod_municipio_origem)===String(cb));
+          if(iA>=0&&iB>=0&&iA<iB) all.add(k.split('¦')[0]);
+        }
+      }
+    }
+    const titA = codsA.length===1 ? nameOf(codsA[0]) : a;
+    const titB = codsB.length===1 ? nameOf(codsB[0]) : b;
+    const titulo = directional ? `de ${titA} → ${titB}` : `${titA} e ${titB} (qualquer sentido)`;
+    await mostrarLinhasResultado(host, [...(directional?all:inter)], titulo);
+  }catch(e){ host.innerHTML = errorBox(e.message); }
+}
+LOADERS.ligacoesPorTerminal = async () => {
+  const orig = await getOrigem();
+  searchPanel({ title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Digite o nome do terminal/origem.'); return; }
+    const cods = Object.entries(orig).filter(([,n])=>norm(n).includes(norm(term))).map(([c])=>c);
+    if(!cods.length){ host.innerHTML=emptyBox('Nenhuma origem com esse nome.'); return; }
+    const inList = cods.slice(0,50).map(enc).join(',');
+    const qi = await sbFetch('qh_intervalo_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`);
+    const lineCods=distinctCods(qi,120);
+    if(!lineCods.length){ host.innerHTML=emptyBox('Nenhuma linha vinculada a esse terminal.'); return; }
+    const rows = await fetchLinesByCods(lineCods,{limit:200});
+    const prefix = `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${lineCods.length} linha(s) a partir de "${esc(term)}"</p>`;
+    lineResults(host, rows, { prefixHTML: prefix });
+  }});
+};
+LOADERS.secoesPorLigacao = async () => {
+  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,nome_ligacao,tarifa&order=secao`);
+  const meta = metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]]);
+  if(!rows.length){ setBody(`<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyBox('Nenhuma seção cadastrada para esta linha.')}</div>`); return; }
+  const cols = [{t:'Seção',w:'70px'},{t:'Descrição'},{t:'Tarifa',w:'90px'}];
+  const rowHTML = r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td></tr>`;
+  setBody(`<div class="doc">${docHead('Seções por Ligação')}${meta}
+    <div class="loc-tools"><label>Filtrar <input type="text" id="secF" placeholder="seção ou descrição" autocomplete="off"></label></div>
+    <div id="secResult"></div></div>`);
+  const result = modalBody.querySelector('#secResult'), inp = modalBody.querySelector('#secF');
+  const paint = ()=>{
+    const q = norm(inp.value.trim());
+    const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${r.nome_ligacao||''}`).includes(q)) : rows;
+    result.innerHTML = f.length ? tableHTML(cols, f.map(rowHTML).join(''), f.length+' seção(ões)') : emptyBox('Nenhuma seção com esse filtro.');
+  };
+  inp.addEventListener('input', debounce(paint));
+  paint();
+};
+
+/* ---- Gerenciais ---- */
+// Agregação PURA do Relatório Gerencial (testável em tests/) — separa o cálculo do render.
+// ativa = isLinhaAtiva (não cancelada nem paralisada); porEmp = top 15 empresas por nº de linhas.
+/* --- Relatórios --------------------------------------------------- */
+function resumoRelatorio(rows){
+  return {
+    total: rows.length,
+    ativas: rows.filter(isLinhaAtiva).length,
+    canc:  rows.filter(r=>r.cancelado).length,
+    paral: rows.filter(r=>r.paralisado).length,
+    sj:    rows.filter(r=>r.sub_judice).length,
+    empCount: new Set(rows.map(r=>r.codempresa)).size,
+    porEmp: [...countBy(rows, r=>r.codempresa||'—')].sort((a,b)=>b[1]-a[1]).slice(0,15),
+  };
+}
+LOADERS.relatoriosGerenciais = async () => {
+  const [rows] = await Promise.all([
+    sbFetch('tabela_vista_teste', `select=codempresa,tipo,cancelado,paralisado,sub_judice,transferido&limit=5000`),
+    getEmpresas()
+  ]);
+  const { total, ativas, canc, paral, sj, empCount, porEmp } = resumoRelatorio(rows);
+  setBody(`<div class="doc">${docHead('Relatórios Gerenciais')}
+    <div class="kpi-grid">
+      <div class="kpi"><b>${total}</b><span>Linhas cadastradas</span></div>
+      <div class="kpi"><b>${ativas}</b><span>Ativas</span></div>
+      <div class="kpi"><b>${canc}</b><span>Canceladas</span></div>
+      <div class="kpi"><b>${paral}</b><span>Paralisadas</span></div>
+      <div class="kpi"><b>${sj}</b><span>Sub judice</span></div>
+      <div class="kpi"><b>${empCount}</b><span>Empresas</span></div>
+    </div>
+    <h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:16px 0 4px">Top empresas por nº de linhas</h3>
+    ${tableHTML([{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Linhas',w:'90px'}], porEmp.map(([c,n])=>`<tr><td class="td-num">${esc(c)}</td><td class="td-logr">${esc(empNome(c))}</td><td class="td-sentido">${n}</td></tr>`).join(''))}
+    <div class="doc-foot">Consolidado sobre ${total} linhas · tabela_vista_teste</div></div>`);
+};
+// Agregação PURA da Frota por Empresa (testável em tests/): total geral + quebra por empresa e
+// por hierarquia. num() trata vazio/inválido como 0; ordena por frota operacional desc.
+function resumoFrota(rows){
+  const num = v => { const n = Number(v); return isNaN(n) ? 0 : n; };
+  const sum = (arr,f) => arr.reduce((s,r)=>s+num(r[f]),0);
+  return {
+    totOp: sum(rows,'frota_operacional'),
+    totRes: sum(rows,'reserva'),
+    porEmp: [...groupBy(rows, r=>r.codempresa||'—')]
+      .map(([cod,rs])=>({cod, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
+      .sort((a,b)=>b.op-a.op),
+    porHier: [...groupBy(rows, r=>r.hierarquia||'—')]
+      .map(([h,rs])=>({h, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
+      .sort((a,b)=>b.op-a.op),
+  };
+}
+// Frota consolidada por empresa (total geral + quebra por hierarquia) — item 16
+LOADERS.frotaPorEmpresa = async () => {
+  const [rows] = await Promise.all([
+    sbFetch('qh_teste', `select=codempresa,hierarquia,frota_operacional,reserva&limit=10000`),
+    getEmpresas()
+  ]);
+  if(!rows.length){ setBody(`<div class="doc">${docHead('Frota por Empresa')}${emptyBox('Nenhuma frota cadastrada.')}</div>`); return; }
+  const fmtN = n => n.toLocaleString('pt-BR');
+  const { totOp, totRes, porEmp, porHier } = resumoFrota(rows);
+  const h3 = t => `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:18px 0 4px">${t}</h3>`;
+  setBody(`<div class="doc">${docHead('Frota por Empresa')}
+    ${bannerTrunc(rows)}
+    <div class="kpi-grid">
+      <div class="kpi"><b>${fmtN(totOp)}</b><span>Frota operacional</span></div>
+      <div class="kpi"><b>${fmtN(totRes)}</b><span>Reserva</span></div>
+      <div class="kpi"><b>${rows.length}</b><span>Linhas</span></div>
+      <div class="kpi"><b>${porEmp.length}</b><span>Empresas</span></div>
+      <div class="kpi"><b>${porHier.length}</b><span>Hierarquias</span></div>
+    </div>
+    ${h3('Frota por empresa')}
+    ${tableHTML([{t:'RJ',w:'62px'},{t:'Empresa'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}],
+      porEmp.map(e=>`<tr><td class="td-num">${esc(e.cod)}</td><td class="td-logr">${esc(empNome(e.cod))}</td><td class="td-num">${e.n}</td><td class="td-sentido">${fmtN(e.op)}</td><td class="td-num">${fmtN(e.res)}</td></tr>`).join(''),
+      `${porEmp.length} empresa(s) · total operacional ${fmtN(totOp)} · reserva ${fmtN(totRes)}`)}
+    ${h3('Frota por hierarquia')}
+    ${tableHTML([{t:'Hierarquia'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}],
+      porHier.map(x=>`<tr><td class="td-logr">${esc(orDash(x.h))}</td><td class="td-num">${x.n}</td><td class="td-sentido">${fmtN(x.op)}</td><td class="td-num">${fmtN(x.res)}</td></tr>`).join(''))}
+    <div class="doc-foot">Consolidado sobre ${rows.length} linhas · qh_teste</div></div>`);
+};
+LOADERS.pesquisaEvento = async () => {
+  searchPanel({ title:'Pesquisa de Evento', placeholder:'Termo livre (processo, descrição, observação)', onRun: async(term, host)=>{
+    if(!term){ host.innerHTML=emptyBox('Digite um termo para pesquisar eventos.'); return; }
+    const t=ilikeTerm(term);
+    const [rows] = await Promise.all([
+      sbFetch('evento_teste', `or=(descricao.ilike.*${t}*,observacao.ilike.*${t}*,numero_processo.ilike.*${t}*)&select=data_registro,codlinha,codempresa,numero_processo,descricao,observacao&order=data_registro.desc&limit=200`),
+      getEmpresas()
+    ]);
+    if(!rows.length){ host.innerHTML = emptyBox('Nenhum evento encontrado para "'+term+'".'); return; }
+    paginateTable(host, rows, {
+      cols:[{t:'Data',w:'82px'},{t:'Linha',w:'100px'},{t:'Empresa'},{t:'RJ',w:'60px'},{t:'Processo',w:'100px'},{t:'Descrição'},{t:'Observação'}],
+      rowHTML:r=>`<tr><td class="td-num">${esc(fmtDate(r.data_registro))}</td><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-logr">${esc(empNome(r.codempresa))}</td><td class="td-num">${esc(orDash(r.codempresa))}</td>
+        <td class="td-num">${esc(orDash(r.numero_processo))}</td><td class="td-logr">${esc(orDash(r.descricao))}</td><td class="td-logr">${esc(orDash(r.observacao))}</td></tr>`,
+      foot:t=>t+' evento(s)', unit:'eventos',
+    });
+  }});
+};
+let _portariaAnos = null;
+/* --- DOC · Portaria ----------------------------------------------- */
+async function getPortariaAnos(){
+  if(_portariaAnos) return _portariaAnos;
+  const maxAno = new Date().getFullYear();
+  let minAno = 1975;
+  try{
+    const r = await sbFetch('portaria_teste', 'select=data_portaria&data_portaria=not.is.null&order=data_portaria.asc&limit=1');
+    if(r[0]?.data_portaria){ const m=String(r[0].data_portaria).match(/^(\d{4})/); if(m) minAno=+m[1]; }
+  }catch(_){}
+  _portariaAnos = []; for(let a=maxAno; a>=minAno; a--) _portariaAnos.push(a);
+  return _portariaAnos;
+}
+LOADERS.portarias = async () => {
+  const anos = await getPortariaAnos();
+  setBody(`<div class="doc">${docHead('Portarias / Legislação')}
+    <div class="ev-filters">
+      <div class="evf"><label>Número</label><input id="pNum" type="text" placeholder="ex.: 1975" autocomplete="off"></div>
+      <div class="evf"><label>Ano</label><select id="pAno"><option value="">Todos</option>${anos.map(a=>`<option value="${a}">${a}</option>`).join('')}</select></div>
+      <div class="evf"><label>Situação</label><select id="pVig"><option value="">Todas</option><option value="vigor">Em vigor</option><option value="revog">Revogadas</option></select></div>
+      <div class="evf evf-wide"><label>Texto (assunto / conteúdo)</label><input id="pTxt" type="text" placeholder="palavra no assunto ou no texto da portaria" autocomplete="off"></div>
+      <button class="evf-clear" id="pClear" type="button">Limpar</button>
+    </div>
+    <div id="pHost"></div></div>`);
+  const num=modalBody.querySelector('#pNum'), ano=modalBody.querySelector('#pAno'),
+        vig=modalBody.querySelector('#pVig'), txt=modalBody.querySelector('#pTxt'), host=modalBody.querySelector('#pHost');
+  const run = async()=>{
+    host.innerHTML = loading();
+    try{
+      let qs='';
+      const n=num.value.trim(); if(n) qs+=`numero_portaria=ilike.*${ilikeTerm(n)}*&`;
+      if(ano.value) qs+=`data_portaria=gte.${ano.value}-01-01&data_portaria=lte.${ano.value}-12-31&`;
+      if(vig.value==='vigor') qs+='vigor=is.true&'; else if(vig.value==='revog') qs+='vigor=is.false&';
+      const tx=txt.value.trim(); if(tx){ const e=ilikeTerm(tx); qs+=`or=(assunto.ilike.*${e}*,conteudo.ilike.*${e}*)&`; }
+      const rows = await sbFetch('portaria_teste', `${qs}select=numero_portaria,data_portaria,data_publicacao,tipo_portaria,tipo_legislacao,assunto,conteudo,vigor,portaria_anterior&order=data_portaria.desc.nullslast&limit=300`);
+      if(!rows.length){ host.innerHTML=emptyBox('Nenhuma portaria para os filtros informados.'); return; }
+      paginateTable(host, rows, {
+        cols:[{t:'Número',w:'110px'},{t:'Data',w:'90px'},{t:'Tipo',w:'120px'},{t:'Assunto'},{t:'Vigor',w:'90px'}],
+        // i = índice GLOBAL na `rows` completa → data-idx continua batendo mesmo paginado
+        rowHTML:(r,i)=>`<tr class="clickable" tabindex="0" role="button" data-idx="${i}"><td class="td-num">${esc(orDash(r.numero_portaria))}</td><td class="td-num">${esc(fmtDate(r.data_portaria))}</td><td class="td-tipo">${esc(orDash(r.tipo_portaria||r.tipo_legislacao))}</td><td class="td-logr">${esc(orDash(r.assunto))}</td><td>${r.vigor?'<span class="chip chip-off">Em vigor</span>':'<span class="chip chip-on">Revogada</span>'}</td></tr>`,
+        foot:t=>t+' portaria(s)'+(t>=300?' (mostrando 300)':'')+' · clique para ler',
+        bind:c=>c.querySelectorAll('tr[data-idx]').forEach(tr=>{
+          const open=()=>showPortaria(rows[+tr.dataset.idx], host);
+          tr.addEventListener('click', open);
+          tr.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } });
+        }),
+        unit:'portarias',
+      });
+    }catch(e){ host.innerHTML=errorBox(e.message); }
+  };
+  [num,txt].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
+  [ano,vig].forEach(el=>el.addEventListener('change', run));
+  modalBody.querySelector('#pClear').addEventListener('click', ()=>{ num.value=''; ano.value=''; vig.value=''; txt.value=''; run(); });
+  if(currentView) currentView._panelRun = run;
+  run();
+};
+function showPortaria(r, host){
+  host.innerHTML = `<button class="loc-btn" id="pbBack" style="margin-bottom:12px">← Voltar aos resultados</button>
+    <div class="doc" style="padding:0">
+    ${metaRows([['Portaria',esc(orDash(r.numero_portaria))],['Tipo',esc(orDash(r.tipo_portaria||r.tipo_legislacao))],
+      ['Data',esc(fmtDate(r.data_portaria))],['Publicação',esc(fmtDate(r.data_publicacao))],
+      ['Situação', r.vigor?'Em vigor':'Revogada'], r.portaria_anterior?['Portaria anterior',esc(r.portaria_anterior)]:['','']])}
+    <div class="ev-block"><div class="ev-label">Assunto</div><div class="ev-text${r.assunto?'':' empty'}">${r.assunto?esc(r.assunto):'—'}</div></div>
+    <div class="ev-block"><div class="ev-label">Conteúdo</div><div class="ev-text${r.conteudo?'':' empty'}">${r.conteudo?esc(r.conteudo):'—'}</div></div>
+  </div>`;
+  const b=host.querySelector('#pbBack'); if(b) b.addEventListener('click', ()=>{ if(currentView&&currentView._panelRun) currentView._panelRun(); });
+}
+
+/* ---- Linhas por Localidade (cruza nome em tabela_vista_teste; enriquece com qh_teste) ---- */
+let _localidadesList = null;
+/* --- DOC · Localidades -------------------------------------------- */
+async function getLocalidades(){
+  if(_localidadesList) return _localidadesList;
+  const rows = await sbFetch('localidades_teste', 'select=localidade,ordem_importacao&order=ordem_importacao&limit=2000');
+  const seen = new Set(); const out = [];
+  rows.forEach(r=>{
+    const nome = String(r.localidade||'').replace(/^"+|"+$/g,'').trim();
+    const key = nome.toLowerCase();
+    if(!nome || nome.length<3 || key==='localidade' || seen.has(key)) return;
+    seen.add(key); out.push(nome);
+  });
+  out.sort((a,b)=>a.localeCompare(b));
+  _localidadesList = out;
+  return out;
+}
+// nomes canônicos da lista de localidades que casam o termo (insensível a acento/caixa) —
+// permite digitar "sao goncalo" e buscar no servidor por "SÃO GONÇALO" (o ilike do PostgREST
+// NÃO ignora acento)
+function localidadesQueCasam(lista, term){
+  const nt = norm(term);
+  return nt ? lista.filter(n => norm(n).includes(nt)).slice(0, 5) : [];
+}
+// termos p/ o ilike de localidade: nomes canônicos (com acento) + o termo digitado (texto
+// livre, cobre grafias sem acento na base), sem duplicatas
+async function termosLocalidade(term){
+  const canon = localidadesQueCasam(await getLocalidades(), term);
+  const out = [], seen = new Set();
+  for(const t of [...canon, term.trim()]){
+    const k = t.toLowerCase(); if(!t || seen.has(k)) continue; seen.add(k); out.push(t);
+  }
+  return out;
+}
+// filtro or=() do PostgREST: cada coluna ilike cada termo
+const orIlike = (cols, termos) => 'or=(' + termos.map(t => { const e = ilikeTerm(t); return cols.map(c => `${c}.ilike.*${e}*`).join(','); }).join(',') + ')';
+// cod_ibge cujo nome de município é EXATAMENTE um dos termos (insens. a acento/caixa) —
+// exato de propósito: "rio" não pode puxar Rio de Janeiro/Rio Bonito/Rio Claro inteiros
+function municipiosExatos(ibge, termos){
+  const nts = new Set(termos.map(norm).filter(Boolean));
+  return Object.entries(ibge).filter(([,v])=>nts.has(norm(v.nome))).map(([c])=>c);
+}
+// codlinha que casam uma localidade pelo NOME/VIA da linha (tabela_vista), por uma SEÇÃO de
+// tarifa OU por um LOGRADOURO do itinerário — MESMA semântica usada na busca do campo A.
+// Usado p/ cruzar duas localidades de forma simétrica (independe da ordem dos campos).
+async function codsPorLocalidade(term){
+  const termos = await termosLocalidade(term);
+  const [ln, sec, itin] = await Promise.all([
+    sbFetch('tabela_vista_teste', `${orIlike(['nome_ligacao','nome_lig_cresc','via'], termos)}&select=codlinha&limit=3000`),
+    sbFetch('tarifa_atual_teste', `${orIlike(['nome_ligacao','via'], termos)}&select=codlinha&limit=3000`),
+    sbFetch('itinerario_teste', `${orIlike(['nome_logradouro'], termos)}&select=codlinha&limit=2000`)
+  ]);
+  const out = new Set([...ln, ...sec, ...itin].map(r=>r.codlinha).filter(Boolean));
+  // localidade que também é MUNICÍPIO (ex.: Niterói): une as linhas cujo itinerário passa
+  // pelo município — a busca textual não enxerga quem passa sem citar o nome
+  for(const c of municipiosExatos(await getIbge(), termos).slice(0,3)){
+    (await linhasNoMunicipio(c)).forEach(cl=>out.add(cl));
+  }
+  return out;
+}
+async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
+  host.innerHTML = loading();
+  try{
+    const termos = await termosLocalidade(a);
+    // 1) linhas cujo nome/nome_cresc/via casa a localidade  2) linhas cujas SEÇÕES de tarifa
+    //    casam a localidade (item 13: as seções da Estrutura também entram na busca)
+    // 3) linhas cujo ITINERÁRIO passa por um logradouro com o nome da localidade (a dica da
+    //    tela promete "nome/itinerário")
+    const [lineRows, secHits, itinHits, ibge] = await Promise.all([
+      sbFetch('tabela_vista_teste', `${orIlike(['nome_ligacao','nome_lig_cresc','via'], termos)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=400`),
+      sbFetch('tarifa_atual_teste', `${orIlike(['nome_ligacao','via'], termos)}&select=codlinha&limit=3000`),
+      sbFetch('itinerario_teste', `${orIlike(['nome_logradouro'], termos)}&select=codlinha&limit=2000`),
+      getIbge()
+    ]);
+    // 4) localidade que também é MUNICÍPIO (ex.: Niterói): linhas cujo itinerário passa pelo
+    //    município também entram — a busca textual não enxerga quem passa sem citar o nome
+    const munACods = [];
+    for(const c of municipiosExatos(ibge, termos).slice(0,3)){
+      (await linhasNoMunicipio(c)).forEach(cl=>munACods.push(cl));
+    }
+    const haveCods = new Set(lineRows.map(r=>r.codlinha));
+    let extraCods = [...new Set([...secHits, ...itinHits].map(r=>r.codlinha).concat(munACods).filter(c=>c && !haveCods.has(c)))];
+    // cruzamento com o campo B: interseção por CODLINHA antes de baixar os dados das linhas
+    // extras (evita buscar linhas que a interseção descartaria e o corte de 200 que estrangulava)
+    let rows = lineRows;
+    if(b && bTipo==='municipio'){
+      // localidade A × MUNICÍPIO B: interseção com as linhas que passam pelo município
+      const cods = Object.entries(ibge).filter(([,v])=>norm(v.nome).includes(norm(b))).map(([c])=>c);
+      if(!cods.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(b)}".`); return; }
+      const munSet = new Set();
+      for(const c of cods.slice(0,5)){ (await linhasNoMunicipio(c)).forEach(cl=>munSet.add(cl)); }
+      rows = rows.filter(r=> munSet.has(r.codlinha));
+      extraCods = extraCods.filter(c=> munSet.has(c));
+    } else if(b){
+      // localidade A × localidade B: interseção SIMÉTRICA por codlinha (mesma busca de
+      // nome/via + seção/itinerário/município que a de A), para não depender da ordem dos campos.
+      const setB = await codsPorLocalidade(b);
+      rows = rows.filter(r=> setB.has(r.codlinha));
+      extraCods = extraCods.filter(c=> setB.has(c));
+    }
+    const fetchCods = extraCods.slice(0,250);
+    let base = rows;
+    if(fetchCods.length) base = rows.concat(await fetchLinesByCods(fetchCods, { limit: fetchCods.length }));
+    if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${a}" e "${b}".`:`Nenhuma linha encontrada para "${a}".`); return; }
+    await getEmpresas();
+    // seções de tarifa cujo NOME casa a(s) localidade(s) buscada(s), por linha — reproduz o
+    // relatório oficial. Município B é só filtro de trânsito, não entra nos termos de seção.
+    const secTerms = [...termos];
+    let termsB = null;
+    if(b && bTipo==='localidade'){ termsB = await termosLocalidade(b); termsB.forEach(t=>secTerms.push(t)); }
+    const baseCods = distinctCods(base, 600);
+    let secByLine = new Map();
+    if(baseCods.length){
+      let secRows = await sbFetch('tarifa_atual_teste',
+        `codlinha=in.(${baseCods.map(enc).join(',')})&${orIlike(['nome_ligacao','nome_ligacao_cresc'], secTerms)}`
+        + `&select=codlinha,secao,nome_ligacao,nome_ligacao_cresc,tipo_ligacao,tarifa,situacao&order=codlinha,secao&limit=5000`);
+      // localidade A × localidade B: mostrar só a seção que liga A↔B (casa AMBAS as
+      // localidades), não toda seção que toca A ou B — foco no trecho pesquisado.
+      if(termsB){
+        const hasAny = (hay, ts) => ts.some(t=>{ const n=norm(t); return n && hay.includes(n); });
+        secRows = secRows.filter(r=>{
+          const hay = norm(`${r.nome_ligacao||''} ${r.nome_ligacao_cresc||''}`);
+          return hasAny(hay, termos) && hasAny(hay, termsB);
+        });
+      }
+      secByLine = groupBy(secRows, r=>r.codlinha);
+    }
+    const comSecaoN = base.reduce((n,r)=>n+(secByLine.has(r.codlinha)?1:0),0);
+    const corte = extraCods.length - fetchCods.length;
+    const titulo = b? `${esc(a)} ↔ ${esc(b)}` : esc(a);
+    const secNote = comSecaoN ? ` · ${comSecaoN} com seção ${b && bTipo==='localidade' ? `${esc(a)} ↔ ${esc(b)}` : `em ${esc(a)}`}` : '';
+    const corteNote = corte>0 ? ` (${corte} linha(s) a mais não exibidas — refine a busca)` : '';
+    const prefix = bannerTrunc(lineRows)
+      + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${base.length} linha(s) · ${titulo}${secNote}${corteNote}</p>`;
+    renderLocalidadeSecoes(host, base, secByLine, { prefixHTML: prefix });
+  }catch(e){ host.innerHTML = errorBox(e.message); }
+}
+// 5 modos de busca da tela "Linhas por Localidade e Município" — cada botão de filtro decide
+// o tipo do campo A/B e qual função de busca roda (localidade× vs. município×).
+const LOC_FILTERS = [
+  { label:'Possui seção na Localidade A', kind:'localidade', aType:'localidade', bMode:'none',
+    hint:'Lista as linhas que têm uma seção de tarifa com esse nome na localidade A.' },
+  { label:'De localidade A para localidade B', kind:'localidade', aType:'localidade', bMode:'localidade',
+    hint:'Cruza duas localidades: mostra as linhas que ligam A a B (independe da ordem digitada).' },
+  { label:'De localidade A para Município B', kind:'localidade', aType:'localidade', bMode:'municipio',
+    hint:'Mostra as linhas da localidade A que também passam pelo município B.' },
+  { label:'Do Município A para o Município B', kind:'municipio', aType:'municipio', bMode:'municipio', directional:true,
+    hint:'Mostra as linhas cujo itinerário vai de A para B, nessa ordem.' },
+  { label:'Trafegam nos municípios A e B', kind:'municipio', aType:'municipio', bMode:'municipio', directional:false,
+    hint:'Mostra as linhas que passam pelos dois municípios, em qualquer ordem.' },
+];
+LOADERS.localidades = async () => {
+  setBody(`<div class="doc">${docHead('Linhas por Localidade e Município')}
+    <div class="doc-obs" id="locHint" style="margin:0 0 12px"><b>Dica:</b> ${esc(LOC_FILTERS[0].hint)}</div>
+    <div class="loc-filters" id="locFilters" role="tablist">${LOC_FILTERS.map((f,i)=>
+      `<button type="button" class="loc-filter-btn${i===0?' active':''}" data-idx="${i}" aria-pressed="${i===0}">${esc(f.label)}</button>`).join('')}</div>
+    <div class="loc-form">
+      <label id="locALabel"><span class="loc-lbl-txt">Localidade</span><input id="locA" list="locList" placeholder="Digite a localidade…" autocomplete="off"></label>
+      <label id="locBLabel"><span class="loc-lbl-txt">Cruzar com</span><input id="locB" list="locList" placeholder="Segunda localidade…" autocomplete="off"></label>
+    </div>
+    <datalist id="locList"></datalist><datalist id="munLocList"></datalist>
+    <div class="loc-actions"><button class="loc-btn" id="locGo" type="button">Buscar linhas</button></div>
+    <div id="locHost">${emptyBox('Escolha um filtro, preencha os campos e clique em Buscar.')}</div></div>`);
+
+  const A=modalBody.querySelector('#locA'), B=modalBody.querySelector('#locB'),
+        ALbl=modalBody.querySelector('#locALabel .loc-lbl-txt'), BLbl=modalBody.querySelector('#locBLabel'),
+        BLblTxt=modalBody.querySelector('#locBLabel .loc-lbl-txt'),
+        hint=modalBody.querySelector('#locHint'), host=modalBody.querySelector('#locHost'),
+        filtersBar=modalBody.querySelector('#locFilters');
+
+  let modeIdx = 0;
+  function applyMode(){
+    const f = LOC_FILTERS[modeIdx];
+    filtersBar.querySelectorAll('.loc-filter-btn').forEach(b=>{
+      const active = +b.dataset.idx===modeIdx;
+      b.classList.toggle('active', active); b.setAttribute('aria-pressed', active);
+    });
+    hint.innerHTML = `<b>Dica:</b> ${esc(f.hint)}`;
+    ALbl.textContent = f.aType==='municipio' ? 'Município' : 'Localidade';
+    A.setAttribute('list', f.aType==='municipio' ? 'munLocList' : 'locList');
+    A.placeholder = f.aType==='municipio' ? 'Nome do município…' : 'Digite a localidade…';
+    A.value=''; B.value='';
+    if(f.bMode==='none'){
+      BLbl.style.display='none';
+    }else{
+      BLbl.style.display='';
+      const bIsMun = f.bMode==='municipio';
+      B.setAttribute('list', bIsMun ? 'munLocList' : 'locList');
+      B.placeholder = bIsMun ? 'Nome do município…' : (f.kind==='municipio' ? 'Segundo município…' : 'Segunda localidade…');
+      BLblTxt.textContent = bIsMun ? 'Município B' : (f.kind==='municipio' ? 'Município B' : 'Cruzar com');
+    }
+    host.innerHTML = emptyBox('Preencha os campos e clique em Buscar.');
+  }
+  filtersBar.addEventListener('click', e=>{
+    const btn = e.target.closest('.loc-filter-btn'); if(!btn) return;
+    modeIdx = +btn.dataset.idx; applyMode();
+  });
+  applyMode();
+
+  const run = async () => {
+    const f = LOC_FILTERS[modeIdx];
+    const a=(A.value||'').trim(), b=(B.value||'').trim();
+    if(!a){ host.innerHTML = emptyBox(`Informe ${f.aType==='municipio'?'o município':'a localidade'}.`); return; }
+    if(f.kind==='localidade'){
+      const bTipo = f.bMode==='municipio' ? 'municipio' : 'localidade';
+      const bb = f.bMode==='none' ? '' : b;
+      if(bb && bTipo==='localidade' && a.toLowerCase()===bb.toLowerCase()){ host.innerHTML=emptyBox('Use localidades diferentes nos dois campos.'); return; }
+      await mostrarLinhasPorLocalidade(host, a, bb, bTipo);
+    }else{
+      if(b && a.toLowerCase()===b.toLowerCase()){ host.innerHTML=emptyBox('Use municípios diferentes nos dois campos.'); return; }
+      await mostrarLinhasEntreMunicipios(host, a, b, f.directional);
+    }
+  };
+  modalBody.querySelector('#locGo').addEventListener('click', run);
+  [A,B].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
+  if(currentView) currentView._panelRun = run;   // realtime relê modeIdx a cada chamada, não fixa o modo
+
+  Promise.all([getLocalidades(), getIbge()]).then(([locs, ibge])=>{
+    const muns = [...new Set(Object.values(ibge).map(v=>v.nome).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    const locDL = modalBody.querySelector('#locList'), munDL = modalBody.querySelector('#munLocList');
+    if(locDL) locDL.innerHTML = locs.map(n=>`<option value="${esc(n)}"></option>`).join('');
+    if(munDL) munDL.innerHTML = muns.map(n=>`<option value="${esc(n)}"></option>`).join('');
+  }).catch(e=>{ console.warn('datalists de localidade/município indisponíveis:', e); });
+};
+
+/* ================================================================
+   COMPONENTES AUXILIARES (tabela de linhas + painel de busca)
+   ================================================================ */
+// codlinhas distintos (descarta vazios); `limit` opcional corta a lista
+const distinctCods = (rows, limit) => [...new Set(rows.map(r=>r.codlinha).filter(Boolean))].slice(0, limit);
+// busca as linhas (tabela_vista) de uma lista de codlinha + garante o cache de empresas
+async function fetchLinesByCods(cods, { limit = 300 } = {}){
+  const [rows] = await Promise.all([
+    sbFetch('tabela_vista_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=${LINE_FIELDS}&order=nome_ligacao&limit=${limit}`),
+    getEmpresas()
+  ]);
+  return rows;
+}
+// ordena grupos de empresa pelo RJ (codempresa) numérico; sem código vai pro fim
+function rjOrder(a, b){
+  const na=parseInt(a,10), nb=parseInt(b,10);
+  if(isNaN(na)&&isNaN(nb)) return String(a).localeCompare(String(b));
+  if(isNaN(na)) return 1; if(isNaN(nb)) return -1;
+  return na-nb;
+}
+// bordas de paginação: clampa `page` no intervalo válido e devolve os índices da fatia.
+// total=0 → 1 página (start=end=0). PURA (cópia em tests/pure.harness.js; testada).
+function pageBounds(total, pageSize, page){
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const p = Math.min(Math.max(1, (page|0) || 1), totalPages);
+  const start = (p - 1) * pageSize;
+  return { page:p, totalPages, start, end:Math.min(start + pageSize, total) };
+}
+// Núcleo de paginação POR FATIA, agnóstico de conteúdo. Reusa o visual do paginador de eventos
+// (.doc-pager/.pg-*) e o `pageBounds` (testado). `renderSlice(start,end)` devolve o HTML da
+// página; `afterPaint(slot)` (opcional) religa cliques; `unit` rotula o .pg-info. Sem barra
+// quando total <= pageSize. Usado por paginateLines e paginateTable.
+function paginate(container, total, renderSlice, { pageSize=25, afterPaint, unit='itens' } = {}){
+  if(total <= pageSize){
+    container.innerHTML = renderSlice(0, total);
+    if(afterPaint) afterPaint(container);
+    return;
+  }
+  container.innerHTML = `<div class="pg-slot"></div>
+    <div class="doc-pager">
+      <button class="pg-btn" type="button" data-pg="prev">‹ Anterior</button>
+      <span class="pg-info"></span>
+      <span class="pg-goto">ir p/ <input type="number" class="pg-num" min="1" aria-label="Ir para a página nº"> <button class="pg-btn pg-go" type="button">Ir</button></span>
+      <button class="pg-btn" type="button" data-pg="next">Próxima ›</button></div>`;
+  const slot=container.querySelector('.pg-slot'), info=container.querySelector('.pg-info');
+  const prev=container.querySelector('[data-pg="prev"]'), next=container.querySelector('[data-pg="next"]'), num=container.querySelector('.pg-num');
+  let page=1;
+  const paint = ()=>{
+    const b=pageBounds(total, pageSize, page); page=b.page;
+    slot.innerHTML = renderSlice(b.start, b.end); if(afterPaint) afterPaint(slot);
+    info.textContent = `Página ${b.page} de ${b.totalPages} · ${total} ${unit}`;
+    prev.disabled = b.page<=1; next.disabled = b.page>=b.totalPages; num.max = b.totalPages;
+  };
+  paint();
+  const nav = d => ()=>{ page += d; paint(); container.scrollIntoView({block:'start'}); };
+  prev.addEventListener('click', ()=>{ if(!prev.disabled) nav(-1)(); });
+  next.addEventListener('click', ()=>{ if(!next.disabled) nav(1)(); });
+  const doGo = ()=>{ const v=parseInt(num.value,10); if(!isNaN(v)){ page=v; paint(); container.scrollIntoView({block:'start'}); } };
+  container.querySelector('.pg-go').addEventListener('click', doGo);
+  num.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); doGo(); } });
+}
+// Paginador de TABELA homogênea: cada página é um tableHTML da fatia. `rowHTML(item, i)` recebe
+// o índice GLOBAL (i = posição na lista inteira) — assim data-idx continua batendo com a lista
+// completa mesmo paginado. `foot(total)` monta o rodapé com o TOTAL. `bind(slot)` religa cliques.
+function paginateTable(container, items, { cols, rowHTML, foot, bind, cls='', pageSize=25, unit='itens', pdf=true } = {}){
+  const total = items.length;
+  const renderSlice = (s,e)=>tableHTML(cols, items.slice(s,e).map((it,j)=>rowHTML(it, s+j)).join(''),
+    typeof foot==='function' ? foot(total) : foot, cls);
+  paginate(container, total, renderSlice, { pageSize, afterPaint:bind, unit });
+  // PDF = lista INTEIRA (a paginação é só de tela). `pdf:false` p/ quem já define o próprio pdfHTML.
+  if(pdf && currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead(currentView.title)}${renderSlice(0, total)}</div>`;
+}
+// Paginador de LISTAS de linha (25/página). `grouped` insere os cabeçalhos de empresa DENTRO de
+// cada página; a contagem do cabeçalho é a do grupo INTEIRO (não só a da página).
+function paginateLines(container, rows, { grouped=false, pageSize=25, pdf=true } = {}){
+  const groupTotals = grouped ? countBy(rows, r=>r.codempresa||'—') : null;
+  const renderSlice = (s,e)=>{
+    const slice = rows.slice(s,e);
+    return grouped
+      ? [...groupBy(slice, r=>r.codempresa||'—')].map(([cod,seg])=>
+          `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${groupTotals.get(cod)} linha(s)</span></h3>${linhasTable(seg)}`).join('')
+      : linhasTable(slice);
+  };
+  paginate(container, rows.length, renderSlice, { pageSize, afterPaint:bindLineRows, unit:'linhas' });
+  // PDF = todas as linhas (a paginação é só de tela). `pdf:false` p/ quem já define um pdfHTML
+  // próprio mais rico (ex.: Município com meta/aviso).
+  if(pdf && currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead(currentView.title)}${renderSlice(0, rows.length)}</div>`;
+}
+// Lista de linhas com barra de filtro (situação) + agrupamento por empresa LIGADO por padrão,
+// com os grupos ordenados pelo RJ (codempresa). Padrão de qualquer consulta que lista linhas.
+// `prefixHTML` entra antes da barra (contadores/banner). Requer getEmpresas() já carregado.
+function lineResults(host, rows, { prefixHTML='', pdf=true } = {}){
+  if(!rows || !rows.length){ host.innerHTML = prefixHTML + emptyBox('Nenhuma ligação encontrada.'); return; }
+  // bannerTrunc(rows) uma vez no topo: avisa "Resultado parcial" quando a QUERY atingiu o teto
+  // (limit). A paginação abaixo exibe tudo em páginas — não corta mais no cliente.
+  host.innerHTML = prefixHTML + bannerTrunc(rows)
+    + `<div class="loc-tools">
+         <label>Situação <select id="lrStatus"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="canceladas">Canceladas</option></select></label>
+         <label><input type="checkbox" id="lrGroup" checked> Agrupar por empresa</label>
+       </div>
+       <div id="lrResult"></div>`;
+  const result = host.querySelector('#lrResult');
+  const statusSel = host.querySelector('#lrStatus'), groupChk = host.querySelector('#lrGroup');
+  const paint = ()=>{
+    const st = statusSel.value;
+    const f = st==='ativas' ? rows.filter(r=>!r.cancelado && !r.paralisado)
+            : st==='canceladas' ? rows.filter(r=>r.cancelado) : rows;
+    if(!f.length){ result.innerHTML = emptyBox('Nenhuma linha com esse filtro.'); return; }
+    if(groupChk.checked){
+      // achata os grupos (empresas por RJ; linhas por codlinha) num array global e pagina
+      // contando TODAS as linhas — os cabeçalhos de empresa entram dentro de cada página.
+      const ordered = [...groupBy(f, r=>r.codempresa||'—')].sort((x,y)=>rjOrder(x[0],y[0]))
+        .flatMap(([,rs])=>[...rs].sort(byCodlinha));
+      paginateLines(result, ordered, { grouped:true, pdf });
+    } else {
+      paginateLines(result, [...f].sort(byCodlinha), { grouped:false, pdf });
+    }
+  };
+  statusSel.addEventListener('change', paint);
+  groupChk.addEventListener('change', paint);
+  paint();
+}
+// ordenação padrão de qualquer listagem de linhas: pelo código da ligação (codlinha),
+// natural/numérico (108-003 antes de 108-029). Usado em toda exibição de várias linhas.
+const byCodlinha = (a, b) => String(a.codlinha||'').localeCompare(String(b.codlinha||''), undefined, { numeric:true });
+function linhasTable(rows){
+  if(!rows.length) return emptyBox('Nenhuma ligação.');
+  const body = [...rows].sort(byCodlinha).map(r=>`<tr class="clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
+    <td class="td-logr" data-label="Empresa">${esc(empNome(r.codempresa))}</td>
+    <td class="td-num" data-label="RJ">${esc(r.codempresa||'')}</td>
+    <td class="td-num" data-label="Código">${esc(fmtCode(r.codlinha))}</td>
+    <td class="td-num" data-label="Número">${esc(r.numero_ligacao||'—')}</td>
+    <td class="td-logr" data-label="Nome">${fmtLineName(r.nome_ligacao)}</td>
+    <td class="td-logr" data-label="Via">${esc(r.via||'—')}</td>
+    <td class="td-tipo" data-label="Característica">${esc(r.caracteristica||'—')}</td>
+    <td data-label="Tipo">${esc(r.tipo||'')} ${boolChip(r.cancelado,'canc.')}</td></tr>`).join('');
+  // "Nome" e "Empresa" ficam sem largura fixa (colunas flexíveis); as secundárias têm largura
+  // fixa e enxuta para sobrar mais espaço ao nome da linha.
+  return bannerTrunc(rows) + tableHTML([{t:'Empresa',w:'150px'},{t:'RJ',w:'52px'},{t:'Código',w:'108px'},{t:'Número',w:'82px'},{t:'Nome'},{t:'Via',w:'110px'},{t:'Característica',w:'100px'},{t:'Tipo',w:'95px'}], body, rows.length+' ligação(ões) · clique para abrir', 'stack');
+}
+function bindLineRows(host){
+  // qualquer elemento com data-row (linha <tr> da tabela OU cabeçalho de linha do
+  // relatório de seções) abre a linha ao clicar
+  (host||modalBody).querySelectorAll('[data-row]').forEach(el=>el.addEventListener('click',()=>{
+    selectLine(JSON.parse(el.dataset.row)); closeModal();
+    toast('Linha selecionada: '+(activeLine.nome_ligacao||activeLine.codlinha),'info');
+  }));
+}
+// tabela leve de seções de tarifa (Nome da Seção · Tipo · Tarifa) — formato do relatório
+// oficial "seções que possuem seção em <localidade>"
+function secoesLocalidadeTable(secoes){
+  const cols = [{t:'Nome da Seção'},{t:'Tipo',w:'160px'},{t:'Tarifa',w:'90px'}];
+  const body = [...secoes].sort((a,b)=>(a.secao||0)-(b.secao||0)).map(s=>
+    `<tr><td class="td-logr">${esc(orDash(s.nome_ligacao))}</td><td class="td-tipo">${esc(orDash(s.tipo_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(s.tarifa))}</td></tr>`).join('');
+  return tableHTML(cols, body, secoes.length+' seção(ões)');
+}
+// render do "Linhas por Localidade": bloco principal = linhas COM seção na localidade,
+// agrupadas por empresa e com as seções por linha (reproduz o relatório antigo); bloco
+// secundário = demais linhas da cobertura ampla (entram por itinerário/nome), como lista.
+function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='' } = {}){
+  const comSecao = base.filter(r=>secByLine.has(r.codlinha));
+  const semSecao = base.filter(r=>!secByLine.has(r.codlinha));
+  let html = prefixHTML;
+  if(comSecao.length){
+    const groups = [...groupBy(comSecao, r=>r.codempresa||'—')].sort((x,y)=>rjOrder(x[0],y[0]));
+    html += groups.map(([cod,rs])=>{
+      const linhas = [...rs].sort(byCodlinha).map(r=>{
+        const chips = [boolChip(r.cancelado,'canc.'), boolChip(r.paralisado,'paral.')].filter(Boolean).join(' ');
+        return `<div class="loc-linha-sec">
+          <div class="loc-linha-head clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'><span class="mono">${esc(fmtCode(r.codlinha))}</span> <span>${fmtLineName(r.nome_ligacao)}</span> ${chips}</div>
+          ${secoesLocalidadeTable(secByLine.get(r.codlinha)||[])}</div>`;
+      }).join('');
+      return `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${rs.length} linha(s)</span></h3>${linhas}`;
+    }).join('');
+  }
+  if(semSecao.length){
+    html += `<h3 class="loc-emp-head" style="margin-top:22px">Outras linhas <span class="loc-emp-rj">por itinerário ou nome · ${semSecao.length} linha(s)</span></h3>`
+      + `<div class="doc-obs" style="margin:2px 0 10px">Ligam os pontos buscados, mas não têm uma seção de tarifa com esse nome.</div>`
+      + linhasTable(semSecao);
+  }
+  host.innerHTML = html || emptyBox('Nenhuma linha encontrada.');
+  bindLineRows(host);
+}
+// tabela de empresas p/ escolher (código/nome/situação) — `extraChips(e)` acrescenta chips à situação
+function empresaChooserHTML(emps, { prompt, sitWidth = '150px', extraChips } = {}){
+  const body = emps.map(e=>`<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}" data-nome="${esc(e.nome_empresa||'')}">
+    <td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td><td class="td-tipo">${esc(orDash(e.situacao))}${extraChips? ' '+extraChips(e):''}</td></tr>`).join('');
+  return `<p style="font-size:13.5px;color:var(--muted);margin:2px 0 8px">${emps.length} empresa(s) encontradas — ${prompt}:</p>`
+    + tableHTML([{t:'Código',w:'90px'},{t:'Empresa'},{t:'Situação',w:sitWidth}], body, emps.length+' empresa(s)');
+}
+function bindEmpresaRows(host, fn){
+  host.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>fn(tr.dataset.emp, tr.dataset.nome)));
+}
+// painel com input de busca dentro do modal; o run() é re-executável (realtime)
+function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=false, note }){
+  const selHTML = selectOpts? `<select id="spSel" aria-label="Filtro">${selectOpts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`:'';
+  setBody(`<div class="doc">${docHead(title)}
+    ${note?`<div class="doc-obs" style="margin:0 0 10px"><b>Nota:</b> ${esc(note)}</div>`:''}
+    <div class="doc-search"><input id="spInput" type="text" placeholder="${esc(placeholder)}" value="${esc(value)}" aria-label="${esc(placeholder)}">${selHTML}<button id="spBtn">Buscar</button></div>
+    <div id="spHost"></div></div>`);
+  const input=modalBody.querySelector('#spInput'), btn=modalBody.querySelector('#spBtn'), host=modalBody.querySelector('#spHost'), sel=modalBody.querySelector('#spSel');
+  const run = async()=>{ host.innerHTML=loading(); try{ await onRun(input.value.trim(), host, sel?sel.value:undefined); }catch(e){ host.innerHTML=errorBox(e.message);} };
+  btn.addEventListener('click', run);
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
+  if(sel) sel.addEventListener('change', run);
+  // guarda o "run" para o realtime re-executar mantendo o termo digitado
+  if(currentView) currentView._panelRun = run;
+  if(auto || value) run();
+}
+
+/* ================================================================
+   CLIQUE NOS CARDS  → abre a view
+   ================================================================ */
+// tabelas que cada view consome (para o realtime saber quando recarregar).
+// REGRA: listar TODAS as tabelas que o loader lê — inclusive as lidas por baixo via lookups
+// (getEmpresas→codempresa_teste, getIbge→municipio_teste, getOrigem→origem_teste,
+// getEvLookups→evento_empresa_teste/evento_linha_teste, getLocalidades→localidades_teste).
+// Se uma tabela lida não estiver aqui, mudanças nela NÃO recarregam a tela aberta (bug de
+// atualização ao vivo). Toda tabela citada aqui também precisa estar em RT_TABLES (assinada) e
+// na publicação supabase_realtime do banco. O teste tests/realtime.test.js guarda essa regra.
+const VIEW_TABLES = {
+  folhaRosto:['tabela_vista_teste','codempresa_teste','tarifa_atual_teste'], folhaDivisoria:['tabela_vista_teste','codempresa_teste'],
+  historicoLinha:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste','tabela_vista_teste'], itinerarios:['itinerario_teste','municipio_teste','codempresa_teste'],
+  quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste','qh_teste','tarifa_atual_teste','origem_teste','codempresa_teste','tabela_vista_teste'], tarifas:['tarifa_atual_teste'],
+  frota:['qh_teste','codempresa_teste'], estrutura:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','qh_intervalo_teste','qh_predeterminado_teste','qh_teste','origem_teste','municipio_teste','codempresa_teste'],
+  empresasRegulares:['tabela_vista_teste','codempresa_teste'], historicoEmpresa:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste'],
+  ligacoesPorEmpresa:['tabela_vista_teste','codempresa_teste'], secoesPorEmpresa:['tarifa_atual_teste'],
+  ligacoesPorNome:['tabela_vista_teste','codempresa_teste'], ligacoesPorNumero:['tabela_vista_teste','codempresa_teste'],
+  ligacoesPorLogradouro:['itinerario_teste','tabela_vista_teste','codempresa_teste'], municipioRegiao:['municipio_teste','itinerario_teste','tabela_vista_teste','codempresa_teste'],
+  ligacoesPorTerminal:['qh_intervalo_teste','origem_teste','tabela_vista_teste','codempresa_teste'],
+  secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste','codempresa_teste'],
+  frotaPorEmpresa:['qh_teste','codempresa_teste'],
+  pesquisaEvento:['evento_teste','codempresa_teste'], portarias:['portaria_teste'],
+  localidades:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','municipio_teste','localidades_teste','codempresa_teste'],
+};
+
+app.addEventListener('click', e => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  const view = card.dataset.view;
+  const needsLine = card.dataset.needsLine === '1';
+  const title = card.dataset.title;
+  const loader = LOADERS[view];
+  if (!loader){ toast(`${title} — disponível em breve`, 'info'); return; }
+  if (needsLine && !activeLine){ toast('Selecione uma linha primeiro.', 'warn'); return; }
+  runView({ title, tables: VIEW_TABLES[view]||[], lineFilter: needsLine, loader });
+});
+
+/* ================================================================
+   UTILITÁRIOS
+   ================================================================ */
+function debounce(fn, ms=150){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+function groupBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); if(!m.has(k))m.set(k,[]); m.get(k).push(x); } return m; }
+function countBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); m.set(k,(m.get(k)||0)+1); } return m; }
+function fmtMoney(v){ if(v===null||v===undefined||v==='') return '—'; const n=Number(v); return isNaN(n)?String(v):n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+/* ================================================================
+   TOAST
+   ================================================================ */
+function toast(msg, type = 'info') {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+/* ================================================================
+   REALTIME — atualiza o que está na tela quando o Supabase muda
+   ================================================================ */
+const RT_TABLES = ['tabela_vista_teste','itinerario_teste','qh_teste','qh_intervalo_teste',
+  'qh_predeterminado_teste','tarifa_atual_teste','municipio_teste','origem_teste',
+  'localidades_teste','evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste',
+  'portaria_teste'];
+const rtDot = document.getElementById('rtDot');
+let reloadTimer = null;
+
+// tabela → como invalidar o cache derivado dela (ver STATE + CACHES). Declarativo em vez de
+// cadeia de if: deixa o conjunto de caches invalidáveis visível num lugar só. Ao criar um cache
+// novo derivado de uma tabela do Realtime, adicione a entrada aqui.
+const CACHE_INVALIDATORS = {
+  municipio_teste:      () => { ibgeMap = null; },
+  origem_teste:         () => { origemMap = null; },
+  evento_empresa_teste: () => { evLookups.emp = null; },
+  evento_linha_teste:   () => { evLookups.lin = null; },
+  codempresa_teste:     () => { empresas.map = null; empresas.list = null; getEmpresas().catch(()=>{}); },
+  portaria_teste:       () => { _portariaAnos = null; },
+  localidades_teste:    () => { _localidadesList = null; },
+};
+function invalidateCaches(table){
+  const fn = CACHE_INVALIDATORS[table];
+  if (fn) fn();
+}
+function scheduleReload(){
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(async ()=>{
+    if(!currentView) return;
+    try {
+      await refreshActiveLine();                                  // banner ao vivo (activeLine é snapshot)
+      if(currentView._panelRun) await currentView._panelRun();   // painéis de busca
+      else await currentView.loader();                            // views diretas
+      mtLive.classList.remove('on'); void mtLive.offsetWidth; mtLive.classList.add('on');
+      toast('Atualizado ao vivo', 'live');
+    } catch(_){}
+  }, 350);
+}
+function rowMatchesActiveLine(payload){
+  // se a view depende da linha ativa, só recarrega se a mudança for da mesma linha
+  if(!currentView || !currentView.lineFilter || !activeLine) return true;
+  const cod = payload?.new?.codlinha ?? payload?.old?.codlinha;
+  if(cod===undefined || cod===null) return true; // sem como filtrar → recarrega
+  return String(cod) === String(activeLine.codlinha);
+}
+function onRealtime(table, payload){
+  invalidateCaches(table);
+  if(currentView && (currentView.tables||[]).includes(table) && rowMatchesActiveLine(payload)){
+    scheduleReload();
+  }
+}
+try {
+  const sbClient = supabase.createClient(SB_URL, SB_KEY, { realtime:{ params:{ eventsPerSecond:5 } } });
+  const channel = sbClient.channel('divat-rt');
+  RT_TABLES.forEach(t => channel.on('postgres_changes', { event:'*', schema:'public', table:t }, p => onRealtime(t, p)));
+  channel.subscribe(status => {
+    rtDot.classList.toggle('live', status==='SUBSCRIBED');
+    if (status==='CHANNEL_ERROR' || status==='TIMED_OUT') console.warn('Realtime status:', status);
+  });
+} catch(e){
+  console.warn('Realtime indisponível:', e);
+  // supabase-js (vendorado) indisponível → a consulta via REST segue funcionando, mas sem atualização ao vivo
+  if (typeof toast === 'function') toast('Atualização ao vivo indisponível no momento', 'warn');
+}
+
+// pré-carrega o cadastro de empresas (nome ↔ RJ) p/ os renderizadores síncronos (banner, listas)
+getEmpresas().catch(()=>{});
+const _bl=document.getElementById('brandLogo'); if(_bl) _bl.innerHTML = DETRO_LOGO_SVG;
+
+/* ================================================================
+   AUTO-ATUALIZAÇÃO — detecta novo deploy e recarrega sozinho,
+   sem ninguém precisar limpar cache. Compara os ETags do index.html
+   E do app.js (deploy que só muda o JS também precisa recarregar).
+   ================================================================ */
+let _verTag = null;
+async function checarNovaVersao(){
+  try {
+    const heads = await Promise.all(['/index.html', '/app.js'].map(p =>
+      fetch(p + '?_=' + Date.now(), { method: 'HEAD', cache: 'no-store' })));
+    const tags = heads.map(r => r.headers.get('etag') || r.headers.get('last-modified'));
+    if (tags.some(t => !t)) return;    // sem como comparar → não faz nada
+    const tag = tags.join('|');
+    if (_verTag === null) { _verTag = tag; return; }   // 1ª medição = referência
+    if (tag !== _verTag) {             // mudou no servidor → versão nova publicada
+      _verTag = tag;
+      if (overlay.classList.contains('open')) {
+        window.__divatReload = true;   // não interrompe quem está consultando
+        toast('Nova versão disponível — atualiza ao fechar', 'info');
+      } else {
+        location.reload();
+      }
+    }
+  } catch(_) { /* offline/erro → tenta de novo no próximo ciclo */ }
+}
+setInterval(checarNovaVersao, 3 * 60 * 1000);                     // a cada 3 min
+window.addEventListener('focus', checarNovaVersao);              // ao voltar pra aba
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checarNovaVersao(); });
+checarNovaVersao();                                              // referência inicial
