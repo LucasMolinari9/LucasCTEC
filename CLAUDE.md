@@ -128,6 +128,9 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   são: **push** (auto-deploy git) ou o MCP **`deploy_to_vercel`**.
 
 ## Como fazer mudanças
+0. **Mudança estrutural no banco** (tabela/coluna nova, RLS/GRANT, Realtime, índice, staging do
+   ETL)? Use a skill `db-change` (`.claude/skills/db-change/`) — ela cobre o checklist de
+   armadilhas antes de escrever SQL/JS. Ajuste isolado de CSS/texto/UI pula direto pro passo 1.
 1. Edite `app.js` (JS) e/ou `index.html` (HTML/CSS). **Trabalhe numa branch**, não direto na
    `main`: push na branch → o Vercel gera **preview deploy** → confira no preview → merge na
    `main` (que é a publicada). O CI (`.github/workflows/ci.yml`) roda o gate em todo push.
