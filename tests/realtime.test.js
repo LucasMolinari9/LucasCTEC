@@ -7,13 +7,13 @@
      (2) toda tabela citada em VIEW_TABLES estar assinada em RT_TABLES (o canal);
      (3) toda tabela de RT_TABLES estar na publicação supabase_realtime do banco.
    Em jul/2026 isso estava quebrado: VIEW_TABLES incompleto (bug de código) e 6 tabelas fora
-   da publicação (bug de banco). Este teste guarda (1) e (2), que vivem no index.html. O item
+   da publicação (bug de banco). Este teste guarda (1) e (2), que vivem no app.js. O item
    (3) é do banco (offline aqui) — confira com a query documentada abaixo em PUB_ESPERADA. */
 
 const fs = require('fs');
 const path = require('path');
 
-const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
 
 let pass = 0, fail = 0;
 const fails = [];
@@ -23,10 +23,10 @@ function ok(cond, name, detail){
 }
 const setEq = (a, b) => { const A=new Set(a), B=new Set(b); return A.size===B.size && [...A].every(x=>B.has(x)); };
 
-// --- extrai os literais VIEW_TABLES e RT_TABLES direto do index.html ---
+// --- extrai os literais VIEW_TABLES e RT_TABLES direto do app.js ---
 function extrai(re, nome){
   const m = re.exec(html);
-  if (!m){ ok(false, `achou o literal ${nome} no index.html`); return null; }
+  if (!m){ ok(false, `achou o literal ${nome} no app.js`); return null; }
   try { return (new Function('return ' + m[1]))(); }   // literais puros (strings/arrays), sem chamadas
   catch(e){ ok(false, `parse do literal ${nome}`, e.message); return null; }
 }
@@ -34,7 +34,7 @@ const VIEW_TABLES = extrai(/const VIEW_TABLES = (\{[\s\S]*?\});/, 'VIEW_TABLES')
 const RT_TABLES   = extrai(/const RT_TABLES = (\[[\s\S]*?\]);/,   'RT_TABLES');
 
 // --- mapa canônico esperado (auditoria jul/2026): tabelas realmente lidas por cada loader,
-//     incluindo lookups. Se você alterar VIEW_TABLES no index.html, atualize aqui também —
+//     incluindo lookups. Se você alterar VIEW_TABLES no app.js, atualize aqui também —
 //     é a guarda que impede a divergência de voltar sem ninguém perceber. ---
 const EXPECTED = {
   folhaRosto:['tabela_vista_teste','codempresa_teste','tarifa_atual_teste'],
@@ -69,7 +69,7 @@ const PUB_ESPERADA = ['tabela_vista_teste','itinerario_teste','qh_teste','qh_int
   'evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste','portaria_teste'];
 
 if (VIEW_TABLES && RT_TABLES){
-  // 1) VIEW_TABLES do index.html bate, view a view, com o mapa canônico (ordem não importa)
+  // 1) VIEW_TABLES do app.js bate, view a view, com o mapa canônico (ordem não importa)
   console.log('VIEW_TABLES == mapa canônico');
   const vistas = new Set([...Object.keys(EXPECTED), ...Object.keys(VIEW_TABLES)]);
   for (const v of vistas){

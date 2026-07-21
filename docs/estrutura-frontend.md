@@ -1,30 +1,36 @@
-# Estrutura e navegação do `index.html` — Portal DIVAT
+# Estrutura e navegação do frontend (`index.html` + `app.js`) — Portal DIVAT
 
-> **Por que este arquivo existe:** o frontend é **um único `index.html`** (HTML + CSS + JS
-> embutidos, ~3,1k linhas). Isso é uma escolha **deliberada** — não um acidente por resolver. Este
-> doc registra (1) *por que* é arquivo único, (2) *como navegar* dentro dele sem se perder, e (3) as
-> **regras de segurança** para reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do
-> `CLAUDE.md` (que lista as seções e funções-chave) e os relatórios `analise-separacao.md` /
-> `analise-duplicacao.md` (que são diagnósticos de acoplamento/reuso, não guias de navegação).
+> **Por que este arquivo existe:** o frontend são **dois arquivos**: `index.html` (HTML + CSS
+> embutido) e **`app.js`** (todo o JS, ~2,5k linhas — extraído do HTML em 21/07/2026). Continua
+> **zero-build**: nada de bundler, framework ou `package.json`. Este doc registra (1) *por que*
+> essa forma, (2) *como navegar* no `app.js` sem se perder, e (3) as **regras de segurança** para
+> reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do `CLAUDE.md` (que lista as
+> seções e funções-chave) e os relatórios `analise-separacao.md` / `analise-duplicacao.md` (que são
+> diagnósticos de acoplamento/reuso, não guias de navegação).
 
-## 1. Por que arquivo único (e por que **não** quebrar em `css/` + `js/`)
+## 1. Por que `index.html` + `app.js` (e por que **não** fatiar mais)
 
-A tentação natural é dividir num diretório `css/` + `js/` por "separação de responsabilidades". Para
-**este** projeto, isso custa mais do que entrega. Motivos concretos:
+Até 21/07/2026 o JS era embutido no `index.html`. Foi extraído para um único `app.js` por **um**
+motivo: derrubar o `'unsafe-inline'` do `script-src` da CSP — com JS inline, a CSP não segura um
+XSS que escape do `esc()`; com `script-src 'self'` (estado atual do `vercel.json`), segura. O que
+mudou junto, e o que continua valendo:
 
-- **Auto-update por ETag.** `checarNovaVersao` (seção `AUTO-ATUALIZAÇÃO`) faz `HEAD /index.html` e
-  compara o **ETag**; quando muda, o navegador recarrega sozinho para todos os usuários. Com o código
-  em `js/*.js`, mudar um módulo **não muda o ETag do `index.html`** → a atualização automática
-  quebra. Separar exigiria **reprojetar** a detecção de versão (manifest com hash, cache-busting).
-- **Zero-build, uma requisição.** Não há bundler, framework nem `package.json`. Servir um arquivo
-  estático é uma requisição. `js/*.js` sem build vira N requisições / cadeia de `import`.
-- **Testabilidade** *seria* o único ganho estrutural real (importar módulos em vez das cópias
-  verbatim `tests/*.harness.js`) — mas isso é o argumento para o dia em que houver essa necessidade,
-  não hoje.
+- **Auto-update por ETag** foi **reprojetado**: `checarNovaVersao` (seção `AUTO-ATUALIZAÇÃO`, no
+  fim do `app.js`) agora faz `HEAD` de `/index.html` **e** `/app.js` e compara os **dois** ETags —
+  deploy que só muda o JS também recarrega todo mundo. Não há cache-busting `?v=`: o
+  `Cache-Control: max-age=0, must-revalidate` do `vercel.json` já faz o navegador revalidar o
+  `app.js` a cada carga.
+- **Zero-build continua.** É **um** `app.js` inteiro (mesmo conteúdo, mesma ordem), carregado por
+  `<script src>` clássico no fim do `<body>` — **não** são ES modules, não há cadeia de `import`.
+  **Não fatiar em `js/*.js`**: N arquivos = N chances de ordem errada + detector de versão tendo
+  que vigiar N ETags, por ganho nenhum.
+- **CSS continua embutido** no `index.html` (o `style-src` mantém `'unsafe-inline'`; risco menor,
+  não vale outro arquivo).
+- **Guarda no gate:** `tests/check.js` **falha** se aparecer `<script>` inline no `index.html` —
+  a CSP bloquearia no navegador; todo JS novo vai no `app.js`.
 
-**Conclusão adotada:** manter arquivo único e resolver a real dor — "achar as coisas" — com
-**organização interna** (seções 2 e 3 abaixo). O `connect-src` da CSP (`vercel.json`) e a hospedagem
-Vercel assumem esse arquivo único.
+A real dor — "achar as coisas" — continua resolvida com **organização interna** (seções 2 e 3
+abaixo), que agora vivem no `app.js`.
 
 ## 2. Como navegar — índice, marcas e sub-marcas (navegue por `grep`)
 
