@@ -1,15 +1,24 @@
 // backup_rest.mjs — Backup lógico (só DADOS) das tabelas do portal DIVAT.
 //
-// Para quem NÃO tem pg_dump instalado. Usa a REST do Supabase (PostgREST) com a
-// SERVICE KEY (ignora RLS → baixa tudo, inclusive as tabelas de staging) e pagina
+// Para quem NÃO tem pg_dump instalado. Usa a REST do Supabase (PostgREST) e pagina
 // pela PRIMARY KEY de cada tabela. Gera 1 arquivo NDJSON por tabela + manifest.json.
 //
-// NÃO substitui o pg_dump (que também salva schema/policies/índices). Ver BACKUP.md.
+// DOIS MODOS (decidido pela chave presente no ambiente):
+//   COMPLETO — SUPABASE_SERVICE_KEY (ignora RLS): baixa TUDO, inclusive as 4 tabelas
+//              de staging do ETL. Rodar só na SUA máquina; a service key jamais sai dela.
+//   PÚBLICO  — SUPABASE_ANON_KEY (só o que o RLS deixa): baixa as 14 tabelas públicas
+//              do portal (sem staging). É o modo do workflow do GitHub Actions
+//              (.github/workflows/backup.yml) — o repo é público e a anon key também,
+//              então o artifact não expõe nada além do que a API pública já expõe.
 //
-// Uso (na SUA máquina — daqui o ambiente do Claude não alcança o Supabase):
+// NÃO substitui o pg_dump (que também salva schema/policies/índices). Ver docs/backup.md.
+//
+// Uso (modo completo, na SUA máquina):
 //   SUPABASE_URL="https://lwzsxuaqqeoamukduhev.supabase.co" \
 //   SUPABASE_SERVICE_KEY="<service_role key: Dashboard → Settings → API>" \
 //   node scripts/backup_rest.mjs ./backup_$(date +%Y-%m-%d)
+//
+// Uso (modo público — mesmo comando, com SUPABASE_ANON_KEY no lugar da service key).
 //
 // Requer apenas Node 18+ (usa fetch nativo). Nenhuma dependência.
 
@@ -17,14 +26,20 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const URL = process.env.SUPABASE_URL;
-const KEY = process.env.SUPABASE_SERVICE_KEY;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const KEY = SERVICE_KEY || ANON_KEY;
+const PUBLICO = !SERVICE_KEY; // sem service key → modo público (só tabelas com anon_read_*)
 const OUT = process.argv[2] || `./backup_${new Date().toISOString().slice(0, 10)}`;
 const PAGE = 1000; // linhas por requisição (abaixo de qualquer max-rows do PostgREST)
 
 if (!URL || !KEY) {
-  console.error('Faltou SUPABASE_URL e/ou SUPABASE_SERVICE_KEY no ambiente. Veja o cabeçalho do arquivo.');
+  console.error('Faltou SUPABASE_URL e/ou uma chave (SUPABASE_SERVICE_KEY ou SUPABASE_ANON_KEY) no ambiente. Veja o cabeçalho do arquivo.');
   process.exit(1);
 }
+
+// Staging do ETL: sem grant para anon (invisíveis pela API pública) → só entram no modo completo.
+const STAGING = new Set(['evento_dados', 'evento_textos', 'portaria_data', 'portaria_texto_teste']);
 
 // tabela -> coluna de PK usada para ordenar a paginação (todas têm PK desde 15/07/2026).
 const TABELAS = {
@@ -67,9 +82,11 @@ async function dumpTabela(tabela, pk) {
 
 async function main() {
   await mkdir(OUT, { recursive: true });
-  const manifest = { gerado_em: new Date().toISOString(), url: URL, tabelas: {} };
+  const alvo = Object.entries(TABELAS).filter(([t]) => !PUBLICO || !STAGING.has(t));
+  console.log(`Modo: ${PUBLICO ? 'PÚBLICO (anon key — sem staging)' : 'COMPLETO (service key)'} — ${alvo.length} tabelas`);
+  const manifest = { gerado_em: new Date().toISOString(), url: URL, modo: PUBLICO ? 'publico' : 'completo', tabelas: {} };
   let total = 0;
-  for (const [tabela, pk] of Object.entries(TABELAS)) {
+  for (const [tabela, pk] of alvo) {
     process.stdout.write(`  ${tabela} … `);
     const n = await dumpTabela(tabela, pk);
     manifest.tabelas[tabela] = n;
@@ -78,7 +95,7 @@ async function main() {
   }
   manifest.total_linhas = total;
   await writeFile(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-  console.log(`\nOK — ${total} linhas em ${Object.keys(TABELAS).length} tabelas → ${OUT}/`);
+  console.log(`\nOK — ${total} linhas em ${alvo.length} tabelas → ${OUT}/`);
   console.log('Guarde essa pasta FORA do git (o .gitignore já ignora backup_*/).');
 }
 

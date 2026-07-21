@@ -1,0 +1,36 @@
+# Backup automático (dados) — roda scripts/backup_rest.mjs em MODO PÚBLICO.
+#
+# Usa a ANON KEY (a mesma pública do index.html): baixa só as 14 tabelas que a API
+# pública já expõe — nada de service key neste repo (é público; segredo em artifact
+# de repo público exporia as tabelas de staging). O dump completo (staging + schema)
+# continua sendo a rotina manual do dono — ver docs/backup.md.
+#
+# O dump fica como artifact do Actions por 90 dias (aba Actions → run → Artifacts).
+name: Backup
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # toda segunda 06:00 UTC (03:00 em Brasília)
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Dump NDJSON via REST (modo público)
+        env:
+          SUPABASE_URL: https://lwzsxuaqqeoamukduhev.supabase.co
+          # anon key — pública por design (é a mesma embutida no index.html servido a todo visitante)
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3enN4dWFxcWVvYW11a2R1aGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTk4NjYsImV4cCI6MjA5NTQ5NTg2Nn0.90R-n9pu_gpDfmRr7O4DMAdjtIUkIDGyEKfG9zXXV1s
+        run: node scripts/backup_rest.mjs ./backup_out
+      - name: Publicar artifact (90 dias)
+        uses: actions/upload-artifact@v4
+        with:
+          name: divat-backup-${{ github.run_id }}
+          path: backup_out/
+          retention-days: 90
+          if-no-files-found: error

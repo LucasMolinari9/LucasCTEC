@@ -13,6 +13,15 @@ O backup é feito de **duas peças** que se completam:
 | **Estrutura** | `docs/backup_schema.sql` — recria tabelas, PK/FK, índices, RLS, grants, funções, trigger | **versionada no git** | regenerar do banco (ver abaixo) |
 | **Dados** | dump do banco (`pg_dump`, script Node ou 18 CSVs) | **fora do git** (Drive/local do dono) | 3 formas — ver "Formas de fazer o backup" |
 
+Além das rotinas manuais acima, existe uma **camada automática** (21/07/2026): o workflow
+**`.github/workflows/backup.yml`** roda o `backup_rest.mjs` em **modo público** toda segunda
+06:00 UTC (e sob demanda, botão *Run workflow*), guardando o dump como **artifact do Actions
+por 90 dias** (aba Actions → run → Artifacts). Ele usa a **anon key** (pública por design):
+cobre as **14 tabelas públicas do portal** — **não** cobre as 4 de staging do ETL
+(`evento_dados`, `evento_textos`, `portaria_data`, `portaria_texto_teste`) nem a estrutura.
+É a rede que garante que sempre existe *algum* dump recente mesmo se a rotina manual atrasar;
+o dump **completo** continua sendo o manual abaixo.
+
 > **Por que separado:** o CSV carrega só as **linhas**; não carrega estrutura, índices, RLS
 > nem funções. O `backup_schema.sql` carrega só a **estrutura**; não carrega dados. Juntos =
 > banco completo. Nenhum dos dois sozinho recupera o portal.
@@ -45,17 +54,22 @@ Restaurar num projeto vazio: `pg_restore --no-owner --no-privileges -d "postgres
 Variações: `--schema-only` (só estrutura) e `--data-only` (só dados).
 
 ### Opção 2 — Script Node `scripts/backup_rest.mjs` (sem `pg_dump`; só DADOS)
-Para quando não há `pg_dump` instalado. Baixa as **18 tabelas** em NDJSON via REST, paginando pela
-PK. Requer só **Node 18+** (nenhuma dependência). A `service_role` key fica em Dashboard → Settings
-→ API (é **SECRETA** — não commite, não cole em lugar público).
+Para quando não há `pg_dump` instalado. Baixa as tabelas em NDJSON via REST, paginando pela PK.
+Requer só **Node 18+** (nenhuma dependência). Tem **dois modos**, decididos pela chave no ambiente:
+
+- **Completo** (`SUPABASE_SERVICE_KEY`): as **18 tabelas**, inclusive staging. A `service_role` key
+  fica em Dashboard → Settings → API (é **SECRETA** — não commite, não cole em lugar público).
+- **Público** (`SUPABASE_ANON_KEY`): as **14 tabelas públicas** (sem staging). É o modo usado pelo
+  workflow automático do Actions — a anon key é a mesma pública do `index.html`.
+
 ```bash
 SUPABASE_URL="https://lwzsxuaqqeoamukduhev.supabase.co" \
 SUPABASE_SERVICE_KEY="<service_role key>" \
 node scripts/backup_rest.mjs "./backup_$(date +%Y-%m-%d)"
 ```
 Saída: pasta `backup_AAAA-MM-DD/` com um `.ndjson` por tabela + `manifest.json` (confira a contagem
-de linhas). O `.gitignore` já ignora `backup_*/`. Limitação: só dados — a estrutura vem da Opção 1
-(`--schema-only`) ou de `docs/backup_schema.sql`.
+de linhas e o campo `modo`). O `.gitignore` já ignora `backup_*/`. Limitação: só dados — a estrutura
+vem da Opção 1 (`--schema-only`) ou de `docs/backup_schema.sql`.
 
 ### Opção 3 — Table Editor → CSV (sem terminal)
 A forma manual pelo painel, detalhada abaixo. Não precisa instalar nada, mas é a mais trabalhosa
