@@ -1,0 +1,13 @@
+{
+  "name": "DIVAT · Cadastro de Linhas Regulares",
+  "short_name": "DIVAT",
+  "description": "Consulta pública do cadastro de linhas regulares do DETRO/RJ.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eef2f6",
+  "theme_color": "#0a3a63",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "vendor/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

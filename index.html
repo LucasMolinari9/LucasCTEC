@@ -14,613 +14,296 @@
 <meta property="og:url" content="https://divatdetro.vercel.app/">
 <meta property="og:locale" content="pt_BR">
 <meta name="twitter:card" content="summary">
-<style>
-  /* Fontes vendoradas em vendor/fonts/ (subset latin, cobre pt-BR) — sem Google Fonts em
-     runtime. Origem: pacotes @fontsource v5.3.0 via npm (como o supabase-js). Para atualizar:
-     npm pack @fontsource/<família>, extrair files/<família>-latin-<peso>-normal.woff2. */
-  @font-face{font-family:'Archivo';font-style:normal;font-display:swap;font-weight:600;src:url(vendor/fonts/archivo-latin-600-normal.woff2) format('woff2')}
-  @font-face{font-family:'Archivo';font-style:normal;font-display:swap;font-weight:700;src:url(vendor/fonts/archivo-latin-700-normal.woff2) format('woff2')}
-  @font-face{font-family:'Archivo';font-style:normal;font-display:swap;font-weight:800;src:url(vendor/fonts/archivo-latin-800-normal.woff2) format('woff2')}
-  @font-face{font-family:'IBM Plex Mono';font-style:normal;font-display:swap;font-weight:500;src:url(vendor/fonts/ibm-plex-mono-latin-500-normal.woff2) format('woff2')}
-  @font-face{font-family:'IBM Plex Mono';font-style:normal;font-display:swap;font-weight:600;src:url(vendor/fonts/ibm-plex-mono-latin-600-normal.woff2) format('woff2')}
-  @font-face{font-family:'IBM Plex Sans';font-style:normal;font-display:swap;font-weight:400;src:url(vendor/fonts/ibm-plex-sans-latin-400-normal.woff2) format('woff2')}
-  @font-face{font-family:'IBM Plex Sans';font-style:normal;font-display:swap;font-weight:500;src:url(vendor/fonts/ibm-plex-sans-latin-500-normal.woff2) format('woff2')}
-  @font-face{font-family:'IBM Plex Sans';font-style:normal;font-display:swap;font-weight:600;src:url(vendor/fonts/ibm-plex-sans-latin-600-normal.woff2) format('woff2')}
-  :root{
-    --navy:#0a3a63;
-    --navy-deep:#072a49;
-    --blue:#1466a6;
-    --green:#1f9d57;
-    --ink:#14202b;
-    --muted:#5d6f80;
-    --bg:#eef2f6;
-    --surface:#ffffff;
-    --line:#dbe4ec;
-    --line-soft:#e9eff4;
-    /* códigos de família (wayfinding) */
-    --c-doc:#1466a6;
-    --c-emp:#1f9d57;
-    --c-lig:#c2700a;
-    --c-ger:#6d4aa8;
-    --radius:14px;
-    --radius-sm:10px;
-    --shadow:0 1px 2px rgba(10,40,66,.05), 0 12px 28px -18px rgba(10,40,66,.30);
-    --shadow-lg:0 2px 6px rgba(10,40,66,.07), 0 28px 56px -26px rgba(10,40,66,.42);
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html{scroll-behavior:smooth}
-  body{
-    font-family:'IBM Plex Sans',system-ui,sans-serif;
-    font-size:18px;
-    color:var(--ink);
-    background:var(--bg);
-    line-height:1.5;
-    -webkit-font-smoothing:antialiased;
-  }
-  .mono{font-family:'IBM Plex Mono',monospace}
-  /* rótulo só para leitores de tela */
-  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-
-  /* ---------- Topbar ---------- */
-  .topbar{
-    background:var(--navy-deep);
-    color:#fff;
-    border-bottom:2px solid var(--green);
-    box-shadow:0 1px 0 rgba(255,255,255,.05) inset;
-  }
-  .topbar-in{
-    max-width:1140px;margin:0 auto;padding:15px 24px;
-    display:flex;align-items:center;gap:16px;
-  }
-  .mark{
-    width:40px;height:40px;border-radius:9px;flex:0 0 auto;
-    background:#fff;display:grid;place-items:center;position:relative;
-    box-shadow:inset 0 0 0 1px rgba(255,255,255,.4);
-  }
-  .mark svg{width:26px;height:26px}
-  /* Logo DETRO — SVG vetorizado (paths), recolorável via currentColor */
-  .brand-logo{display:inline-flex;align-items:center;line-height:0}
-  .brand-logo svg{display:block;width:auto}
-  #brandLogo{color:#fff}
-  #brandLogo svg{height:42px}
-  .doc-head .brand-logo svg{height:58px}
-  .brand-txt{display:flex;flex-direction:column;line-height:1.15}
-  .brand-txt b{font-family:'Archivo';font-weight:800;letter-spacing:.04em;font-size:17px}
-  .brand-txt span{font-size:13px;color:#b9d4ea;letter-spacing:.06em;text-transform:uppercase}
-  .topbar-meta{margin-left:auto;text-align:right;font-size:13px;color:#a9c5dd;padding-left:18px;border-left:1px solid rgba(255,255,255,.12)}
-  .topbar-meta b{display:block;color:#fff;font-weight:600;font-size:13.5px;letter-spacing:.01em}
-  /* indicador de conexão realtime */
-  .rt-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#9fb4c6;margin-left:6px;vertical-align:middle;transition:background .3s}
-  .rt-dot.live{background:#37d67a;box-shadow:0 0 0 3px rgba(55,214,122,.25)}
-
-  /* ---------- Hero / seletor de linha ---------- */
-  .hero{
-    /* overflow:visible para o dropdown de resultados da busca não ser cortado pela
-       borda inferior do hero; a textura ::before é inset:0 com mask, então fica contida. */
-    position:relative;overflow:visible;
-    background:
-      radial-gradient(120% 150% at 50% -25%, rgba(31,157,87,.18) 0%, rgba(31,157,87,0) 44%),
-      linear-gradient(180deg,#0c3e69 0%, var(--navy-deep) 100%);
-    color:#fff;padding:56px 24px 62px;
-  }
-  .hero::before{
-    content:"";position:absolute;inset:0;pointer-events:none;opacity:.45;
-    background-image:radial-gradient(rgba(255,255,255,.10) 1px, transparent 1px);
-    background-size:23px 23px;
-    -webkit-mask-image:linear-gradient(180deg,transparent,#000 42%,transparent 92%);
-            mask-image:linear-gradient(180deg,transparent,#000 42%,transparent 92%);
-  }
-  .hero-in{position:relative;max-width:760px;margin:0 auto;text-align:center}
-  .eyebrow{
-    display:inline-flex;align-items:center;gap:12px;
-    font-family:'Archivo';font-weight:700;font-size:12px;letter-spacing:.28em;
-    text-transform:uppercase;color:#7fe0a6;margin-bottom:15px;
-  }
-  .eyebrow::before,.eyebrow::after{content:"";width:28px;height:1px;background:rgba(127,224,166,.5)}
-  .hero h1{
-    font-family:'Archivo';font-weight:800;font-size:clamp(30px,4vw,46px);
-    letter-spacing:-.015em;line-height:1.04;
-  }
-  .hero p{color:#aecbe4;max-width:52ch;margin:14px auto 0;font-size:16.5px;line-height:1.55}
-
-  .selector{
-    margin:32px auto 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;
-    background:#fff;border:1px solid rgba(255,255,255,.55);
-    padding:7px 7px 7px 9px;border-radius:13px;max-width:660px;
-    box-shadow:0 22px 48px -22px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.16);
-  }
-  .selector .field{flex:1 1 300px;display:flex;align-items:center;gap:11px;padding:0 8px;text-align:left}
-  .selector .field svg{width:19px;height:19px;color:var(--blue);flex:0 0 auto}
-  .selector input{
-    flex:1;background:transparent;border:0;outline:0;color:var(--ink);
-    font-family:'IBM Plex Sans';font-size:16.5px;padding:13px 0;
-  }
-  .selector input::placeholder{color:#90a2b3}
-  .selector > button{
-    background:#15824a;color:#fff;border:0;cursor:pointer;align-self:stretch;
-    font-family:'Archivo';font-weight:700;font-size:15px;letter-spacing:.01em;
-    padding:0 26px;min-height:48px;border-radius:9px;
-    box-shadow:0 1px 0 rgba(255,255,255,.22) inset, 0 8px 18px -10px rgba(21,130,74,.9);
-    transition:filter .15s,transform .15s;
-  }
-  .selector > button:hover{filter:brightness(1.07)}
-  .selector > button:active{transform:translateY(1px)}
-  .selector:focus-within{box-shadow:0 0 0 3px rgba(31,157,87,.35), 0 22px 48px -22px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.16)}
-
-  /* faixa de "rota" decorativa */
-  .route{display:flex;align-items:center;gap:0;margin:28px auto 0;max-width:640px;opacity:.9}
-  .route .seg{height:3px;flex:1;background:rgba(255,255,255,.25);border-radius:2px}
-  .route .stop{width:11px;height:11px;border-radius:50%;flex:0 0 auto;
-    background:var(--navy-deep);box-shadow:0 0 0 3px rgba(255,255,255,.6)}
-  .route .stop.live{background:var(--green);box-shadow:0 0 0 3px var(--green)}
-
-  /* ---------- Conteúdo ---------- */
-  main{max-width:1140px;margin:0 auto;padding:30px 24px 64px;position:relative}
-
-  .section{margin-top:30px}
-  .section:first-child{margin-top:0}
-  /* barras de rolagem discretas */
-  .results-drop::-webkit-scrollbar,.modal-overlay::-webkit-scrollbar{width:11px;height:11px}
-  .results-drop::-webkit-scrollbar-thumb,.modal-overlay::-webkit-scrollbar-thumb{background:#bccadb;border-radius:9px;border:2px solid transparent;background-clip:padding-box}
-  .results-drop::-webkit-scrollbar-thumb:hover,.modal-overlay::-webkit-scrollbar-thumb:hover{background:#9fb0c4;background-clip:padding-box}
-  .sec-head{margin-bottom:14px;display:flex;align-items:center;gap:14px}
-  .sec-head h2{
-    font-family:'Archivo';font-weight:700;font-size:13px;letter-spacing:.14em;
-    text-transform:uppercase;color:var(--navy);display:flex;align-items:center;gap:11px;white-space:nowrap;
-  }
-  .sec-head h2::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--accent);transform:rotate(45deg)}
-  .sec-head::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line) 0%,transparent 100%)}
-
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(252px,1fr));gap:14px}
-
-  .card{
-    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
-    padding:18px;text-align:left;cursor:pointer;font:inherit;color:inherit;
-    display:flex;gap:14px;align-items:flex-start;position:relative;overflow:hidden;
-    box-shadow:var(--shadow);transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;
-  }
-  .card::after{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--accent);
-    transform:scaleX(0);transform-origin:left;transition:transform .24s ease;opacity:.9}
-  .card:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg);border-color:color-mix(in srgb,var(--accent) 32%,var(--line))}
-  .card:hover::after{transform:scaleX(1)}
-  .card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  .ico{
-    width:42px;height:42px;border-radius:11px;flex:0 0 auto;display:grid;place-items:center;
-    background:var(--accent-soft);color:var(--accent);
-    transition:background .18s ease,color .18s ease;
-  }
-  .card:hover .ico{background:var(--accent);color:#fff}
-  .ico svg{width:21px;height:21px}
-  .card-txt h3{font-family:'Archivo';font-weight:600;font-size:15.5px;line-height:1.25;color:var(--navy)}
-  .card-txt p{font-size:13.5px;color:var(--muted);margin-top:4px;line-height:1.45}
-  footer{
-    border-top:1px solid var(--line);background:var(--surface);
-    color:var(--muted);font-size:13.5px;
-  }
-  .footer-in{max-width:1140px;margin:0 auto;padding:20px 24px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-  .footer-in .pill{font-family:'IBM Plex Mono';font-size:12.5px;background:var(--line-soft);padding:3px 10px;border-radius:6px;color:var(--blue)}
-  .footer-in .right{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-
-  /* NOTA: os @media de responsividade mobile ficam no FINAL desta folha de estilo,
-     DEPOIS das regras-base dos componentes — senão as regras-base, por virem
-     depois, venceriam os overrides no cascade. */
-  @media (prefers-reduced-motion:reduce){
-    *{transition:none!important;animation:none!important;scroll-behavior:auto}
-  }
-
-  /* ---------- Search dropdown ---------- */
-  .selector{position:relative}
-  .results-drop{
-    position:absolute;top:calc(100% + 10px);left:0;right:0;
-    background:#fff;border:1px solid var(--line);border-radius:12px;
-    box-shadow:0 24px 50px -16px rgba(12,40,66,.34);z-index:200;
-    max-height:340px;overflow-y:auto;display:none;
-  }
-  .results-drop.open{display:block}
-  .result-item{
-    display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;padding:11px 16px;
-    cursor:pointer;border:0;background:none;width:100%;text-align:left;
-    border-bottom:1px solid var(--line-soft);font:inherit;color:inherit;
-    transition:background .12s;
-  }
-  .result-item:last-child{border-bottom:0}
-  .result-item:hover{background:#f1f6fb}
-  .r-num{
-    font-family:'IBM Plex Mono';font-size:13px;font-weight:600;
-    color:var(--blue);background:#e7f0f8;padding:2px 8px;border-radius:5px;white-space:nowrap;
-  }
-  .r-name{flex:1 1 auto;min-width:0;font-size:14.5px;font-weight:500;color:var(--ink)}
-  .r-emp{flex:1 1 100%;font-size:13px;color:var(--muted);white-space:normal}
-  .drop-empty{padding:14px 16px;font-size:14.5px;color:var(--muted);text-align:center}
-  .drop-error{padding:14px 16px;font-size:14.5px;color:#b33a2e;text-align:center}
-
-  /* ---------- Active line banner ---------- */
-  .line-banner{
-    background:var(--navy-deep);
-    border:1px solid rgba(255,255,255,.06);border-left:4px solid var(--green);
-    border-radius:var(--radius);
-    padding:15px 20px;display:flex;align-items:center;gap:16px;
-    margin-bottom:22px;flex-wrap:wrap;box-shadow:var(--shadow);
-  }
-  .lb-num{
-    font-family:'IBM Plex Mono';font-size:13.5px;font-weight:600;
-    color:var(--navy);background:#fff;padding:5px 13px;border-radius:7px;white-space:nowrap;
-  }
-  .lb-name{font-family:'Archivo';font-weight:700;font-size:17px;color:#fff}
-  .lb-emp{font-size:13.5px;color:#cfe1f1;margin-top:2px}
-  .lb-clear{
-    margin-left:auto;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.28);
-    border-radius:6px;padding:4px 12px;font-size:13.5px;color:#fff;
-    cursor:pointer;font:inherit;transition:background .12s;
-  }
-  .lb-clear:hover{background:rgba(255,255,255,.2)}
-
-  /* ---------- Modal ---------- */
-  .modal-overlay{
-    position:fixed;inset:0;background:rgba(7,25,42,.62);
-    z-index:1000;display:none;align-items:flex-start;justify-content:center;
-    padding:40px 16px 60px;overflow-y:auto;backdrop-filter:blur(3px);
-  }
-  .modal-overlay.open{display:flex}
-  .modal{
-    background:var(--surface);border-radius:16px;width:100%;max-width:840px;
-    box-shadow:0 30px 80px -20px rgba(7,25,42,.6);overflow:hidden;
-  }
-  .modal-doc{max-width:880px}
-  /* thin toolbar above the document */
-  .modal-toolbar{
-    background:var(--navy-deep);color:#fff;padding:10px 16px;
-    display:flex;align-items:center;gap:10px;
-  }
-  .mt-label{font-family:'Archivo';font-weight:700;font-size:13px;letter-spacing:.08em;
-    text-transform:uppercase;color:#9fc0dc;margin-right:auto;display:flex;align-items:center;gap:8px}
-  .mt-live{font-size:10.5px;letter-spacing:.06em;color:#0a3a63;background:#37d67a;
-    padding:2px 7px;border-radius:5px;font-weight:700;display:none}
-  .mt-live.on{display:inline-block;animation:pulseLive 1.6s ease}
-  @keyframes pulseLive{0%{opacity:.4}50%{opacity:1}100%{opacity:.85}}
-  .mt-btn{
-    background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;
-    border-radius:6px;padding:5px 12px;font:inherit;font-size:13.5px;cursor:pointer;
-    display:flex;align-items:center;gap:6px;transition:background .12s;
-  }
-  .mt-btn:hover{background:rgba(255,255,255,.2)}
-  .modal-close{
-    background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
-    color:#fff;width:30px;height:30px;border-radius:6px;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .12s;
-  }
-  .modal-close:hover{background:rgba(255,255,255,.2)}
-  .modal-body{padding:0;background:#fff;max-height:none}
-
-  /* ===== Documento oficial (réplica do PDF) ===== */
-  .doc{
-    font-family:'IBM Plex Sans',serif;color:#111;padding:26px 30px 30px;
-  }
-  .doc-head{display:flex;align-items:center;gap:18px;border-bottom:2px solid var(--green);box-shadow:0 3px 0 -1px var(--line);padding-bottom:14px;flex-wrap:wrap}
-  .doc-head-titles{border-left:2px solid var(--line);padding-left:18px}
-  .doc-head h1{font-family:'Archivo';font-weight:800;font-size:18px;line-height:1.15;color:#0a3a63;letter-spacing:-.01em}
-  .doc-head .sub{font-family:'Archivo';font-weight:700;font-size:14px;color:#1f9d57;
-    letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
-  /* metadata block */
-  .doc-meta{
-    padding:16px 18px;margin-top:8px;
-    background:linear-gradient(180deg,#f7fafc,#fff);
-    border:1px solid var(--line);border-bottom:2px solid var(--navy);border-radius:10px 10px 0 0;
-    display:grid;grid-template-columns:1fr 1fr;gap:8px 32px;font-size:14px;
-  }
-  .doc-meta .row{display:flex;gap:7px;align-items:baseline}
-  .doc-meta .row.full{grid-column:1 / -1}
-  .doc-meta b{font-weight:700;color:var(--navy);font-family:'Archivo';font-size:12px;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
-  .doc-meta span{color:var(--ink);font-weight:500}
-  /* table */
-  .doc-table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13.5px}
-  /* tabelas largas rolam na horizontal (qualquer tela) sem quebrar o layout */
-  .doc-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  .doc-table thead th{
-    font-family:'Archivo';font-weight:700;font-size:11.5px;letter-spacing:.07em;
-    text-transform:uppercase;text-align:left;color:var(--navy);
-    background:#eef3f8;border-bottom:2px solid var(--navy);padding:10px 11px;
-  }
-  .doc-table tbody td{padding:8px 11px;border-bottom:1px solid #eaeef3;vertical-align:top}
-  .doc-table tbody tr:last-child td{border-bottom:0}
-  .doc-table tbody tr:hover{background:#f2f8fd}
-  .doc-table tbody tr.clickable{cursor:pointer}
-  .doc-table tbody tr.clickable:hover{background:#eaf3fb}
-  .td-sentido{font-weight:600;color:#0a3a63;white-space:nowrap}
-  .td-tipo{color:#444;white-space:nowrap}
-  .td-logr{font-weight:500}
-  .td-mun{color:#555;font-size:12.5px;white-space:nowrap}
-  .td-obs{color:#666;font-size:12px;text-align:right;font-style:italic;white-space:nowrap}
-  .td-num{font-family:'IBM Plex Mono';font-size:12.5px;color:var(--blue);white-space:nowrap}
-  /* separador entre grupos */
-  .sentido-sep td{
-    background:#e8f0f7;font-family:'Archivo';font-weight:700;font-size:11.5px;
-    letter-spacing:.1em;text-transform:uppercase;color:var(--navy);padding:7px 11px;
-    border-bottom:1px solid #d4e0eb;box-shadow:inset 3px 0 0 var(--c-doc);
-  }
-  /* sub-cabeçalho de dia (div) dentro de um sentido */
-  div.sentido-sep{
-    background:#e8f0f7;font-family:'Archivo';font-weight:700;font-size:11.5px;
-    letter-spacing:.1em;text-transform:uppercase;color:var(--navy);border-radius:6px;margin-top:10px;
-    padding:7px 11px;box-shadow:inset 3px 0 0 var(--c-doc);
-  }
-  /* formulário "Linhas por Localidade e Município" (com filtros) */
-  .loc-form{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin:4px 0 12px}
-  .loc-form label{display:flex;flex-direction:column;gap:4px;font-family:'Archivo';font-weight:700;
-    font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;color:#0a3a63}
-  .loc-form select,.loc-form input{border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;
-    font-size:14.5px;background:#fff;outline:0;width:100%}
-  .loc-form select:focus,.loc-form input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(20,102,166,.12)}
-  .loc-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
-  .loc-btn{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;
-    font-weight:600;font-size:14px;cursor:pointer;transition:background .12s}
-  .loc-btn:hover{background:var(--navy-deep)}
-  .loc-filters{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
-  .loc-filter-btn{font:inherit;font-family:'Archivo';font-weight:700;font-size:12.5px;
-    letter-spacing:.02em;border:1px solid transparent;border-radius:999px;padding:8px 14px;
-    cursor:pointer;transition:background .12s,color .12s;background:#e7f0f8;color:var(--blue)}
-  .loc-filter-btn:hover{background:#d9e8f5}
-  .loc-filter-btn.active{background:var(--navy);color:#fff}
-  .loc-filter-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-  /* barra de filtros sobre o resultado (situação / agrupar por empresa) */
-  .loc-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin:2px 0 12px;
-    padding:9px 12px;background:#f3f7fb;border:1px solid var(--line);border-radius:9px}
-  .loc-tools label{display:flex;align-items:center;gap:7px;font-family:'Archivo';font-weight:700;
-    font-size:12.5px;letter-spacing:.03em;text-transform:uppercase;color:#0a3a63}
-  .loc-tools select,.loc-tools input[type=text]{border:1px solid var(--line);border-radius:7px;padding:5px 9px;font:inherit;
-    font-size:13.5px;background:#fff;outline:0;text-transform:none;letter-spacing:0}
-  .loc-emp-head{font-family:'Archivo';font-weight:800;font-size:14px;color:var(--navy);
-    margin:16px 0 6px;padding-bottom:4px;border-bottom:2px solid var(--green)}
-  .loc-emp-head .loc-emp-rj{font-weight:600;font-size:12.5px;color:var(--muted)}
-  /* relatório de seções por linha (Linhas por Localidade) */
-  .loc-linha-sec{margin:8px 0 16px}
-  .loc-linha-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;cursor:pointer;
-    font-family:'Archivo';font-weight:700;font-size:13.5px;color:var(--navy);margin:8px 0 5px}
-  .loc-linha-head:hover{color:var(--blue)}
-  .loc-linha-head .mono{font-family:'IBM Plex Mono';font-size:12.5px;font-weight:600;color:var(--blue);
-    background:#e7f0f8;padding:2px 8px;border-radius:5px}
-  /* chips de município (drill-down) na consulta por região */
-  .mun-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:2px 0 12px}
-  .mun-chips-lbl{font-family:'Archivo';font-weight:700;font-size:12px;letter-spacing:.03em;
-    text-transform:uppercase;color:#0a3a63;margin-right:4px}
-  .mun-chip{font:inherit;font-size:12.5px;border:1px solid var(--line);background:#fff;color:var(--navy);
-    border-radius:999px;padding:4px 11px;cursor:pointer;transition:background .12s,border-color .12s}
-  .mun-chip:hover{background:#eef5fb;border-color:var(--c-lig)}
-  /* faixa de SENTIDO (origem/terminal de partida) no Quadro de Horários */
-  .qh-sentido{
-    font-family:'Archivo';font-weight:800;font-size:13px;letter-spacing:.06em;
-    text-transform:uppercase;color:#fff;background:linear-gradient(90deg,var(--navy),var(--navy-deep));
-    border-left:4px solid var(--green);padding:11px 15px;border-radius:8px;margin:22px 0 4px;
-    box-shadow:var(--shadow);
-  }
-  .doc-obs{
-    margin-top:16px;border:1px solid #dbe4ec;border-left:3px solid var(--c-lig);border-radius:8px;
-    padding:11px 15px;font-size:13px;color:#3a4a59;background:#fbfcfe;
-  }
-  .doc-obs b{color:#0a3a63}
-  /* aviso de resultado truncado (lista atingiu o limite da consulta) */
-  .trunc-aviso{margin:0 0 10px;border:1px solid #f0d9a8;border-left:3px solid #d9930b;border-radius:8px;
-    padding:9px 13px;font-size:13px;color:#7a5407;background:#fff8ec}
-  .trunc-aviso b{color:#7a5407}
-  .doc-foot{margin-top:16px;text-align:right;font-size:12px;color:#888;
-    border-top:1px solid #e4e9ee;padding-top:8px}
-  /* paginação de documentos longos (ex.: Histórico da Linha) */
-  .doc-table tbody tr.hid{display:none}
-  .doc-pager{display:flex;align-items:center;justify-content:center;gap:14px;
-    margin-top:18px;border-top:1px solid #e4e9ee;padding:14px 0 8px;flex-wrap:wrap;
-    position:sticky;bottom:0;background:#fff;z-index:3;
-    box-shadow:0 -6px 14px -10px rgba(7,25,42,.4)}
-  .pg-btn{background:var(--navy);color:#fff;border:0;border-radius:7px;padding:7px 15px;
-    font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;transition:background .12s}
-  .pg-btn:hover:not(:disabled){background:var(--navy-deep)}
-  .pg-btn:disabled{background:#c2ccd6;cursor:default}
-  .pg-info{font-size:13.5px;color:#444;font-family:'Archivo';font-weight:600;
-    min-width:200px;text-align:center}
-  .pg-goto{display:inline-flex;align-items:center;gap:5px;font-size:13.5px;color:#444;font-family:'Archivo';font-weight:600}
-  .pg-num{width:64px;padding:5px 6px;border:1px solid #c9d3dc;border-radius:6px;font:inherit;font-size:13.5px}
-  .ev-search{margin:0 0 12px}
-  .ev-filters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px 10px;align-items:end;
-    background:#f3f7fb;border:1px solid #e1e9f1;border-radius:10px;padding:12px 14px;margin:0 0 14px}
-  .ev-filters .evf{display:flex;flex-direction:column;gap:4px;font:700 11.5px 'Archivo';letter-spacing:.04em;text-transform:uppercase;color:#5a6f83}
-  .ev-filters .evf-wide{grid-column:span 2}
-  .ev-filters .evf input,.ev-filters .evf select{padding:8px 10px;border:1px solid #c9d3dc;border-radius:7px;font:inherit;font-size:13.5px;font-weight:400;outline:0;background:#fff}
-  .ev-filters .evf input:focus,.ev-filters .evf select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(20,102,166,.12)}
-  .ev-filters .evf-clear{align-self:end;background:#fff;color:var(--navy);border:1px solid #c9d3dc;border-radius:7px;
-    padding:8px 13px;font:700 13px 'Archivo';cursor:pointer;transition:background .12s}
-  .ev-filters .evf-clear:hover{background:#eef4f9}
-  .ev-empty{padding:30px 10px;text-align:center;color:var(--muted);font-size:14.5px}
-  .ev-empty.hid{display:none}
-  /* container oculto usado só para gerar o PDF completo */
-  .pdf-export{position:absolute;left:-99999px;top:0;width:794px;background:#fff}
-  /* ===== Histórico: um evento por página ===== */
-  .ev-page.hid{display:none}
-  .ev-page{padding:2px 2px 8px;min-height:60vh}
-  .ev-grid{display:grid;grid-template-columns:1.05fr 1.5fr 2fr 1.05fr;gap:10px 20px;
-    background:linear-gradient(180deg,#f7fafc,#fff);border:1px solid var(--line);
-    border-left:3px solid var(--green);border-radius:10px;padding:14px 16px;margin-top:8px;box-shadow:var(--shadow)}
-  .ev-grid.ev5{grid-template-columns:.9fr .9fr 1.3fr 1.7fr .9fr}
-  .ev-cell{display:flex;flex-direction:column;gap:4px}
-  .ev-h{font-family:'Archivo';font-weight:700;font-size:11px;letter-spacing:.06em;
-    text-transform:uppercase;color:var(--muted)}
-  .ev-v{font-size:14.5px;color:var(--ink);font-weight:500}
-  .ev-v.mono{font-family:'IBM Plex Mono';font-size:13px;color:var(--blue);font-weight:600}
-  .ev-block{margin-top:18px}
-  .ev-label{font-family:'Archivo';font-weight:700;font-size:13px;letter-spacing:.04em;text-transform:uppercase;
-    color:var(--navy);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--line);
-    display:flex;align-items:center;gap:9px}
-  .ev-label::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--green);transform:rotate(45deg)}
-  .ev-text{font-size:14.5px;line-height:1.55;color:#1a1a1a;white-space:pre-wrap;word-break:break-word}
-  .ev-text.empty{color:#9aa3ab;font-style:italic}
-  /* no PDF cada evento começa numa nova página */
-  .pdf-export .ev-page + .ev-page{page-break-before:always}
-  /* blocos que não podem ser cortados no meio entre páginas do PDF/impressão */
-  .pdf-export .doc-head,.pdf-export .doc-meta,.pdf-export .ev-grid,.pdf-export .ev-block,
-  .pdf-export .qh-sentido,.pdf-export .sentido-sep,.pdf-export tr,.pdf-export .kpi,
-  .pdf-export .doc-obs{break-inside:avoid}
-  /* cabeçalho de grupo não fica órfão no rodapé da página */
-  .pdf-export .qh-sentido,.pdf-export .sentido-sep{break-after:avoid}
-  /* a caixa de busca, o paginador e as barras de filtro nunca entram no PDF */
-  .pdf-export .doc-search,.pdf-export .doc-pager,.pdf-export .ev-empty,.pdf-export .ev-filters,.pdf-export .loc-tools{display:none!important}
-  /* o PDF/impressão nunca rola e usa a largura natural da tabela. O container .pdf-export
-     fica fora do .modal-body, então as regras mobile já não o atingem — isto é defesa extra. */
-  .pdf-export .doc-table-wrap{overflow:visible!important}
-  .pdf-export .doc-table{min-width:0!important}
-  .pdf-export .ev-grid{grid-template-columns:1.05fr 1.5fr 2fr 1.05fr!important}
-  .pdf-export .ev-grid.ev5{grid-template-columns:.9fr .9fr 1.3fr 1.7fr .9fr!important}
-  .pdf-export .loc-form{grid-template-columns:1fr 1fr!important}
-  /* largura explícita do logo (proporção 3200:847 ≈ 3.78) e tamanho maior p/ o cabeçalho do PDF. */
-  .pdf-export .doc-head .brand-logo svg{height:68px;width:257px}
-  /* ===== Tela cheia do modal (preenche a tela inteira) ===== */
-  .modal-overlay.fs-fallback,
-  .modal-overlay:fullscreen,
-  .modal-overlay:-webkit-full-screen{
-    padding:0!important;background:#fff;overflow-y:auto;align-items:flex-start;
-    inset:0;width:100vw;height:100vh;
-  }
-  /* o modal cresce com o conteúdo (overflow visível) p/ a rolagem do overlay funcionar */
-  .modal-overlay.fs-fallback .modal,
-  .modal-overlay:fullscreen .modal,
-  .modal-overlay:-webkit-full-screen .modal{
-    max-width:100%!important;width:100%;min-height:100vh;border-radius:0;margin:0;overflow:visible;
-  }
-  /* texto continua legível: centraliza o conteúdo do documento */
-  .modal-overlay.fs-fallback .doc,
-  .modal-overlay:fullscreen .doc,
-  .modal-overlay:-webkit-full-screen .doc{max-width:1280px;margin:0 auto;width:100%}
-  /* KPIs gerenciais */
-  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:10px}
-  .kpi{position:relative;border:1px solid var(--line);border-radius:12px;padding:16px 16px 14px;
-    background:linear-gradient(180deg,#fff,#fafcfe);overflow:hidden;box-shadow:var(--shadow)}
-  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--green)}
-  .kpi b{display:block;font-family:'Archivo';font-weight:800;font-size:27px;color:var(--navy);line-height:1.05}
-  .kpi span{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:5px;display:block}
-  /* busca dentro do modal */
-  .doc-search{display:flex;gap:8px;margin:4px 0 14px;flex-wrap:wrap}
-  .doc-search input{flex:1;min-width:160px;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font:inherit;font-size:14.5px;outline:0}
-  .doc-search input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(20,102,166,.12)}
-  .doc-search button{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:0 16px;font:inherit;font-weight:600;font-size:14.5px;cursor:pointer}
-  .doc-search select{border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit;font-size:14.5px;background:#fff}
-  .chip{display:inline-block;font-size:12px;padding:2px 8px;border-radius:20px;font-weight:600}
-  .chip-on{background:#fde7e6;color:#b33a2e}
-  .chip-off{background:#e4f4ec;color:#1f7a45}
-  /* loading / empty */
-  .m-loading{text-align:center;padding:48px 0;color:var(--muted);font-size:15.5px}
-  .m-loading .spin{
-    width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--blue);
-    border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px;
-  }
-  @keyframes spin{to{transform:rotate(360deg)}}
-
-  /* ---------- Toast ---------- */
-  .toast{
-    position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-    padding:10px 20px;border-radius:8px;font-size:15px;font-weight:500;
-    z-index:2000;box-shadow:0 4px 16px rgba(0,0,0,.2);
-    animation:slideUp .2s ease;pointer-events:none;white-space:nowrap;
-  }
-  .toast-info{background:var(--navy);color:#fff}
-  .toast-warn{background:#c2700a;color:#fff}
-  .toast-err{background:#b33a2e;color:#fff}
-  .toast-live{background:#1f9d57;color:#fff}
-  @keyframes slideUp{
-    from{opacity:0;transform:translateX(-50%) translateY(10px)}
-    to{opacity:1;transform:translateX(-50%) translateY(0)}
-  }
-
-  /* ---------- Print / PDF vetorial ---------- */
-  @media print{
-    @page{size:A4;margin:12mm 12mm 14mm}
-    html,body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;background:#fff!important}
-    .modal,.section,.card{animation:none!important}
-    body>*{display:none!important}
-    .modal-overlay{position:static!important;display:block!important;background:none!important;padding:0!important;backdrop-filter:none!important}
-    .modal{box-shadow:none!important;max-width:none!important;border-radius:0!important;width:auto!important;margin:0!important}
-    .modal-toolbar{display:none!important}
-    .modal-body{padding:0!important}
-    /* modo exportação: imprime só o documento completo (container oculto) e esconde o modal */
-    html.exporting body>*{display:none!important}
-    html.exporting .pdf-export{display:block!important;position:static!important;left:auto!important;top:auto!important;width:auto!important}
-    /* documento: cores preservadas, quebras controladas e cabeçalho de tabela repetido por página */
-    .doc{padding:0!important}
-    .doc-head,.doc-meta,.doc-meta .row,.ev-grid,.ev-block,.qh-sentido,.sentido-sep,.kpi,.doc-obs,.doc-foot{break-inside:avoid}
-    .qh-sentido,.sentido-sep,.doc-table thead{break-after:avoid}
-    .doc-table thead{display:table-header-group}
-    .doc-table tr{break-inside:avoid}
-    .doc-table tbody tr:hover{background:none!important}
-    .doc-search,.doc-pager,.ev-empty,.ev-filters{display:none!important}
-    .doc-table tbody tr.hid{display:table-row!important}
-    .ev-page.hid{display:block!important}
-    .ev-page + .ev-page{break-before:page}
-  }
-
-  /* ============================================================
-     RESPONSIVIDADE MOBILE — fica no FIM de propósito: vem depois das
-     regras-base dos componentes, então os overrides vencem no cascade.
-     (O `screen` evita afetar o @media print.)
-     ============================================================ */
-  /* tabelas largas rolam na horizontal dentro do modal (sem quebrar o layout) */
-  @media screen and (max-width:768px){
-    .modal-body .doc-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-    .modal-body .doc-table-wrap .doc-table{min-width:520px}
-  }
-  @media screen and (max-width:560px){
-    .selector button{flex:1 1 100%;padding:13px}
-    .topbar-meta{display:none}
-    .modal-body .ev-grid,.modal-body .ev-grid.ev5{grid-template-columns:1fr}
-    /* barra do modal: só ícones, sem rótulos, para caber na largura do celular */
-    .modal-overlay{padding:14px 8px 30px}
-    .modal-toolbar{padding:9px 10px;gap:6px}
-    .mt-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .mt-btn{padding:7px 9px}
-    .mt-btn-label{display:none}
-    /* documento e metadados em COLUNA ÚNICA, com menos padding */
-    .doc{padding:18px 14px 22px}
-    .doc-head{gap:12px}
-    .doc-head h1{font-size:16px}
-    .doc-meta{grid-template-columns:1fr;gap:7px 0;padding:14px}
-    .doc-head .brand-logo svg{height:44px}
-    .modal-body .ev-filters{grid-template-columns:1fr 1fr}
-    .modal-body .ev-filters .evf-wide{grid-column:span 2}
-    /* tabelas: fonte/padding menores e colunas de texto QUEBRAM (menos rolagem) */
-    .doc-table{font-size:13px}
-    .doc-table thead th{padding:9px;font-size:11px}
-    .doc-table tbody td{padding:9px}
-    .td-tipo,.td-mun,.td-sentido{white-space:normal}
-    .doc-table tbody tr.clickable td{padding-top:11px;padding-bottom:11px}
-    /* tabela de resultados de linhas (classe .stack) vira CARTÕES: sem rolagem lateral,
-       cada linha é um bloco e cada célula mostra seu rótulo (data-label) */
-    .modal-body .doc-table-wrap .doc-table.stack{min-width:0}
-    .doc-table.stack thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0)}
-    .doc-table.stack tbody tr{display:block;border:1px solid var(--line);border-radius:10px;
-      margin-bottom:10px;padding:5px 13px;background:#fff;box-shadow:0 1px 2px rgba(10,40,70,.05)}
-    .doc-table.stack tbody tr.clickable:hover{background:#f7fbff}
-    .doc-table.stack tbody td{display:flex;justify-content:space-between;align-items:baseline;gap:14px;
-      border:0;border-bottom:1px dashed #eef2f6;padding:9px 0;text-align:right;white-space:normal}
-    .doc-table.stack tbody tr td:last-child{border-bottom:0}
-    .doc-table.stack tbody td::before{content:attr(data-label);font-family:'Archivo';font-weight:700;
-      font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
-      text-align:left;flex:0 0 auto;white-space:nowrap}
-    /* busca dentro do modal: input ocupa a linha; filtro/botão embaixo */
-    .doc-search{flex-wrap:wrap}
-    .doc-search input{flex:1 1 100%}
-    .doc-search select,.doc-search button{flex:1 1 auto}
-  }
-  @media screen and (max-width:480px){
-    main,.hero,.topbar-in,.footer-in{padding-left:14px;padding-right:14px}
-    .modal-body .loc-form{grid-template-columns:1fr}
-    .modal-body .doc-table-wrap .doc-table{min-width:460px}
-  }
-  @media screen and (max-width:380px){
-    .doc-table{font-size:12.5px}
-    .doc-table thead th,.doc-table tbody td{padding:8px 7px}
-  }
-</style>
+<link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.webmanifest">
 </head>
 <body>
 
 <header class="topbar">
   <div class="topbar-in">
-        <span id="brandLogo" class="brand-logo" role="img" aria-label="DETRO — Departamento de Transportes Rodoviários do RJ"></span>
+        <span id="brandLogo" class="brand-logo" role="img" aria-label="DETRO — Departamento de Transportes Rodoviários do RJ"><svg class="logo-detro" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3200 847" role="img" aria-label="DETRO - Departamento de Transportes Rodoviários do RJ" fill="currentColor">
+        <title>DETRO-RJ</title>
+        <g transform="translate(0.000000,847.000000) scale(0.100000,-0.100000)">
+        <path d="M16155 7148 c-59 -30 -114 -86 -141 -143 l-24 -50 0 -2160 c0 -2092
+      1 -2161 19 -2201 27 -59 86 -121 145 -152 l51 -27 2240 0 2240 0 50 27 c60 32
+      114 87 146 148 l24 45 0 2160 0 2160 -27 50 c-14 28 -47 70 -71 92 -87 80 141
+      73 -2366 73 l-2246 -1 -40 -21z m4515 -163 c65 -33 60 136 60 -2190 0 -1942
+      -1 -2119 -16 -2145 -9 -15 -29 -35 -44 -44 -26 -15 -210 -16 -2230 -16 l-2202
+      0 -39 39 -39 39 0 2122 c0 1940 1 2124 16 2149 9 15 28 35 43 44 24 15 210 16
+      2224 17 1945 0 2201 -2 2227 -15z"/>
+        <path d="M16496 6935 c-21 -7 -54 -28 -72 -46 -67 -65 -65 -30 -62 -896 l3
+      -781 30 -43 c18 -26 50 -53 80 -68 l49 -26 496 -2 495 -3 5 -1107 c6 -1221 1
+      -1132 67 -1195 63 -60 31 -58 868 -58 837 0 805 -2 868 58 66 63 61 -26 67
+      1194 l5 1108 485 2 486 3 49 25 c65 33 111 100 120 173 3 28 5 381 3 782 -3
+      729 -3 730 -25 771 -28 53 -83 100 -130 113 -26 8 -643 11 -1943 11 -1595 -1
+      -1911 -3 -1944 -15z m2149 -220 c222 -39 415 -141 575 -305 110 -113 183 -230
+      231 -373 67 -197 74 -356 25 -549 -96 -380 -396 -663 -800 -755 -112 -26 -356
+      -23 -469 5 -199 50 -352 132 -493 266 -145 136 -237 287 -286 468 -20 72 -23
+      106 -23 253 1 203 17 274 95 431 144 288 431 501 753 559 100 18 287 18 392 0z"/>
+        <path d="M18325 6559 c-279 -38 -540 -218 -663 -458 -130 -252 -129 -508 4
+      -761 69 -132 214 -275 353 -349 86 -45 236 -90 338 -102 161 -19 361 19 522
+      100 82 42 200 138 266 218 67 80 148 240 171 338 23 92 23 278 1 361 -55 205
+      -182 387 -352 504 -69 48 -204 108 -290 130 -91 23 -254 32 -350 19z"/>
+        <path d="M28945 7159 c-16 -4 -79 -18 -140 -29 -439 -84 -903 -286 -1251 -545
+      -368 -274 -663 -620 -860 -1010 -80 -159 -100 -206 -154 -360 -149 -426 -191
+      -933 -108 -1330 42 -204 125 -420 226 -590 227 -381 632 -687 1107 -836 290
+      -90 555 -129 889 -129 414 0 782 65 1161 205 130 48 435 198 550 270 242 154
+      532 407 691 605 342 425 539 896 611 1465 18 141 28 495 14 495 -5 0 -12 28
+      -16 63 -8 77 -33 222 -45 262 -5 17 -24 76 -41 132 -37 122 -128 312 -205 431
+      -198 304 -508 562 -859 716 -190 83 -461 164 -580 173 -33 3 -64 9 -70 14 -12
+      11 -879 10 -920 -2z m455 -1550 c234 -58 408 -219 485 -447 109 -323 6 -746
+      -245 -1015 -147 -157 -291 -242 -506 -298 -128 -33 -352 -34 -473 -1 -200 55
+      -349 167 -434 330 -146 277 -99 698 114 1014 55 81 186 213 268 268 233 157
+      532 213 791 149z"/>
+        <path d="M7020 7148 c0 -14 -17 -120 -120 -778 -40 -250 -83 -522 -95 -605
+      -13 -82 -31 -193 -39 -245 -9 -52 -32 -194 -52 -315 -20 -121 -38 -236 -40
+      -255 -4 -39 -33 -220 -65 -405 -11 -66 -24 -152 -29 -192 -5 -39 -21 -138 -34
+      -220 -14 -81 -44 -273 -67 -425 l-43 -278 -1823 0 -1823 0 0 -40 0 -40 1816 0
+      1816 0 -8 -42 c-4 -24 -8 -52 -9 -63 -2 -11 -11 -71 -20 -132 l-18 -113 -2393
+      0 -2394 0 0 -60 0 -60 2386 0 c2267 0 2385 -1 2380 -17 -3 -10 -15 -80 -26
+      -157 -11 -76 -23 -142 -26 -147 -3 -5 -1254 -9 -2995 -9 l-2989 0 0 -75 0 -75
+      4218 3 4217 2 170 27 c408 66 733 180 1050 371 698 419 1146 1113 1270 1967 8
+      52 19 177 26 276 31 461 -54 864 -250 1187 -240 395 -654 671 -1217 812 -221
+      56 -420 87 -659 105 -217 15 -2115 13 -2115 -2z m1945 -1513 c364 -82 545
+      -311 545 -689 0 -499 -234 -870 -645 -1025 -158 -59 -336 -91 -511 -91 l-117
+      0 6 43 c12 96 109 714 132 842 8 44 19 116 25 160 6 44 22 145 35 225 13 80
+      38 235 55 345 17 110 33 206 36 214 8 23 301 8 439 -24z"/>
+        <path d="M12196 7133 c-6 -29 -36 -219 -86 -543 -16 -102 -40 -255 -54 -340
+      -14 -85 -34 -216 -46 -290 -38 -245 -69 -443 -100 -630 -16 -102 -38 -243 -49
+      -315 -11 -71 -31 -200 -45 -285 -14 -85 -43 -272 -66 -415 -23 -143 -54 -343
+      -70 -445 -16 -102 -43 -273 -60 -380 -17 -107 -40 -252 -51 -322 -10 -70 -32
+      -210 -48 -310 -17 -101 -37 -231 -45 -289 -9 -59 -19 -120 -22 -138 l-7 -31
+      1629 2 1628 3 8 45 c8 43 45 274 108 674 17 104 33 202 35 218 21 118 55 351
+      52 355 -2 2 -339 3 -749 3 -409 0 -747 2 -749 5 -3 2 0 39 7 82 7 43 22 143
+      34 223 12 80 23 146 25 148 1 2 297 3 656 2 360 0 659 3 665 8 7 4 21 70 33
+      147 12 77 23 152 26 166 3 15 16 98 30 185 13 88 45 287 70 443 25 157 45 288
+      45 293 0 4 -299 8 -664 8 l-664 0 5 38 c3 20 19 120 37 222 l31 185 730 5 729
+      5 13 80 c7 44 27 172 43 285 17 113 33 212 35 220 3 8 13 76 24 150 36 244 81
+      524 87 542 5 17 -64 18 -1600 18 l-1604 0 -6 -27z"/>
+        <path d="M22227 7083 c-30 -202 -137 -884 -143 -908 -2 -11 -18 -110 -34 -220
+      -17 -110 -41 -270 -55 -355 -14 -85 -36 -229 -50 -319 -14 -90 -36 -232 -50
+      -315 -14 -83 -33 -209 -44 -281 -11 -71 -31 -200 -45 -285 -60 -379 -109 -689
+      -136 -860 -74 -477 -168 -1073 -176 -1113 l-6 -27 844 2 843 3 17 110 c10 61
+      25 155 34 210 8 55 31 201 50 325 40 253 71 451 108 685 14 88 26 164 26 168
+      0 5 7 7 17 5 12 -2 42 -79 109 -278 51 -151 156 -462 234 -690 78 -228 150
+      -443 161 -477 l20 -63 989 0 c545 0 990 3 990 6 0 7 -88 180 -553 1088 -263
+      514 -305 582 -416 675 -75 63 -69 75 50 116 648 219 941 587 1025 1290 18 149
+      13 385 -10 500 -51 251 -154 444 -324 607 -230 222 -522 345 -982 416 -91 14
+      -263 16 -1296 19 l-1191 4 -6 -38z m1878 -1278 c83 -22 155 -65 187 -111 74
+      -107 55 -335 -38 -471 -45 -65 -132 -125 -221 -153 -70 -21 -238 -40 -366 -40
+      l-79 0 6 28 c3 15 13 72 21 127 9 55 18 114 21 130 3 17 16 100 29 185 38 248
+      47 304 51 319 6 19 303 8 389 -14z"/>
+        <path d="M25368 2273 c-11 -27 -36 -81 -54 -122 -19 -41 -34 -76 -34 -78 0 -2
+      19 -3 42 -1 41 3 43 5 124 120 45 64 79 119 76 122 -3 3 -34 6 -69 6 l-64 0
+      -21 -47z"/>
+        <path d="M22718 2100 c2 -109 -1 -190 -6 -190 -5 0 -17 10 -28 21 -51 58 -188
+      80 -291 45 -60 -20 -133 -92 -164 -162 -85 -191 -55 -473 64 -595 55 -57 100
+      -74 192 -74 91 0 146 22 203 82 l32 34 0 -55 0 -56 85 0 85 0 0 570 0 570 -87
+      0 -88 0 3 -190z m-90 -217 c64 -47 91 -122 99 -273 8 -146 -33 -285 -100 -334
+      -22 -16 -43 -21 -90 -21 -77 0 -107 19 -144 95 -26 51 -28 65 -31 202 -3 129
+      -1 155 17 210 25 73 43 98 91 128 43 26 118 23 158 -7z"/>
+        <path d="M320 1680 l0 -530 213 0 c231 0 285 8 386 57 108 52 206 179 246 318
+      27 95 24 250 -8 347 -44 137 -107 213 -227 277 -92 49 -167 61 -402 61 l-208
+      0 0 -530z m368 430 c120 -22 213 -96 264 -208 28 -59 32 -80 36 -182 7 -182
+      -35 -309 -129 -394 -66 -59 -122 -76 -255 -76 l-103 0 0 428 c-1 236 2 432 6
+      435 10 10 123 8 181 -3z"/>
+        <path d="M12232 2163 l3 -47 148 3 147 3 0 -484 -1 -483 93 -3 93 -3 0 483 0
+      483 140 1 c77 0 141 4 143 7 1 4 2 25 2 47 l0 40 -386 0 -385 0 3 -47z"/>
+        <path d="M20520 1680 l0 -530 96 0 95 0 -3 240 c-2 132 -1 240 2 239 8 -1 303
+      -417 319 -450 l15 -29 113 0 c62 0 113 2 113 5 0 3 -8 13 -17 23 -33 32 -348
+      453 -351 468 -2 8 4 14 17 14 41 0 136 44 177 82 58 53 77 107 73 201 -4 61
+      -10 82 -34 122 -39 62 -87 100 -158 125 -49 17 -82 20 -257 20 l-200 0 0 -530z
+      m338 435 c61 -18 105 -66 121 -131 40 -159 -47 -273 -209 -274 l-65 0 2 207
+      c2 115 3 209 3 211 0 8 105 -1 148 -13z"/>
+        <path d="M24683 2198 c-30 -15 -48 -60 -34 -87 18 -32 52 -51 94 -51 93 0 139
+      69 82 125 -19 20 -34 25 -72 24 -26 0 -58 -5 -70 -11z"/>
+        <path d="M26362 2200 c-26 -11 -45 -55 -37 -87 11 -47 106 -69 164 -38 48 24
+      55 72 16 110 -19 20 -34 25 -72 24 -26 0 -58 -4 -71 -9z"/>
+        <path d="M30627 1683 l3 -528 91 0 90 0 -1 240 c0 142 3 236 8 230 23 -25 305
+      -421 318 -446 l15 -29 114 0 c103 0 140 8 102 23 -12 5 -367 468 -367 479 0 3
+      19 8 42 12 92 15 173 69 210 140 31 58 31 184 1 242 -30 57 -79 102 -143 133
+      -53 25 -62 26 -270 29 l-215 3 2 -528z m359 424 c97 -51 138 -192 85 -295 -33
+      -66 -86 -94 -182 -100 l-79 -5 0 213 0 213 74 -6 c40 -3 87 -12 102 -20z"/>
+        <path d="M31488 1619 l-3 -592 -26 -19 c-22 -17 -29 -18 -55 -7 -16 7 -37 19
+      -47 28 -20 17 -18 19 -50 -46 l-26 -51 42 -17 c23 -10 78 -20 122 -22 73 -4
+      85 -2 134 24 95 49 90 9 93 696 l3 597 -92 0 -93 0 -2 -591z"/>
+        <path d="M4498 2148 l-67 -10 -3 -77 -3 -76 -62 -3 -63 -3 0 -39 0 -39 63 -3
+      62 -3 5 -335 c6 -376 6 -377 78 -407 41 -17 145 -14 195 6 24 9 27 16 27 57 0
+      40 -2 45 -17 38 -10 -4 -34 -9 -54 -12 -68 -8 -69 -1 -69 350 l0 308 70 0 70
+      0 0 40 0 39 -67 3 -68 3 -1 85 c0 97 5 92 -96 78z"/>
+        <path d="M8808 2148 l-67 -10 -3 -77 -3 -76 -61 -3 -62 -3 3 -37 2 -37 59 -5
+      59 -5 5 -335 c6 -375 5 -371 76 -405 40 -19 141 -17 197 4 24 9 27 16 27 57 0
+      40 -2 45 -17 38 -35 -15 -89 -16 -101 -2 -8 10 -12 105 -12 329 l-1 314 65 3
+      66 3 0 39 0 39 -67 3 -67 3 0 85 c-1 97 4 93 -98 78z"/>
+        <path d="M18208 2147 l-68 -10 0 -79 0 -78 -60 0 -60 0 0 -40 0 -40 59 0 60 0
+      3 -334 c3 -320 4 -336 24 -363 35 -47 80 -65 154 -60 36 3 77 10 93 16 24 9
+      27 16 27 56 0 42 -2 45 -19 35 -29 -15 -77 -12 -95 6 -14 13 -16 57 -16 330
+      l0 314 65 0 65 0 0 40 0 40 -65 0 -64 0 -3 87 c-3 100 2 95 -100 80z"/>
+        <path d="M10877 1960 c1 -88 0 -160 -2 -160 -2 0 -24 14 -48 31 -86 60 -224
+      48 -302 -28 -108 -104 -137 -361 -60 -519 75 -153 251 -192 371 -82 l44 41 0
+      -47 0 -47 73 3 c39 2 71 6 70 11 -2 4 -3 221 -3 482 l0 475 -72 0 -73 0 2
+      -160z m-55 -209 c40 -44 60 -127 60 -241 0 -168 -39 -253 -129 -280 -36 -11
+      -46 -10 -79 6 -51 25 -79 69 -94 150 -14 73 -8 223 10 287 15 49 64 105 104
+      115 46 12 97 -3 128 -37z"/>
+        <path d="M29110 1960 c0 -88 -3 -160 -6 -160 -3 0 -19 11 -36 25 -82 69 -239
+      54 -320 -32 -100 -105 -123 -354 -47 -510 48 -99 115 -143 220 -143 55 0 143
+      41 167 78 l17 26 5 -44 5 -45 68 0 67 0 3 483 2 482 -72 0 -73 0 0 -160z m-71
+      -187 c14 -11 37 -41 51 -69 23 -45 25 -60 25 -189 0 -133 -1 -143 -28 -197
+      -31 -62 -62 -88 -117 -95 -80 -11 -141 54 -161 171 -13 75 -7 216 11 279 12
+      41 62 104 94 118 30 13 95 3 125 -18z"/>
+        <path d="M1614 1985 c-81 -17 -136 -46 -186 -98 -154 -157 -152 -502 3 -642
+      117 -105 332 -135 504 -70 39 14 73 29 77 33 6 6 -9 89 -18 100 -1 2 -20 -8
+      -41 -21 -133 -84 -294 -81 -379 8 -50 52 -74 115 -81 218 l-6 77 287 0 c325 0
+      295 -11 275 95 -31 167 -121 270 -265 300 -82 17 -91 17 -170 0z m156 -95 c47
+      -24 85 -78 99 -140 20 -87 35 -80 -178 -80 -105 0 -192 3 -194 8 -8 14 24 117
+      48 153 28 43 95 79 148 79 21 0 56 -9 77 -20z"/>
+        <path d="M2553 1990 c-55 -12 -112 -42 -147 -79 -17 -17 -32 -31 -35 -31 -3 0
+      -4 22 -3 50 l4 50 -86 0 -86 0 0 -535 0 -535 85 0 85 0 0 159 0 160 51 -34
+      c64 -44 119 -59 190 -52 101 9 197 76 246 170 67 132 69 387 4 516 -61 119
+      -187 185 -308 161z m86 -129 c65 -47 91 -128 91 -293 0 -206 -42 -305 -142
+      -338 -30 -9 -46 -9 -75 1 -58 19 -78 35 -106 87 -53 97 -56 365 -7 467 43 90
+      166 129 239 76z"/>
+        <path d="M3282 1990 c-30 -5 -85 -18 -124 -31 l-70 -22 7 -51 c8 -61 10 -64
+      38 -46 131 83 239 94 307 30 28 -26 31 -34 28 -82 -3 -47 -7 -55 -36 -75 -19
+      -12 -91 -40 -160 -62 -209 -66 -267 -127 -267 -277 0 -72 3 -86 30 -129 22
+      -36 45 -57 85 -78 49 -26 63 -28 125 -25 80 5 144 30 198 78 21 18 39 31 40
+      29 1 -2 10 -21 20 -42 27 -59 94 -80 179 -57 52 15 68 34 68 82 0 34 -3 39
+      -17 33 -38 -16 -61 -16 -76 0 -15 15 -17 49 -17 302 0 269 -1 287 -21 322 -28
+      50 -74 79 -155 96 -75 16 -101 17 -182 5z m163 -655 c-51 -89 -186 -114 -246
+      -47 -47 52 -50 132 -9 199 25 42 49 57 172 107 l103 41 3 -128 c2 -123 1 -131
+      -23 -172z"/>
+        <path d="M4131 1987 c-29 -7 -58 -24 -83 -49 l-38 -38 0 40 0 40 -82 0 -83 0
+      2 -412 3 -413 85 -3 85 -3 0 297 c0 280 1 300 21 340 23 49 82 84 142 84 l37
+      0 0 65 c0 73 0 73 -89 52z"/>
+        <path d="M5090 1989 c-61 -8 -176 -42 -193 -58 -4 -5 -2 -29 5 -54 12 -45 29
+      -59 44 -36 15 24 129 69 177 69 127 0 199 -98 131 -179 -20 -25 -49 -38 -150
+      -70 -202 -63 -269 -118 -294 -236 -20 -99 24 -205 107 -257 32 -19 51 -23 123
+      -23 95 1 146 20 209 79 21 19 35 27 38 19 11 -30 51 -79 73 -90 36 -18 99 -15
+      148 7 41 18 42 20 42 66 0 40 -2 45 -17 39 -39 -16 -54 -17 -68 -5 -13 10 -15
+      56 -15 289 -1 336 -8 364 -100 411 -33 16 -150 42 -181 39 -8 -1 -43 -5 -79
+      -10z m190 -474 c0 -105 -3 -132 -20 -164 -25 -50 -71 -88 -116 -97 -94 -18
+      -163 28 -172 114 -10 108 43 171 190 223 49 18 91 36 94 40 17 29 24 -4 24
+      -116z"/>
+        <path d="M5995 1986 c-56 -14 -86 -28 -132 -63 l-33 -24 0 40 0 41 -82 0 -83
+      0 2 -412 3 -413 82 -3 83 -3 0 314 c0 285 2 315 18 340 53 82 195 98 258 31
+      l24 -26 2 -326 3 -327 82 -3 83 -3 0 315 c0 304 1 315 21 343 35 47 82 68 149
+      67 67 0 111 -22 126 -61 5 -14 9 -168 9 -344 l0 -319 85 0 85 0 0 320 c0 366
+      -5 403 -58 460 -84 87 -273 85 -391 -4 l-44 -33 -37 37 c-54 54 -165 79 -255
+      56z"/>
+        <path d="M7252 1989 c-89 -15 -148 -46 -206 -110 -87 -94 -127 -238 -107 -384
+      24 -172 96 -270 240 -327 47 -18 76 -22 181 -22 113 0 132 2 200 28 41 16 76
+      30 78 31 3 2 -19 97 -23 103 -2 2 -24 -10 -50 -27 -26 -16 -80 -38 -120 -47
+      -70 -17 -77 -17 -140 1 -79 21 -117 51 -150 115 -24 47 -45 144 -45 208 l0 32
+      285 0 285 0 0 24 c0 157 -108 325 -231 360 -76 21 -136 26 -197 15z m163 -114
+      c42 -31 72 -91 81 -159 l7 -46 -191 0 c-105 0 -193 3 -195 8 -9 14 23 112 49
+      151 55 84 172 105 249 46z"/>
+        <path d="M8170 1987 c-69 -16 -95 -30 -142 -75 l-38 -36 0 52 0 52 -82 0 -83
+      0 2 -412 3 -413 82 -3 83 -3 0 288 c0 158 3 300 7 315 11 36 53 85 92 105 44
+      23 143 22 184 -2 60 -36 63 -51 62 -392 l-1 -308 86 -3 86 -3 -3 343 c-3 378
+      -2 371 -69 436 -56 55 -173 80 -269 59z"/>
+        <path d="M9435 1989 c-204 -30 -329 -212 -312 -454 8 -105 28 -170 76 -241 74
+      -111 190 -162 340 -151 183 14 310 143 342 345 30 198 -52 392 -198 465 -43
+      22 -72 29 -163 41 -14 2 -52 0 -85 -5z m169 -113 c139 -105 142 -495 6 -609
+      -88 -74 -205 -47 -263 62 -38 70 -49 125 -48 245 1 147 26 230 88 288 40 38
+      70 48 130 45 37 -3 61 -11 87 -31z"/>
+        <path d="M13282 1985 c-55 -17 -89 -40 -97 -65 -8 -25 -27 -27 -24 -2 6 61 5
+      62 -81 62 l-80 0 0 -415 0 -416 85 3 85 3 3 307 c2 292 3 308 23 334 34 46 70
+      67 123 72 l51 5 0 63 c0 60 -1 64 -22 63 -13 0 -42 -6 -66 -14z"/>
+        <path d="M13715 1990 c-59 -8 -183 -45 -197 -58 -8 -9 13 -102 23 -102 5 0 30
+      14 56 30 105 67 219 66 282 -1 23 -25 29 -86 11 -120 -14 -25 -67 -51 -165
+      -78 -167 -48 -261 -113 -284 -198 -31 -112 5 -231 87 -288 41 -28 50 -30 130
+      -30 99 1 152 20 214 80 l36 36 11 -34 c20 -60 54 -82 124 -82 35 0 75 7 92 15
+      26 13 30 21 33 63 3 44 -8 61 -23 37 -9 -14 -52 -12 -62 3 -4 6 -10 146 -13
+      309 -5 281 -6 298 -26 325 -58 78 -182 113 -329 93z m180 -605 c-7 -41 -60
+      -104 -101 -121 -41 -17 -101 -18 -134 -1 -13 7 -35 28 -48 47 -20 29 -23 45
+      -20 92 7 98 49 134 243 210 l60 23 3 -110 c2 -60 1 -124 -3 -140z"/>
+        <path d="M14665 1996 c-5 -2 -36 -9 -67 -16 -45 -9 -68 -21 -108 -57 l-50 -45
+      0 51 0 51 -82 0 -83 0 2 -412 3 -413 82 -3 83 -3 0 298 0 298 25 44 c55 95
+      199 119 279 45 l36 -32 2 -324 3 -323 85 -3 85 -3 0 319 c0 257 -3 328 -15
+      370 -27 90 -102 142 -225 156 -25 3 -49 4 -55 2z"/>
+        <path d="M15350 1990 c-183 -31 -279 -188 -205 -336 27 -55 85 -99 172 -133
+      90 -35 171 -80 187 -103 22 -31 20 -86 -4 -125 -53 -88 -199 -90 -323 -5 -25
+      18 -47 32 -50 32 -5 0 -30 -111 -25 -114 1 -2 34 -15 72 -30 134 -53 300 -45
+      393 17 69 47 103 101 110 174 8 85 -2 123 -43 171 -34 41 -78 65 -252 143 -40
+      18 -80 42 -88 53 -30 43 -9 117 43 152 21 14 46 19 98 19 66 0 105 -13 196
+      -62 6 -3 29 73 29 95 0 11 -91 38 -174 52 -66 11 -71 11 -136 0z"/>
+        <path d="M16173 1990 c-54 -11 -95 -33 -144 -77 l-39 -35 0 51 0 51 -82 0 -83
+      0 0 -535 0 -536 83 3 84 3 -1 158 c-1 86 1 157 3 157 3 0 26 -16 51 -35 73
+      -55 156 -69 249 -41 145 44 222 168 233 376 10 187 -27 312 -118 394 -64 58
+      -154 83 -236 66z m94 -133 c65 -44 100 -178 90 -342 -8 -116 -30 -187 -72
+      -234 -85 -94 -206 -68 -267 58 -19 40 -22 67 -26 192 -3 115 -1 159 12 202 39
+      134 163 192 263 124z"/>
+        <path d="M16965 1989 c-216 -31 -339 -228 -307 -491 22 -176 112 -296 254
+      -339 127 -39 273 -13 366 66 163 138 186 457 46 641 -73 95 -212 143 -359 123z
+      m144 -99 c22 -11 48 -31 60 -46 80 -102 94 -369 26 -504 -78 -155 -248 -154
+      -324 2 -74 150 -55 413 37 512 54 57 132 71 201 36z"/>
+        <path d="M17855 1985 c-36 -9 -59 -24 -82 -51 l-33 -37 0 41 0 42 -82 0 -83 0
+      2 -412 3 -413 82 -3 83 -3 0 298 c0 283 1 300 21 338 26 50 84 85 142 85 l42
+      0 0 65 c0 74 -2 75 -95 50z"/>
+        <path d="M18840 1989 c-76 -13 -151 -50 -198 -97 -122 -122 -156 -377 -72
+      -548 69 -142 219 -214 420 -201 78 5 208 41 231 64 7 7 -7 89 -17 102 -2 2
+      -17 -7 -34 -19 -46 -33 -139 -62 -200 -63 -83 -2 -139 18 -186 68 -50 51 -73
+      113 -81 218 l-6 77 287 0 286 0 0 23 c-1 46 -29 156 -54 204 -65 130 -217 199
+      -376 172z m163 -112 c41 -31 73 -93 82 -159 l7 -48 -190 0 c-105 0 -193 3
+      -195 8 -9 14 24 117 49 155 52 79 174 100 247 44z"/>
+        <path d="M19585 1986 c-116 -28 -187 -93 -207 -187 -15 -71 1 -132 47 -187 31
+      -36 68 -56 245 -134 74 -33 100 -64 100 -120 0 -95 -92 -154 -202 -128 -57 14
+      -116 40 -160 73 -15 11 -29 19 -31 16 -2 -2 -9 -26 -15 -54 -13 -60 -10 -64
+      87 -97 94 -33 254 -33 326 0 144 66 204 218 133 343 -32 57 -59 74 -281 172
+      -54 24 -97 68 -97 99 0 42 31 87 77 109 60 29 131 23 215 -19 69 -34 73 -33
+      84 32 8 46 3 50 -86 70 -100 22 -180 26 -235 12z"/>
+        <path d="M21635 1993 c-193 -26 -310 -147 -335 -348 -26 -207 53 -388 205
+      -465 65 -34 72 -35 174 -35 95 0 112 3 161 27 66 32 142 105 170 162 49 104
+      63 244 35 364 -38 159 -132 255 -281 287 -70 15 -75 15 -129 8z m102 -94 c108
+      -40 168 -215 143 -414 -18 -141 -71 -224 -163 -254 -70 -23 -159 23 -200 104
+      -67 133 -60 373 14 489 45 72 132 103 206 75z"/>
+        <path d="M23358 1989 c-203 -30 -333 -215 -314 -450 15 -183 88 -305 220 -366
+      54 -24 73 -28 161 -28 89 0 107 3 162 29 121 55 194 165 215 320 20 151 -14
+      287 -98 384 -48 56 -107 89 -190 107 -76 16 -75 16 -156 4z m136 -93 c45 -19
+      90 -77 112 -144 15 -45 19 -87 19 -192 -1 -161 -20 -225 -85 -284 -54 -49
+      -110 -63 -166 -41 -101 38 -154 153 -154 331 0 135 33 248 87 296 49 45 128
+      59 187 34z"/>
+        <path d="M25260 1989 c-30 -5 -86 -19 -123 -31 l-69 -22 7 -46 c9 -63 18 -68
+      66 -36 121 81 257 73 302 -17 24 -48 12 -94 -32 -124 -19 -13 -84 -38 -145
+      -57 -142 -45 -211 -86 -250 -150 -27 -43 -30 -58 -31 -125 0 -88 21 -138 79
+      -188 47 -42 96 -57 171 -51 73 6 137 33 188 78 21 18 39 31 40 29 1 -2 11 -22
+      22 -43 25 -49 71 -70 137 -63 26 3 61 13 77 22 28 14 31 20 31 61 0 40 -2 45
+      -17 39 -39 -16 -54 -17 -68 -5 -13 10 -15 54 -15 277 0 298 -6 338 -56 389
+      -56 55 -196 84 -314 63z m198 -486 c-4 -134 -19 -177 -74 -219 -44 -34 -127
+      -43 -173 -19 -87 45 -87 203 0 266 41 29 233 107 243 98 4 -4 6 -60 4 -126z"/>
+        <path d="M26112 1985 c-55 -17 -89 -40 -97 -65 -11 -34 -25 -22 -25 20 l0 40
+      -80 0 -80 0 0 -415 0 -415 84 0 85 0 3 309 c3 295 4 311 24 337 34 46 70 67
+      123 72 l51 5 0 63 c0 60 -1 64 -22 63 -13 0 -42 -6 -66 -14z"/>
+        <path d="M27000 1989 c-58 -10 -142 -46 -176 -76 -47 -42 -95 -118 -115 -184
+      -28 -92 -24 -253 9 -343 34 -93 95 -165 176 -206 66 -34 73 -35 175 -35 92 1
+      113 4 161 26 151 71 228 219 217 424 -6 118 -26 185 -76 251 -87 115 -223 168
+      -371 143z m163 -108 c146 -90 152 -519 9 -619 -72 -50 -138 -49 -211 6 -113
+      84 -134 420 -36 562 54 79 158 101 238 51z"/>
+        <path d="M27782 1985 c-133 -29 -212 -116 -212 -232 1 -97 66 -179 178 -224
+      101 -40 190 -88 206 -111 22 -31 20 -86 -4 -125 -52 -87 -193 -90 -317 -8 -29
+      19 -54 35 -56 35 -6 0 -29 -111 -25 -116 3 -2 38 -16 79 -31 63 -23 90 -27
+      184 -27 94 -1 117 3 160 22 103 47 154 123 155 230 0 112 -42 167 -175 227
+      -219 98 -225 102 -225 160 0 43 32 89 75 110 63 29 162 10 276 -52 6 -3 29 73
+      29 95 0 11 -96 39 -180 52 -77 12 -69 12 -148 -5z"/>
+        <path d="M23844 1965 c3 -9 40 -109 82 -223 41 -114 91 -250 111 -302 49 -134
+      95 -263 99 -277 4 -16 134 -18 134 -3 0 8 262 720 295 803 6 15 1 17 -36 17
+      l-44 0 -104 -283 c-58 -155 -111 -298 -119 -317 l-14 -35 -105 290 c-57 160
+      -107 302 -110 318 l-5 27 -95 0 c-82 0 -94 -2 -89 -15z"/>
+        <path d="M24660 1565 l0 -415 85 0 85 0 0 415 0 415 -85 0 -85 0 0 -415z"/>
+        <path d="M26340 1575 c0 -223 -1 -408 -2 -412 -2 -5 36 -9 85 -11 l87 -3 0
+      416 0 415 -85 0 -85 0 0 -405z"/>
+        <path d="M11371 1851 c-149 -56 -217 -178 -209 -375 7 -159 59 -246 180 -302
+      57 -26 73 -29 173 -29 91 0 121 4 173 24 67 26 74 38 52 97 -10 24 -12 25 -28
+      11 -92 -81 -272 -82 -343 -1 -37 43 -50 84 -64 202 l-5 42 246 0 245 0 -6 48
+      c-19 138 -65 218 -155 266 -72 39 -179 46 -259 17z m169 -73 c49 -25 83 -80
+      93 -150 l6 -38 -166 0 -166 0 7 43 c11 64 49 121 98 146 54 27 73 26 128 -1z"/>
+        <path d="M29625 1860 c-156 -39 -245 -164 -245 -349 0 -155 65 -280 175 -336
+      52 -27 68 -30 149 -30 72 0 101 5 137 22 129 59 199 204 186 382 -7 95 -58
+      204 -117 251 -74 59 -192 84 -285 60z m155 -89 c71 -51 107 -161 98 -305 -12
+      -188 -115 -293 -232 -236 -83 40 -120 137 -114 298 3 91 8 116 31 164 48 98
+      141 132 217 79z"/>
+        </g>
+      </svg></span>
     <div class="topbar-meta">
       <b>Coordenadoria Técnica</b>
       Cadastro de Linhas Regulares<span id="rtDot" class="rt-dot" title="Conexão em tempo real"></span>
@@ -676,7 +359,7 @@
 </div>
 
 <!-- Banner linha ativa -->
-<div style="max-width:1140px;margin:0 auto;padding:0 24px">
+<div class="banner-wrap">
   <div id="lineBanner" class="line-banner" style="display:none;margin-top:20px"></div>
 </div>
 
@@ -684,15 +367,14 @@
 
 <footer>
   <div class="footer-in">
-    <span>DIVAT — Cadastro de Linhas Regulares</span>
+    <span>DETRO/RJ · DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Conectado · Supabase · <span class="pill" style="background:#e4f4ec;color:var(--green)">bd_teste</span> · <span class="pill" id="verTag" style="background:#dfeaf6;color:var(--navy)">build 21/07-A</span></span>
+    <span class="right">Dados atualizados em tempo real · <span class="pill pill-ver" id="verTag">build 22/07-A</span></span>
   </div>
 </footer>
 
-<!-- supabase-js (vendorado, v2.110.7): usado APENAS para o canal Realtime (as consultas usam REST/fetch).
-     Vendorado em vez de CDN → versão fixa, mesma origem, sem dependência de terceiro em runtime. -->
-<script src="vendor/supabase-js-2.110.7.min.js"></script>
+<!-- supabase-js (vendorado) é usado SÓ para o Realtime e agora é injetado pelo app.js após a
+     carga (não bloqueia a primeira pintura). As consultas usam REST/fetch direto. -->
 <script src="app.js"></script>
 </body>
 </html>

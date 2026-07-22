@@ -17,7 +17,7 @@ function fmtTime(t){ if(!t) return '—'; const m=String(t).match(/^(\d{2}):(\d{
 // app.js:736 — data ISO (YYYY-MM-DD) → DD/MM/YYYY
 function fmtDate(d){ if(!d) return '—'; const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:d; }
 // app.js:737 — escape de HTML (relevante p/ XSS)
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 // app.js:738
 const enc = s => encodeURIComponent(s);
 // app.js:760 — sanitiza termo p/ uso dentro de padrão ilike do PostgREST

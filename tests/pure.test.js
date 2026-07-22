@@ -38,6 +38,7 @@ console.log('esc');
 eq(P.esc('<b>'),   '&lt;b&gt;',       'esc < >');
 eq(P.esc('a&b'),   'a&amp;b',         'esc &');
 eq(P.esc('"x"'),   '&quot;x&quot;',   'esc aspas');
+eq(P.esc("'x'"),   '&#39;x&#39;',     'esc apóstrofo (atributos single-quoted)');
 eq(P.esc(null),    '',                'esc null');
 eq(P.esc(undefined),'',               'esc undefined');
 ok(P.esc('<img src=x onerror=alert(1)>').indexOf('<') === -1, 'esc neutraliza tag (XSS)');

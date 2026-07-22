@@ -10,14 +10,18 @@ empresas, relatórios). Os dados são **alimentados pelo dono direto no Supabase
 exibe e **atualiza ao vivo** (Realtime).
 
 ## Arquitetura (importante)
-- **Frontend = `index.html` (HTML + CSS embutido) + `app.js` (todo o JS, ~2,5k linhas)** —
-  zero-build: sem framework, sem `package.json`, `<script src>` clássico no fim do `<body>`.
-  Todo JS novo vai no `app.js` — o `tests/check.js` **falha** se aparecer `<script>` inline no
-  `index.html` (a CSP publica `script-src 'self'` e bloquearia). Racional e regras de navegação:
-  **`docs/estrutura-frontend.md`**.
+- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (todo o JS, ~2,3k
+  linhas, num IIFE)** — zero-build: sem framework, sem `package.json`, `<script src>` clássico no
+  fim do `<body>`. Todo JS novo vai no `app.js` (o `tests/check.js` **falha** se aparecer
+  `<script>` inline no `index.html` — a CSP publica `script-src 'self'` e bloquearia) e todo CSS
+  novo vai em **classe no `styles.css`** (não em `style=""` no template). Há **rotas por hash**
+  (`#/linha/<cod>`, `#/consulta/<view>`) — deep link e Voltar do navegador fecham o modal.
+  Racional e regras de navegação: **`docs/estrutura-frontend.md`**.
 - As consultas usam **REST do Supabase via `fetch`** (PostgREST). O **supabase-js** é usado **só**
-  para o canal **Realtime** — e é **vendorado** em `vendor/supabase-js-2.110.7.min.js` (versão
-  fixa, mesma origem, sem CDN em runtime; ver Armadilhas para atualizar).
+  para o canal **Realtime** — é **vendorado** em `vendor/supabase-js-2.110.7.min.js` (versão
+  fixa, mesma origem, sem CDN em runtime; ver Armadilhas para atualizar) e **injetado
+  dinamicamente pelo `app.js`** (seção `REALTIME`; não há `<script>` dele no `index.html` — não
+  bloqueia a primeira pintura).
 - **Fontes vendoradas** em `vendor/fonts/` (Archivo, IBM Plex Mono/Sans — subset latin, dos
   pacotes `@fontsource` 5.3.0); `@font-face` no `<style>` do `index.html`. **Nenhum terceiro
   externo em runtime.** Para atualizar: `npm pack @fontsource/<família>`, extrair
@@ -101,8 +105,9 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | `CLIQUE NOS CARDS` | — | Liga o clique do card → abre a view. |
 | `UTILITÁRIOS` | `groupBy`, `countBy`, `fmtMoney` | Agregação dos relatórios e moeda pt-BR. |
 | `TOAST` | `toast` | Avisos transitórios. |
-| `REALTIME` | `RT_TABLES`, `invalidateCaches`, `scheduleReload`, `rowMatchesActiveLine`, `onRealtime` | Assina mudanças do Supabase e recarrega a tela aberta. |
-| `AUTO-ATUALIZAÇÃO` | `checarNovaVersao` | Detector de novo deploy (ETags do `index.html` E do `app.js`) que recarrega sozinho. |
+| `REALTIME` | `RT_TABLES`, `invalidateCaches`, `scheduleReload`, `rowMatchesActiveLine`, `onRealtime`, `initRealtime` | Assina mudanças do Supabase e recarrega a tela aberta (supabase-js injetado dinamicamente aqui). |
+| `AUTO-ATUALIZAÇÃO` | `checarNovaVersao` | Detector de novo deploy (ETags de `index.html`, `app.js` e `styles.css`) que recarrega sozinho. |
+| `ROTAS (hash)` | `syncHash`, `applyRoute` | Deep link (`#/linha/…`, `#/consulta/…`) e Voltar do navegador fechando o modal. |
 
 A lógica **pura** dessas seções tem testes em `tests/` (cópias verbatim nos `*.harness.js`,
 guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegador).
@@ -119,9 +124,9 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
 - **Atualização automática para todos os usuários** (sem limpar cache):
   1. `Cache-Control: public, max-age=0, must-revalidate` (no `vercel.json`) → cada visita
      revalida (`index.html` **e** `app.js`).
-  2. Detector de versão (`checarNovaVersao` no `app.js`): compara os **ETags** de `/index.html`
-     e `/app.js` a cada ~3 min e ao focar a aba; se mudou, recarrega sozinho (espera fechar o
-     modal aberto).
+  2. Detector de versão (`checarNovaVersao` no `app.js`): compara os **ETags** de `/index.html`,
+     `/app.js` e `/styles.css` a cada ~3 min e ao focar a aba; se mudou, recarrega sozinho
+     (espera fechar o modal aberto). Arquivo estático novo de primeira ordem → entra na lista.
 - **Carimbo de versão** no rodapé (`#verTag`, ex.: `build 21/07-A`). Ao publicar algo que o
   usuário precisa confirmar, **incremente esse texto**.
 - O `vercel` CLI **não** funciona pelo ambiente do Claude (rede de saída bloqueada). Os caminhos
