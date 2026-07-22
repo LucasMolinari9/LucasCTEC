@@ -1,31 +1,45 @@
-# Estrutura e navegação do frontend (`index.html` + `app.js`) — Portal DIVAT
+# Estrutura e navegação do frontend (`index.html` + `styles.css` + `app.js`) — Portal DIVAT
 
-> **Por que este arquivo existe:** o frontend são **dois arquivos**: `index.html` (HTML + CSS
-> embutido) e **`app.js`** (todo o JS, ~2,5k linhas — extraído do HTML em 21/07/2026). Continua
+> **Por que este arquivo existe:** o frontend são **três arquivos**: `index.html` (HTML),
+> `styles.css` (todo o CSS — extraído do HTML em 22/07/2026) e **`app.js`** (todo o JS,
+> ~2,3k linhas — extraído do HTML em 21/07/2026, envolto num IIFE desde 22/07/2026). Continua
 > **zero-build**: nada de bundler, framework ou `package.json`. Este doc registra (1) *por que*
 > essa forma, (2) *como navegar* no `app.js` sem se perder, e (3) as **regras de segurança** para
 > reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do `CLAUDE.md` (que lista as
 > seções e funções-chave) e os relatórios `analise-separacao.md` / `analise-duplicacao.md` (que são
 > diagnósticos de acoplamento/reuso, não guias de navegação).
 
-## 1. Por que `index.html` + `app.js` (e por que **não** fatiar mais)
+## 1. Por que `index.html` + `styles.css` + `app.js` (e por que **não** fatiar mais)
 
 Até 21/07/2026 o JS era embutido no `index.html`. Foi extraído para um único `app.js` por **um**
 motivo: derrubar o `'unsafe-inline'` do `script-src` da CSP — com JS inline, a CSP não segura um
 XSS que escape do `esc()`; com `script-src 'self'` (estado atual do `vercel.json`), segura. O que
 mudou junto, e o que continua valendo:
 
-- **Auto-update por ETag** foi **reprojetado**: `checarNovaVersao` (seção `AUTO-ATUALIZAÇÃO`, no
-  fim do `app.js`) agora faz `HEAD` de `/index.html` **e** `/app.js` e compara os **dois** ETags —
-  deploy que só muda o JS também recarrega todo mundo. Não há cache-busting `?v=`: o
-  `Cache-Control: max-age=0, must-revalidate` do `vercel.json` já faz o navegador revalidar o
-  `app.js` a cada carga.
+- **Auto-update por ETag** vigia os **três** arquivos: `checarNovaVersao` (seção
+  `AUTO-ATUALIZAÇÃO`) faz `HEAD` de `/index.html`, `/app.js` **e** `/styles.css` e compara os
+  ETags — deploy que muda só um deles também recarrega todo mundo. Não há cache-busting `?v=`: o
+  `Cache-Control: max-age=0, must-revalidate` do `vercel.json` já faz o navegador revalidar os
+  três a cada carga. **Ao criar um novo arquivo estático de primeira ordem, inclua-o na lista.**
 - **Zero-build continua.** É **um** `app.js` inteiro (mesmo conteúdo, mesma ordem), carregado por
   `<script src>` clássico no fim do `<body>` — **não** são ES modules, não há cadeia de `import`.
   **Não fatiar em `js/*.js`**: N arquivos = N chances de ordem errada + detector de versão tendo
   que vigiar N ETags, por ganho nenhum.
-- **CSS continua embutido** no `index.html` (o `style-src` mantém `'unsafe-inline'`; risco menor,
-  não vale outro arquivo).
+- **CSS em `styles.css`** (extraído do `<style>` em 22/07/2026): cacheável separado do HTML e
+  editável com tooling. O `style-src` **mantém `'unsafe-inline'`** porque ainda há atributos
+  `style=""` *dinâmicos* legítimos (accent dos cards via custom properties, larguras de `<th>`);
+  os estilos inline *repetidos* viraram classes (`.doc-h3`, `.doc-note`, `.fd-*`, `.qh-*` etc. —
+  bloco "CLASSES DE DOCUMENTO" no fim do `styles.css`). Estilo novo: **classe no `styles.css`**,
+  não `style=""` no template.
+- **IIFE**: o `app.js` inteiro roda dentro de `(() => { … })();` — nada vaza para `window`
+  (o vendor `supabase-js` continua global e é lido normalmente). O escopo interno é único, então
+  as regras de hoisting/TDZ da seção 3 continuam valendo sem mudança.
+- **supabase-js é injetado dinamicamente** pelo `app.js` (seção `REALTIME`) — script dinâmico é
+  async, não bloqueia a primeira pintura. Não há mais `<script>` dele no `index.html`; ao
+  atualizar a versão vendorada, troque o `s.src` no `initRealtime`.
+- **Rotas por hash** (seção `ROTAS (hash)`, fim do `app.js`): `#/linha/<codlinha>`,
+  `#/consulta/<view>` e a combinação — deep link compartilhável, e o Voltar do navegador fecha o
+  modal (a abertura cria UMA entrada de histórico; trocas de view usam `replaceState`).
 - **Guarda no gate:** `tests/check.js` **falha** se aparecer `<script>` inline no `index.html` —
   a CSP bloquearia no navegador; todo JS novo vai no `app.js`.
 
@@ -37,17 +51,17 @@ abaixo), que agora vivem no `app.js`.
 Números de linha **deslocam** a cada edição; **marcas de comentário não**. A regra de ouro é sempre
 achar por `grep` do texto da marca, nunca por linha.
 
-- **Índice no topo do `<script>`** — logo após `<script>`, um comentário lista as 14 seções na ordem.
+- **Índice no topo do `<script>`** — logo após `<script>`, um comentário lista as 15 seções na ordem.
 - **Marcas de seção** (topo de nível), formato de 64 `=`:
   ```
   /* ================================================================
      TÍTULO DA SEÇÃO
      ================================================================ */
   ```
-  As 14: `SUPABASE CONFIG` · `ÍCONES` · `SEÇÕES / CARDS` · `RENDER CARDS` · `STATE + CACHES` ·
+  As 15: `SUPABASE CONFIG` · `ÍCONES` · `SEÇÕES / CARDS` · `RENDER CARDS` · `STATE + CACHES` ·
   `BUSCA DE LINHAS (hero)` · `LINHA ATIVA — BANNER` · `MODAL / SISTEMA DE VIEWS` ·
   `COMPONENTES AUXILIARES` · `CLIQUE NOS CARDS` · `UTILITÁRIOS` · `TOAST` · `REALTIME` ·
-  `AUTO-ATUALIZAÇÃO`.
+  `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
   `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~57% do JS (~1,7k linhas, ~60 funções).
 

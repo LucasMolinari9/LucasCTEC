@@ -5,8 +5,13 @@
    STATE + CACHES · BUSCA DE LINHAS · LINHA ATIVA — BANNER ·
    MODAL / SISTEMA DE VIEWS (maior bloco — tem sub-índice próprio) ·
    COMPONENTES AUXILIARES · CLIQUE NOS CARDS · UTILITÁRIOS ·
-   TOAST · REALTIME · AUTO-ATUALIZAÇÃO
+   TOAST · REALTIME · AUTO-ATUALIZAÇÃO · ROTAS (hash)
+   ----------------------------------------------------------------
+   O arquivo inteiro roda dentro de um IIFE: nenhuma função/estado
+   vaza para window (o vendor supabase-js continua global, é lido
+   aqui dentro normalmente).
    ================================================================ */
+(() => {
 /* ================================================================
    SUPABASE CONFIG
    ================================================================ */
@@ -88,7 +93,7 @@ function fmtCode(code) {
 function fmtTime(t){ if(!t) return '—'; const m=String(t).match(/^(\d{2}):(\d{2})/); return m?`${m[1]}:${m[2]}`:t; }
 // data ISO (YYYY-MM-DD) → DD/MM/YYYY
 function fmtDate(d){ if(!d) return '—'; const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:d; }
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const enc = s => encodeURIComponent(s);
 // Sanitiza um termo do usuário para uso DENTRO de um padrão ilike do PostgREST.
 // encodeURIComponent não escapa ( ) * — que delimitam o grupo or=(...) e são curinga;
@@ -138,28 +143,34 @@ const I = {
   hub:'<circle cx="12" cy="12" r="2.5"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3M6.5 6.5 8.6 8.6M15.4 15.4l2.1 2.1M17.5 6.5 15.4 8.6M8.6 15.4l-2.1 2.1"/>',
   chart:'<path d="M4 20V4M4 20h16"/><rect x="7" y="12" width="3" height="5"/><rect x="12" y="8" width="3" height="9"/><rect x="17" y="5" width="3" height="12"/>',
   search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
-  law:'<path d="M12 3v18M5 21h14M7 7l-3 6h6zM17 7l-3 6h6z"/><path d="M5 7h14"/><circle cx="12" cy="4" r="1"/>'
+  law:'<path d="M12 3v18M5 21h14M7 7l-3 6h6zM17 7l-3 6h6z"/><path d="M5 7h14"/><circle cx="12" cy="4" r="1"/>',
+  // ícones exclusivos (evitam repetição entre famílias — o ícone é o elemento mais escaneável)
+  histEmp:'<path d="M4 21V7a2 2 0 0 1 2-2h5v16"/><path d="M7.5 9h2M7.5 13h2"/><path d="M3 21h8"/><circle cx="17" cy="15.5" r="4.2"/><path d="M17 13.8v1.7l1.4 1.2"/>',
+  fleet:'<rect x="7" y="6" width="14" height="10" rx="2"/><path d="M7 11h14"/><circle cx="10.5" cy="18.5" r="1.3"/><circle cx="17.5" cy="18.5" r="1.3"/><path d="M4 14V6a2 2 0 0 1 2-2h9"/>',
+  ruler:'<path d="M3 9h18v6H3z"/><path d="M7 9v3M11 9v3M15 9v3"/>'
 };
 
 /* ================================================================
    SEÇÕES / CARDS  — [icone, titulo, descricao, view, precisaLinha]
    ================================================================ */
 const SECTIONS = [
+  // Documentos: os mais consultados primeiro; cada descrição diz o que o DOCUMENTO contém
+  // (a instrução "busque a linha…" repetida virava ruído — a busca fica dentro do card).
   { key:'doc', name:'Documentos da Linha', color:'var(--c-doc)', soft:'#e7f0f8',
     items:[
-      ['file','Folha de Rosto','Busque a linha por nome, código ou número','folhaRosto',false],
-      ['divider','Folha Divisória','Busque a linha por nome, código ou número','folhaDivisoria',false],
+      ['file','Folha de Rosto','Resumo cadastral: empresa, código, tarifa e situação','folhaRosto',false],
+      ['route','Itinerários','Percurso por sentido: logradouros e municípios','itinerarios',false],
+      ['clock','Quadro de Horários','Partidas por sentido e dia — por linha ou empresa','quadroHorarios',false],
+      ['ticket','Tarifas','Seções e valores vigentes da linha','tarifas',false],
       ['history','Histórico da Linha','Alterações e eventos registrados','historicoLinha',false],
-      ['route','Itinerários','Busque a linha por nome, código ou número','itinerarios',false],
-      ['clock','Quadro de Horários','Busque por linha (nº/nome/código) ou empresa (PDF de todos)','quadroHorarios',false],
-      ['ticket','Tarifas','Busque a linha por nome, código ou número','tarifas',false],
-      ['bus','Frota','Busque a linha por nome, código ou número','frota',false],
-      ['structure','Estrutura Operacional','Busque a linha por nome, código ou número','estrutura',false],
+      ['bus','Frota','Frota operacional e reserva por tipo de veículo','frota',false],
+      ['structure','Estrutura Operacional','Consolidado: cadastro, seções, itinerário, horários e frota','estrutura',false],
+      ['divider','Folha Divisória','Capa de separação para processos e arquivos','folhaDivisoria',false],
     ]},
   { key:'emp', name:'Empresas', color:'var(--c-emp)', soft:'#e4f4ec',
     items:[
       ['building','Empresas Regulares','Operadoras com linhas regulares ativas','empresasRegulares',false],
-      ['history','Histórico da Empresa','Eventos e alterações por operadora','historicoEmpresa',false],
+      ['histEmp','Histórico da Empresa','Eventos e alterações por operadora','historicoEmpresa',false],
       ['link','Ligações por Empresa','Linhas operadas por uma empresa','ligacoesPorEmpresa',false],
       ['segments','Seções por Empresa','Seções atendidas por operadora','secoesPorEmpresa',false],
     ]},
@@ -171,12 +182,12 @@ const SECTIONS = [
       ['map','Município e Região','Linhas por origem e destino','municipioRegiao',false],
       ['pin','Linhas por Localidade e Município','Busque por seção, "via" ou cruze localidades/municípios','localidades',false],
       ['hub','Ligações por Terminais','Linhas que atendem um terminal','ligacoesPorTerminal',false],
-      ['segments','Seções por Ligação','Seções que compõem uma linha','secoesPorLigacao',true],
+      ['ruler','Seções por Ligação','Seções que compõem uma linha','secoesPorLigacao',true],
     ]},
   { key:'ger', name:'Gerenciais e Pesquisa', color:'var(--c-ger)', soft:'#efe9f7',
     items:[
       ['chart','Relatórios Gerenciais','Indicadores e consolidados da DIVAT','relatoriosGerenciais',false],
-      ['bus','Frota por Empresa','Frota consolidada por operadora e hierarquia','frotaPorEmpresa',false],
+      ['fleet','Frota por Empresa','Frota consolidada por operadora e hierarquia','frotaPorEmpresa',false],
       ['search','Pesquisa de Evento','Buscar eventos por termo livre','pesquisaEvento',false],
       ['law','Portarias / Legislação','Buscar portarias por número, assunto ou texto','portarias',false],
     ]},
@@ -188,20 +199,39 @@ const SECTIONS = [
 const app = document.getElementById('app');
 const svg = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 
+// metadados por view (título, ícone, cores, pré-requisito) — usados pelo clique do card,
+// pela busca do topo (consultas no dropdown) e pelo roteamento por hash.
+const VIEW_META = {};
 SECTIONS.forEach(sec => {
-  const cards = sec.items.map(([ic, title, desc, view, needsLine]) => `
+  const cards = sec.items.map(([ic, title, desc, view, needsLine]) => {
+    VIEW_META[view] = { title, icon:ic, needsLine:!!needsLine, color:sec.color, soft:sec.soft };
+    return `
     <button class="card${needsLine?' needs-line':''}" type="button"
       style="--accent:${sec.color};--accent-soft:${sec.soft}"
       data-view="${view}" data-needs-line="${needsLine?1:0}" data-title="${esc(title)}">
       <span class="ico">${svg(I[ic])}</span>
-      <span class="card-txt"><h3>${title}</h3><p>${desc}</p></span>
-    </button>`).join('');
+      <span class="card-txt"><h3>${title}</h3><p>${desc}</p>${needsLine?'<span class="need-chip"></span>':''}</span>
+    </button>`;
+  }).join('');
   app.insertAdjacentHTML('beforeend', `
     <section class="section">
       <div class="sec-head" style="--accent:${sec.color}"><h2>${sec.name}</h2></div>
       <div class="grid">${cards}</div>
     </section>`);
 });
+// chips dos cards que exigem linha: mostram o pré-requisito ANTES do clique e, com uma
+// linha selecionada, viram confirmação com o número dela (estado visível, não punitivo).
+function updateNeedChips(){
+  document.querySelectorAll('.card.needs-line .need-chip').forEach(chip => {
+    if (activeLine){
+      chip.textContent = 'Linha ' + (activeLine.numero_ligacao || fmtCode(activeLine.codlinha));
+      chip.classList.add('ok');
+    } else {
+      chip.textContent = 'Requer linha selecionada';
+      chip.classList.remove('ok');
+    }
+  });
+}
 
 /* ================================================================
    STATE + CACHES
@@ -271,15 +301,41 @@ const searchBtn   = document.getElementById('openLine');
 const selector    = document.querySelector('.selector');
 const dropdown = document.createElement('div');
 dropdown.className = 'results-drop';
+dropdown.id = 'searchResults';
 selector.appendChild(dropdown);
-function closeDropdown() { dropdown.classList.remove('open'); }
+// semântica de combobox no input (dropdown controlado, estado aberto/fechado anunciado)
+searchInput.setAttribute('role', 'combobox');
+searchInput.setAttribute('aria-expanded', 'false');
+searchInput.setAttribute('aria-autocomplete', 'list');
+searchInput.setAttribute('aria-controls', 'searchResults');
+function openDropdown(){ dropdown.classList.add('open'); searchInput.setAttribute('aria-expanded','true'); }
+function closeDropdown(){ dropdown.classList.remove('open'); searchInput.setAttribute('aria-expanded','false'); }
 
 const LINE_FIELDS = 'codlinha,numero_ligacao,nome_ligacao,nome_lig_cresc,via,codempresa,tipo,caracteristica,licitado,cancelado,paralisado,sub_judice,transferido,data_criacao,processo_criacao';
 
-async function doSearch() {
+// consultas (cards) cujo título casa o termo — a busca do topo também navega para os cards,
+// não só para linhas ("tarifa" acha o card Tarifas, "horário" acha Quadro de Horários).
+function matchViews(term){
+  const t = norm(term);
+  if (t.length < 3) return [];
+  return Object.entries(VIEW_META)
+    .filter(([,m]) => norm(m.title).includes(t))
+    .slice(0, 4);
+}
+const viewResultsHTML = views => views.map(([view, m]) => `
+  <button class="result-view" type="button" data-open-view="${esc(view)}"
+    style="--accent:${m.color};--accent-soft:${m.soft}">
+    <span class="rv-ico">${svg(I[m.icon])}</span>
+    <span class="rv-txt">${esc(m.title)}</span>
+    <span class="rv-kind">consulta</span>
+  </button>`).join('');
+
+// `auto:true` = disparo da busca-enquanto-digita: sem toast de campo vazio e sem
+// mexer no rótulo do botão (feedback visual só na busca manual).
+async function doSearch({ auto = false } = {}) {
   const term = searchInput.value.trim();
-  if (!term) { toast('Digite o número ou nome da linha.', 'warn'); return; }
-  searchBtn.textContent = '…'; searchBtn.disabled = true;
+  if (!term) { if (!auto) toast('Digite o número ou nome da linha.', 'warn'); return; }
+  if (!auto) { searchBtn.textContent = '…'; searchBtn.disabled = true; }
   try {
     const e1 = ilikeTerm(term);
     const encCode = ilikeTerm(term.replace(/[-.\s]/g, ''));
@@ -287,28 +343,58 @@ async function doSearch() {
       `select=${LINE_FIELDS}` +
       `&or=(numero_ligacao.ilike.*${e1}*,nome_ligacao.ilike.*${e1}*,codlinha.ilike.*${encCode}*)` +
       `&limit=15`);
-    if (!rows.length) {
+    if (term !== searchInput.value.trim()) return;   // usuário já digitou outra coisa → descarta
+    const viewsHTML = viewResultsHTML(matchViews(term));
+    if (!rows.length && !viewsHTML) {
       dropdown.innerHTML = '<div class="drop-empty">Nenhuma linha encontrada.</div>';
     } else {
-      dropdown.innerHTML = rows.sort(byCodlinha).map(r => `
-        <button class="result-item" type="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
+      dropdown.innerHTML = viewsHTML + rows.sort(byCodlinha).map(r => `
+        <button class="result-item" type="button" data-row='${esc(JSON.stringify(r))}'>
           <span class="r-num">${esc(r.numero_ligacao || fmtCode(r.codlinha))}</span>
           <span class="r-name">${esc(r.nome_ligacao || '—')}</span>
           ${situacaoHTML(r)}
           <span class="r-emp">${esc(fmtCode(r.codlinha))} · ${esc(empNome(r.codempresa))}${r.codempresa?` (RJ ${esc(r.codempresa)})`:''}</span>
         </button>`).join('');
     }
-    dropdown.classList.add('open');
+    openDropdown();
   } catch (e) {
+    if (auto) return;                               // busca automática falhou → silencioso
     dropdown.innerHTML = `<div class="drop-error">Erro: ${esc(e.message)}</div>`;
-    dropdown.classList.add('open');
+    openDropdown();
   } finally {
-    searchBtn.textContent = 'Abrir linha'; searchBtn.disabled = false;
+    if (!auto) { searchBtn.textContent = 'Abrir linha'; searchBtn.disabled = false; }
   }
 }
-searchBtn.addEventListener('click', doSearch);
-searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+searchBtn.addEventListener('click', () => doSearch());
+// busca-enquanto-digita (debounce): a partir de 2 caracteres; campo esvaziado fecha a lista
+searchInput.addEventListener('input', debounce(() => {
+  const t = searchInput.value.trim();
+  if (t.length >= 2) doSearch({ auto:true });
+  else closeDropdown();
+}, 300));
+// navegação por teclado: ↓ entra na lista, ↑/↓ percorrem, Esc fecha e devolve o foco
+const dropItems = () => [...dropdown.querySelectorAll('button')];
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { doSearch(); return; }
+  if (e.key === 'Escape') { closeDropdown(); return; }
+  if (e.key === 'ArrowDown' && dropdown.classList.contains('open')){
+    const items = dropItems();
+    if (items.length){ e.preventDefault(); items[0].focus(); }
+  }
+});
+dropdown.addEventListener('keydown', e => {
+  const items = dropItems();
+  const i = items.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown' && i < items.length - 1){ e.preventDefault(); items[i+1].focus(); }
+  else if (e.key === 'ArrowUp'){
+    e.preventDefault();
+    if (i > 0) items[i-1].focus(); else searchInput.focus();
+  }
+  else if (e.key === 'Escape'){ closeDropdown(); searchInput.focus(); }
+});
 dropdown.addEventListener('click', e => {
+  const view = e.target.closest('.result-view');
+  if (view){ closeDropdown(); searchInput.value = ''; openView(view.dataset.openView); return; }
   const item = e.target.closest('.result-item');
   if (!item) return;
   selectLine(JSON.parse(item.dataset.row));
@@ -335,7 +421,9 @@ function selectLine(row) {
     <button class="lb-clear" id="btnClearLine">✕ Limpar</button>`;
   document.getElementById('btnClearLine').addEventListener('click', () => {
     activeLine = null; banner.style.display = 'none';
+    updateNeedChips(); syncHash();
   });
+  updateNeedChips(); syncHash();
   // se o cache de empresas ainda não chegou, atualiza o texto quando carregar
   if (!empresas.map) getEmpresas().then(() => {
     if (activeLine === row) { const el = banner.querySelector('.lb-emp'); if (el) el.innerHTML = bannerEmpHTML(row); }
@@ -497,6 +585,12 @@ function closeModal(){
   nav.reset();
   // devolve o foco ao elemento que abriu o modal (acessibilidade)
   if (lastFocused && lastFocused.focus) { try { lastFocused.focus(); } catch(_){} lastFocused = null; }
+  // rota: fechar pela UI desfaz a entrada criada na abertura (back) ou limpa o hash;
+  // fechamento disparado pela PRÓPRIA rota (botão Voltar do navegador) não mexe no histórico.
+  if (!_applyingRoute){
+    if (_modalPushed){ _modalPushed = false; history.back(); }
+    else syncHash();
+  } else { _modalPushed = false; }
   if (window.__divatReload) location.reload();
 }
 btnBack.addEventListener('click', () => {
@@ -508,7 +602,7 @@ btnBack.addEventListener('click', () => {
 function setBody(html){ modalBody.innerHTML = html; }
 function loading(msg='Carregando…'){ return `<div class="m-loading"><div class="spin"></div>${esc(msg)}</div>`; }
 function emptyBox(msg){ return `<div class="m-loading">${esc(msg)}</div>`; }
-function errorBox(msg){ return `<div class="m-loading" style="color:#b33a2e">Erro ao carregar: ${esc(msg)}</div>`; }
+function errorBox(msg){ return `<div class="m-loading err">Erro ao carregar: ${esc(msg)}</div>`; }
 
 /* --- Dispatcher — runView ---------------------------------------- */
 async function runView(view, { silent=false } = {}){
@@ -516,304 +610,27 @@ async function runView(view, { silent=false } = {}){
     nav.push(currentView);
   }
   nav.goingBack = false;
-  if (!overlay.classList.contains('open')) lastFocused = document.activeElement;
+  const wasOpen = overlay.classList.contains('open');
+  if (!wasOpen) lastFocused = document.activeElement;
   currentView = view;
   mtTitle.textContent = view.title;
   overlay.classList.add('open');
   modalClose.focus();                     // move o foco p/ dentro do diálogo
+  // rota: ABRIR o modal cria UMA entrada de histórico (Voltar do navegador fecha o modal);
+  // trocas de view com o modal já aberto só atualizam o hash (replace, sem nova entrada).
+  syncHash({ push: !wasOpen && !!view.key });
   if (!silent) setBody(loading());
   try { await view.loader(); }
   catch(e){ setBody(errorBox(e.message)); }
 }
 
-// header institucional reutilizável
-const DETRO_LOGO_SVG = `<svg class="logo-detro" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3200 847" role="img" aria-label="DETRO - Departamento de Transportes Rodoviários do RJ" fill="currentColor">
-        <title>DETRO-RJ</title>
-        <g transform="translate(0.000000,847.000000) scale(0.100000,-0.100000)">
-        <path d="M16155 7148 c-59 -30 -114 -86 -141 -143 l-24 -50 0 -2160 c0 -2092
-      1 -2161 19 -2201 27 -59 86 -121 145 -152 l51 -27 2240 0 2240 0 50 27 c60 32
-      114 87 146 148 l24 45 0 2160 0 2160 -27 50 c-14 28 -47 70 -71 92 -87 80 141
-      73 -2366 73 l-2246 -1 -40 -21z m4515 -163 c65 -33 60 136 60 -2190 0 -1942
-      -1 -2119 -16 -2145 -9 -15 -29 -35 -44 -44 -26 -15 -210 -16 -2230 -16 l-2202
-      0 -39 39 -39 39 0 2122 c0 1940 1 2124 16 2149 9 15 28 35 43 44 24 15 210 16
-      2224 17 1945 0 2201 -2 2227 -15z"/>
-        <path d="M16496 6935 c-21 -7 -54 -28 -72 -46 -67 -65 -65 -30 -62 -896 l3
-      -781 30 -43 c18 -26 50 -53 80 -68 l49 -26 496 -2 495 -3 5 -1107 c6 -1221 1
-      -1132 67 -1195 63 -60 31 -58 868 -58 837 0 805 -2 868 58 66 63 61 -26 67
-      1194 l5 1108 485 2 486 3 49 25 c65 33 111 100 120 173 3 28 5 381 3 782 -3
-      729 -3 730 -25 771 -28 53 -83 100 -130 113 -26 8 -643 11 -1943 11 -1595 -1
-      -1911 -3 -1944 -15z m2149 -220 c222 -39 415 -141 575 -305 110 -113 183 -230
-      231 -373 67 -197 74 -356 25 -549 -96 -380 -396 -663 -800 -755 -112 -26 -356
-      -23 -469 5 -199 50 -352 132 -493 266 -145 136 -237 287 -286 468 -20 72 -23
-      106 -23 253 1 203 17 274 95 431 144 288 431 501 753 559 100 18 287 18 392 0z"/>
-        <path d="M18325 6559 c-279 -38 -540 -218 -663 -458 -130 -252 -129 -508 4
-      -761 69 -132 214 -275 353 -349 86 -45 236 -90 338 -102 161 -19 361 19 522
-      100 82 42 200 138 266 218 67 80 148 240 171 338 23 92 23 278 1 361 -55 205
-      -182 387 -352 504 -69 48 -204 108 -290 130 -91 23 -254 32 -350 19z"/>
-        <path d="M28945 7159 c-16 -4 -79 -18 -140 -29 -439 -84 -903 -286 -1251 -545
-      -368 -274 -663 -620 -860 -1010 -80 -159 -100 -206 -154 -360 -149 -426 -191
-      -933 -108 -1330 42 -204 125 -420 226 -590 227 -381 632 -687 1107 -836 290
-      -90 555 -129 889 -129 414 0 782 65 1161 205 130 48 435 198 550 270 242 154
-      532 407 691 605 342 425 539 896 611 1465 18 141 28 495 14 495 -5 0 -12 28
-      -16 63 -8 77 -33 222 -45 262 -5 17 -24 76 -41 132 -37 122 -128 312 -205 431
-      -198 304 -508 562 -859 716 -190 83 -461 164 -580 173 -33 3 -64 9 -70 14 -12
-      11 -879 10 -920 -2z m455 -1550 c234 -58 408 -219 485 -447 109 -323 6 -746
-      -245 -1015 -147 -157 -291 -242 -506 -298 -128 -33 -352 -34 -473 -1 -200 55
-      -349 167 -434 330 -146 277 -99 698 114 1014 55 81 186 213 268 268 233 157
-      532 213 791 149z"/>
-        <path d="M7020 7148 c0 -14 -17 -120 -120 -778 -40 -250 -83 -522 -95 -605
-      -13 -82 -31 -193 -39 -245 -9 -52 -32 -194 -52 -315 -20 -121 -38 -236 -40
-      -255 -4 -39 -33 -220 -65 -405 -11 -66 -24 -152 -29 -192 -5 -39 -21 -138 -34
-      -220 -14 -81 -44 -273 -67 -425 l-43 -278 -1823 0 -1823 0 0 -40 0 -40 1816 0
-      1816 0 -8 -42 c-4 -24 -8 -52 -9 -63 -2 -11 -11 -71 -20 -132 l-18 -113 -2393
-      0 -2394 0 0 -60 0 -60 2386 0 c2267 0 2385 -1 2380 -17 -3 -10 -15 -80 -26
-      -157 -11 -76 -23 -142 -26 -147 -3 -5 -1254 -9 -2995 -9 l-2989 0 0 -75 0 -75
-      4218 3 4217 2 170 27 c408 66 733 180 1050 371 698 419 1146 1113 1270 1967 8
-      52 19 177 26 276 31 461 -54 864 -250 1187 -240 395 -654 671 -1217 812 -221
-      56 -420 87 -659 105 -217 15 -2115 13 -2115 -2z m1945 -1513 c364 -82 545
-      -311 545 -689 0 -499 -234 -870 -645 -1025 -158 -59 -336 -91 -511 -91 l-117
-      0 6 43 c12 96 109 714 132 842 8 44 19 116 25 160 6 44 22 145 35 225 13 80
-      38 235 55 345 17 110 33 206 36 214 8 23 301 8 439 -24z"/>
-        <path d="M12196 7133 c-6 -29 -36 -219 -86 -543 -16 -102 -40 -255 -54 -340
-      -14 -85 -34 -216 -46 -290 -38 -245 -69 -443 -100 -630 -16 -102 -38 -243 -49
-      -315 -11 -71 -31 -200 -45 -285 -14 -85 -43 -272 -66 -415 -23 -143 -54 -343
-      -70 -445 -16 -102 -43 -273 -60 -380 -17 -107 -40 -252 -51 -322 -10 -70 -32
-      -210 -48 -310 -17 -101 -37 -231 -45 -289 -9 -59 -19 -120 -22 -138 l-7 -31
-      1629 2 1628 3 8 45 c8 43 45 274 108 674 17 104 33 202 35 218 21 118 55 351
-      52 355 -2 2 -339 3 -749 3 -409 0 -747 2 -749 5 -3 2 0 39 7 82 7 43 22 143
-      34 223 12 80 23 146 25 148 1 2 297 3 656 2 360 0 659 3 665 8 7 4 21 70 33
-      147 12 77 23 152 26 166 3 15 16 98 30 185 13 88 45 287 70 443 25 157 45 288
-      45 293 0 4 -299 8 -664 8 l-664 0 5 38 c3 20 19 120 37 222 l31 185 730 5 729
-      5 13 80 c7 44 27 172 43 285 17 113 33 212 35 220 3 8 13 76 24 150 36 244 81
-      524 87 542 5 17 -64 18 -1600 18 l-1604 0 -6 -27z"/>
-        <path d="M22227 7083 c-30 -202 -137 -884 -143 -908 -2 -11 -18 -110 -34 -220
-      -17 -110 -41 -270 -55 -355 -14 -85 -36 -229 -50 -319 -14 -90 -36 -232 -50
-      -315 -14 -83 -33 -209 -44 -281 -11 -71 -31 -200 -45 -285 -60 -379 -109 -689
-      -136 -860 -74 -477 -168 -1073 -176 -1113 l-6 -27 844 2 843 3 17 110 c10 61
-      25 155 34 210 8 55 31 201 50 325 40 253 71 451 108 685 14 88 26 164 26 168
-      0 5 7 7 17 5 12 -2 42 -79 109 -278 51 -151 156 -462 234 -690 78 -228 150
-      -443 161 -477 l20 -63 989 0 c545 0 990 3 990 6 0 7 -88 180 -553 1088 -263
-      514 -305 582 -416 675 -75 63 -69 75 50 116 648 219 941 587 1025 1290 18 149
-      13 385 -10 500 -51 251 -154 444 -324 607 -230 222 -522 345 -982 416 -91 14
-      -263 16 -1296 19 l-1191 4 -6 -38z m1878 -1278 c83 -22 155 -65 187 -111 74
-      -107 55 -335 -38 -471 -45 -65 -132 -125 -221 -153 -70 -21 -238 -40 -366 -40
-      l-79 0 6 28 c3 15 13 72 21 127 9 55 18 114 21 130 3 17 16 100 29 185 38 248
-      47 304 51 319 6 19 303 8 389 -14z"/>
-        <path d="M25368 2273 c-11 -27 -36 -81 -54 -122 -19 -41 -34 -76 -34 -78 0 -2
-      19 -3 42 -1 41 3 43 5 124 120 45 64 79 119 76 122 -3 3 -34 6 -69 6 l-64 0
-      -21 -47z"/>
-        <path d="M22718 2100 c2 -109 -1 -190 -6 -190 -5 0 -17 10 -28 21 -51 58 -188
-      80 -291 45 -60 -20 -133 -92 -164 -162 -85 -191 -55 -473 64 -595 55 -57 100
-      -74 192 -74 91 0 146 22 203 82 l32 34 0 -55 0 -56 85 0 85 0 0 570 0 570 -87
-      0 -88 0 3 -190z m-90 -217 c64 -47 91 -122 99 -273 8 -146 -33 -285 -100 -334
-      -22 -16 -43 -21 -90 -21 -77 0 -107 19 -144 95 -26 51 -28 65 -31 202 -3 129
-      -1 155 17 210 25 73 43 98 91 128 43 26 118 23 158 -7z"/>
-        <path d="M320 1680 l0 -530 213 0 c231 0 285 8 386 57 108 52 206 179 246 318
-      27 95 24 250 -8 347 -44 137 -107 213 -227 277 -92 49 -167 61 -402 61 l-208
-      0 0 -530z m368 430 c120 -22 213 -96 264 -208 28 -59 32 -80 36 -182 7 -182
-      -35 -309 -129 -394 -66 -59 -122 -76 -255 -76 l-103 0 0 428 c-1 236 2 432 6
-      435 10 10 123 8 181 -3z"/>
-        <path d="M12232 2163 l3 -47 148 3 147 3 0 -484 -1 -483 93 -3 93 -3 0 483 0
-      483 140 1 c77 0 141 4 143 7 1 4 2 25 2 47 l0 40 -386 0 -385 0 3 -47z"/>
-        <path d="M20520 1680 l0 -530 96 0 95 0 -3 240 c-2 132 -1 240 2 239 8 -1 303
-      -417 319 -450 l15 -29 113 0 c62 0 113 2 113 5 0 3 -8 13 -17 23 -33 32 -348
-      453 -351 468 -2 8 4 14 17 14 41 0 136 44 177 82 58 53 77 107 73 201 -4 61
-      -10 82 -34 122 -39 62 -87 100 -158 125 -49 17 -82 20 -257 20 l-200 0 0 -530z
-      m338 435 c61 -18 105 -66 121 -131 40 -159 -47 -273 -209 -274 l-65 0 2 207
-      c2 115 3 209 3 211 0 8 105 -1 148 -13z"/>
-        <path d="M24683 2198 c-30 -15 -48 -60 -34 -87 18 -32 52 -51 94 -51 93 0 139
-      69 82 125 -19 20 -34 25 -72 24 -26 0 -58 -5 -70 -11z"/>
-        <path d="M26362 2200 c-26 -11 -45 -55 -37 -87 11 -47 106 -69 164 -38 48 24
-      55 72 16 110 -19 20 -34 25 -72 24 -26 0 -58 -4 -71 -9z"/>
-        <path d="M30627 1683 l3 -528 91 0 90 0 -1 240 c0 142 3 236 8 230 23 -25 305
-      -421 318 -446 l15 -29 114 0 c103 0 140 8 102 23 -12 5 -367 468 -367 479 0 3
-      19 8 42 12 92 15 173 69 210 140 31 58 31 184 1 242 -30 57 -79 102 -143 133
-      -53 25 -62 26 -270 29 l-215 3 2 -528z m359 424 c97 -51 138 -192 85 -295 -33
-      -66 -86 -94 -182 -100 l-79 -5 0 213 0 213 74 -6 c40 -3 87 -12 102 -20z"/>
-        <path d="M31488 1619 l-3 -592 -26 -19 c-22 -17 -29 -18 -55 -7 -16 7 -37 19
-      -47 28 -20 17 -18 19 -50 -46 l-26 -51 42 -17 c23 -10 78 -20 122 -22 73 -4
-      85 -2 134 24 95 49 90 9 93 696 l3 597 -92 0 -93 0 -2 -591z"/>
-        <path d="M4498 2148 l-67 -10 -3 -77 -3 -76 -62 -3 -63 -3 0 -39 0 -39 63 -3
-      62 -3 5 -335 c6 -376 6 -377 78 -407 41 -17 145 -14 195 6 24 9 27 16 27 57 0
-      40 -2 45 -17 38 -10 -4 -34 -9 -54 -12 -68 -8 -69 -1 -69 350 l0 308 70 0 70
-      0 0 40 0 39 -67 3 -68 3 -1 85 c0 97 5 92 -96 78z"/>
-        <path d="M8808 2148 l-67 -10 -3 -77 -3 -76 -61 -3 -62 -3 3 -37 2 -37 59 -5
-      59 -5 5 -335 c6 -375 5 -371 76 -405 40 -19 141 -17 197 4 24 9 27 16 27 57 0
-      40 -2 45 -17 38 -35 -15 -89 -16 -101 -2 -8 10 -12 105 -12 329 l-1 314 65 3
-      66 3 0 39 0 39 -67 3 -67 3 0 85 c-1 97 4 93 -98 78z"/>
-        <path d="M18208 2147 l-68 -10 0 -79 0 -78 -60 0 -60 0 0 -40 0 -40 59 0 60 0
-      3 -334 c3 -320 4 -336 24 -363 35 -47 80 -65 154 -60 36 3 77 10 93 16 24 9
-      27 16 27 56 0 42 -2 45 -19 35 -29 -15 -77 -12 -95 6 -14 13 -16 57 -16 330
-      l0 314 65 0 65 0 0 40 0 40 -65 0 -64 0 -3 87 c-3 100 2 95 -100 80z"/>
-        <path d="M10877 1960 c1 -88 0 -160 -2 -160 -2 0 -24 14 -48 31 -86 60 -224
-      48 -302 -28 -108 -104 -137 -361 -60 -519 75 -153 251 -192 371 -82 l44 41 0
-      -47 0 -47 73 3 c39 2 71 6 70 11 -2 4 -3 221 -3 482 l0 475 -72 0 -73 0 2
-      -160z m-55 -209 c40 -44 60 -127 60 -241 0 -168 -39 -253 -129 -280 -36 -11
-      -46 -10 -79 6 -51 25 -79 69 -94 150 -14 73 -8 223 10 287 15 49 64 105 104
-      115 46 12 97 -3 128 -37z"/>
-        <path d="M29110 1960 c0 -88 -3 -160 -6 -160 -3 0 -19 11 -36 25 -82 69 -239
-      54 -320 -32 -100 -105 -123 -354 -47 -510 48 -99 115 -143 220 -143 55 0 143
-      41 167 78 l17 26 5 -44 5 -45 68 0 67 0 3 483 2 482 -72 0 -73 0 0 -160z m-71
-      -187 c14 -11 37 -41 51 -69 23 -45 25 -60 25 -189 0 -133 -1 -143 -28 -197
-      -31 -62 -62 -88 -117 -95 -80 -11 -141 54 -161 171 -13 75 -7 216 11 279 12
-      41 62 104 94 118 30 13 95 3 125 -18z"/>
-        <path d="M1614 1985 c-81 -17 -136 -46 -186 -98 -154 -157 -152 -502 3 -642
-      117 -105 332 -135 504 -70 39 14 73 29 77 33 6 6 -9 89 -18 100 -1 2 -20 -8
-      -41 -21 -133 -84 -294 -81 -379 8 -50 52 -74 115 -81 218 l-6 77 287 0 c325 0
-      295 -11 275 95 -31 167 -121 270 -265 300 -82 17 -91 17 -170 0z m156 -95 c47
-      -24 85 -78 99 -140 20 -87 35 -80 -178 -80 -105 0 -192 3 -194 8 -8 14 24 117
-      48 153 28 43 95 79 148 79 21 0 56 -9 77 -20z"/>
-        <path d="M2553 1990 c-55 -12 -112 -42 -147 -79 -17 -17 -32 -31 -35 -31 -3 0
-      -4 22 -3 50 l4 50 -86 0 -86 0 0 -535 0 -535 85 0 85 0 0 159 0 160 51 -34
-      c64 -44 119 -59 190 -52 101 9 197 76 246 170 67 132 69 387 4 516 -61 119
-      -187 185 -308 161z m86 -129 c65 -47 91 -128 91 -293 0 -206 -42 -305 -142
-      -338 -30 -9 -46 -9 -75 1 -58 19 -78 35 -106 87 -53 97 -56 365 -7 467 43 90
-      166 129 239 76z"/>
-        <path d="M3282 1990 c-30 -5 -85 -18 -124 -31 l-70 -22 7 -51 c8 -61 10 -64
-      38 -46 131 83 239 94 307 30 28 -26 31 -34 28 -82 -3 -47 -7 -55 -36 -75 -19
-      -12 -91 -40 -160 -62 -209 -66 -267 -127 -267 -277 0 -72 3 -86 30 -129 22
-      -36 45 -57 85 -78 49 -26 63 -28 125 -25 80 5 144 30 198 78 21 18 39 31 40
-      29 1 -2 10 -21 20 -42 27 -59 94 -80 179 -57 52 15 68 34 68 82 0 34 -3 39
-      -17 33 -38 -16 -61 -16 -76 0 -15 15 -17 49 -17 302 0 269 -1 287 -21 322 -28
-      50 -74 79 -155 96 -75 16 -101 17 -182 5z m163 -655 c-51 -89 -186 -114 -246
-      -47 -47 52 -50 132 -9 199 25 42 49 57 172 107 l103 41 3 -128 c2 -123 1 -131
-      -23 -172z"/>
-        <path d="M4131 1987 c-29 -7 -58 -24 -83 -49 l-38 -38 0 40 0 40 -82 0 -83 0
-      2 -412 3 -413 85 -3 85 -3 0 297 c0 280 1 300 21 340 23 49 82 84 142 84 l37
-      0 0 65 c0 73 0 73 -89 52z"/>
-        <path d="M5090 1989 c-61 -8 -176 -42 -193 -58 -4 -5 -2 -29 5 -54 12 -45 29
-      -59 44 -36 15 24 129 69 177 69 127 0 199 -98 131 -179 -20 -25 -49 -38 -150
-      -70 -202 -63 -269 -118 -294 -236 -20 -99 24 -205 107 -257 32 -19 51 -23 123
-      -23 95 1 146 20 209 79 21 19 35 27 38 19 11 -30 51 -79 73 -90 36 -18 99 -15
-      148 7 41 18 42 20 42 66 0 40 -2 45 -17 39 -39 -16 -54 -17 -68 -5 -13 10 -15
-      56 -15 289 -1 336 -8 364 -100 411 -33 16 -150 42 -181 39 -8 -1 -43 -5 -79
-      -10z m190 -474 c0 -105 -3 -132 -20 -164 -25 -50 -71 -88 -116 -97 -94 -18
-      -163 28 -172 114 -10 108 43 171 190 223 49 18 91 36 94 40 17 29 24 -4 24
-      -116z"/>
-        <path d="M5995 1986 c-56 -14 -86 -28 -132 -63 l-33 -24 0 40 0 41 -82 0 -83
-      0 2 -412 3 -413 82 -3 83 -3 0 314 c0 285 2 315 18 340 53 82 195 98 258 31
-      l24 -26 2 -326 3 -327 82 -3 83 -3 0 315 c0 304 1 315 21 343 35 47 82 68 149
-      67 67 0 111 -22 126 -61 5 -14 9 -168 9 -344 l0 -319 85 0 85 0 0 320 c0 366
-      -5 403 -58 460 -84 87 -273 85 -391 -4 l-44 -33 -37 37 c-54 54 -165 79 -255
-      56z"/>
-        <path d="M7252 1989 c-89 -15 -148 -46 -206 -110 -87 -94 -127 -238 -107 -384
-      24 -172 96 -270 240 -327 47 -18 76 -22 181 -22 113 0 132 2 200 28 41 16 76
-      30 78 31 3 2 -19 97 -23 103 -2 2 -24 -10 -50 -27 -26 -16 -80 -38 -120 -47
-      -70 -17 -77 -17 -140 1 -79 21 -117 51 -150 115 -24 47 -45 144 -45 208 l0 32
-      285 0 285 0 0 24 c0 157 -108 325 -231 360 -76 21 -136 26 -197 15z m163 -114
-      c42 -31 72 -91 81 -159 l7 -46 -191 0 c-105 0 -193 3 -195 8 -9 14 23 112 49
-      151 55 84 172 105 249 46z"/>
-        <path d="M8170 1987 c-69 -16 -95 -30 -142 -75 l-38 -36 0 52 0 52 -82 0 -83
-      0 2 -412 3 -413 82 -3 83 -3 0 288 c0 158 3 300 7 315 11 36 53 85 92 105 44
-      23 143 22 184 -2 60 -36 63 -51 62 -392 l-1 -308 86 -3 86 -3 -3 343 c-3 378
-      -2 371 -69 436 -56 55 -173 80 -269 59z"/>
-        <path d="M9435 1989 c-204 -30 -329 -212 -312 -454 8 -105 28 -170 76 -241 74
-      -111 190 -162 340 -151 183 14 310 143 342 345 30 198 -52 392 -198 465 -43
-      22 -72 29 -163 41 -14 2 -52 0 -85 -5z m169 -113 c139 -105 142 -495 6 -609
-      -88 -74 -205 -47 -263 62 -38 70 -49 125 -48 245 1 147 26 230 88 288 40 38
-      70 48 130 45 37 -3 61 -11 87 -31z"/>
-        <path d="M13282 1985 c-55 -17 -89 -40 -97 -65 -8 -25 -27 -27 -24 -2 6 61 5
-      62 -81 62 l-80 0 0 -415 0 -416 85 3 85 3 3 307 c2 292 3 308 23 334 34 46 70
-      67 123 72 l51 5 0 63 c0 60 -1 64 -22 63 -13 0 -42 -6 -66 -14z"/>
-        <path d="M13715 1990 c-59 -8 -183 -45 -197 -58 -8 -9 13 -102 23 -102 5 0 30
-      14 56 30 105 67 219 66 282 -1 23 -25 29 -86 11 -120 -14 -25 -67 -51 -165
-      -78 -167 -48 -261 -113 -284 -198 -31 -112 5 -231 87 -288 41 -28 50 -30 130
-      -30 99 1 152 20 214 80 l36 36 11 -34 c20 -60 54 -82 124 -82 35 0 75 7 92 15
-      26 13 30 21 33 63 3 44 -8 61 -23 37 -9 -14 -52 -12 -62 3 -4 6 -10 146 -13
-      309 -5 281 -6 298 -26 325 -58 78 -182 113 -329 93z m180 -605 c-7 -41 -60
-      -104 -101 -121 -41 -17 -101 -18 -134 -1 -13 7 -35 28 -48 47 -20 29 -23 45
-      -20 92 7 98 49 134 243 210 l60 23 3 -110 c2 -60 1 -124 -3 -140z"/>
-        <path d="M14665 1996 c-5 -2 -36 -9 -67 -16 -45 -9 -68 -21 -108 -57 l-50 -45
-      0 51 0 51 -82 0 -83 0 2 -412 3 -413 82 -3 83 -3 0 298 0 298 25 44 c55 95
-      199 119 279 45 l36 -32 2 -324 3 -323 85 -3 85 -3 0 319 c0 257 -3 328 -15
-      370 -27 90 -102 142 -225 156 -25 3 -49 4 -55 2z"/>
-        <path d="M15350 1990 c-183 -31 -279 -188 -205 -336 27 -55 85 -99 172 -133
-      90 -35 171 -80 187 -103 22 -31 20 -86 -4 -125 -53 -88 -199 -90 -323 -5 -25
-      18 -47 32 -50 32 -5 0 -30 -111 -25 -114 1 -2 34 -15 72 -30 134 -53 300 -45
-      393 17 69 47 103 101 110 174 8 85 -2 123 -43 171 -34 41 -78 65 -252 143 -40
-      18 -80 42 -88 53 -30 43 -9 117 43 152 21 14 46 19 98 19 66 0 105 -13 196
-      -62 6 -3 29 73 29 95 0 11 -91 38 -174 52 -66 11 -71 11 -136 0z"/>
-        <path d="M16173 1990 c-54 -11 -95 -33 -144 -77 l-39 -35 0 51 0 51 -82 0 -83
-      0 0 -535 0 -536 83 3 84 3 -1 158 c-1 86 1 157 3 157 3 0 26 -16 51 -35 73
-      -55 156 -69 249 -41 145 44 222 168 233 376 10 187 -27 312 -118 394 -64 58
-      -154 83 -236 66z m94 -133 c65 -44 100 -178 90 -342 -8 -116 -30 -187 -72
-      -234 -85 -94 -206 -68 -267 58 -19 40 -22 67 -26 192 -3 115 -1 159 12 202 39
-      134 163 192 263 124z"/>
-        <path d="M16965 1989 c-216 -31 -339 -228 -307 -491 22 -176 112 -296 254
-      -339 127 -39 273 -13 366 66 163 138 186 457 46 641 -73 95 -212 143 -359 123z
-      m144 -99 c22 -11 48 -31 60 -46 80 -102 94 -369 26 -504 -78 -155 -248 -154
-      -324 2 -74 150 -55 413 37 512 54 57 132 71 201 36z"/>
-        <path d="M17855 1985 c-36 -9 -59 -24 -82 -51 l-33 -37 0 41 0 42 -82 0 -83 0
-      2 -412 3 -413 82 -3 83 -3 0 298 c0 283 1 300 21 338 26 50 84 85 142 85 l42
-      0 0 65 c0 74 -2 75 -95 50z"/>
-        <path d="M18840 1989 c-76 -13 -151 -50 -198 -97 -122 -122 -156 -377 -72
-      -548 69 -142 219 -214 420 -201 78 5 208 41 231 64 7 7 -7 89 -17 102 -2 2
-      -17 -7 -34 -19 -46 -33 -139 -62 -200 -63 -83 -2 -139 18 -186 68 -50 51 -73
-      113 -81 218 l-6 77 287 0 286 0 0 23 c-1 46 -29 156 -54 204 -65 130 -217 199
-      -376 172z m163 -112 c41 -31 73 -93 82 -159 l7 -48 -190 0 c-105 0 -193 3
-      -195 8 -9 14 24 117 49 155 52 79 174 100 247 44z"/>
-        <path d="M19585 1986 c-116 -28 -187 -93 -207 -187 -15 -71 1 -132 47 -187 31
-      -36 68 -56 245 -134 74 -33 100 -64 100 -120 0 -95 -92 -154 -202 -128 -57 14
-      -116 40 -160 73 -15 11 -29 19 -31 16 -2 -2 -9 -26 -15 -54 -13 -60 -10 -64
-      87 -97 94 -33 254 -33 326 0 144 66 204 218 133 343 -32 57 -59 74 -281 172
-      -54 24 -97 68 -97 99 0 42 31 87 77 109 60 29 131 23 215 -19 69 -34 73 -33
-      84 32 8 46 3 50 -86 70 -100 22 -180 26 -235 12z"/>
-        <path d="M21635 1993 c-193 -26 -310 -147 -335 -348 -26 -207 53 -388 205
-      -465 65 -34 72 -35 174 -35 95 0 112 3 161 27 66 32 142 105 170 162 49 104
-      63 244 35 364 -38 159 -132 255 -281 287 -70 15 -75 15 -129 8z m102 -94 c108
-      -40 168 -215 143 -414 -18 -141 -71 -224 -163 -254 -70 -23 -159 23 -200 104
-      -67 133 -60 373 14 489 45 72 132 103 206 75z"/>
-        <path d="M23358 1989 c-203 -30 -333 -215 -314 -450 15 -183 88 -305 220 -366
-      54 -24 73 -28 161 -28 89 0 107 3 162 29 121 55 194 165 215 320 20 151 -14
-      287 -98 384 -48 56 -107 89 -190 107 -76 16 -75 16 -156 4z m136 -93 c45 -19
-      90 -77 112 -144 15 -45 19 -87 19 -192 -1 -161 -20 -225 -85 -284 -54 -49
-      -110 -63 -166 -41 -101 38 -154 153 -154 331 0 135 33 248 87 296 49 45 128
-      59 187 34z"/>
-        <path d="M25260 1989 c-30 -5 -86 -19 -123 -31 l-69 -22 7 -46 c9 -63 18 -68
-      66 -36 121 81 257 73 302 -17 24 -48 12 -94 -32 -124 -19 -13 -84 -38 -145
-      -57 -142 -45 -211 -86 -250 -150 -27 -43 -30 -58 -31 -125 0 -88 21 -138 79
-      -188 47 -42 96 -57 171 -51 73 6 137 33 188 78 21 18 39 31 40 29 1 -2 11 -22
-      22 -43 25 -49 71 -70 137 -63 26 3 61 13 77 22 28 14 31 20 31 61 0 40 -2 45
-      -17 39 -39 -16 -54 -17 -68 -5 -13 10 -15 54 -15 277 0 298 -6 338 -56 389
-      -56 55 -196 84 -314 63z m198 -486 c-4 -134 -19 -177 -74 -219 -44 -34 -127
-      -43 -173 -19 -87 45 -87 203 0 266 41 29 233 107 243 98 4 -4 6 -60 4 -126z"/>
-        <path d="M26112 1985 c-55 -17 -89 -40 -97 -65 -11 -34 -25 -22 -25 20 l0 40
-      -80 0 -80 0 0 -415 0 -415 84 0 85 0 3 309 c3 295 4 311 24 337 34 46 70 67
-      123 72 l51 5 0 63 c0 60 -1 64 -22 63 -13 0 -42 -6 -66 -14z"/>
-        <path d="M27000 1989 c-58 -10 -142 -46 -176 -76 -47 -42 -95 -118 -115 -184
-      -28 -92 -24 -253 9 -343 34 -93 95 -165 176 -206 66 -34 73 -35 175 -35 92 1
-      113 4 161 26 151 71 228 219 217 424 -6 118 -26 185 -76 251 -87 115 -223 168
-      -371 143z m163 -108 c146 -90 152 -519 9 -619 -72 -50 -138 -49 -211 6 -113
-      84 -134 420 -36 562 54 79 158 101 238 51z"/>
-        <path d="M27782 1985 c-133 -29 -212 -116 -212 -232 1 -97 66 -179 178 -224
-      101 -40 190 -88 206 -111 22 -31 20 -86 -4 -125 -52 -87 -193 -90 -317 -8 -29
-      19 -54 35 -56 35 -6 0 -29 -111 -25 -116 3 -2 38 -16 79 -31 63 -23 90 -27
-      184 -27 94 -1 117 3 160 22 103 47 154 123 155 230 0 112 -42 167 -175 227
-      -219 98 -225 102 -225 160 0 43 32 89 75 110 63 29 162 10 276 -52 6 -3 29 73
-      29 95 0 11 -96 39 -180 52 -77 12 -69 12 -148 -5z"/>
-        <path d="M23844 1965 c3 -9 40 -109 82 -223 41 -114 91 -250 111 -302 49 -134
-      95 -263 99 -277 4 -16 134 -18 134 -3 0 8 262 720 295 803 6 15 1 17 -36 17
-      l-44 0 -104 -283 c-58 -155 -111 -298 -119 -317 l-14 -35 -105 290 c-57 160
-      -107 302 -110 318 l-5 27 -95 0 c-82 0 -94 -2 -89 -15z"/>
-        <path d="M24660 1565 l0 -415 85 0 85 0 0 415 0 415 -85 0 -85 0 0 -415z"/>
-        <path d="M26340 1575 c0 -223 -1 -408 -2 -412 -2 -5 36 -9 85 -11 l87 -3 0
-      416 0 415 -85 0 -85 0 0 -405z"/>
-        <path d="M11371 1851 c-149 -56 -217 -178 -209 -375 7 -159 59 -246 180 -302
-      57 -26 73 -29 173 -29 91 0 121 4 173 24 67 26 74 38 52 97 -10 24 -12 25 -28
-      11 -92 -81 -272 -82 -343 -1 -37 43 -50 84 -64 202 l-5 42 246 0 245 0 -6 48
-      c-19 138 -65 218 -155 266 -72 39 -179 46 -259 17z m169 -73 c49 -25 83 -80
-      93 -150 l6 -38 -166 0 -166 0 7 43 c11 64 49 121 98 146 54 27 73 26 128 -1z"/>
-        <path d="M29625 1860 c-156 -39 -245 -164 -245 -349 0 -155 65 -280 175 -336
-      52 -27 68 -30 149 -30 72 0 101 5 137 22 129 59 199 204 186 382 -7 95 -58
-      204 -117 251 -74 59 -192 84 -285 60z m155 -89 c71 -51 107 -161 98 -305 -12
-      -188 -115 -293 -232 -236 -83 40 -120 137 -114 298 3 91 8 116 31 164 48 98
-      141 132 217 79z"/>
-        </g>
-      </svg>`;
+// header institucional reutilizável — o SVG do logo vive no index.html (header #brandLogo);
+// aqui só reaproveitamos o markup (recolorável via currentColor + classe .brand-logo-doc).
+const DETRO_LOGO_SVG = document.getElementById('brandLogo').innerHTML;
 /* --- Helpers de documento e busca de linha ----------------------- */
 function docHead(subtitle){
   return `<div class="doc-head">
-    <span class="brand-logo brand-logo-doc" role="img" aria-label="DETRO — Departamento de Transportes Rodoviários do RJ">${DETRO_LOGO_SVG.replace(/currentColor/g,'#0a3a63')}</span>
+    <span class="brand-logo brand-logo-doc" role="img" aria-label="DETRO — Departamento de Transportes Rodoviários do RJ">${DETRO_LOGO_SVG}</span>
     <div class="doc-head-titles"><div class="sub">DIVAT · ${esc(subtitle)}</div></div></div>`;
 }
 function metaRows(pairs){
@@ -866,7 +683,7 @@ async function lineSearchRun(term, host, { render, emptyMsg, prompt, useActive =
   if (!lines.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para “'+esc(term)+'”.'); if (currentView) currentView.pdfHTML = null; return; }
   if (lines.length === 1){ selectLine(lines[0]); return render(host, lines[0]); }
   await getEmpresas();
-  host.innerHTML = `<p style="font-size:13.5px;color:var(--muted);margin:2px 0 8px">${lines.length} linha(s) encontradas — ${prompt}:</p>` + linhasTable(lines);
+  host.innerHTML = `<p class="doc-note">${lines.length} linha(s) encontradas — ${prompt}:</p>` + linhasTable(lines);
   host.querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{ const l=JSON.parse(tr.dataset.row); selectLine(l); render(host, l); }));
   if (currentView) currentView.pdfHTML = null;
 }
@@ -904,7 +721,7 @@ async function renderFolhaRosto(host, line){
       ['Processo de criação', esc(orDash(L.processo_criacao))],
       ['Situação', status, true],
     ])}
-    <div class="doc-foot">Fonte: cadastro DETRO-RJ · tabela_vista_teste</div>`;
+    <div class="doc-foot">Fonte: cadastro DETRO-RJ · DIVAT</div>`;
   host.innerHTML = inner;
   if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Cadastro de Linhas: Folha de Rosto')}${inner}</div>`;
 }
@@ -913,14 +730,14 @@ LOADERS.folhaDivisoria = () => lineDocView({ subtitle:'Folha Divisória', render
 async function renderFolhaDivisoria(host, line){
   host.innerHTML = loading();
   await getEmpresas();
-  const corpo = `<div style="margin-top:20px">
-      <div style="font-family:'Archivo';font-weight:800;font-size:31.5px;color:var(--navy)">${esc(line.nome_ligacao||'—')}</div>
-      <div class="mono" style="margin-top:10px;font-size:17px;color:var(--blue)">${esc(fmtCode(line.codlinha))} · ${esc(empNome(line.codempresa))} · RJ-${esc(line.codempresa||'—')}</div>
-      <div style="margin-top:14px">${situacaoHTML(line)}</div>
-      <div style="margin-top:40px;color:var(--muted);font-size:14.5px">Página de separação do processo da linha</div>
+  const corpo = `<div class="fd-body">
+      <div class="fd-title">${esc(line.nome_ligacao||'—')}</div>
+      <div class="mono fd-code">${esc(fmtCode(line.codlinha))} · ${esc(empNome(line.codempresa))} · RJ-${esc(line.codempresa||'—')}</div>
+      <div class="fd-chip">${situacaoHTML(line)}</div>
+      <div class="fd-note">Página de separação do processo da linha</div>
     </div>`;
-  host.innerHTML = `<div style="text-align:center;padding:40px 30px">${corpo}</div>`;
-  if (currentView) currentView.pdfHTML = ()=>`<div class="doc" style="text-align:center;padding:80px 30px">${docHead('Folha Divisória')}<div style="margin-top:60px">${corpo}</div></div>`;
+  host.innerHTML = `<div class="fd-wrap">${corpo}</div>`;
+  if (currentView) currentView.pdfHTML = ()=>`<div class="doc fd-wrap-pdf">${docHead('Folha Divisória')}<div class="fd-body-pdf">${corpo}</div></div>`;
 }
 
 /* Histórico (linha e empresa): um evento por página, descrição/observação por extenso.
@@ -1099,24 +916,24 @@ function quadroHorariosBodyHTML(interv, predet, orig){
   const sentidoKey = (cod, nome) => orig[cod] || nome || ('Origem '+orDash(cod));
   let html='';
   if (interv.length){
-    html += `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:14px 0 4px">Por intervalo / frequência</h3>`;
+    html += `<h3 class="doc-h3">Por intervalo / frequência</h3>`;
     for (const [label, list] of groupBy(interv, r=>sentidoKey(r.cod_origem, r.nome_origem))){
       html += `<div class="qh-sentido">Sentido · partidas de ${esc(label)}</div>`;
       for (const [dia, rows] of groupBy(list, r=>r.dia_semana||'—')){
         const body = rows.map(r=>`<tr><td class="td-num">${esc(fmtTime(r.hora_inicio))}</td>
           <td class="td-num">${esc(fmtTime(r.hora_fim))}</td><td class="td-tipo">${esc(orDash(r.intervalo))} min</td></tr>`).join('');
-        html += `<div style="margin-top:6px"><div class="sentido-sep" style="padding:5px 8px">${esc(dia)}</div>
+        html += `<div class="mt6"><div class="sentido-sep sm">${esc(dia)}</div>
           <div class="doc-table-wrap"><table class="doc-table"><thead><tr><th style="width:33%">Início</th><th style="width:33%">Fim</th><th>Intervalo</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
       }
     }
   }
   if (predet.length){
-    html += `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:18px 0 4px">Horários predeterminados</h3>`;
+    html += `<h3 class="doc-h3">Horários predeterminados</h3>`;
     for (const [label, list] of groupBy(predet, r=>sentidoKey(r.cod_origem, r.nome_origem))){
       html += `<div class="qh-sentido">Sentido · partidas de ${esc(label)}</div>`;
       for (const [dia, rows] of groupBy(list, r=>r.dia_semana||'—')){
-        const horas = rows.map(r=>`<span class="mono" style="display:inline-block;background:#eef4f9;color:var(--blue);padding:2px 7px;border-radius:5px;margin:2px;font-size:12.5px">${esc(fmtTime(r.saida))}</span>`).join('');
-        html += `<div style="margin-top:6px"><div class="sentido-sep" style="padding:5px 8px">${esc(dia)} · ${rows.length} partida(s)</div><div style="padding:8px 4px">${horas}</div></div>`;
+        const horas = rows.map(r=>`<span class="mono qh-hora">${esc(fmtTime(r.saida))}</span>`).join('');
+        html += `<div class="mt6"><div class="sentido-sep sm">${esc(dia)} · ${rows.length} partida(s)</div><div class="qh-horas">${horas}</div></div>`;
       }
     }
   }
@@ -1167,7 +984,7 @@ async function renderLinhaQuadro(host, line){
     if (!interv.length && !predet.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para esta linha.'); if(currentView) currentView.pdfHTML=null; return; }
     const ultima = qh[0]?.ultima_alteracao;
     // bloco de Seções e Tarifas da linha (mesma tabela/builder da Estrutura), fora do #qhResult
-    const h3sec = `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:18px 0 4px">Seções e Tarifas</h3>`;
+    const h3sec = `<h3 class="doc-h3">Seções e Tarifas</h3>`;
     const secBlock = secoes.length ? `${h3sec}${secoesTarifasHTML(secoes)}` : '';
     if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroMetaHTML(line, ultima)}${secBlock}${quadroHorariosBodyHTML(interv, predet, orig)}</div>`;
     // filtros por sentido (origem das partidas) e por dia — o PDF segue completo
@@ -1229,7 +1046,7 @@ async function renderEmpresaQuadros(host, cod, nome){
   // PDF: todos os quadros, um por página
   if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${comQuadro.map(l=>
     `<div class="ev-page">${docHead('Quadro de Horários')}${quadroDocInner(l, intervBy.get(l.codlinha)||[], predetBy.get(l.codlinha)||[], orig)}</div>`).join('')}</div>`;
-  host.innerHTML = `<div class="doc-obs" style="margin:0 0 10px"><b>${esc(nomeEmp)}</b> · ${linhas.length} linha(s), ${comQuadro.length} com quadro de horários.
+  host.innerHTML = `<div class="doc-obs tight"><b>${esc(nomeEmp)}</b> · ${linhas.length} linha(s), ${comQuadro.length} com quadro de horários.
       Use o botão <b>PDF</b> da barra acima para baixar todos os quadros (um por página).</div>`
     + (trunc? `<div class="trunc-aviso"><b>Resultado parcial:</b> a empresa tem muitos horários e alguns podem não ter sido carregados.</div>`:'')
     + `<div id="eqResult"></div>`;
@@ -1238,7 +1055,7 @@ async function renderEmpresaQuadros(host, cod, nome){
     const l = comQuadro.find(x=>String(x.codlinha)===String(tr.dataset.cod));
     if(!l) return;
     const iv = intervBy.get(l.codlinha)||[], pd = predetBy.get(l.codlinha)||[];
-    host.innerHTML = `<button type="button" class="qh-back" style="background:none;border:0;color:var(--blue);font:inherit;font-weight:600;cursor:pointer;padding:4px 0;margin-bottom:6px">‹ Voltar à lista da empresa</button>`
+    host.innerHTML = `<button type="button" class="qh-back">‹ Voltar à lista da empresa</button>`
       + quadroDocInner(l, iv, pd, orig);
     if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroDocInner(l, iv, pd, orig)}</div>`;
     host.querySelector('.qh-back').addEventListener('click', ()=>renderEmpresaQuadros(host, cod, nome));
@@ -1359,7 +1176,7 @@ async function renderEstrutura(host, line){
   ]);
   const L = lineRows[0] || line;
   const f = qh[0] || {};
-  const h3 = t => `<h3 style="font-family:'Archivo';font-size:15.5px;color:var(--navy);border-bottom:2px solid var(--green);padding-bottom:4px;margin:22px 0 6px">${t}</h3>`;
+  const h3 = t => `<h3 class="doc-h3-rule">${t}</h3>`;
   const frotaMeta = metaRows([['Hierarquização',esc(orDash(f.hierarquia))],['Frota operacional',esc(orDash(f.frota_operacional))],['Reserva',esc(orDash(f.reserva))],['Última alteração',fmtDate(f.ultima_alteracao)]]);
   const inner = `${metaRows([
       ['Empresa',esc(empNome(L.codempresa)),true],['Registro','RJ-'+esc(orDash(L.codempresa))],
@@ -1402,7 +1219,7 @@ LOADERS.empresasRegulares = async () => {
   const rowHTML = e => `<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}"><td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td><td class="td-tipo">${statusCol(e)}</td><td class="td-sentido">${e.total}</td><td class="td-tipo">${e.ativas}</td></tr>`;
   const cols = [{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Situação',w:'150px'},{t:'Total de linhas',w:'120px'},{t:'Linhas ativas',w:'110px'}];
   setBody(`<div class="doc">${docHead('Empresas Regulares')}
-    <p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${list.length} empresas no cadastro${semLinha?` · ${semLinha} sem linhas`:''}. Clique para ver as ligações da empresa.</p>
+    <p class="doc-note">${list.length} empresas no cadastro${semLinha?` · ${semLinha} sem linhas`:''}. Clique para ver as ligações da empresa.</p>
     <div class="loc-tools">
       <label>Situação <select id="empSit"><option value="todas">Todas</option><option value="regular">Regulares</option><option value="cassada">Cassadas</option><option value="interv">Sob intervenção</option></select></label>
       <label>Buscar <input type="text" id="empBusca" placeholder="nome ou RJ" autocomplete="off"></label>
@@ -1551,7 +1368,7 @@ LOADERS.ligacoesPorLogradouro = async () => {
     const cods=distinctCods(it,500);
     if(!cods.length){ host.innerHTML=emptyBox('Nenhuma linha passa por esse logradouro.'); return; }
     const rows = await fetchLinesByCods(cods,{limit:500});
-    const prefix = bannerTrunc(it) + `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${cods.length} linha(s) passam por "${esc(term)}"</p>`;
+    const prefix = bannerTrunc(it) + `<p class="doc-note">${cods.length} linha(s) passam por "${esc(term)}"</p>`;
     lineResults(host, rows, { prefixHTML: prefix });
   }});
 };
@@ -1599,7 +1416,7 @@ LOADERS.municipioRegiao = async () => {
         const rows = await fetchLinesByCods(lc,{limit:500});
         const label = modo==='origem' ? 'com origem na' : 'que trafegam dentro da';
         const prefix = bannerTrunc(it)
-          + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${lc.length} linha(s) ${label} região ${esc(region)}</p>`;
+          + `<p class="doc-count">${lc.length} linha(s) ${label} região ${esc(region)}</p>`;
         lineResults(result, rows, { prefixHTML: prefix });
       }
       scope.addEventListener('change', ()=>{ paint().catch(e=>{ result.innerHTML = errorBox(e.message); }); });
@@ -1688,7 +1505,7 @@ async function mostrarLinhasResultado(host, cods, titulo){
   const slice = cods.slice(0,250);
   const rows = await fetchLinesByCods(slice,{limit:250});
   const extra = cods.length>slice.length ? ` (mostrando ${slice.length})` : '';
-  const prefix = `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${cods.length} linha(s) — ${esc(titulo)}${extra}</p>`;
+  const prefix = `<p class="doc-count">${cods.length} linha(s) — ${esc(titulo)}${extra}</p>`;
   lineResults(host, rows, { prefixHTML: prefix });
 }
 // Município A × Município B — filtro direcional (A→B, respeita a ordem do itinerário) e
@@ -1750,7 +1567,7 @@ LOADERS.ligacoesPorTerminal = async () => {
     const lineCods=distinctCods(qi,120);
     if(!lineCods.length){ host.innerHTML=emptyBox('Nenhuma linha vinculada a esse terminal.'); return; }
     const rows = await fetchLinesByCods(lineCods,{limit:200});
-    const prefix = `<p style="font-size:13.5px;color:var(--muted);margin-bottom:6px">${lineCods.length} linha(s) a partir de "${esc(term)}"</p>`;
+    const prefix = `<p class="doc-note">${lineCods.length} linha(s) a partir de "${esc(term)}"</p>`;
     lineResults(host, rows, { prefixHTML: prefix });
   }});
 };
@@ -1803,9 +1620,9 @@ LOADERS.relatoriosGerenciais = async () => {
       <div class="kpi"><b>${sj}</b><span>Sub judice</span></div>
       <div class="kpi"><b>${empCount}</b><span>Empresas</span></div>
     </div>
-    <h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:16px 0 4px">Top empresas por nº de linhas</h3>
+    <h3 class="doc-h3">Top empresas por nº de linhas</h3>
     ${tableHTML([{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Linhas',w:'90px'}], porEmp.map(([c,n])=>`<tr><td class="td-num">${esc(c)}</td><td class="td-logr">${esc(empNome(c))}</td><td class="td-sentido">${n}</td></tr>`).join(''))}
-    <div class="doc-foot">Consolidado sobre ${total} linhas · tabela_vista_teste</div></div>`);
+    <div class="doc-foot">Consolidado sobre ${total} linhas · cadastro DETRO-RJ · DIVAT</div></div>`);
 };
 // Agregação PURA da Frota por Empresa (testável em tests/): total geral + quebra por empresa e
 // por hierarquia. num() trata vazio/inválido como 0; ordena por frota operacional desc.
@@ -1832,7 +1649,7 @@ LOADERS.frotaPorEmpresa = async () => {
   if(!rows.length){ setBody(`<div class="doc">${docHead('Frota por Empresa')}${emptyBox('Nenhuma frota cadastrada.')}</div>`); return; }
   const fmtN = n => n.toLocaleString('pt-BR');
   const { totOp, totRes, porEmp, porHier } = resumoFrota(rows);
-  const h3 = t => `<h3 style="font-family:'Archivo';font-size:14.5px;color:var(--navy);margin:18px 0 4px">${t}</h3>`;
+  const h3 = t => `<h3 class="doc-h3">${t}</h3>`;
   setBody(`<div class="doc">${docHead('Frota por Empresa')}
     ${bannerTrunc(rows)}
     <div class="kpi-grid">
@@ -1849,7 +1666,7 @@ LOADERS.frotaPorEmpresa = async () => {
     ${h3('Frota por hierarquia')}
     ${tableHTML([{t:'Hierarquia'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}],
       porHier.map(x=>`<tr><td class="td-logr">${esc(orDash(x.h))}</td><td class="td-num">${x.n}</td><td class="td-sentido">${fmtN(x.op)}</td><td class="td-num">${fmtN(x.res)}</td></tr>`).join(''))}
-    <div class="doc-foot">Consolidado sobre ${rows.length} linhas · qh_teste</div></div>`);
+    <div class="doc-foot">Consolidado sobre ${rows.length} linhas · cadastro DETRO-RJ · DIVAT</div></div>`);
 };
 LOADERS.pesquisaEvento = async () => {
   searchPanel({ title:'Pesquisa de Evento', placeholder:'Termo livre (processo, descrição, observação)', onRun: async(term, host)=>{
@@ -1925,8 +1742,8 @@ LOADERS.portarias = async () => {
   run();
 };
 function showPortaria(r, host){
-  host.innerHTML = `<button class="loc-btn" id="pbBack" style="margin-bottom:12px">← Voltar aos resultados</button>
-    <div class="doc" style="padding:0">
+  host.innerHTML = `<button class="loc-btn mb12" id="pbBack">← Voltar aos resultados</button>
+    <div class="doc flush">
     ${metaRows([['Portaria',esc(orDash(r.numero_portaria))],['Tipo',esc(orDash(r.tipo_portaria||r.tipo_legislacao))],
       ['Data',esc(fmtDate(r.data_portaria))],['Publicação',esc(fmtDate(r.data_publicacao))],
       ['Situação', r.vigor?'Em vigor':'Revogada'], r.portaria_anterior?['Portaria anterior',esc(r.portaria_anterior)]:['','']])}
@@ -2069,7 +1886,7 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     const secNote = comSecaoN ? ` · ${comSecaoN} com seção ${b && bTipo==='localidade' ? `${esc(a)} ↔ ${esc(b)}` : `em ${esc(a)}`}` : '';
     const corteNote = corte>0 ? ` (${corte} linha(s) a mais não exibidas — refine a busca)` : '';
     const prefix = bannerTrunc(lineRows)
-      + `<p style="font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px">${base.length} linha(s) · ${titulo}${secNote}${corteNote}</p>`;
+      + `<p class="doc-count">${base.length} linha(s) · ${titulo}${secNote}${corteNote}</p>`;
     renderLocalidadeSecoes(host, base, secByLine, { prefixHTML: prefix });
   }catch(e){ host.innerHTML = errorBox(e.message); }
 }
@@ -2089,7 +1906,7 @@ const LOC_FILTERS = [
 ];
 LOADERS.localidades = async () => {
   setBody(`<div class="doc">${docHead('Linhas por Localidade e Município')}
-    <div class="doc-obs" id="locHint" style="margin:0 0 12px"><b>Dica:</b> ${esc(LOC_FILTERS[0].hint)}</div>
+    <div class="doc-obs tight" id="locHint"><b>Dica:</b> ${esc(LOC_FILTERS[0].hint)}</div>
     <div class="loc-filters" id="locFilters" role="tablist">${LOC_FILTERS.map((f,i)=>
       `<button type="button" class="loc-filter-btn${i===0?' active':''}" data-idx="${i}" aria-pressed="${i===0}">${esc(f.label)}</button>`).join('')}</div>
     <div class="loc-form">
@@ -2288,7 +2105,7 @@ function lineResults(host, rows, { prefixHTML='', pdf=true } = {}){
 const byCodlinha = (a, b) => String(a.codlinha||'').localeCompare(String(b.codlinha||''), undefined, { numeric:true });
 function linhasTable(rows){
   if(!rows.length) return emptyBox('Nenhuma ligação.');
-  const body = [...rows].sort(byCodlinha).map(r=>`<tr class="clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'>
+  const body = [...rows].sort(byCodlinha).map(r=>`<tr class="clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r))}'>
     <td class="td-logr" data-label="Empresa">${esc(empNome(r.codempresa))}</td>
     <td class="td-num" data-label="RJ">${esc(r.codempresa||'')}</td>
     <td class="td-num" data-label="Código">${esc(fmtCode(r.codlinha))}</td>
@@ -2330,15 +2147,15 @@ function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='' } = {}){
       const linhas = [...rs].sort(byCodlinha).map(r=>{
         const chips = [boolChip(r.cancelado,'canc.'), boolChip(r.paralisado,'paral.')].filter(Boolean).join(' ');
         return `<div class="loc-linha-sec">
-          <div class="loc-linha-head clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r)).replace(/'/g,"&#39;")}'><span class="mono">${esc(fmtCode(r.codlinha))}</span> <span>${fmtLineName(r.nome_ligacao)}</span> ${chips}</div>
+          <div class="loc-linha-head clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r))}'><span class="mono">${esc(fmtCode(r.codlinha))}</span> <span>${fmtLineName(r.nome_ligacao)}</span> ${chips}</div>
           ${secoesLocalidadeTable(secByLine.get(r.codlinha)||[])}</div>`;
       }).join('');
       return `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${rs.length} linha(s)</span></h3>${linhas}`;
     }).join('');
   }
   if(semSecao.length){
-    html += `<h3 class="loc-emp-head" style="margin-top:22px">Outras linhas <span class="loc-emp-rj">por itinerário ou nome · ${semSecao.length} linha(s)</span></h3>`
-      + `<div class="doc-obs" style="margin:2px 0 10px">Ligam os pontos buscados, mas não têm uma seção de tarifa com esse nome.</div>`
+    html += `<h3 class="loc-emp-head mt22">Outras linhas <span class="loc-emp-rj">por itinerário ou nome · ${semSecao.length} linha(s)</span></h3>`
+      + `<div class="doc-obs tight">Ligam os pontos buscados, mas não têm uma seção de tarifa com esse nome.</div>`
       + linhasTable(semSecao);
   }
   host.innerHTML = html || emptyBox('Nenhuma linha encontrada.');
@@ -2348,7 +2165,7 @@ function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='' } = {}){
 function empresaChooserHTML(emps, { prompt, sitWidth = '150px', extraChips } = {}){
   const body = emps.map(e=>`<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}" data-nome="${esc(e.nome_empresa||'')}">
     <td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td><td class="td-tipo">${esc(orDash(e.situacao))}${extraChips? ' '+extraChips(e):''}</td></tr>`).join('');
-  return `<p style="font-size:13.5px;color:var(--muted);margin:2px 0 8px">${emps.length} empresa(s) encontradas — ${prompt}:</p>`
+  return `<p class="doc-note">${emps.length} empresa(s) encontradas — ${prompt}:</p>`
     + tableHTML([{t:'Código',w:'90px'},{t:'Empresa'},{t:'Situação',w:sitWidth}], body, emps.length+' empresa(s)');
 }
 function bindEmpresaRows(host, fn){
@@ -2358,7 +2175,7 @@ function bindEmpresaRows(host, fn){
 function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=false, note }){
   const selHTML = selectOpts? `<select id="spSel" aria-label="Filtro">${selectOpts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`:'';
   setBody(`<div class="doc">${docHead(title)}
-    ${note?`<div class="doc-obs" style="margin:0 0 10px"><b>Nota:</b> ${esc(note)}</div>`:''}
+    ${note?`<div class="doc-obs tight"><b>Nota:</b> ${esc(note)}</div>`:''}
     <div class="doc-search"><input id="spInput" type="text" placeholder="${esc(placeholder)}" value="${esc(value)}" aria-label="${esc(placeholder)}">${selHTML}<button id="spBtn">Buscar</button></div>
     <div id="spHost"></div></div>`);
   const input=modalBody.querySelector('#spInput'), btn=modalBody.querySelector('#spBtn'), host=modalBody.querySelector('#spHost'), sel=modalBody.querySelector('#spSel');
@@ -2397,16 +2214,20 @@ const VIEW_TABLES = {
   localidades:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','municipio_teste','localidades_teste','codempresa_teste'],
 };
 
+// Caminho único para abrir uma view de card — usado pelo clique do card, pelos resultados
+// de "consulta" da busca do topo e pelo roteamento por hash (deep link / botão Voltar).
+function openView(view){
+  const meta = VIEW_META[view];
+  if (!meta) return false;
+  const loader = LOADERS[view];
+  if (!loader){ toast(`${meta.title} — disponível em breve`, 'info'); return false; }
+  if (meta.needsLine && !activeLine){ toast('Selecione uma linha primeiro.', 'warn'); return false; }
+  runView({ key:view, title:meta.title, tables: VIEW_TABLES[view]||[], lineFilter: meta.needsLine, loader });
+  return true;
+}
 app.addEventListener('click', e => {
   const card = e.target.closest('.card');
-  if (!card) return;
-  const view = card.dataset.view;
-  const needsLine = card.dataset.needsLine === '1';
-  const title = card.dataset.title;
-  const loader = LOADERS[view];
-  if (!loader){ toast(`${title} — disponível em breve`, 'info'); return; }
-  if (needsLine && !activeLine){ toast('Selecione uma linha primeiro.', 'warn'); return; }
-  runView({ title, tables: VIEW_TABLES[view]||[], lineFilter: needsLine, loader });
+  if (card) openView(card.dataset.view);
 });
 
 /* ================================================================
@@ -2424,6 +2245,7 @@ function toast(msg, type = 'info') {
   document.querySelectorAll('.toast').forEach(t => t.remove());
   const el = document.createElement('div');
   el.className = `toast toast-${type}`;
+  el.setAttribute('role', 'status');       // leitores de tela anunciam o aviso (aria-live polite)
   el.textContent = msg;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3000);
@@ -2481,33 +2303,45 @@ function onRealtime(table, payload){
     scheduleReload();
   }
 }
-try {
-  const sbClient = supabase.createClient(SB_URL, SB_KEY, { realtime:{ params:{ eventsPerSecond:5 } } });
-  const channel = sbClient.channel('divat-rt');
-  RT_TABLES.forEach(t => channel.on('postgres_changes', { event:'*', schema:'public', table:t }, p => onRealtime(t, p)));
-  channel.subscribe(status => {
-    rtDot.classList.toggle('live', status==='SUBSCRIBED');
-    if (status==='CHANNEL_ERROR' || status==='TIMED_OUT') console.warn('Realtime status:', status);
-  });
-} catch(e){
-  console.warn('Realtime indisponível:', e);
-  // supabase-js (vendorado) indisponível → a consulta via REST segue funcionando, mas sem atualização ao vivo
-  if (typeof toast === 'function') toast('Atualização ao vivo indisponível no momento', 'warn');
+function initRealtime(){
+  try {
+    const sbClient = supabase.createClient(SB_URL, SB_KEY, { realtime:{ params:{ eventsPerSecond:5 } } });
+    const channel = sbClient.channel('divat-rt');
+    RT_TABLES.forEach(t => channel.on('postgres_changes', { event:'*', schema:'public', table:t }, p => onRealtime(t, p)));
+    channel.subscribe(status => {
+      rtDot.classList.toggle('live', status==='SUBSCRIBED');
+      if (status==='CHANNEL_ERROR' || status==='TIMED_OUT') console.warn('Realtime status:', status);
+    });
+  } catch(e){
+    console.warn('Realtime indisponível:', e);
+    // supabase-js (vendorado) indisponível → a consulta via REST segue funcionando, mas sem atualização ao vivo
+    if (typeof toast === 'function') toast('Atualização ao vivo indisponível no momento', 'warn');
+  }
+}
+// O supabase-js (~100 KB, usado SÓ pelo Realtime) é injetado dinamicamente — script dinâmico
+// é async por padrão, então não atrasa a primeira pintura (a CSP script-src 'self' permite:
+// mesmo origin, arquivo vendorado). Ao atualizar a versão vendorada, troque o src aqui.
+{
+  const s = document.createElement('script');
+  s.src = 'vendor/supabase-js-2.110.7.min.js';
+  s.onload = initRealtime;
+  s.onerror = () => { console.warn('Falha ao carregar o supabase-js vendorado'); toast('Atualização ao vivo indisponível no momento', 'warn'); };
+  document.head.appendChild(s);
 }
 
 // pré-carrega o cadastro de empresas (nome ↔ RJ) p/ os renderizadores síncronos (banner, listas)
 getEmpresas().catch(()=>{});
-const _bl=document.getElementById('brandLogo'); if(_bl) _bl.innerHTML = DETRO_LOGO_SVG;
 
 /* ================================================================
    AUTO-ATUALIZAÇÃO — detecta novo deploy e recarrega sozinho,
-   sem ninguém precisar limpar cache. Compara os ETags do index.html
-   E do app.js (deploy que só muda o JS também precisa recarregar).
+   sem ninguém precisar limpar cache. Compara os ETags do index.html,
+   do app.js E do styles.css (deploy que muda só um deles também
+   precisa recarregar todo mundo).
    ================================================================ */
 let _verTag = null;
 async function checarNovaVersao(){
   try {
-    const heads = await Promise.all(['/index.html', '/app.js'].map(p =>
+    const heads = await Promise.all(['/index.html', '/app.js', '/styles.css'].map(p =>
       fetch(p + '?_=' + Date.now(), { method: 'HEAD', cache: 'no-store' })));
     const tags = heads.map(r => r.headers.get('etag') || r.headers.get('last-modified'));
     if (tags.some(t => !t)) return;    // sem como comparar → não faz nada
@@ -2528,3 +2362,62 @@ setInterval(checarNovaVersao, 3 * 60 * 1000);                     // a cada 3 mi
 window.addEventListener('focus', checarNovaVersao);              // ao voltar pra aba
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checarNovaVersao(); });
 checarNovaVersao();                                              // referência inicial
+
+/* ================================================================
+   ROTAS (hash) — deep link compartilhável e botão Voltar do navegador
+   Formatos:
+     #/linha/<codlinha>                    → seleciona a linha
+     #/consulta/<view>                     → abre o card <view>
+     #/linha/<codlinha>/consulta/<view>    → linha + documento
+   Views de drill-down (sem `key`, ex.: "Linhas no Município") não
+   entram na URL — o hash fica no último estado endereçável.
+   ================================================================ */
+let _applyingRoute = false;   // aplicando uma rota → runView/selectLine não reescrevem o hash
+let _modalPushed  = false;    // a abertura do modal criou uma entrada de histórico?
+
+// estado atual → hash. `push:true` cria entrada de histórico (só na ABERTURA do modal —
+// é o que faz o Voltar do navegador fechar o modal em vez de sair do site).
+function syncHash({ push = false } = {}){
+  if (_applyingRoute) return;
+  const parts = [];
+  if (activeLine) parts.push('linha/' + encodeURIComponent(activeLine.codlinha));
+  if (overlay.classList.contains('open') && currentView && currentView.key) parts.push('consulta/' + currentView.key);
+  const target = parts.length ? '#/' + parts.join('/') : location.pathname + location.search;
+  const alvoHash = parts.length ? target : '';
+  if ((location.hash || '') === alvoHash) return;
+  try {
+    if (push){ history.pushState(null, '', target); _modalPushed = true; }
+    else history.replaceState(null, '', target);
+  } catch(_){ /* file:// ou contexto sem History API → segue sem rota */ }
+}
+
+// hash → estado (idempotente: só mexe no que estiver diferente do hash)
+async function applyRoute(){
+  const seg = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  let cod = null, view = null;
+  for (let i = 0; i < seg.length; i++){
+    if (seg[i] === 'linha'    && seg[i+1]) cod  = decodeURIComponent(seg[++i]);
+    else if (seg[i] === 'consulta' && seg[i+1]) view = decodeURIComponent(seg[++i]);
+  }
+  _applyingRoute = true;
+  try {
+    if (cod && (!activeLine || String(activeLine.codlinha) !== String(cod))){
+      try {
+        const rows = await sbFetch('tabela_vista_teste', `codlinha=eq.${enc(cod)}&select=${LINE_FIELDS}&limit=1`);
+        if (rows[0]) selectLine(rows[0]);
+      } catch(_){ /* linha inacessível → segue sem selecionar */ }
+    }
+    if (!cod && activeLine){ activeLine = null; banner.style.display = 'none'; updateNeedChips(); }
+    if (view && VIEW_META[view]){
+      if (!(overlay.classList.contains('open') && currentView && currentView.key === view)) openView(view);
+    } else if (!view && overlay.classList.contains('open')){
+      closeModal();
+    }
+  } finally { _applyingRoute = false; }
+}
+window.addEventListener('hashchange', () => { applyRoute(); });
+
+/* ---- boot ---- */
+updateNeedChips();     // chips dos cards que exigem linha (estado inicial)
+applyRoute();          // deep link: aplica o hash da URL de entrada (se houver)
+})();

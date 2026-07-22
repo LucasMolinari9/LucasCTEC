@@ -73,3 +73,39 @@ Plano completo em `docs/plano-endurecimento-2026-07-21.md`. Em resumo:
    **Atenção ETL:** reimportar com encoding errado recria o problema — importar sempre UTF-8.
 6. **Docs**: este CHANGELOG criado; `CLAUDE.md` enxuto (só estado atual + regras); fluxo de
    trabalho passa a ser **branch → preview do Vercel → merge na `main`**.
+
+## 22/07/2026 — Profissionalização do frontend (UX, rotas, CSS próprio)
+
+Revisão completa do frontend (branch `claude/frontend-review-2sty95`, avaliada em preview antes
+do merge). Nenhuma mudança de banco. Em resumo:
+
+1. **Rotas por hash** (seção `ROTAS (hash)` no `app.js`): `#/linha/<codlinha>`,
+   `#/consulta/<view>` e a combinação. Links compartilháveis/favoritáveis, deep link na
+   entrada, e o **Voltar do navegador fecha o modal** (abertura cria UMA entrada de histórico;
+   trocas de view internas usam `replaceState`).
+2. **CSS extraído para `styles.css`** (o `<style>` do `index.html` saiu; `style-src` segue com
+   `'unsafe-inline'` por causa dos `style=""` dinâmicos — accents dos cards e larguras de `th`).
+   Os ~30 estilos inline REPETIDOS dos templates viraram classes (`.doc-h3`, `.doc-note`,
+   `.doc-count`, `.fd-*`, `.qh-*`, `.doc-obs.tight` etc.). `checarNovaVersao` vigia agora
+   **3 ETags** (`index.html`, `app.js`, `styles.css`).
+3. **`esc()` também escapa `'`** (`&#39;`) — remove a classe de bug dos atributos single-quoted
+   (os `.replace(/'/g,…)` manuais saíram); cópia no `tests/pure.harness.js` atualizada + teste.
+4. **`app.js` num IIFE** (nada vaza p/ `window`) e **logo DETRO (SVG ~280 linhas) saiu do JS**
+   — vive inline no `#brandLogo` do `index.html`; `docHead` reusa o markup e a cor vem da
+   classe `.brand-logo-doc` (fim do `replace(currentColor)`).
+5. **supabase-js injetado dinamicamente** pelo `app.js` (só serve o Realtime; script dinâmico é
+   async → não bloqueia a primeira pintura). A tag `<script>` dele saiu do `index.html`.
+6. **Busca do topo**: busca-enquanto-digita (debounce 300 ms, ≥2 caracteres), navegação por
+   teclado (↓/↑/Esc), semântica de combobox (`aria-expanded` etc.) e **consultas no dropdown**
+   (digitar "tarifa" acha o card Tarifas — `matchViews`/`VIEW_META`).
+7. **Cards**: descrições diferenciadas (a instrução repetida "Busque a linha…" saiu), documentos
+   mais usados primeiro, ícones exclusivos (`histEmp`, `fleet`, `ruler`), chip visível nos cards
+   que exigem linha ("Requer linha selecionada" → "Linha <nº>" quando há linha ativa) e modo
+   compacto no celular (linha única, sem descrição — menos rolagem).
+8. **Sem detalhe interno na UI pública**: rodapé sem "Supabase"/"bd_teste" (carimbo `#verTag`
+   continua, discreto) e rodapés de documento sem nome de tabela (`tabela_vista_teste` etc. →
+   "cadastro DETRO-RJ · DIVAT").
+9. **A11y**: toasts com `role="status"` (leitores de tela anunciam avisos e o "Atualizado ao
+   vivo").
+10. **PWA mínimo**: `manifest.webmanifest` + `vendor/icon.svg` (instalável na tela inicial;
+    sem service worker).
