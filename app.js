@@ -314,6 +314,11 @@ function toggleSearchCard(){
 function selectTopic(key, opts = {}){
   const sec = SECTIONS.find(s => s.key === key);
   if (!sec) return;
+  // sai de "Documentos da Linha" sem fechar a busca por outro caminho (ex.: clicar direto
+  // em outro tópico) deixava `searchOpen` preso em true — ao voltar pro "doc" depois, a
+  // busca reabria sozinha em vez do grid, e a sidebar mostrava "Buscar Linha" com destaque
+  // no lugar do tópico realmente clicado.
+  if (key !== 'doc') searchOpen = false;
   currentTopicKey = key;
   renderSideNav(key);
   renderSideContent(key);
@@ -2421,8 +2426,15 @@ app.addEventListener('click', e => {
     const key = topicBtn.dataset.topic;
     // clique no tópico é o ÚNICO jeito de abrir/fechar a sub-lista (nunca abre sozinha)
     expandedTopicKey = (expandedTopicKey === key) ? null : key;
-    if (currentTopicKey === key) renderSideNav(currentTopicKey);
-    else selectTopic(key);
+    if (currentTopicKey === key){
+      // clicar em "Documentos da Linha" enquanto a busca está aberta em cima dele fecha a
+      // busca e volta pro grid — senão o clique parecia não fazer nada (a sub-lista abria/
+      // fechava, mas "Buscar Linha" continuava com o destaque em vez do tópico clicado).
+      if (key === 'doc' && searchOpen){ searchOpen = false; renderSideContent('doc'); }
+      renderSideNav(currentTopicKey);
+    } else {
+      selectTopic(key);
+    }
     return;
   }
   // sub-título da sidebar = mesmo alvo do card correspondente no painel de conteúdo
