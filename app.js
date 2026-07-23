@@ -286,9 +286,13 @@ function renderSideNav(activeKey){
 }
 function renderSideContent(key){
   const sec = SECTIONS.find(s => s.key === key);
+  // com a busca aberta, o título/descrição do tópico repetem o que a barra já deixa
+  // óbvio (e a sidebar já rotula o tópico ativo) — some pra a barra ficar sozinha,
+  // sem se misturar com um card de outra coisa logo abaixo dela.
+  const showHead = !(key === 'doc' && searchOpen);
   sideContent.innerHTML = `
-    <div class="sec-head" style="--accent:${ACCENT}"><h2>${sec.name}</h2></div>
-    <p class="content-sub">${sec.desc}</p>
+    ${showHead ? `<div class="sec-head" style="--accent:${ACCENT}"><h2>${sec.name}</h2></div>
+    <p class="content-sub">${sec.desc}</p>` : ''}
     <div class="grid">${topicGridHTML(sec)}</div>`;
   // busca de linha só faz sentido aqui: é o único tópico cujos cards exigem linha
   // selecionada (needsLine em SECTIONS) — os demais já têm busca própria por card
