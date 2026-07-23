@@ -177,7 +177,7 @@
     flex:1 1 auto;min-height:560px;
   }
   .side{
-    width:296px;flex:0 0 auto;background:var(--navy-deep);padding:18px 12px;
+    width:336px;flex:0 0 auto;background:var(--navy-deep);padding:18px 16px;
     display:flex;flex-direction:column;gap:2px;overflow-y:auto;
   }
   .side-brand{display:flex;align-items:center;gap:10px;padding:4px 12px 16px;margin-bottom:10px;border-bottom:1px solid rgba(255,255,255,.08)}
@@ -201,12 +201,12 @@
   .side-search-btn .t-ico{width:32px;height:32px;border-radius:8px;flex:0 0 auto;display:grid;place-items:center;background:rgba(255,255,255,.06);color:#9db4cc;transition:background .15s,color .15s}
   .side-search-btn .t-ico svg{width:17px;height:17px}
   .side-search-btn:hover{background:rgba(255,255,255,.055);color:#fff}
-  /* estado "aberto" fica mais discreto que `.topic-btn.active` (barra lateral em vez de
-     preenchimento sólido) — são dois "ligados" ao mesmo tempo quando a busca abre dentro
-     de Documentos da Linha, e com o mesmo preenchimento sólido pareciam 2 itens
-     selecionados na navegação. */
-  .side-search-btn.open{background:rgba(255,255,255,.09);color:#fff;box-shadow:inset 3px 0 0 var(--blue)}
-  .side-search-btn.open .t-ico{background:rgba(255,255,255,.14);color:#fff}
+  /* clicar em "Buscar Linha" é o que o usuário selecionou por último — fica com o
+     preenchimento sólido (mesmo tratamento de `.topic-btn.active`). O tópico "Documentos
+     da Linha" por baixo vira `.searching` (mais discreto, barra lateral) enquanto a busca
+     estiver aberta, pra não competir com o item que o usuário realmente clicou. */
+  .side-search-btn.open{background:var(--blue);color:#fff}
+  .side-search-btn.open .t-ico{background:rgba(255,255,255,.22);color:#fff}
   .side-search-btn:focus-visible{outline:2px solid #fff;outline-offset:-2px;border-radius:10px}
   .topic-btn{
     display:flex;align-items:center;gap:12px;width:100%;text-align:left;font:inherit;
@@ -218,6 +218,10 @@
   .topic-btn:hover{background:rgba(255,255,255,.055);color:#fff}
   .topic-btn.active{background:var(--accent);color:#fff}
   .topic-btn.active .t-ico{background:rgba(255,255,255,.22);color:#fff}
+  /* "Documentos da Linha" enquanto a busca está aberta em cima dele — ver comentário em
+     .side-search-btn.open acima */
+  .topic-btn.active.searching{background:rgba(255,255,255,.09);color:#fff;box-shadow:inset 3px 0 0 var(--accent)}
+  .topic-btn.active.searching .t-ico{background:rgba(255,255,255,.14);color:#fff}
   .topic-btn:focus-visible{outline:2px solid #fff;outline-offset:-2px;border-radius:10px}
   .topic-btn .chev{margin-left:auto;opacity:.55;transition:transform .18s}
   .topic-btn.expanded .chev{transform:rotate(90deg);opacity:.9}

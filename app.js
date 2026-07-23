@@ -272,7 +272,7 @@ function renderSideNav(activeKey){
       <span class="t-ico">${svg(I.search)}</span>Buscar Linha
     </button>` +
     SECTIONS.map(sec => `
-    <button type="button" class="topic-btn${sec.key===activeKey?' active':''}${sec.key===expandedTopicKey?' expanded':''}" data-topic="${sec.key}"
+    <button type="button" class="topic-btn${sec.key===activeKey?' active':''}${(sec.key==='doc'&&activeKey==='doc'&&searchOpen)?' searching':''}${sec.key===expandedTopicKey?' expanded':''}" data-topic="${sec.key}"
       style="--accent:${ACCENT}">
       <span class="t-ico">${svg(I[sec.icon])}</span>${sec.name}
       <span class="chev">${svg('<path d="m9 6 6 6-6 6"/>')}</span>
