@@ -286,31 +286,26 @@ function renderSideNav(activeKey){
 }
 function renderSideContent(key){
   const sec = SECTIONS.find(s => s.key === key);
-  // com a busca aberta, o título/descrição do tópico repetem o que a barra já deixa
-  // óbvio (e a sidebar já rotula o tópico ativo) — some pra a barra ficar sozinha,
-  // sem se misturar com um card de outra coisa logo abaixo dela.
-  const showHead = !(key === 'doc' && searchOpen);
-  sideContent.innerHTML = `
-    ${showHead ? `<div class="sec-head" style="--accent:${ACCENT}"><h2>${sec.name}</h2></div>
-    <p class="content-sub">${sec.desc}</p>` : ''}
-    <div class="grid">${topicGridHTML(sec)}</div>`;
-  // busca de linha só faz sentido aqui: é o único tópico cujos cards exigem linha
-  // selecionada (needsLine em SECTIONS) — os demais já têm busca própria por card
-  // (empresa, logradouro, terminal…), duplicar poluiria a tela. Fica escondida por
-  // padrão — só aparece quando o card "Buscar Linha" da sidebar é clicado
-  // (toggleSearchCard). `sideContent.innerHTML` acima já desanexou o nó de qualquer
-  // render anterior; reinserimos o MESMO nó (não clona, mantém os listeners) no topo
-  // do painel.
+  // busca aberta: o painel mostra SÓ a barra — nada de título, descrição ou grade
+  // junto (pedido explícito). `sideContent.innerHTML` abaixo já desanexou o nó de
+  // qualquer render anterior; reinserimos o MESMO nó (não clona, mantém os
+  // listeners de busca já ligados).
   if (key === 'doc' && searchOpen){
+    sideContent.innerHTML = '';
     selector.style.display = '';
-    sideContent.insertBefore(selector, sideContent.firstChild);
+    sideContent.appendChild(selector);
+    return;
   }
+  sideContent.innerHTML = `
+    <div class="sec-head" style="--accent:${ACCENT}"><h2>${sec.name}</h2></div>
+    <p class="content-sub">${sec.desc}</p>
+    <div class="grid">${topicGridHTML(sec)}</div>`;
 }
 // clique no card "Buscar Linha" da sidebar: abre/fecha a barra de busca dentro do
 // painel; se o tópico ativo não for "Documentos da Linha", muda pra ele já aberta.
 function toggleSearchCard(){
   searchOpen = !(currentTopicKey === 'doc' && searchOpen);
-  if (currentTopicKey === 'doc'){ renderSideContent('doc'); renderSideNav('doc'); }
+  if (currentTopicKey === 'doc'){ renderSideContent('doc'); renderSideNav('doc'); updateNeedChips(); }
   else selectTopic('doc');
   if (searchOpen) searchInput.focus();
 }
@@ -445,9 +440,13 @@ const viewResultsHTML = views => views.map(([view, m]) => `
   </button>`).join('');
 // clique num resultado de "consulta" no dropdown → leva para dentro do tópico dono no painel
 // lateral, com o card destacado (não abre o documento sozinho; o clique final no card é que abre).
+// fecha a busca primeiro: com ela aberta o painel mostra só a barra (sem grade) — sem
+// fechar, o card escolhido não teria onde ser destacado.
 function openViewFromSearch(view){
   const topic = VIEW_TOPIC[view];
-  if (topic) selectTopic(topic, { highlight: view });
+  if (!topic) return;
+  searchOpen = false;
+  selectTopic(topic, { highlight: view });
 }
 
 // `auto:true` = disparo da busca-enquanto-digita: sem toast de campo vazio e sem
@@ -519,6 +518,8 @@ dropdown.addEventListener('click', e => {
   if (!item) return;
   selectLine(JSON.parse(item.dataset.row));
   closeDropdown(); searchInput.value = '';
+  // achou a linha → fecha a busca e mostra a grade de documentos, já com a linha ativa
+  if (currentTopicKey === 'doc' && searchOpen){ searchOpen = false; renderSideContent('doc'); renderSideNav('doc'); updateNeedChips(); }
 });
 document.addEventListener('click', e => { if (!selector.contains(e.target)) closeDropdown(); });
 
