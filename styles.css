@@ -201,10 +201,10 @@
   .side-search-btn .t-ico{width:32px;height:32px;border-radius:8px;flex:0 0 auto;display:grid;place-items:center;background:rgba(255,255,255,.06);color:#9db4cc;transition:background .15s,color .15s}
   .side-search-btn .t-ico svg{width:17px;height:17px}
   .side-search-btn:hover{background:rgba(255,255,255,.055);color:#fff}
-  /* clicar em "Buscar Linha" é o que o usuário selecionou por último — fica com o
-     preenchimento sólido (mesmo tratamento de `.topic-btn.active`). O tópico "Documentos
-     da Linha" por baixo vira `.searching` (mais discreto, barra lateral) enquanto a busca
-     estiver aberta, pra não competir com o item que o usuário realmente clicou. */
+  /* clicar em "Buscar Linha" fica com o mesmo preenchimento sólido de `.topic-btn.active`.
+     Enquanto a busca estiver aberta, o tópico "Documentos da Linha" por baixo NÃO recebe
+     `.active` (ver renderSideNav) — fica igual a qualquer outro item não selecionado,
+     pra não ter dois itens com destaque ao mesmo tempo. */
   .side-search-btn.open{background:var(--blue);color:#fff}
   .side-search-btn.open .t-ico{background:rgba(255,255,255,.22);color:#fff}
   .side-search-btn:focus-visible{outline:2px solid #fff;outline-offset:-2px;border-radius:10px}
@@ -218,10 +218,6 @@
   .topic-btn:hover{background:rgba(255,255,255,.055);color:#fff}
   .topic-btn.active{background:var(--accent);color:#fff}
   .topic-btn.active .t-ico{background:rgba(255,255,255,.22);color:#fff}
-  /* "Documentos da Linha" enquanto a busca está aberta em cima dele — ver comentário em
-     .side-search-btn.open acima */
-  .topic-btn.active.searching{background:rgba(255,255,255,.09);color:#fff;box-shadow:inset 3px 0 0 var(--accent)}
-  .topic-btn.active.searching .t-ico{background:rgba(255,255,255,.14);color:#fff}
   .topic-btn:focus-visible{outline:2px solid #fff;outline-offset:-2px;border-radius:10px}
   .topic-btn .chev{margin-left:auto;opacity:.55;transition:transform .18s}
   .topic-btn.expanded .chev{transform:rotate(90deg);opacity:.9}
