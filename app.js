@@ -200,8 +200,8 @@ const SECTIONS = [
       ['hub','Ligações por Terminais','Linhas que atendem um terminal','ligacoesPorTerminal',false],
       ['ruler','Seções por Ligação','Seções que compõem uma linha','secoesPorLigacao',true],
     ]},
-  { key:'ger', name:'Gerenciais e Pesquisa',
-    icon:'chart', desc:'Relatórios consolidados, frota por empresa, pesquisa de eventos e legislação.',
+  { key:'ger', name:'Portarias',
+    icon:'law', desc:'Relatórios consolidados, frota por empresa, pesquisa de eventos e legislação.',
     items:[
       ['chart','Relatórios Gerenciais','Indicadores e consolidados da DIVAT','relatoriosGerenciais',false],
       ['fleet','Frota por Empresa','Frota consolidada por operadora e hierarquia','frotaPorEmpresa',false],
