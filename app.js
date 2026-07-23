@@ -169,7 +169,8 @@ const I = {
 const SECTIONS = [
   // Documentos: os mais consultados primeiro; cada descrição diz o que o DOCUMENTO contém
   // (a instrução "busque a linha…" repetida virava ruído — a busca fica dentro do card).
-  { key:'doc', name:'Documentos da Linha', color:'var(--c-doc)', soft:'#e7f0f8',
+  { key:'doc', name:'Documentos da Linha',
+    icon:'file', desc:'Itinerário, quadro de horários, tarifas, frota e histórico de cada linha regular.',
     items:[
       ['file','Folha de Rosto','Resumo cadastral: empresa, código, tarifa e situação','folhaRosto',false],
       ['route','Itinerários','Percurso por sentido: logradouros e municípios','itinerarios',false],
@@ -180,14 +181,16 @@ const SECTIONS = [
       ['structure','Estrutura Operacional','Consolidado: cadastro, seções, itinerário, horários e frota','estrutura',false],
       ['divider','Folha Divisória','Capa de separação para processos e arquivos','folhaDivisoria',false],
     ]},
-  { key:'emp', name:'Empresas', color:'var(--c-emp)', soft:'#e4f4ec',
+  { key:'emp', name:'Empresas',
+    icon:'building', desc:'Operadoras regulares, seções atendidas e histórico de eventos por empresa.',
     items:[
       ['building','Empresas Regulares','Operadoras com linhas regulares ativas','empresasRegulares',false],
       ['histEmp','Histórico da Empresa','Eventos e alterações por operadora','historicoEmpresa',false],
       ['link','Ligações por Empresa','Linhas operadas por uma empresa','ligacoesPorEmpresa',false],
       ['segments','Seções por Empresa','Seções atendidas por operadora','secoesPorEmpresa',false],
     ]},
-  { key:'lig', name:'Consultas de Ligações', color:'var(--c-lig)', soft:'#f8efe0',
+  { key:'lig', name:'Consultas de Ligações',
+    icon:'hub', desc:'Busque linhas por nome, número, logradouro, terminal ou município.',
     items:[
       ['alpha','Ligações pelo Nome','Buscar em ordem alfabética crescente','ligacoesPorNome',false],
       ['hash','Identificar pelo Número','Localizar uma linha pelo código','ligacoesPorNumero',false],
@@ -197,7 +200,8 @@ const SECTIONS = [
       ['hub','Ligações por Terminais','Linhas que atendem um terminal','ligacoesPorTerminal',false],
       ['ruler','Seções por Ligação','Seções que compõem uma linha','secoesPorLigacao',true],
     ]},
-  { key:'ger', name:'Gerenciais e Pesquisa', color:'var(--c-ger)', soft:'#efe9f7',
+  { key:'ger', name:'Portarias',
+    icon:'law', desc:'Relatórios consolidados, frota por empresa, pesquisa de eventos e legislação.',
     items:[
       ['chart','Relatórios Gerenciais','Indicadores e consolidados da DIVAT','relatoriosGerenciais',false],
       ['fleet','Frota por Empresa','Frota consolidada por operadora e hierarquia','frotaPorEmpresa',false],
@@ -207,31 +211,99 @@ const SECTIONS = [
 ];
 
 /* ================================================================
-   RENDER CARDS
+   RENDER CARDS — painel lateral fixo (sidebar de tópicos) + conteúdo
    ================================================================ */
 const app = document.getElementById('app');
 const svg = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 
+// cor única (mesmo azul de "Documentos da Linha") pra todos os cards e pro destaque do
+// tópico ativo na sidebar — parou de variar por família de tópico.
+const ACCENT = 'var(--c-doc)', ACCENT_SOFT = '#e7f0f8';
+
 // metadados por view (título, ícone, cores, pré-requisito) — usados pelo clique do card,
-// pela busca do topo (consultas no dropdown) e pelo roteamento por hash.
+// pela busca do topo (consultas no dropdown) e pelo roteamento por hash. Populados eagerly,
+// independente de qual tópico está ativo no painel no momento.
 const VIEW_META = {};
+const VIEW_TOPIC = {};   // view → key do tópico dono (SECTIONS[].key) — usado pela busca do topo
 SECTIONS.forEach(sec => {
-  const cards = sec.items.map(([ic, title, desc, view, needsLine]) => {
-    VIEW_META[view] = { title, icon:ic, needsLine:!!needsLine, color:sec.color, soft:sec.soft };
-    return `
+  sec.items.forEach(([ic, title, desc, view, needsLine]) => {
+    VIEW_META[view] = { title, icon:ic, needsLine:!!needsLine, color:ACCENT, soft:ACCENT_SOFT };
+    VIEW_TOPIC[view] = sec.key;
+  });
+});
+
+const DEFAULT_TOPIC = 'doc';   // tópico mostrado ao abrir o site sem hash (o mais consultado)
+
+// grid dos cards-folha do tópico ativo (documentos/consultas dentro dele)
+function topicGridHTML(sec){
+  return sec.items.map(([ic, title, desc, view, needsLine]) => `
     <button class="card${needsLine?' needs-line':''}" type="button"
-      style="--accent:${sec.color};--accent-soft:${sec.soft}"
+      style="--accent:${ACCENT};--accent-soft:${ACCENT_SOFT}"
       data-view="${view}" data-needs-line="${needsLine?1:0}" data-title="${esc(title)}">
       <span class="ico">${svg(I[ic])}</span>
       <span class="card-txt"><h3>${title}</h3><p>${desc}</p>${needsLine?'<span class="need-chip"></span>':''}</span>
-    </button>`;
-  }).join('');
-  app.insertAdjacentHTML('beforeend', `
-    <section class="section">
-      <div class="sec-head" style="--accent:${sec.color}"><h2>${sec.name}</h2></div>
-      <div class="grid">${cards}</div>
-    </section>`);
-});
+    </button>`).join('');
+}
+
+// casca fixa: sidebar (nav) + painel de conteúdo — montada uma vez, preenchida por selectTopic()
+app.innerHTML = `
+  <div class="side-shell">
+    <nav class="side" id="sideNav"></nav>
+    <div class="content" id="sideContent"></div>
+  </div>`;
+const sideNav = document.getElementById('sideNav');
+const sideContent = document.getElementById('sideContent');
+
+let currentTopicKey;      // key do tópico ativo no painel de conteúdo — undefined até a 1ª renderização
+let expandedTopicKey = null; // key do tópico com a sub-lista aberta na sidebar — só muda por CLIQUE explícito
+                              // no botão do tópico (nunca abre sozinha por virar o tópico atual)
+
+function renderSideNav(activeKey){
+  sideNav.innerHTML = `
+    <div class="side-brand">
+      <span class="side-brand-badge">${svg('<path d="M6 7.5h12M12 7.5V17"/><circle cx="12" cy="6" r="1.6" fill="currentColor" stroke="none"/>')}</span>
+      <div class="side-brand-txt"><b>Coordenadoria Técnica</b><span>DETRO/RJ</span></div>
+    </div>
+    <div class="side-eyebrow">Consultas</div>` +
+    SECTIONS.map(sec => `
+    <button type="button" class="topic-btn${sec.key===activeKey?' active':''}${sec.key===expandedTopicKey?' expanded':''}" data-topic="${sec.key}"
+      style="--accent:${ACCENT}">
+      <span class="t-ico">${svg(I[sec.icon])}</span>${sec.name}
+      <span class="chev">${svg('<path d="m9 6 6 6-6 6"/>')}</span>
+    </button>
+    ${sec.key===expandedTopicKey ? `<div class="sub-list">${sec.items.map(([ic,title,desc,view]) => `<button type="button" data-view="${view}">${title}</button>`).join('')}</div>` : ''}
+  `).join('');
+  // no mobile a sidebar vira faixa horizontal (ver @media em styles.css); sem isso, um
+  // tópico ativo fora da 1ª "dobra" da faixa (deep link, busca) fica sem destaque visível
+  // — a sub-lista some no mobile, então o botão realçado é o único indicador de onde se está.
+  sideNav.querySelector('.topic-btn.active')?.scrollIntoView({ block:'nearest', inline:'nearest' });
+}
+function renderSideContent(key){
+  const sec = SECTIONS.find(s => s.key === key);
+  sideContent.innerHTML = `
+    <div class="sec-head" style="--accent:${ACCENT}"><h2>${sec.name}</h2></div>
+    <p class="content-sub">${sec.desc}</p>
+    <div class="grid">${topicGridHTML(sec)}</div>`;
+}
+// troca o tópico ativo do painel — usado pelo clique na sidebar, pela busca do topo
+// (com destaque no card) e pelo roteamento por hash.
+function selectTopic(key, opts = {}){
+  const sec = SECTIONS.find(s => s.key === key);
+  if (!sec) return;
+  currentTopicKey = key;
+  renderSideNav(key);
+  renderSideContent(key);
+  updateNeedChips();
+  if (!_applyingRoute) syncHash();
+  if (opts.highlight){
+    const el = sideContent.querySelector(`.card[data-view="${opts.highlight}"]`);
+    if (el){
+      el.scrollIntoView({ block:'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      el.classList.add('card-flash');
+      setTimeout(() => el.classList.remove('card-flash'), 1600);
+    }
+  }
+}
 // chips dos cards que exigem linha: mostram o pré-requisito ANTES do clique e, com uma
 // linha selecionada, viram confirmação com o número dela (estado visível, não punitivo).
 function updateNeedChips(){
@@ -342,6 +414,12 @@ const viewResultsHTML = views => views.map(([view, m]) => `
     <span class="rv-txt">${esc(m.title)}</span>
     <span class="rv-kind">consulta</span>
   </button>`).join('');
+// clique num resultado de "consulta" no dropdown → leva para dentro do tópico dono no painel
+// lateral, com o card destacado (não abre o documento sozinho; o clique final no card é que abre).
+function openViewFromSearch(view){
+  const topic = VIEW_TOPIC[view];
+  if (topic) selectTopic(topic, { highlight: view });
+}
 
 // `auto:true` = disparo da busca-enquanto-digita: sem toast de campo vazio e sem
 // mexer no rótulo do botão (feedback visual só na busca manual).
@@ -407,7 +485,7 @@ dropdown.addEventListener('keydown', e => {
 });
 dropdown.addEventListener('click', e => {
   const view = e.target.closest('.result-view');
-  if (view){ closeDropdown(); searchInput.value = ''; openView(view.dataset.openView); return; }
+  if (view){ closeDropdown(); searchInput.value = ''; openViewFromSearch(view.dataset.openView); return; }
   const item = e.target.closest('.result-item');
   if (!item) return;
   selectLine(JSON.parse(item.dataset.row));
@@ -1101,14 +1179,16 @@ LOADERS.quadroHorarios = async () => {
 };
 
 /* --- DOC · Tarifas -------------------------------------------- */
-const TARIFA_COLS = [{t:'Seção',w:'60px'},{t:'Nº Linha',w:'80px'},{t:'Ligação'},{t:'Via',w:'90px'},{t:'Caract.',w:'90px'},{t:'Tipo',w:'90px'},{t:'RM',w:'55px'},{t:'Tarifa',w:'80px'},{t:'Piso I',w:'80px'},{t:'Situação',w:'90px'},{t:'Criação',w:'90px'},{t:'Status',w:'150px'}];
+const TARIFA_COLS = [{t:'Seção',w:'60px'},{t:'Nº Linha',w:'80px'},{t:'Ligação'},{t:'Via',w:'90px'},{t:'Caract.',w:'90px'},{t:'Tipo',w:'90px'},{t:'RM',w:'55px'},{t:'Tarifa',w:'80px'},{t:'Piso I (km)',w:'90px'},{t:'Situação',w:'90px'},{t:'Criação',w:'90px'},{t:'Status',w:'150px'}];
 function tarifaRowHTML(r){
   // chip de status com a data do evento ao lado (quando a coluna de data está disponível)
   const dChip = (v,label,date) => v ? `<span class="chip chip-on">${label}${date?' '+fmtDate(date):''}</span>` : '';
   const st = [ dChip(r.cancelado,'Canc.',r.data_cancelamento), dChip(r.paralisado,'Paral.',r.data_paralisacao), dChip(r.sub_judice,'Sub jud.',r.data_sub_judice), dChip(r.transferido,'Transf.',r.data_transferencia) ].filter(Boolean).join(' ') || '<span class="chip chip-off">OK</span>';
+  // "Piso I" é quilometragem (extensão da seção), não valor monetário — sem "R$"
+  const pisoTxt = (r.piso_i===null||r.piso_i===undefined||r.piso_i==='') ? '—' : `${fmtMoney(r.piso_i)} km`;
   return `<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-num">${esc(orDash(r.numero_linha))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td>
   <td class="td-tipo">${esc(orDash(r.via))}</td><td class="td-tipo">${esc(orDash(r.caracteristica))}</td><td class="td-tipo">${esc(orDash(r.tipo_ligacao))}</td><td class="td-num">${esc(orDash(r.rm))}</td>
-  <td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td><td class="td-num">R$ ${esc(fmtMoney(r.piso_i))}</td>
+  <td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td><td class="td-num">${esc(pisoTxt)}</td>
   <td class="td-tipo">${esc(orDash(r.situacao))}</td><td class="td-num">${fmtDate(r.data_criacao)}</td><td>${st}</td></tr>`;
 }
 function secoesTarifasHTML(rows){
@@ -2305,7 +2385,19 @@ function openView(view){
   return true;
 }
 app.addEventListener('click', e => {
-  const card = e.target.closest('.card');
+  const topicBtn = e.target.closest('.topic-btn');
+  if (topicBtn){
+    const key = topicBtn.dataset.topic;
+    // clique no tópico é o ÚNICO jeito de abrir/fechar a sub-lista (nunca abre sozinha)
+    expandedTopicKey = (expandedTopicKey === key) ? null : key;
+    if (currentTopicKey === key) renderSideNav(currentTopicKey);
+    else selectTopic(key);
+    return;
+  }
+  // sub-título da sidebar = mesmo alvo do card correspondente no painel de conteúdo
+  const subBtn = e.target.closest('.sub-list button');
+  if (subBtn){ openView(subBtn.dataset.view); return; }
+  const card = e.target.closest('.card[data-view]');
   if (card) openView(card.dataset.view);
 });
 
@@ -2446,20 +2538,23 @@ checarNovaVersao();                                              // referência 
    ROTAS (hash) — deep link compartilhável e botão Voltar do navegador
    Formatos:
      #/linha/<codlinha>                    → seleciona a linha
-     #/consulta/<view>                     → abre o card <view>
+     #/topico/<key>                        → tópico ativo no painel lateral (omitido quando é o padrão)
+     #/consulta/<view>                     → abre o card <view> (tópico dono fica ativo no painel)
      #/linha/<codlinha>/consulta/<view>    → linha + documento
    Views de drill-down (sem `key`, ex.: "Linhas no Município") não
    entram na URL — o hash fica no último estado endereçável.
    ================================================================ */
-let _applyingRoute = false;   // aplicando uma rota → runView/selectLine não reescrevem o hash
+let _applyingRoute = false;   // aplicando uma rota → runView/selectLine/selectTopic não reescrevem o hash
 let _modalPushed  = false;    // a abertura do modal criou uma entrada de histórico?
 
 // estado atual → hash. `push:true` cria entrada de histórico (só na ABERTURA do modal —
-// é o que faz o Voltar do navegador fechar o modal em vez de sair do site).
+// é o que faz o Voltar do navegador fechar o modal em vez de sair do site). Trocar de tópico no
+// painel lateral é só `replace` (não é mais "entrar numa tela" — o painel sempre está visível).
 function syncHash({ push = false } = {}){
   if (_applyingRoute) return;
   const parts = [];
   if (activeLine) parts.push('linha/' + encodeURIComponent(activeLine.codlinha));
+  if (currentTopicKey && currentTopicKey !== DEFAULT_TOPIC) parts.push('topico/' + currentTopicKey);
   if (overlay.classList.contains('open') && currentView && currentView.key) parts.push('consulta/' + currentView.key);
   const target = parts.length ? '#/' + parts.join('/') : location.pathname + location.search;
   const alvoHash = parts.length ? target : '';
@@ -2473,10 +2568,11 @@ function syncHash({ push = false } = {}){
 // hash → estado (idempotente: só mexe no que estiver diferente do hash)
 async function applyRoute(){
   const seg = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-  let cod = null, view = null;
+  let cod = null, view = null, topico = null;
   for (let i = 0; i < seg.length; i++){
-    if (seg[i] === 'linha'    && seg[i+1]) cod  = decodeURIComponent(seg[++i]);
-    else if (seg[i] === 'consulta' && seg[i+1]) view = decodeURIComponent(seg[++i]);
+    if (seg[i] === 'linha'    && seg[i+1]) cod    = decodeURIComponent(seg[++i]);
+    else if (seg[i] === 'topico'   && seg[i+1]) topico = decodeURIComponent(seg[++i]);
+    else if (seg[i] === 'consulta' && seg[i+1]) view   = decodeURIComponent(seg[++i]);
   }
   _applyingRoute = true;
   try {
@@ -2487,6 +2583,9 @@ async function applyRoute(){
       } catch(_){ /* linha inacessível → segue sem selecionar */ }
     }
     if (!cod && activeLine){ activeLine = null; banner.style.display = 'none'; updateNeedChips(); }
+    // tópico ativo no painel: dono do view (se houver), senão o segmento topico/, senão o padrão
+    const topicoAlvo = (view && VIEW_TOPIC[view]) || topico || DEFAULT_TOPIC;
+    if (currentTopicKey !== topicoAlvo) selectTopic(topicoAlvo);
     if (view && VIEW_META[view]){
       if (!(overlay.classList.contains('open') && currentView && currentView.key === view)) openView(view);
     } else if (!view && overlay.classList.contains('open')){
@@ -2497,6 +2596,5 @@ async function applyRoute(){
 window.addEventListener('hashchange', () => { applyRoute(); });
 
 /* ---- boot ---- */
-updateNeedChips();     // chips dos cards que exigem linha (estado inicial)
-applyRoute();          // deep link: aplica o hash da URL de entrada (se houver)
+applyRoute();          // 1ª renderização do painel (tópico padrão ou o do hash) + deep link de entrada
 })();

@@ -143,3 +143,24 @@ direto no Postgres, prova mais forte que um teste de caixa-preta.
   do Supabase (Authentication → Policies) — já listado como pendente no `CLAUDE.md`; não foi
   possível confirmar ao vivo se o signup do Auth está fechado (mesmo bloqueio de rede); hash do
   `vendor/supabase-js-2.110.7.min.js` não foi reconferido contra o pacote oficial do npm.
+
+## 23/07/2026 — Home vira painel lateral (sidebar de tópicos)
+
+- **Home de cards → painel lateral fixo.** A grade de seções empilhadas deu lugar a uma
+  **sidebar de tópicos** (nav navy à esquerda) + **painel de conteúdo** que mostra os cards do
+  tópico ativo. A casca é montada uma vez e preenchida por `selectTopic`; a seção `RENDER CARDS`
+  do `app.js` passou a ter `renderSideNav`/`renderSideContent` (mapa de código no `CLAUDE.md`
+  atualizado).
+- **Tópico "Gerenciais e Pesquisa" renomeado para "Portarias".** Cor de acento **unificada**
+  (mesmo azul de "Documentos da Linha") em todos os cards e no destaque do tópico ativo — parou
+  de variar por família.
+- **Rota nova `#/topico/<key>`** (deep link do tópico ativo no painel; omitida quando é o
+  padrão). Convive com `#/linha/…` e `#/consulta/…`; a busca do topo leva ao tópico dono e
+  **realça** o card (sem abrir o documento sozinho).
+- **Sub-lista da sidebar só abre por clique explícito** no tópico (nunca sozinha ao virar o
+  tópico atual). No **mobile** a sidebar vira faixa horizontal de ícones e a sub-lista some;
+  `renderSideNav` faz `scrollIntoView` do tópico ativo para o destaque não ficar fora da faixa
+  (deep link / busca).
+- **Fix de dado na tela de Tarifas:** "Piso I" é **quilometragem** (extensão da seção), não
+  valor — passou a exibir `… km` em vez de `R$ …`.
+- `node tests/check.js` verde (260/260). Sem mudança de schema/Realtime — só frontend.
