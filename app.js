@@ -1169,10 +1169,10 @@ async function renderTarifasEmpresa(host, cod, nome){
   const nLinhas = new Set(rows.map(r=>r.codlinha)).size;
   const meta = metaRows([['Empresa',esc(nomeEmp||'—'),true],['Registro','RJ-'+esc(cod)],['Total',nLinhas+' linha(s) · '+rows.length+' seção(ões)']]);
   if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhuma tarifa cadastrada para a empresa '+esc(nomeEmp||cod)+'.'); if(currentView) currentView.pdfHTML=null; return; }
-  // agrupa por linha — cada linha aparece 1x, com a qtd. de seções e a(s) tarifa(s) dela
+  // agrupa por linha — cada linha aparece 1x, com a qtd. de seções e a TARIFA DA LINHA
+  // (a da 1ª seção, mesma convenção da Folha de Rosto — não o intervalo das seções).
   const linhas = [...groupBy(rows, r=>r.codlinha)].map(([codlinha,secs])=>{
-    const valores = [...new Set(secs.map(s=>Number(s.tarifa)).filter(v=>!isNaN(v)))];
-    const tarifaTxt = !valores.length ? '—' : valores.length===1 ? 'R$ '+fmtMoney(valores[0]) : `R$ ${fmtMoney(Math.min(...valores))} – R$ ${fmtMoney(Math.max(...valores))}`;
+    const tarifaTxt = secs[0].tarifa != null ? 'R$ '+fmtMoney(secs[0].tarifa) : '—';
     return { codlinha, numero_linha:secs[0].numero_linha, nome_ligacao:secs[0].nome_ligacao, nsec:secs.length, tarifaTxt };
   });
   const tools = `<div class="loc-tools"><label>Ver <select id="tarEmpModo"><option value="secoes" selected>Linhas com seção</option><option value="linhas">Somente linhas</option></select></label></div>`;
