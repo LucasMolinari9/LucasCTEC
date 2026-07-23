@@ -174,7 +174,7 @@ const SECTIONS = [
       ['file','Folha de Rosto','Resumo cadastral: empresa, código, tarifa e situação','folhaRosto',false],
       ['route','Itinerários','Percurso por sentido: logradouros e municípios','itinerarios',false],
       ['clock','Quadro de Horários','Partidas por sentido e dia — por linha ou empresa','quadroHorarios',false],
-      ['ticket','Tarifas','Seções e valores vigentes da linha','tarifas',false],
+      ['ticket','Tarifas','Seções e valores vigentes — por linha ou empresa','tarifas',false],
       ['history','Histórico da Linha','Alterações e eventos registrados','historicoLinha',false],
       ['bus','Frota','Frota operacional e reserva por tipo de veículo','frota',false],
       ['structure','Estrutura Operacional','Consolidado: cadastro, seções, itinerário, horários e frota','estrutura',false],
@@ -186,7 +186,6 @@ const SECTIONS = [
       ['histEmp','Histórico da Empresa','Eventos e alterações por operadora','historicoEmpresa',false],
       ['link','Ligações por Empresa','Linhas operadas por uma empresa','ligacoesPorEmpresa',false],
       ['segments','Seções por Empresa','Seções atendidas por operadora','secoesPorEmpresa',false],
-      ['ticket','Tarifas por Empresa','Todas as tarifas vigentes de uma operadora','tarifasPorEmpresa',false],
     ]},
   { key:'lig', name:'Consultas de Ligações', color:'var(--c-lig)', soft:'#f8efe0',
     items:[
@@ -1138,7 +1137,53 @@ async function renderTarifas(host, line){
   paint();
 }
 
-LOADERS.tarifas = () => lineDocView({ subtitle:'Tarifas Vigentes', render:renderTarifas });
+// Modo empresa: resolve a empresa e lista as tarifas de TODAS as linhas dela
+async function tarifaEmpresaRun(term, host){
+  term = (term||'').trim();
+  if(!term){
+    if(activeLine) return renderTarifasEmpresa(host, activeLine.codempresa, empNome(activeLine.codempresa));
+    host.innerHTML = emptyBox('Busque por uma empresa (nome ou código RJ), ou troque para "Por linha".');
+    if(currentView) currentView.pdfHTML=null; return;
+  }
+  await getEmpresas();
+  const emps = searchEmpresas(term);
+  if(emps.length > 1){
+    host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para ver as tarifas' });
+    bindEmpresaRows(host, (cod,nome)=>renderTarifasEmpresa(host, cod, nome));
+    if(currentView) currentView.pdfHTML=null; return;
+  }
+  const cod = emps.length===1 ? emps[0].codempresa : term;
+  const nome = emps.length===1 ? emps[0].nome_empresa : null;
+  await renderTarifasEmpresa(host, cod, nome);
+}
+// Lista (paginada) as tarifas de todas as linhas de UMA empresa
+async function renderTarifasEmpresa(host, cod, nome){
+  host.innerHTML = loading();
+  const rows = await sbFetch('tarifa_atual_teste', `codempresa=eq.${enc(cod)}&select=codlinha,secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=codlinha,secao&limit=3000`);
+  const nomeEmp = nome || empNome(cod);
+  const meta = metaRows([['Empresa',esc(nomeEmp||'—'),true],['Registro','RJ-'+esc(cod)],['Total',rows.length+' seção(ões)']]);
+  if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhuma tarifa cadastrada para a empresa '+esc(nomeEmp||cod)+'.'); if(currentView) currentView.pdfHTML=null; return; }
+  host.innerHTML = `${meta}<div id="tarEmpResult"></div>`;
+  paginateTable(host.querySelector('#tarEmpResult'), rows, { cols:TARIFA_COLS, rowHTML:tarifaRowHTML, foot:t=>t+' seção(ões)', unit:'seções' });
+}
+
+LOADERS.tarifas = () => {
+  searchPanel({
+    title:'Tarifas Vigentes',
+    placeholder:'Nome, número ou código da linha (ou empresa)',
+    selectOpts:[['linha','Por linha'],['empresa','Por empresa']],
+    note:'Por linha: nome, número ou código → mostra as tarifas dela. Por empresa: nome ou código RJ → lista as tarifas de todas as linhas da operadora.',
+    onRun:(term, host, modo) => modo==='empresa' ? tarifaEmpresaRun(term, host) : lineDocRun(term, host, renderTarifas)
+  });
+  const host = modalBody.querySelector('#spHost');
+  if (activeLine){
+    const i = modalBody.querySelector('#spInput');
+    if (i) i.value = activeLine.numero_ligacao || activeLine.codlinha || '';
+    renderTarifas(host, activeLine);
+  } else {
+    host.innerHTML = emptyBox('Busque a linha pelo nome, número ou código — ou troque para "Por empresa".');
+  }
+};
 
 /* --- DOC · Frota ---------------------------------------------- */
 function frotaBlockHTML(f){
@@ -1312,32 +1357,6 @@ LOADERS.secoesPorEmpresa = async () => {
     };
     inp.addEventListener('input', debounce(paint));
     paint();
-  }});
-};
-// Renderiza as tarifas (todas as linhas, paginado) de UMA empresa dentro de um container
-async function renderTarifasEmpresa(host, cod, nome){
-  const rows = await sbFetch('tarifa_atual_teste', `codempresa=eq.${enc(cod)}&select=codlinha,secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=codlinha,secao&limit=3000`);
-  const meta = metaRows([['Empresa',esc(nome||empNome(cod)||'—'),true],['Registro','RJ-'+esc(cod)],['Total',rows.length+' seção(ões)']]);
-  if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhuma tarifa cadastrada para a empresa '+esc(cod)+'.'); if(currentView) currentView.pdfHTML=null; return; }
-  host.innerHTML = `${meta}<div id="tarEmpResult"></div>`;
-  paginateTable(host.querySelector('#tarEmpResult'), rows, { cols:TARIFA_COLS, rowHTML:tarifaRowHTML, foot:t=>t+' seção(ões)', unit:'seções' });
-}
-LOADERS.tarifasPorEmpresa = async () => {
-  const pre = activeLine?.codempresa || '';
-  searchPanel({ title:'Tarifas por Empresa', placeholder:'Nome ou código da empresa (ex. 1001 ou AUTO VIAÇÃO)', value:pre, onRun: async(term, host)=>{
-    term = (term||'').trim();
-    if(!term){ host.innerHTML=emptyBox('Busque pelo nome ou código da empresa.'); if(currentView) currentView.pdfHTML=null; return; }
-    // busca client-side sobre o cadastro completo — insensível a maiúsc./minúsc. e acento
-    await getEmpresas();
-    const emps = searchEmpresas(term);
-    if(emps.length === 1){ await renderTarifasEmpresa(host, emps[0].codempresa, emps[0].nome_empresa); return; }
-    if(emps.length > 1){
-      host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para ver as tarifas' });
-      bindEmpresaRows(host, (cod,nome)=>renderTarifasEmpresa(host, cod, nome));
-      if(currentView) currentView.pdfHTML=null; return;
-    }
-    // não achou no cadastro de nomes → tenta o termo como código direto
-    await renderTarifasEmpresa(host, term, null);
   }});
 };
 // Renderiza o histórico (paginado) de UMA empresa dentro de um container
@@ -2242,11 +2261,10 @@ function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=fal
 const VIEW_TABLES = {
   folhaRosto:['tabela_vista_teste','codempresa_teste','tarifa_atual_teste'], folhaDivisoria:['tabela_vista_teste','codempresa_teste'],
   historicoLinha:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste','tabela_vista_teste'], itinerarios:['itinerario_teste','municipio_teste','codempresa_teste'],
-  quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste','qh_teste','tarifa_atual_teste','origem_teste','codempresa_teste','tabela_vista_teste'], tarifas:['tarifa_atual_teste'],
+  quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste','qh_teste','tarifa_atual_teste','origem_teste','codempresa_teste','tabela_vista_teste'], tarifas:['tarifa_atual_teste','codempresa_teste'],
   frota:['qh_teste','codempresa_teste'], estrutura:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','qh_intervalo_teste','qh_predeterminado_teste','qh_teste','origem_teste','municipio_teste','codempresa_teste'],
   empresasRegulares:['tabela_vista_teste','codempresa_teste'], historicoEmpresa:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste'],
   ligacoesPorEmpresa:['tabela_vista_teste','codempresa_teste'], secoesPorEmpresa:['tarifa_atual_teste'],
-  tarifasPorEmpresa:['tarifa_atual_teste','codempresa_teste'],
   ligacoesPorNome:['tabela_vista_teste','codempresa_teste'], ligacoesPorNumero:['tabela_vista_teste','codempresa_teste'],
   ligacoesPorLogradouro:['itinerario_teste','tabela_vista_teste','codempresa_teste'], municipioRegiao:['municipio_teste','itinerario_teste','tabela_vista_teste','codempresa_teste'],
   ligacoesPorTerminal:['qh_intervalo_teste','origem_teste','tabela_vista_teste','codempresa_teste'],
