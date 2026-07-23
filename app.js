@@ -1157,14 +1157,33 @@ async function tarifaEmpresaRun(term, host){
   await renderTarifasEmpresa(host, cod, nome);
 }
 // Lista (paginada) as tarifas de todas as linhas de UMA empresa
+const LINHA_TARIFA_COLS = [{t:'Número',w:'100px'},{t:'Ligação'},{t:'Código',w:'120px'},{t:'Seções',w:'80px'},{t:'Tarifa',w:'150px'}];
+// uma linha por LIGAÇÃO (deduplicado), mesmo quando ela tem várias seções de tarifa
+function linhaTarifaRowHTML(l){
+  return `<tr><td class="td-num">${esc(orDash(l.numero_linha||fmtCode(l.codlinha)))}</td><td class="td-logr">${esc(orDash(l.nome_ligacao))}</td><td class="td-num">${esc(fmtCode(l.codlinha))}</td><td class="td-num">${l.nsec}</td><td class="td-sentido">${esc(l.tarifaTxt)}</td></tr>`;
+}
 async function renderTarifasEmpresa(host, cod, nome){
   host.innerHTML = loading();
   const rows = await sbFetch('tarifa_atual_teste', `codempresa=eq.${enc(cod)}&select=codlinha,secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=codlinha,secao&limit=3000`);
   const nomeEmp = nome || empNome(cod);
-  const meta = metaRows([['Empresa',esc(nomeEmp||'—'),true],['Registro','RJ-'+esc(cod)],['Total',rows.length+' seção(ões)']]);
+  const nLinhas = new Set(rows.map(r=>r.codlinha)).size;
+  const meta = metaRows([['Empresa',esc(nomeEmp||'—'),true],['Registro','RJ-'+esc(cod)],['Total',nLinhas+' linha(s) · '+rows.length+' seção(ões)']]);
   if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhuma tarifa cadastrada para a empresa '+esc(nomeEmp||cod)+'.'); if(currentView) currentView.pdfHTML=null; return; }
-  host.innerHTML = `${meta}<div id="tarEmpResult"></div>`;
-  paginateTable(host.querySelector('#tarEmpResult'), rows, { cols:TARIFA_COLS, rowHTML:tarifaRowHTML, foot:t=>t+' seção(ões)', unit:'seções' });
+  // agrupa por linha — cada linha aparece 1x, com a qtd. de seções e a(s) tarifa(s) dela
+  const linhas = [...groupBy(rows, r=>r.codlinha)].map(([codlinha,secs])=>{
+    const valores = [...new Set(secs.map(s=>Number(s.tarifa)).filter(v=>!isNaN(v)))];
+    const tarifaTxt = !valores.length ? '—' : valores.length===1 ? 'R$ '+fmtMoney(valores[0]) : `R$ ${fmtMoney(Math.min(...valores))} – R$ ${fmtMoney(Math.max(...valores))}`;
+    return { codlinha, numero_linha:secs[0].numero_linha, nome_ligacao:secs[0].nome_ligacao, nsec:secs.length, tarifaTxt };
+  });
+  const tools = `<div class="loc-tools"><label>Ver <select id="tarEmpModo"><option value="secoes" selected>Linhas com seção</option><option value="linhas">Somente linhas</option></select></label></div>`;
+  host.innerHTML = `${meta}${tools}<div id="tarEmpResult"></div>`;
+  const result = host.querySelector('#tarEmpResult'), sel = host.querySelector('#tarEmpModo');
+  const paint = ()=>{
+    if(sel.value==='linhas') paginateTable(result, linhas, { cols:LINHA_TARIFA_COLS, rowHTML:linhaTarifaRowHTML, foot:t=>t+' linha(s)', unit:'linhas' });
+    else paginateTable(result, rows, { cols:TARIFA_COLS, rowHTML:tarifaRowHTML, foot:t=>t+' seção(ões)', unit:'seções' });
+  };
+  sel.addEventListener('change', paint);
+  paint();
 }
 
 LOADERS.tarifas = () => {
