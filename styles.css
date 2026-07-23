@@ -127,15 +127,15 @@
   }
   .selector input::placeholder{color:#90a2b3}
   .selector > button{
-    background:#15824a;color:#fff;border:0;cursor:pointer;align-self:stretch;
+    background:var(--blue);color:#fff;border:0;cursor:pointer;align-self:stretch;
     font-family:'Archivo';font-weight:700;font-size:15px;letter-spacing:.01em;
     padding:0 26px;min-height:48px;border-radius:9px;
-    box-shadow:0 1px 0 rgba(255,255,255,.22) inset, 0 8px 18px -10px rgba(21,130,74,.9);
+    box-shadow:0 1px 0 rgba(255,255,255,.22) inset, 0 8px 18px -10px rgba(20,102,166,.9);
     transition:filter .15s,transform .15s;
   }
-  .selector > button:hover{filter:brightness(1.07)}
+  .selector > button:hover{filter:brightness(1.1)}
   .selector > button:active{transform:translateY(1px)}
-  .selector:focus-within{box-shadow:0 0 0 3px rgba(31,157,87,.35), 0 22px 48px -22px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.16)}
+  .selector:focus-within{box-shadow:0 0 0 3px rgba(20,102,166,.35), 0 22px 48px -22px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.16)}
 
   /* variante do seletor quando o app.js o realoca pro topo do painel (tópico "Documentos
      da Linha", ver renderSideContent) — a versão base foi desenhada pra flutuar sobre o
@@ -145,7 +145,7 @@
     margin:0 0 22px;max-width:none;border-color:var(--line);
     box-shadow:var(--shadow);
   }
-  .content > .selector:focus-within{box-shadow:0 0 0 3px rgba(31,157,87,.28), var(--shadow)}
+  .content > .selector:focus-within{box-shadow:0 0 0 3px rgba(20,102,166,.28), var(--shadow)}
 
   /* faixa de "rota" decorativa */
   .route{display:flex;align-items:center;gap:0;margin:28px auto 0;max-width:640px;opacity:.9}
@@ -187,6 +187,23 @@
   .side-brand-txt b{font-family:'Archivo';font-size:14px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .side-brand-txt span{font-size:10.5px;color:#7d93ab}
   .side-eyebrow{font-family:'IBM Plex Mono';font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#7d93ab;padding:6px 12px 10px}
+
+  /* card "Buscar Linha" — abre/fecha a barra de busca dentro do painel (toggleSearchCard).
+     Não é `.topic-btn` de propósito: visualmente parecido, mas semanticamente uma AÇÃO, não
+     um destino de navegação — teria clique ambíguo se dividisse a mesma classe/handler. */
+  .side-search-btn{
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;font:inherit;
+    font-weight:500;font-size:14px;color:#c9d8e8;background:none;border:0;border-radius:10px;
+    padding:11px 12px;cursor:pointer;transition:background .15s,color .15s;
+    margin-bottom:10px;position:relative;
+  }
+  .side-search-btn::after{content:"";position:absolute;left:12px;right:12px;bottom:-6px;height:1px;background:rgba(255,255,255,.08)}
+  .side-search-btn .t-ico{width:32px;height:32px;border-radius:8px;flex:0 0 auto;display:grid;place-items:center;background:rgba(255,255,255,.06);color:#9db4cc;transition:background .15s,color .15s}
+  .side-search-btn .t-ico svg{width:17px;height:17px}
+  .side-search-btn:hover{background:rgba(255,255,255,.055);color:#fff}
+  .side-search-btn.open{background:var(--blue);color:#fff}
+  .side-search-btn.open .t-ico{background:rgba(255,255,255,.22);color:#fff}
+  .side-search-btn:focus-visible{outline:2px solid #fff;outline-offset:-2px;border-radius:10px}
   .topic-btn{
     display:flex;align-items:center;gap:12px;width:100%;text-align:left;font:inherit;
     font-weight:500;font-size:14px;color:#c9d8e8;background:none;border:0;border-radius:10px;padding:11px 12px;cursor:pointer;
@@ -735,7 +752,17 @@
     .side-shell{flex-direction:column;flex:none;min-height:0}
     .side{width:100%;flex-direction:row;overflow-x:auto;overflow-y:visible;padding:10px;gap:6px;flex:none}
     .side-brand,.side-eyebrow{display:none}
-    .topic-btn{flex:0 0 auto;white-space:nowrap}
+    /* width:auto (não o width:100% herdado da base) — senão cada botão sozinho ocupa
+       quase a largura inteira da faixa. Passava despercebido nos tópicos (transparentes
+       quando inativos, então "somem" visualmente) até o botão "Buscar Linha" entrar antes
+       deles: aí o scrollIntoView do tópico ativo (renderSideNav) rolava ele pra fora da
+       faixa antes do usuário reparar que existe. */
+    .topic-btn,.side-search-btn{flex:0 0 auto;white-space:nowrap;width:auto}
+    /* reserva espaço à esquerda quando o navegador rola até o tópico ativo (scrollIntoView
+       em renderSideNav) — sem isso ele encosta o ativo na borda e corta o "Buscar Linha". */
+    .topic-btn{scroll-margin-left:170px}
+    .side-search-btn{margin-bottom:0}
+    .side-search-btn::after{display:none}
     .sub-list{display:none}
     .content{padding:18px 16px}
   }
