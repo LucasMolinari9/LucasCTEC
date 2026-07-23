@@ -273,6 +273,10 @@ function renderSideNav(activeKey){
     </button>
     ${sec.key===expandedTopicKey ? `<div class="sub-list">${sec.items.map(([ic,title,desc,view]) => `<button type="button" data-view="${view}">${title}</button>`).join('')}</div>` : ''}
   `).join('');
+  // no mobile a sidebar vira faixa horizontal (ver @media em styles.css); sem isso, um
+  // tópico ativo fora da 1ª "dobra" da faixa (deep link, busca) fica sem destaque visível
+  // — a sub-lista some no mobile, então o botão realçado é o único indicador de onde se está.
+  sideNav.querySelector('.topic-btn.active')?.scrollIntoView({ block:'nearest', inline:'nearest' });
 }
 function renderSideContent(key){
   const sec = SECTIONS.find(s => s.key === key);
