@@ -49,6 +49,7 @@ const EXPECTED = {
   historicoEmpresa:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste'],
   ligacoesPorEmpresa:['tabela_vista_teste','codempresa_teste'],
   secoesPorEmpresa:['tarifa_atual_teste'],
+  tarifasPorEmpresa:['tarifa_atual_teste','codempresa_teste'],
   ligacoesPorNome:['tabela_vista_teste','codempresa_teste'],
   ligacoesPorNumero:['tabela_vista_teste','codempresa_teste'],
   ligacoesPorLogradouro:['itinerario_teste','tabela_vista_teste','codempresa_teste'],
