@@ -15,6 +15,12 @@
 /* ================================================================
    SUPABASE CONFIG
    ================================================================ */
+/* --- Infraestrutura de acesso a dado (Supabase/fetch) ---
+   Único ponto que fala com o mundo externo (rede). Nada aqui embaixo conhece
+   view, DOM ou regra de negócio — só HTTP, timeout/retry e o formato cru do
+   PostgREST. Inspirado no limite Domain→Infrastructure da Clean Architecture:
+   a "camada de dado" fica isolada para poder mudar (outro backend, outro
+   client) sem mexer em quem lê `isLinhaAtiva`/`isVigente` abaixo. --- */
 const SB_URL = 'https://lwzsxuaqqeoamukduhev.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3enN4dWFxcWVvYW11a2R1aGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTk4NjYsImV4cCI6MjA5NTQ5NTg2Nn0.90R-n9pu_gpDfmRr7O4DMAdjtIUkIDGyEKfG9zXXV1s';
 
@@ -83,6 +89,13 @@ function bannerTrunc(rows){
     : '';
 }
 
+/* --- Regras de domínio e formatação (funções puras) ---
+   Daqui pra baixo, nenhuma função toca rede/DOM — só recebem dado e devolvem
+   dado (string/bool/HTML-string). É a "camada de domínio": pode ser testada
+   isolada (é o que os `tests/*.harness.js` fazem) e não sabe de onde o dado
+   veio nem quem vai renderizá-lo. Em especial `isLinhaAtiva`/`isVigente` são
+   a REGRA DE NEGÓCIO central do portal (o que conta como linha ativa/vigente)
+   — mudar esse critério é editar só aqui, nunca nos `render*`. --- */
 // 101001001 → 101-001-001 (formato do código da ligação no PDF oficial)
 function fmtCode(code) {
   if (!code) return '';
@@ -243,7 +256,7 @@ let origemMap = null;    // { [cod_origem]: nome_origem }
 const evLookups = { emp:null, lin:null };  // lookups de evento: emp={[id]:evento_empresa}, lin={[id]:evento_linha}
 const empresas  = { map:null, list:null }; // cadastro (nome↔RJ): map={[codempresa]:nome_empresa}, list=linhas cruas p/ busca client-side
 
-// normaliza p/ busca insensível a maiúsc./minúsc. E acento
+// função pura (domínio), só mora aqui perto de quem a usa primeiro — não acessa o cache acima
 const norm = s => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 
 async function getIbge() {
