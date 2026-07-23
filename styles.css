@@ -91,7 +91,7 @@
     background:
       radial-gradient(120% 150% at 50% -25%, rgba(31,157,87,.18) 0%, rgba(31,157,87,0) 44%),
       linear-gradient(180deg,#0c3e69 0%, var(--navy-deep) 100%);
-    color:#fff;padding:40px 24px 46px;
+    color:#fff;padding:22px 24px 26px;
   }
   .hero::before{
     content:"";position:absolute;inset:0;pointer-events:none;opacity:.45;
@@ -104,17 +104,17 @@
   .eyebrow{
     display:inline-flex;align-items:center;gap:12px;
     font-family:'Archivo';font-weight:700;font-size:12px;letter-spacing:.28em;
-    text-transform:uppercase;color:#7fe0a6;margin-bottom:15px;
+    text-transform:uppercase;color:#7fe0a6;margin-bottom:8px;
   }
   .eyebrow::before,.eyebrow::after{content:"";width:28px;height:1px;background:rgba(127,224,166,.5)}
   .hero h1{
-    font-family:'Archivo';font-weight:800;font-size:clamp(30px,4vw,46px);
+    font-family:'Archivo';font-weight:800;font-size:clamp(22px,2.6vw,30px);
     letter-spacing:-.015em;line-height:1.04;
   }
-  .hero p{color:#aecbe4;max-width:52ch;margin:14px auto 0;font-size:16.5px;line-height:1.55}
+  .hero p{color:#aecbe4;max-width:52ch;margin:8px auto 0;font-size:15px;line-height:1.5}
 
   .selector{
-    margin:32px auto 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+    margin:16px auto 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;
     background:#fff;border:1px solid rgba(255,255,255,.55);
     padding:7px 7px 7px 9px;border-radius:13px;max-width:660px;
     box-shadow:0 22px 48px -22px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.16);
@@ -164,7 +164,7 @@
   .side-shell{
     display:flex;align-items:stretch;gap:0;border:1px solid var(--line);border-radius:var(--radius);
     overflow:hidden;box-shadow:var(--shadow-lg);
-    flex:1 1 auto;min-height:320px;
+    flex:1 1 auto;min-height:560px;
   }
   .side{
     width:270px;flex:0 0 auto;background:var(--navy-deep);padding:18px 12px;
