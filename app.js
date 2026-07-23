@@ -254,7 +254,9 @@ app.innerHTML = `
 const sideNav = document.getElementById('sideNav');
 const sideContent = document.getElementById('sideContent');
 
-let currentTopicKey;   // key do tópico ativo no painel — undefined até a 1ª renderização
+let currentTopicKey;      // key do tópico ativo no painel de conteúdo — undefined até a 1ª renderização
+let expandedTopicKey = null; // key do tópico com a sub-lista aberta na sidebar — só muda por CLIQUE explícito
+                              // no botão do tópico (nunca abre sozinha por virar o tópico atual)
 
 function renderSideNav(activeKey){
   sideNav.innerHTML = `
@@ -264,12 +266,12 @@ function renderSideNav(activeKey){
     </div>
     <div class="side-eyebrow">Consultas</div>` +
     SECTIONS.map(sec => `
-    <button type="button" class="topic-btn${sec.key===activeKey?' active':''}" data-topic="${sec.key}"
+    <button type="button" class="topic-btn${sec.key===activeKey?' active':''}${sec.key===expandedTopicKey?' expanded':''}" data-topic="${sec.key}"
       style="--accent:${ACCENT}">
       <span class="t-ico">${svg(I[sec.icon])}</span>${sec.name}
       <span class="chev">${svg('<path d="m9 6 6 6-6 6"/>')}</span>
     </button>
-    ${sec.key===activeKey ? `<div class="sub-list">${sec.items.map(([ic,title,desc,view]) => `<button type="button" data-view="${view}">${title}</button>`).join('')}</div>` : ''}
+    ${sec.key===expandedTopicKey ? `<div class="sub-list">${sec.items.map(([ic,title,desc,view]) => `<button type="button" data-view="${view}">${title}</button>`).join('')}</div>` : ''}
   `).join('');
 }
 function renderSideContent(key){
@@ -2380,7 +2382,14 @@ function openView(view){
 }
 app.addEventListener('click', e => {
   const topicBtn = e.target.closest('.topic-btn');
-  if (topicBtn){ selectTopic(topicBtn.dataset.topic); return; }
+  if (topicBtn){
+    const key = topicBtn.dataset.topic;
+    // clique no tópico é o ÚNICO jeito de abrir/fechar a sub-lista (nunca abre sozinha)
+    expandedTopicKey = (expandedTopicKey === key) ? null : key;
+    if (currentTopicKey === key) renderSideNav(currentTopicKey);
+    else selectTopic(key);
+    return;
+  }
   // sub-título da sidebar = mesmo alvo do card correspondente no painel de conteúdo
   const subBtn = e.target.closest('.sub-list button');
   if (subBtn){ openView(subBtn.dataset.view); return; }

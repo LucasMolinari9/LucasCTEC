@@ -189,7 +189,7 @@
   .topic-btn.active .t-ico{background:rgba(255,255,255,.22);color:#fff}
   .topic-btn:focus-visible{outline:2px solid #fff;outline-offset:-2px;border-radius:10px}
   .topic-btn .chev{margin-left:auto;opacity:.55;transition:transform .18s}
-  .topic-btn.active .chev{transform:rotate(90deg);opacity:.9}
+  .topic-btn.expanded .chev{transform:rotate(90deg);opacity:.9}
   .sub-list{display:flex;flex-direction:column;padding:2px 4px 10px 44px;gap:1px}
   .sub-list button{
     text-align:left;font:inherit;font-size:12.8px;color:#94aac2;background:none;border:0;
