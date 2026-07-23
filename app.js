@@ -1689,7 +1689,7 @@ LOADERS.pesquisaEvento = async () => {
       sbFetch('evento_teste', `or=(descricao.ilike.*${t}*,observacao.ilike.*${t}*,numero_processo.ilike.*${t}*)&select=data_registro,codlinha,codempresa,numero_processo,descricao,observacao&order=data_registro.desc&limit=200`),
       getEmpresas()
     ]);
-    if(!rows.length){ host.innerHTML = emptyBox('Nenhum evento encontrado para "'+term+'".'); return; }
+    if(!rows.length){ host.innerHTML = emptyBox('Nenhum evento encontrado para "'+esc(term)+'".'); return; }
     paginateTable(host, rows, {
       cols:[{t:'Data',w:'82px'},{t:'Linha',w:'100px'},{t:'Empresa'},{t:'RJ',w:'60px'},{t:'Processo',w:'100px'},{t:'Descrição'},{t:'Observação'}],
       rowHTML:r=>`<tr><td class="td-num">${esc(fmtDate(r.data_registro))}</td><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-logr">${esc(empNome(r.codempresa))}</td><td class="td-num">${esc(orDash(r.codempresa))}</td>
@@ -1869,7 +1869,7 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     const fetchCods = extraCods.slice(0,250);
     let base = rows;
     if(fetchCods.length) base = rows.concat(await fetchLinesByCods(fetchCods, { limit: fetchCods.length }));
-    if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${a}" e "${b}".`:`Nenhuma linha encontrada para "${a}".`); return; }
+    if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${esc(a)}" e "${esc(b)}".`:`Nenhuma linha encontrada para "${esc(a)}".`); return; }
     await getEmpresas();
     // seções de tarifa cujo NOME casa a(s) localidade(s) buscada(s), por linha — reproduz o
     // relatório oficial. Município B é só filtro de trânsito, não entra nos termos de seção.
