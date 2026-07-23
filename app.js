@@ -257,6 +257,9 @@ const sideContent = document.getElementById('sideContent');
 let currentTopicKey;      // key do tópico ativo no painel de conteúdo — undefined até a 1ª renderização
 let expandedTopicKey = null; // key do tópico com a sub-lista aberta na sidebar — só muda por CLIQUE explícito
                               // no botão do tópico (nunca abre sozinha por virar o tópico atual)
+let searchOpen = false;      // barra de busca de linha visível no painel? só existe no tópico
+                              // "Documentos da Linha" (único cujos cards exigem linha selecionada)
+                              // — some com valor padrão fechado; só abre por clique no card "Buscar Linha"
 
 function renderSideNav(activeKey){
   sideNav.innerHTML = `
@@ -264,7 +267,10 @@ function renderSideNav(activeKey){
       <span class="side-brand-badge">${svg('<path d="M6 7.5h12M12 7.5V17"/><circle cx="12" cy="6" r="1.6" fill="currentColor" stroke="none"/>')}</span>
       <div class="side-brand-txt"><b>Coordenadoria Técnica</b><span>DETRO/RJ</span></div>
     </div>
-    <div class="side-eyebrow">Consultas</div>` +
+    <div class="side-eyebrow">Consultas</div>
+    <button type="button" class="side-search-btn${(activeKey==='doc'&&searchOpen)?' open':''}">
+      <span class="t-ico">${svg(I.search)}</span>Buscar Linha
+    </button>` +
     SECTIONS.map(sec => `
     <button type="button" class="topic-btn${sec.key===activeKey?' active':''}${sec.key===expandedTopicKey?' expanded':''}" data-topic="${sec.key}"
       style="--accent:${ACCENT}">
@@ -286,14 +292,23 @@ function renderSideContent(key){
     <div class="grid">${topicGridHTML(sec)}</div>`;
   // busca de linha só faz sentido aqui: é o único tópico cujos cards exigem linha
   // selecionada (needsLine em SECTIONS) — os demais já têm busca própria por card
-  // (empresa, logradouro, terminal…), duplicar poluiria a tela. `sideContent.innerHTML`
-  // acima já desanexou o nó de qualquer render anterior; reinserimos o MESMO nó (não
-  // clona, mantém os listeners) no topo do painel. Nos outros tópicos ele fica só
-  // desanexado (invisível, sem precisar reesconder).
-  if (key === 'doc'){
+  // (empresa, logradouro, terminal…), duplicar poluiria a tela. Fica escondida por
+  // padrão — só aparece quando o card "Buscar Linha" da sidebar é clicado
+  // (toggleSearchCard). `sideContent.innerHTML` acima já desanexou o nó de qualquer
+  // render anterior; reinserimos o MESMO nó (não clona, mantém os listeners) no topo
+  // do painel.
+  if (key === 'doc' && searchOpen){
     selector.style.display = '';
     sideContent.insertBefore(selector, sideContent.firstChild);
   }
+}
+// clique no card "Buscar Linha" da sidebar: abre/fecha a barra de busca dentro do
+// painel; se o tópico ativo não for "Documentos da Linha", muda pra ele já aberta.
+function toggleSearchCard(){
+  searchOpen = !(currentTopicKey === 'doc' && searchOpen);
+  if (currentTopicKey === 'doc'){ renderSideContent('doc'); renderSideNav('doc'); }
+  else selectTopic('doc');
+  if (searchOpen) searchInput.focus();
 }
 // troca o tópico ativo do painel — usado pelo clique na sidebar, pela busca do topo
 // (com destaque no card) e pelo roteamento por hash.
@@ -2395,6 +2410,7 @@ function openView(view){
   return true;
 }
 app.addEventListener('click', e => {
+  if (e.target.closest('.side-search-btn')){ toggleSearchCard(); return; }
   const topicBtn = e.target.closest('.topic-btn');
   if (topicBtn){
     const key = topicBtn.dataset.topic;
