@@ -187,3 +187,23 @@ dependa do fallback do `.doc` visível.
   fechando a regressão em que o fallback do `.doc` visível exportaria só a página atual. Verificado
   com `node tests/check.js` + smoke tests no Chromium (dados falsos, sem rede): navegação, índice
   global do clique (Portarias) e `pdfHTML()` com a lista completa.
+- **Parte D (2026-07-23):** submarcado o limite **infra × domínio** dentro da seção `SUPABASE
+  CONFIG` — mudança **puramente aditiva de comentários**, sem mover código. Motivação: adaptar o
+  que dá para aproveitar da Clean Architecture (github.com/jasontaylordev/CleanArchitecture) num
+  projeto zero-build/arquivo-único, onde não cabe a separação literal em camadas/pastas
+  (Domain/Application/Infrastructure) — o valor do padrão aqui é só a **fronteira de
+  dependência**: domínio (regras puras) não deve depender de infraestrutura (I/O), e infra não deve
+  saber de regra de negócio. Duas submarcas novas:
+  - `/* --- Infraestrutura de acesso a dado (Supabase/fetch) --- */`: `SB_URL`/`SB_KEY`,
+    `fetchComTimeout`, `sbFetch`, `marcarTrunc`, `bannerTrunc` — único trecho do arquivo que fala
+    com a rede.
+  - `/* --- Regras de domínio e formatação (funções puras) --- */`: `fmtCode`/`fmtTime`/`fmtDate`,
+    `esc`/`enc`/`ilikeTerm`/`orDash`/`fmtLineName`/`boolChip`, e sobretudo `situacaoHTML`,
+    `isLinhaAtiva` e `isVigente` — a **regra de negócio central** do portal (o que conta como
+    linha ativa/vigente). Essas funções só recebem e devolvem dado; não tocam rede nem DOM, por
+    isso já tinham cópia verbatim testável em `tests/*.harness.js` mesmo antes desta parte.
+  `norm` (seção `STATE + CACHES`) ganhou o mesmo comentário — é pura, mas fica perto de quem a usa
+  primeiro (busca de empresas) em vez de subir para a submarca de domínio, para não misturar
+  reorganização de comentário com deslocamento de código nesta rodada. **Não criar `js/domain/` ou
+  qualquer pasta**: continua valendo a regra da seção 1 (zero-build, um arquivo só). Verificado com
+  `node tests/check.js` (mudança é comentário puro, sem risco de TDZ/hoisting).

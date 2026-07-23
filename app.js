@@ -15,6 +15,12 @@
 /* ================================================================
    SUPABASE CONFIG
    ================================================================ */
+/* --- Infraestrutura de acesso a dado (Supabase/fetch) ---
+   Único ponto que fala com o mundo externo (rede). Nada aqui embaixo conhece
+   view, DOM ou regra de negócio — só HTTP, timeout/retry e o formato cru do
+   PostgREST. Inspirado no limite Domain→Infrastructure da Clean Architecture:
+   a "camada de dado" fica isolada para poder mudar (outro backend, outro
+   client) sem mexer em quem lê `isLinhaAtiva`/`isVigente` abaixo. --- */
 const SB_URL = 'https://lwzsxuaqqeoamukduhev.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3enN4dWFxcWVvYW11a2R1aGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTk4NjYsImV4cCI6MjA5NTQ5NTg2Nn0.90R-n9pu_gpDfmRr7O4DMAdjtIUkIDGyEKfG9zXXV1s';
 
@@ -83,6 +89,13 @@ function bannerTrunc(rows){
     : '';
 }
 
+/* --- Regras de domínio e formatação (funções puras) ---
+   Daqui pra baixo, nenhuma função toca rede/DOM — só recebem dado e devolvem
+   dado (string/bool/HTML-string). É a "camada de domínio": pode ser testada
+   isolada (é o que os `tests/*.harness.js` fazem) e não sabe de onde o dado
+   veio nem quem vai renderizá-lo. Em especial `isLinhaAtiva`/`isVigente` são
+   a REGRA DE NEGÓCIO central do portal (o que conta como linha ativa/vigente)
+   — mudar esse critério é editar só aqui, nunca nos `render*`. --- */
 // 101001001 → 101-001-001 (formato do código da ligação no PDF oficial)
 function fmtCode(code) {
   if (!code) return '';
@@ -162,7 +175,7 @@ const SECTIONS = [
       ['file','Folha de Rosto','Resumo cadastral: empresa, código, tarifa e situação','folhaRosto',false],
       ['route','Itinerários','Percurso por sentido: logradouros e municípios','itinerarios',false],
       ['clock','Quadro de Horários','Partidas por sentido e dia — por linha ou empresa','quadroHorarios',false],
-      ['ticket','Tarifas','Seções e valores vigentes da linha','tarifas',false],
+      ['ticket','Tarifas','Seções e valores vigentes — por linha ou empresa','tarifas',false],
       ['history','Histórico da Linha','Alterações e eventos registrados','historicoLinha',false],
       ['bus','Frota','Frota operacional e reserva por tipo de veículo','frota',false],
       ['structure','Estrutura Operacional','Consolidado: cadastro, seções, itinerário, horários e frota','estrutura',false],
@@ -309,7 +322,7 @@ let origemMap = null;    // { [cod_origem]: nome_origem }
 const evLookups = { emp:null, lin:null };  // lookups de evento: emp={[id]:evento_empresa}, lin={[id]:evento_linha}
 const empresas  = { map:null, list:null }; // cadastro (nome↔RJ): map={[codempresa]:nome_empresa}, list=linhas cruas p/ busca client-side
 
-// normaliza p/ busca insensível a maiúsc./minúsc. E acento
+// função pura (domínio), só mora aqui perto de quem a usa primeiro — não acessa o cache acima
 const norm = s => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 
 async function getIbge() {
@@ -1160,18 +1173,19 @@ LOADERS.quadroHorarios = async () => {
 };
 
 /* --- DOC · Tarifas -------------------------------------------- */
+const TARIFA_COLS = [{t:'Seção',w:'60px'},{t:'Nº Linha',w:'80px'},{t:'Ligação'},{t:'Via',w:'90px'},{t:'Caract.',w:'90px'},{t:'Tipo',w:'90px'},{t:'RM',w:'55px'},{t:'Tarifa',w:'80px'},{t:'Piso I',w:'80px'},{t:'Situação',w:'90px'},{t:'Criação',w:'90px'},{t:'Status',w:'150px'}];
+function tarifaRowHTML(r){
+  // chip de status com a data do evento ao lado (quando a coluna de data está disponível)
+  const dChip = (v,label,date) => v ? `<span class="chip chip-on">${label}${date?' '+fmtDate(date):''}</span>` : '';
+  const st = [ dChip(r.cancelado,'Canc.',r.data_cancelamento), dChip(r.paralisado,'Paral.',r.data_paralisacao), dChip(r.sub_judice,'Sub jud.',r.data_sub_judice), dChip(r.transferido,'Transf.',r.data_transferencia) ].filter(Boolean).join(' ') || '<span class="chip chip-off">OK</span>';
+  return `<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-num">${esc(orDash(r.numero_linha))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td>
+  <td class="td-tipo">${esc(orDash(r.via))}</td><td class="td-tipo">${esc(orDash(r.caracteristica))}</td><td class="td-tipo">${esc(orDash(r.tipo_ligacao))}</td><td class="td-num">${esc(orDash(r.rm))}</td>
+  <td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td><td class="td-num">R$ ${esc(fmtMoney(r.piso_i))}</td>
+  <td class="td-tipo">${esc(orDash(r.situacao))}</td><td class="td-num">${fmtDate(r.data_criacao)}</td><td>${st}</td></tr>`;
+}
 function secoesTarifasHTML(rows){
   if(!rows.length) return emptyBox('Nenhuma seção/tarifa cadastrada para esta linha.');
-  const body = rows.map(r=>{
-    // chip de status com a data do evento ao lado (quando a coluna de data está disponível)
-    const dChip = (v,label,date) => v ? `<span class="chip chip-on">${label}${date?' '+fmtDate(date):''}</span>` : '';
-    const st = [ dChip(r.cancelado,'Canc.',r.data_cancelamento), dChip(r.paralisado,'Paral.',r.data_paralisacao), dChip(r.sub_judice,'Sub jud.',r.data_sub_judice), dChip(r.transferido,'Transf.',r.data_transferencia) ].filter(Boolean).join(' ') || '<span class="chip chip-off">OK</span>';
-    return `<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-num">${esc(orDash(r.numero_linha))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td>
-    <td class="td-tipo">${esc(orDash(r.via))}</td><td class="td-tipo">${esc(orDash(r.caracteristica))}</td><td class="td-tipo">${esc(orDash(r.tipo_ligacao))}</td><td class="td-num">${esc(orDash(r.rm))}</td>
-    <td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td><td class="td-num">R$ ${esc(fmtMoney(r.piso_i))}</td>
-    <td class="td-tipo">${esc(orDash(r.situacao))}</td><td class="td-num">${fmtDate(r.data_criacao)}</td><td>${st}</td></tr>`;
-  }).join('');
-  return tableHTML([{t:'Seção',w:'60px'},{t:'Nº Linha',w:'80px'},{t:'Ligação'},{t:'Via',w:'90px'},{t:'Caract.',w:'90px'},{t:'Tipo',w:'90px'},{t:'RM',w:'55px'},{t:'Tarifa',w:'80px'},{t:'Piso I',w:'80px'},{t:'Situação',w:'90px'},{t:'Criação',w:'90px'},{t:'Status',w:'150px'}], body, rows.length+' seção(ões)');
+  return tableHTML(TARIFA_COLS, rows.map(tarifaRowHTML).join(''), rows.length+' seção(ões)');
 }
 
 async function renderTarifas(host, line){
@@ -1195,7 +1209,72 @@ async function renderTarifas(host, line){
   paint();
 }
 
-LOADERS.tarifas = () => lineDocView({ subtitle:'Tarifas Vigentes', render:renderTarifas });
+// Modo empresa: resolve a empresa e lista as tarifas de TODAS as linhas dela
+async function tarifaEmpresaRun(term, host){
+  term = (term||'').trim();
+  if(!term){
+    if(activeLine) return renderTarifasEmpresa(host, activeLine.codempresa, empNome(activeLine.codempresa));
+    host.innerHTML = emptyBox('Busque por uma empresa (nome ou código RJ), ou troque para "Por linha".');
+    if(currentView) currentView.pdfHTML=null; return;
+  }
+  await getEmpresas();
+  const emps = searchEmpresas(term);
+  if(emps.length > 1){
+    host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para ver as tarifas' });
+    bindEmpresaRows(host, (cod,nome)=>renderTarifasEmpresa(host, cod, nome));
+    if(currentView) currentView.pdfHTML=null; return;
+  }
+  const cod = emps.length===1 ? emps[0].codempresa : term;
+  const nome = emps.length===1 ? emps[0].nome_empresa : null;
+  await renderTarifasEmpresa(host, cod, nome);
+}
+// Lista (paginada) as tarifas de todas as linhas de UMA empresa
+const LINHA_TARIFA_COLS = [{t:'Número',w:'100px'},{t:'Ligação'},{t:'Código',w:'120px'},{t:'Seções',w:'80px'},{t:'Tarifa',w:'150px'}];
+// uma linha por LIGAÇÃO (deduplicado), mesmo quando ela tem várias seções de tarifa
+function linhaTarifaRowHTML(l){
+  return `<tr><td class="td-num">${esc(orDash(l.numero_linha||fmtCode(l.codlinha)))}</td><td class="td-logr">${esc(orDash(l.nome_ligacao))}</td><td class="td-num">${esc(fmtCode(l.codlinha))}</td><td class="td-num">${l.nsec}</td><td class="td-sentido">${esc(l.tarifaTxt)}</td></tr>`;
+}
+async function renderTarifasEmpresa(host, cod, nome){
+  host.innerHTML = loading();
+  const rows = await sbFetch('tarifa_atual_teste', `codempresa=eq.${enc(cod)}&select=codlinha,secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=codlinha,secao&limit=3000`);
+  const nomeEmp = nome || empNome(cod);
+  const nLinhas = new Set(rows.map(r=>r.codlinha)).size;
+  const meta = metaRows([['Empresa',esc(nomeEmp||'—'),true],['Registro','RJ-'+esc(cod)],['Total',nLinhas+' linha(s) · '+rows.length+' seção(ões)']]);
+  if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhuma tarifa cadastrada para a empresa '+esc(nomeEmp||cod)+'.'); if(currentView) currentView.pdfHTML=null; return; }
+  // agrupa por linha — cada linha aparece 1x, com a qtd. de seções e a TARIFA DA LINHA
+  // (a da 1ª seção, mesma convenção da Folha de Rosto — não o intervalo das seções).
+  const linhas = [...groupBy(rows, r=>r.codlinha)].map(([codlinha,secs])=>{
+    const tarifaTxt = secs[0].tarifa != null ? 'R$ '+fmtMoney(secs[0].tarifa) : '—';
+    return { codlinha, numero_linha:secs[0].numero_linha, nome_ligacao:secs[0].nome_ligacao, nsec:secs.length, tarifaTxt };
+  });
+  const tools = `<div class="loc-tools"><label>Ver <select id="tarEmpModo"><option value="secoes" selected>Linhas com seção</option><option value="linhas">Somente linhas</option></select></label></div>`;
+  host.innerHTML = `${meta}${tools}<div id="tarEmpResult"></div>`;
+  const result = host.querySelector('#tarEmpResult'), sel = host.querySelector('#tarEmpModo');
+  const paint = ()=>{
+    if(sel.value==='linhas') paginateTable(result, linhas, { cols:LINHA_TARIFA_COLS, rowHTML:linhaTarifaRowHTML, foot:t=>t+' linha(s)', unit:'linhas' });
+    else paginateTable(result, rows, { cols:TARIFA_COLS, rowHTML:tarifaRowHTML, foot:t=>t+' seção(ões)', unit:'seções' });
+  };
+  sel.addEventListener('change', paint);
+  paint();
+}
+
+LOADERS.tarifas = () => {
+  searchPanel({
+    title:'Tarifas Vigentes',
+    placeholder:'Nome, número ou código da linha (ou empresa)',
+    selectOpts:[['linha','Por linha'],['empresa','Por empresa']],
+    note:'Por linha: nome, número ou código → mostra as tarifas dela. Por empresa: nome ou código RJ → lista as tarifas de todas as linhas da operadora.',
+    onRun:(term, host, modo) => modo==='empresa' ? tarifaEmpresaRun(term, host) : lineDocRun(term, host, renderTarifas)
+  });
+  const host = modalBody.querySelector('#spHost');
+  if (activeLine){
+    const i = modalBody.querySelector('#spInput');
+    if (i) i.value = activeLine.numero_ligacao || activeLine.codlinha || '';
+    renderTarifas(host, activeLine);
+  } else {
+    host.innerHTML = emptyBox('Busque a linha pelo nome, número ou código — ou troque para "Por empresa".');
+  }
+};
 
 /* --- DOC · Frota ---------------------------------------------- */
 function frotaBlockHTML(f){
@@ -1748,7 +1827,7 @@ LOADERS.pesquisaEvento = async () => {
       sbFetch('evento_teste', `or=(descricao.ilike.*${t}*,observacao.ilike.*${t}*,numero_processo.ilike.*${t}*)&select=data_registro,codlinha,codempresa,numero_processo,descricao,observacao&order=data_registro.desc&limit=200`),
       getEmpresas()
     ]);
-    if(!rows.length){ host.innerHTML = emptyBox('Nenhum evento encontrado para "'+term+'".'); return; }
+    if(!rows.length){ host.innerHTML = emptyBox('Nenhum evento encontrado para "'+esc(term)+'".'); return; }
     paginateTable(host, rows, {
       cols:[{t:'Data',w:'82px'},{t:'Linha',w:'100px'},{t:'Empresa'},{t:'RJ',w:'60px'},{t:'Processo',w:'100px'},{t:'Descrição'},{t:'Observação'}],
       rowHTML:r=>`<tr><td class="td-num">${esc(fmtDate(r.data_registro))}</td><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-logr">${esc(empNome(r.codempresa))}</td><td class="td-num">${esc(orDash(r.codempresa))}</td>
@@ -1928,7 +2007,7 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     const fetchCods = extraCods.slice(0,250);
     let base = rows;
     if(fetchCods.length) base = rows.concat(await fetchLinesByCods(fetchCods, { limit: fetchCods.length }));
-    if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${a}" e "${b}".`:`Nenhuma linha encontrada para "${a}".`); return; }
+    if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${esc(a)}" e "${esc(b)}".`:`Nenhuma linha encontrada para "${esc(a)}".`); return; }
     await getEmpresas();
     // seções de tarifa cujo NOME casa a(s) localidade(s) buscada(s), por linha — reproduz o
     // relatório oficial. Município B é só filtro de trânsito, não entra nos termos de seção.
@@ -2273,7 +2352,7 @@ function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=fal
 const VIEW_TABLES = {
   folhaRosto:['tabela_vista_teste','codempresa_teste','tarifa_atual_teste'], folhaDivisoria:['tabela_vista_teste','codempresa_teste'],
   historicoLinha:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste','tabela_vista_teste'], itinerarios:['itinerario_teste','municipio_teste','codempresa_teste'],
-  quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste','qh_teste','tarifa_atual_teste','origem_teste','codempresa_teste','tabela_vista_teste'], tarifas:['tarifa_atual_teste'],
+  quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste','qh_teste','tarifa_atual_teste','origem_teste','codempresa_teste','tabela_vista_teste'], tarifas:['tarifa_atual_teste','codempresa_teste'],
   frota:['qh_teste','codempresa_teste'], estrutura:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','qh_intervalo_teste','qh_predeterminado_teste','qh_teste','origem_teste','municipio_teste','codempresa_teste'],
   empresasRegulares:['tabela_vista_teste','codempresa_teste'], historicoEmpresa:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste'],
   ligacoesPorEmpresa:['tabela_vista_teste','codempresa_teste'], secoesPorEmpresa:['tarifa_atual_teste'],

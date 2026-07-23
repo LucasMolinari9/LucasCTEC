@@ -42,7 +42,7 @@ const EXPECTED = {
   historicoLinha:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste','tabela_vista_teste'],
   itinerarios:['itinerario_teste','municipio_teste','codempresa_teste'],
   quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste','qh_teste','tarifa_atual_teste','origem_teste','codempresa_teste','tabela_vista_teste'],
-  tarifas:['tarifa_atual_teste'],
+  tarifas:['tarifa_atual_teste','codempresa_teste'],
   frota:['qh_teste','codempresa_teste'],
   estrutura:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','qh_intervalo_teste','qh_predeterminado_teste','qh_teste','origem_teste','municipio_teste','codempresa_teste'],
   empresasRegulares:['tabela_vista_teste','codempresa_teste'],

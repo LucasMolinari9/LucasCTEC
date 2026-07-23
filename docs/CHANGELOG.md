@@ -109,3 +109,37 @@ do merge). Nenhuma mudança de banco. Em resumo:
    vivo").
 10. **PWA mínimo**: `manifest.webmanifest` + `vendor/icon.svg` (instalável na tela inicial;
     sem service worker).
+
+## 23/07/2026 — Revisão de segurança guiada pelo checklist do CyberSources
+
+Revisão pontual do frontend e da postura do Supabase, adaptando ao formato do site (estático +
+PostgREST, sem servidor próprio) a fatia de "Web Testing/Reconnaissance" do catálogo de
+ferramentas [bst04/CyberSources](https://github.com/bst04/CyberSources). Escopo somente-leitura
+(headers HTTP, GRANTs/RLS via SQL e Security Advisor, varredura estática de XSS/injeção de
+filtro no `app.js`, segredos nos arquivos servidos); nenhuma escrita real foi tentada contra a
+API pública (rede de saída bloqueada no ambiente da revisão) — compensado consultando os GRANTs
+direto no Postgres, prova mais forte que um teste de caixa-preta.
+
+- **Único achado (médio): HTML injection refletido em 2 telas.** `pesquisaEvento`
+  (`app.js`, Pesquisa de Evento) e `mostrarLinhasPorLocalidade` (`app.js`, Ligações por
+  Localidade/Município) concatenavam o termo de busca do usuário direto em `innerHTML` na
+  mensagem de "nenhum resultado", sem passar por `esc()` — ao contrário do resto do arquivo
+  (~150 outros pontos escapam corretamente). Em Localidade/Município a inconsistência era
+  visível na própria função: a variável `b` era escapada numa branch e não na outra. A CSP
+  `script-src 'self'` (sem `unsafe-inline`) já impedia execução de JS por esse vetor (handlers
+  inline como `onerror=` são bloqueados pelo navegador), então o risco real era injeção de HTML
+  morto/link de phishing dentro do resultado de busca, não roubo de sessão. **Corrigido**:
+  `term`/`a`/`b` agora passam por `esc()` nos dois pontos, igual ao padrão do resto do arquivo —
+  diff de 2 linhas, `node tests/check.js` verde (259/259 testes) depois da mudança.
+- **Confirmado sem achado**: GRANTs do Postgres mostram só `SELECT` para `anon`/
+  `authenticated` em todas as 18 tabelas públicas (zero INSERT/UPDATE/DELETE);
+  `rolbypassrls=false` para os dois (só `service_role` ignora RLS); as 4 tabelas de staging do
+  ETL seguem "RLS ativo, sem policy" — o padrão intencional já documentado, não uma falha;
+  nenhuma chave `service_role` embutida nos arquivos servidos; `ilikeTerm()` neutraliza
+  injeção no agrupador `or=(...)` do PostgREST; headers de segurança (CSP, HSTS,
+  `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`) completos no
+  `vercel.json`.
+- **Pendente, fora do escopo desta revisão**: ativar *Leaked Password Protection* no Dashboard
+  do Supabase (Authentication → Policies) — já listado como pendente no `CLAUDE.md`; não foi
+  possível confirmar ao vivo se o signup do Auth está fechado (mesmo bloqueio de rede); hash do
+  `vendor/supabase-js-2.110.7.min.js` não foi reconferido contra o pacote oficial do npm.
