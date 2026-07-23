@@ -142,10 +142,10 @@
      hero navy (borda quase-branca, sombra forte); aqui vira uma barra de largura total,
      alinhada à esquerda como o resto do painel, com sombra/borda no tom do próprio painel. */
   .content > .selector{
-    margin:0 0 22px;max-width:none;border-color:var(--line);
-    box-shadow:var(--shadow);
+    margin:0 0 34px;max-width:none;border-color:var(--line);
+    box-shadow:var(--shadow-lg);
   }
-  .content > .selector:focus-within{box-shadow:0 0 0 3px rgba(20,102,166,.28), var(--shadow)}
+  .content > .selector:focus-within{box-shadow:0 0 0 3px rgba(20,102,166,.28), var(--shadow-lg)}
 
   /* faixa de "rota" decorativa */
   .route{display:flex;align-items:center;gap:0;margin:28px auto 0;max-width:640px;opacity:.9}
