@@ -284,6 +284,16 @@ function renderSideContent(key){
     <div class="sec-head" style="--accent:${ACCENT}"><h2>${sec.name}</h2></div>
     <p class="content-sub">${sec.desc}</p>
     <div class="grid">${topicGridHTML(sec)}</div>`;
+  // busca de linha só faz sentido aqui: é o único tópico cujos cards exigem linha
+  // selecionada (needsLine em SECTIONS) — os demais já têm busca própria por card
+  // (empresa, logradouro, terminal…), duplicar poluiria a tela. `sideContent.innerHTML`
+  // acima já desanexou o nó de qualquer render anterior; reinserimos o MESMO nó (não
+  // clona, mantém os listeners) no topo do painel. Nos outros tópicos ele fica só
+  // desanexado (invisível, sem precisar reesconder).
+  if (key === 'doc'){
+    selector.style.display = '';
+    sideContent.insertBefore(selector, sideContent.firstChild);
+  }
 }
 // troca o tópico ativo do painel — usado pelo clique na sidebar, pela busca do topo
 // (com destaque no card) e pelo roteamento por hash.
