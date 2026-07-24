@@ -570,7 +570,24 @@ async function refreshActiveLine(){
 
 /* ================================================================
    MODAL / SISTEMA DE VIEWS
-   currentView = { title, tables:[], lineFilter, loader, _panelRun }
+   currentView = { title, tables:[], lineFilter, loader, _panelRun, _gen, _detail, pdfHTML }
+   ----------------------------------------------------------------
+   Contrato de escrita em pdfHTML/_detail — NÃO atribua currentView.pdfHTML direto.
+   Todo loader/run/render que faz `await` e depois escreve um resultado:
+     1. no INÍCIO, antes do seu próprio await: `const view = currentView, gen = beginGen(view);`
+     2. ao terminar: `commitViewResult(view, gen, { pdfHTML: fn ou null })` no lugar da atribuição
+        — usando o `view` CAPTURADO, nunca `currentView` de novo (senão uma escrita atrasada
+        acerta a view aberta AGORA, não a dona da busca).
+   `gen` descarta em silêncio uma escrita de uma busca/troca de linha anterior que resolveu
+   depois de uma mais nova (ex.: digitar "101" e trocar pra "202" antes da 1ª resposta voltar).
+   Helpers que escrevem pdfHTML DEPOIS do await de quem os chama (paginateTable, paginateLines,
+   lineResults) recebem `view` E `gen` como opções em vez de capturar os próprios — capturar ali
+   seria tarde demais pro guard fazer sentido. `_panelRun` fica FORA do seam de propósito: é
+   atribuído uma vez, antes de qualquer await, direto no loader — não é resultado de operação
+   assíncrona, não há corrida a proteger. Painéis com lista+detalhe (hoje só Portarias) usam
+   pushDetail(view, patch)/popDetail(view) em vez de commitViewResult, pra não perder o pdfHTML/
+   busca da lista quando um item é aberto. Detalhes do design: beginGen/commitViewResult/
+   pushDetail/popDetail logo abaixo de `let currentView`.
    ----------------------------------------------------------------
    SUB-ÍNDICE (grep `--- ` para pular). Na ordem atual do arquivo:
      Chrome do modal · Dispatcher — runView ·
@@ -694,6 +711,41 @@ async function baixarPdf(){
 
 let currentView = null, lastFocused = null;
 const btnBack = document.getElementById('btnBack');
+
+// Seam do ciclo de vida da view: único caminho de escrita em view.pdfHTML (e no slot
+// de detalhe de painéis tipo Portarias). Protege contra respostas atrasadas de uma
+// busca/troca de linha anterior sobrescreverem o resultado de uma tentativa mais nova
+// (ex.: digitar "101" e trocar pra "202" antes da 1ª resposta voltar).
+//
+// Uso: no INÍCIO de todo loader/run que vai fazer `await` e depois escrever pdfHTML —
+// antes desse await, não depois — capture `const view = currentView, gen = beginGen(view);`.
+// Ao terminar, troque `currentView.pdfHTML = X` por `commitViewResult(view, gen, { pdfHTML: X })`.
+// Helpers que escrevem pdfHTML DEPOIS do await de quem os chama (paginateTable,
+// paginateLines, lineResults) recebem `gen` como opção em vez de capturar a própria —
+// capturar ali seria tarde demais pra distinguir qual tentativa é a mais recente.
+function beginGen(view){
+  if (!view) return null;   // modal já pode ter fechado (currentView virou null) — no-op seguro
+  view._gen = (view._gen || 0) + 1;
+  return view._gen;
+}
+function commitViewResult(view, gen, patch){
+  if (!view || gen !== view._gen) return false;
+  if ('pdfHTML' in patch) view.pdfHTML = patch.pdfHTML;
+  return true;
+}
+// pushDetail/popDetail: entra/sai de um "detalhe" dentro de um painel de lista (hoje só
+// Portarias) sem perder o pdfHTML/pesquisa da lista por baixo.
+function pushDetail(view, patch){
+  if (!view) return;
+  view._detail = { pdfHTML: view.pdfHTML };
+  if ('pdfHTML' in patch) view.pdfHTML = patch.pdfHTML;
+}
+function popDetail(view){
+  if (!view || !view._detail) return;
+  view.pdfHTML = view._detail.pdfHTML;
+  view._detail = null;
+}
+
 // Pilha de navegação do modal (voltar). Estado que muda junto — pilha, flag de "indo p/ trás"
 // e o botão Voltar — encapsulado aqui em vez de três variáveis soltas espalhadas por
 // runView/btnBack/closeModal (o flag solto `_goingBack` era fácil de dessincronizar).
@@ -799,19 +851,20 @@ async function searchLines(term){
 // Resolve o termo → renderiza a linha ativa, 1 resultado, ou lista p/ escolher (N).
 // `render(host, line)` desenha o documento; `useActive` liga o atalho da linha já selecionada.
 async function lineSearchRun(term, host, { render, emptyMsg, prompt, useActive = true }){
+  const view = currentView, gen = beginGen(view);
   term = (term||'').trim();
   if (!term){
     if (useActive && activeLine) return render(host, activeLine);
-    host.innerHTML = emptyBox(emptyMsg); if (currentView) currentView.pdfHTML = null; return;
+    host.innerHTML = emptyBox(emptyMsg); commitViewResult(view, gen, { pdfHTML:null }); return;
   }
   if (useActive && activeLine && lineMatchesTerm(activeLine, term)) return render(host, activeLine);
   const lines = await searchLines(term);
-  if (!lines.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para “'+esc(term)+'”.'); if (currentView) currentView.pdfHTML = null; return; }
+  if (!lines.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para “'+esc(term)+'”.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   if (lines.length === 1){ selectLine(lines[0]); return render(host, lines[0]); }
   await getEmpresas();
   host.innerHTML = `<p class="doc-note">${lines.length} linha(s) encontradas — ${prompt}:</p>` + linhasTable(lines);
   host.querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{ const l=JSON.parse(tr.dataset.row); selectLine(l); render(host, l); }));
-  if (currentView) currentView.pdfHTML = null;
+  commitViewResult(view, gen, { pdfHTML:null });
 }
 // resolve o termo → 1 linha (renderiza o documento) ou várias (lista p/ escolher)
 function lineDocRun(term, host, render){
@@ -821,6 +874,7 @@ function lineDocRun(term, host, render){
 LOADERS.folhaRosto = () => lineDocView({ subtitle:'Cadastro de Linhas: Folha de Rosto', render:renderFolhaRosto });
 /* --- DOC · Folha de Rosto ----------------------------------------- */
 async function renderFolhaRosto(host, line){
+  const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   const [rows, , tarifas] = await Promise.all([
     sbFetch('tabela_vista_teste', `codlinha=eq.${enc(line.codlinha)}&select=${LINE_FIELDS}&limit=1`),
@@ -849,11 +903,12 @@ async function renderFolhaRosto(host, line){
     ])}
     <div class="doc-foot">Fonte: cadastro DETRO-RJ · DIVAT</div>`;
   host.innerHTML = inner;
-  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Cadastro de Linhas: Folha de Rosto')}${inner}</div>`;
+  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Cadastro de Linhas: Folha de Rosto')}${inner}</div>` });
 }
 
 LOADERS.folhaDivisoria = () => lineDocView({ subtitle:'Folha Divisória', render:renderFolhaDivisoria });
 async function renderFolhaDivisoria(host, line){
+  const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   await getEmpresas();
   const corpo = `<div class="fd-body">
@@ -863,7 +918,7 @@ async function renderFolhaDivisoria(host, line){
       <div class="fd-note">Página de separação do processo da linha</div>
     </div>`;
   host.innerHTML = `<div class="fd-wrap">${corpo}</div>`;
-  if (currentView) currentView.pdfHTML = ()=>`<div class="doc fd-wrap-pdf">${docHead('Folha Divisória')}<div class="fd-body-pdf">${corpo}</div></div>`;
+  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc fd-wrap-pdf">${docHead('Folha Divisória')}<div class="fd-body-pdf">${corpo}</div></div>` });
 }
 
 /* Histórico (linha e empresa): um evento por página, descrição/observação por extenso.
@@ -962,6 +1017,7 @@ function paginateEvents(container, rows, buildPage, headerHTML='', opts={}){
 // Renderiza o histórico (paginado) de UMA linha dentro de um container
 /* --- DOC · Histórico (linha) -------------------------------------- */
 async function renderLineHistory(host, line){
+  const view = currentView, gen = beginGen(view);
   selectLine(line);   // sincroniza a linha ativa e o banner do topo
   const [rows, lk] = await Promise.all([
     sbFetch('evento_teste', `codlinha=eq.${enc(line.codlinha)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.asc&limit=2000`),
@@ -969,12 +1025,12 @@ async function renderLineHistory(host, line){
   ]);
   const head = docHead('Histórico da Linha');
   const meta = metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(orDash(line.codempresa))],['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—'),true]]);
-  if (!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento registrado para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
+  if (!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento registrado para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const build = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin[r.evento_linha] || lk.emp[r.evento_empresa] || '—', false) + evBlocksHTML(r);
   // PDF/impressão: um evento por página (cabeçalho repetido); segue o filtro aplicado na tela
   const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
-  paginateEvents(host, rows, build, meta, { onFilter:(vis)=>{ if (currentView) currentView.pdfHTML = ()=>pdfFrom(vis); } });
-  if (currentView) currentView.pdfHTML = ()=>pdfFrom(rows);
+  paginateEvents(host, rows, build, meta, { onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
+  commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(rows) });
 }
 LOADERS.historicoLinha = async () => {
   const pre = activeLine ? (activeLine.numero_ligacao || activeLine.codlinha || '') : '';
@@ -1002,12 +1058,13 @@ function itinerarioTableHTML(rows, ibge){
 }
 
 async function renderItinerarios(host, line){
+  const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   const [rows, ibge] = await Promise.all([
     sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_municipio_origem,codempresa&order=id`),
     getIbge(), getEmpresas()
   ]);
-  if (!rows.length) { host.innerHTML = emptyBox('Nenhum itinerário encontrado para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
+  if (!rows.length) { host.innerHTML = emptyBox('Nenhum itinerário encontrado para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const codEmp = rows[0]?.codempresa || line.codempresa || '';
   const meta = metaRows([['Empresa',esc(empNome(codEmp)),true],['Registro','RJ-'+esc(codEmp)],
       ['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
@@ -1015,7 +1072,7 @@ async function renderItinerarios(host, line){
       ['Característica',esc(orDash(line.caracteristica))],['Tipo da Ligação',esc(orDash(line.tipo))],
       ['Situação',situacaoHTML(line),true]]);
   const inner = `${meta}${itinerarioTableHTML(rows, ibge)}`;   // documento completo (p/ PDF)
-  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}${inner}</div>`;
+  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}${inner}</div>` });
   // filtro por sentido — o PDF segue com os dois sentidos
   rows.forEach(r=>r._sn=normSentido(r.sentido));
   const sentidos = [...new Set(rows.map(r=>r._sn))].filter(Boolean).sort((a,b)=>(SENTIDO_ORDER[a]||9)-(SENTIDO_ORDER[b]||9));
@@ -1098,6 +1155,7 @@ function quadroLinhaRun(term, host){
 // Quadro de UMA linha (comportamento clássico do card)
 async function renderLinhaQuadro(host, line){
   if(!host || !line) return;
+  const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   try {
     const [interv, predet, qh, secoes, orig] = await Promise.all([
@@ -1107,12 +1165,12 @@ async function renderLinhaQuadro(host, line){
       sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`),
       getOrigem(), getEmpresas()
     ]);
-    if (!interv.length && !predet.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para esta linha.'); if(currentView) currentView.pdfHTML=null; return; }
+    if (!interv.length && !predet.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const ultima = qh[0]?.ultima_alteracao;
     // bloco de Seções e Tarifas da linha (mesma tabela/builder da Estrutura), fora do #qhResult
     const h3sec = `<h3 class="doc-h3">Seções e Tarifas</h3>`;
     const secBlock = secoes.length ? `${h3sec}${secoesTarifasHTML(secoes)}` : '';
-    if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroMetaHTML(line, ultima)}${secBlock}${quadroHorariosBodyHTML(interv, predet, orig)}</div>`;
+    commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroMetaHTML(line, ultima)}${secBlock}${quadroHorariosBodyHTML(interv, predet, orig)}</div>` });
     // filtros por sentido (origem das partidas) e por dia — o PDF segue completo
     const sentidoKey = (cod,nome)=> orig[cod] || nome || ('Origem '+orDash(cod));
     const sentidos = [...new Set([...interv.map(r=>sentidoKey(r.cod_origem,r.nome_origem)), ...predet.map(r=>sentidoKey(r.cod_origem,r.nome_origem))])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
@@ -1139,18 +1197,19 @@ const renderActiveLineQuadro = host => renderLinhaQuadro(host, activeLine);
 
 // Modo empresa: resolve a empresa e lista as linhas com quadro
 async function quadroEmpresaRun(term, host){
+  const view = currentView, gen = beginGen(view);
   term = (term||'').trim();
   if(!term){
     if(activeLine) return renderActiveLineQuadro(host);
     host.innerHTML = emptyBox('Busque por uma empresa (nome ou código), ou selecione uma linha.');
-    if(currentView) currentView.pdfHTML=null; return;
+    commitViewResult(view, gen, { pdfHTML:null }); return;
   }
   await getEmpresas();
   const emps = searchEmpresas(term);
   if(emps.length > 1){
     host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para abrir os quadros' });
     bindEmpresaRows(host, (cod,nome)=>renderEmpresaQuadros(host, cod, nome));
-    if(currentView) currentView.pdfHTML=null; return;
+    commitViewResult(view, gen, { pdfHTML:null }); return;
   }
   const cod = emps.length===1 ? emps[0].codempresa : term;
   const nome = emps.length===1 ? emps[0].nome_empresa : null;
@@ -1159,31 +1218,34 @@ async function quadroEmpresaRun(term, host){
 
 // Lista as linhas (com quadro) de uma empresa e prepara o PDF de todos os quadros
 async function renderEmpresaQuadros(host, cod, nome){
+  const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   const [linhas, orig] = await Promise.all([
     sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=codlinha&limit=500`),
     getOrigem(), getEmpresas()
   ]);
   const nomeEmp = nome || empNome(cod);
-  if(!linhas.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para a empresa '+esc(nomeEmp)+'.'); if(currentView) currentView.pdfHTML=null; return; }
+  if(!linhas.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para a empresa '+esc(nomeEmp)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const { intervBy, predetBy, trunc } = await fetchQHByLines(linhas.map(l=>l.codlinha));
   const comQuadro = linhas.filter(l => intervBy.has(l.codlinha) || predetBy.has(l.codlinha));
-  if(!comQuadro.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para as linhas da empresa '+esc(nomeEmp)+'.'); if(currentView) currentView.pdfHTML=null; return; }
+  if(!comQuadro.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para as linhas da empresa '+esc(nomeEmp)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   // PDF: todos os quadros, um por página
-  if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${comQuadro.map(l=>
-    `<div class="ev-page">${docHead('Quadro de Horários')}${quadroDocInner(l, intervBy.get(l.codlinha)||[], predetBy.get(l.codlinha)||[], orig)}</div>`).join('')}</div>`;
+  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${comQuadro.map(l=>
+    `<div class="ev-page">${docHead('Quadro de Horários')}${quadroDocInner(l, intervBy.get(l.codlinha)||[], predetBy.get(l.codlinha)||[], orig)}</div>`).join('')}</div>` });
   host.innerHTML = `<div class="doc-obs tight"><b>${esc(nomeEmp)}</b> · ${linhas.length} linha(s), ${comQuadro.length} com quadro de horários.
       Use o botão <b>PDF</b> da barra acima para baixar todos os quadros (um por página).</div>`
     + (trunc? `<div class="trunc-aviso"><b>Resultado parcial:</b> a empresa tem muitos horários e alguns podem não ter sido carregados.</div>`:'')
     + `<div id="eqResult"></div>`;
   // clique numa linha → quadro individual (com voltar). data-cod=codlinha → fatia-safe.
+  // Reusa o mesmo view/gen da lista: é ação síncrona (sem fetch próprio), o clique mais
+  // recente sempre vence naturalmente (JS de thread única), sem precisar de nova geração.
   const abrirQuadro = tr=>{
     const l = comQuadro.find(x=>String(x.codlinha)===String(tr.dataset.cod));
     if(!l) return;
     const iv = intervBy.get(l.codlinha)||[], pd = predetBy.get(l.codlinha)||[];
     host.innerHTML = `<button type="button" class="qh-back">‹ Voltar à lista da empresa</button>`
       + quadroDocInner(l, iv, pd, orig);
-    if(currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroDocInner(l, iv, pd, orig)}</div>`;
+    commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroDocInner(l, iv, pd, orig)}</div>` });
     host.querySelector('.qh-back').addEventListener('click', ()=>renderEmpresaQuadros(host, cod, nome));
   };
   paginateTable(host.querySelector('#eqResult'), comQuadro, {
@@ -1232,12 +1294,13 @@ function secoesTarifasHTML(rows){
 }
 
 async function renderTarifas(host, line){
+  const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`);
-  if (!rows.length) { host.innerHTML = emptyBox('Nenhuma tarifa cadastrada para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
+  if (!rows.length) { host.innerHTML = emptyBox('Nenhuma tarifa cadastrada para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]]);
   const inner = `${meta}${secoesTarifasHTML(rows)}`;            // documento completo (p/ PDF)
-  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Tarifas Vigentes')}${inner}</div>`;
+  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Tarifas Vigentes')}${inner}</div>` });
   // filtro por situação da seção — reusa isVigente (critério estrito compartilhado; ver junto a isLinhaAtiva)
   const temInativa = rows.some(r=>!isVigente(r));
   const tools = temInativa ? `<div class="loc-tools"><label>Situação <select id="tarSit"><option value="todas">Todas</option><option value="vigentes">Vigentes</option><option value="inativas">Canceladas/inativas</option></select></label></div>` : '';
@@ -1254,18 +1317,19 @@ async function renderTarifas(host, line){
 
 // Modo empresa: resolve a empresa e lista as tarifas de TODAS as linhas dela
 async function tarifaEmpresaRun(term, host){
+  const view = currentView, gen = beginGen(view);
   term = (term||'').trim();
   if(!term){
     if(activeLine) return renderTarifasEmpresa(host, activeLine.codempresa, empNome(activeLine.codempresa));
     host.innerHTML = emptyBox('Busque por uma empresa (nome ou código RJ), ou troque para "Por linha".');
-    if(currentView) currentView.pdfHTML=null; return;
+    commitViewResult(view, gen, { pdfHTML:null }); return;
   }
   await getEmpresas();
   const emps = searchEmpresas(term);
   if(emps.length > 1){
     host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para ver as tarifas' });
     bindEmpresaRows(host, (cod,nome)=>renderTarifasEmpresa(host, cod, nome));
-    if(currentView) currentView.pdfHTML=null; return;
+    commitViewResult(view, gen, { pdfHTML:null }); return;
   }
   const cod = emps.length===1 ? emps[0].codempresa : term;
   const nome = emps.length===1 ? emps[0].nome_empresa : null;
@@ -1278,12 +1342,13 @@ function linhaTarifaRowHTML(l){
   return `<tr><td class="td-num">${esc(orDash(l.numero_linha||fmtCode(l.codlinha)))}</td><td class="td-logr">${esc(orDash(l.nome_ligacao))}</td><td class="td-num">${esc(fmtCode(l.codlinha))}</td><td class="td-num">${l.nsec}</td><td class="td-sentido">${esc(l.tarifaTxt)}</td></tr>`;
 }
 async function renderTarifasEmpresa(host, cod, nome){
+  const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   const rows = await sbFetch('tarifa_atual_teste', `codempresa=eq.${enc(cod)}&select=codlinha,secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=codlinha,secao&limit=3000`);
   const nomeEmp = nome || empNome(cod);
   const nLinhas = new Set(rows.map(r=>r.codlinha)).size;
   const meta = metaRows([['Empresa',esc(nomeEmp||'—'),true],['Registro','RJ-'+esc(cod)],['Total',nLinhas+' linha(s) · '+rows.length+' seção(ões)']]);
-  if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhuma tarifa cadastrada para a empresa '+esc(nomeEmp||cod)+'.'); if(currentView) currentView.pdfHTML=null; return; }
+  if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhuma tarifa cadastrada para a empresa '+esc(nomeEmp||cod)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   // agrupa por linha — cada linha aparece 1x, com a qtd. de seções e a TARIFA DA LINHA
   // (a da 1ª seção, mesma convenção da Folha de Rosto — não o intervalo das seções).
   const linhas = [...groupBy(rows, r=>r.codlinha)].map(([codlinha,secs])=>{
@@ -1294,8 +1359,8 @@ async function renderTarifasEmpresa(host, cod, nome){
   host.innerHTML = `${meta}${tools}<div id="tarEmpResult"></div>`;
   const result = host.querySelector('#tarEmpResult'), sel = host.querySelector('#tarEmpModo');
   const paint = ()=>{
-    if(sel.value==='linhas') paginateTable(result, linhas, { cols:LINHA_TARIFA_COLS, rowHTML:linhaTarifaRowHTML, foot:t=>t+' linha(s)', unit:'linhas' });
-    else paginateTable(result, rows, { cols:TARIFA_COLS, rowHTML:tarifaRowHTML, foot:t=>t+' seção(ões)', unit:'seções' });
+    if(sel.value==='linhas') paginateTable(result, linhas, { cols:LINHA_TARIFA_COLS, rowHTML:linhaTarifaRowHTML, foot:t=>t+' linha(s)', unit:'linhas', view, gen });
+    else paginateTable(result, rows, { cols:TARIFA_COLS, rowHTML:tarifaRowHTML, foot:t=>t+' seção(ões)', unit:'seções', view, gen });
   };
   sel.addEventListener('change', paint);
   paint();
@@ -1338,25 +1403,27 @@ function frotaBlockHTML(f){
 }
 
 async function renderFrota(host, line){
+  const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   const [rows] = await Promise.all([
     sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e&limit=1`),
     getEmpresas()
   ]);
-  if (!rows.length) { host.innerHTML = emptyBox('Nenhuma frota cadastrada para esta linha.'); if (currentView) currentView.pdfHTML = null; return; }
+  if (!rows.length) { host.innerHTML = emptyBox('Nenhuma frota cadastrada para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const f = rows[0];
   const inner = `${metaRows([['Empresa',esc(empNome(f.codempresa)),true],['Registro','RJ-'+esc(orDash(f.codempresa))],
       ['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
       ['Ligação',esc(line.nome_ligacao||'—'),true],['Hierarquia',esc(orDash(f.hierarquia))],['Última alteração',fmtDate(f.ultima_alteracao)]])}
     ${frotaBlockHTML(f)}`;
   host.innerHTML = inner;
-  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Frota da Linha')}${inner}</div>`;
+  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Frota da Linha')}${inner}</div>` });
 }
 
 LOADERS.frota = () => lineDocView({ subtitle:'Frota da Linha', render:renderFrota });
 
 /* --- DOC · Estrutura Operacional ------------------------------ */
 async function renderEstrutura(host, line){
+  const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   const cod = enc(line.codlinha);
   const [lineRows, secoes, itin, interv, predet, qh, orig, ibge] = await Promise.all([
@@ -1385,7 +1452,7 @@ async function renderEstrutura(host, line){
     ${h3('Quadro de Horários e Frota')}${frotaMeta}${f&&Object.keys(f).length?frotaBlockHTML(f):''}${quadroHorariosBodyHTML(interv, predet, orig)}
     <div class="doc-foot">Fonte: cadastro DETRO-RJ · DIVAT</div>`;
   host.innerHTML = inner;
-  if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Cadastro de Linhas: Estrutura Operacional')}${inner}</div>`;
+  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Cadastro de Linhas: Estrutura Operacional')}${inner}</div>` });
 }
 
 // Documento consolidado (igual ao Relatório oficial): cadastro + Seções/Tarifas +
@@ -1394,6 +1461,7 @@ LOADERS.estrutura = () => lineDocView({ subtitle:'Cadastro de Linhas: Estrutura 
 
 /* ---- Empresas ---- */
 LOADERS.empresasRegulares = async () => {
+  const view = currentView, gen = beginGen(view);
   // lista TODAS as empresas do cadastro (codempresa_teste), inclusive sem linhas
   const [lineRows] = await Promise.all([
     sbFetch('tabela_vista_teste', `select=codempresa,cancelado,paralisado&limit=5000`),
@@ -1435,6 +1503,7 @@ LOADERS.empresasRegulares = async () => {
     paginateTable(result, f, {
       cols, rowHTML:e=>rowHTML(e), foot:t=>t+' empresa(s)', unit:'empresas',
       bind:c=>c.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>openEmpresaLigacoes(tr.dataset.emp))),
+      view, gen,
     });
   };
   sel.addEventListener('change', paint);
@@ -1445,6 +1514,7 @@ LOADERS.empresasRegulares = async () => {
 /* --- DOC · Empresas ----------------------------------------------- */
 function openEmpresaLigacoes(cod){
   runView({ title:'Ligações por Empresa', tables:['tabela_vista_teste','codempresa_teste'], loader: async()=>{
+    const view = currentView, gen = beginGen(view);
     const [rows] = await Promise.all([
       sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`),
       getEmpresas()
@@ -1452,13 +1522,14 @@ function openEmpresaLigacoes(cod){
     setBody(`<div class="doc">${docHead('Ligações por Empresa')}
       ${metaRows([['Empresa',esc(empNome(cod)),true],['Registro','RJ-'+esc(cod)],['Total',rows.length+' ligação(ões)']])}
       <div id="empLigResult"></div></div>`);
-    lineResults(modalBody.querySelector('#empLigResult'), rows);
+    lineResults(modalBody.querySelector('#empLigResult'), rows, { view, gen });
   }});
 }
 LOADERS.ligacoesPorEmpresa = async () => {
   const pre = activeLine?.codempresa || '';
   searchPanel({ title:'Ligações por Empresa', placeholder:'Código (ex. 101) ou nome da empresa', value:pre, onRun: async(term, host)=>{
-    if(!term){ host.innerHTML=emptyBox('Informe o código ou nome da empresa.'); return; }
+    const view = currentView, gen = beginGen(view);
+    if(!term){ host.innerHTML=emptyBox('Informe o código ou nome da empresa.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     await getEmpresas();
     let cods = [];
     if(/^\d+$/.test(term.trim())){
@@ -1466,19 +1537,20 @@ LOADERS.ligacoesPorEmpresa = async () => {
     } else {
       const t = norm(term);
       cods = Object.entries(empresas.map).filter(([,n])=>norm(n||'').includes(t)).map(([c])=>c);
-      if(!cods.length){ host.innerHTML=emptyBox('Nenhuma empresa encontrada para "'+esc(term)+'".'); return; }
+      if(!cods.length){ host.innerHTML=emptyBox('Nenhuma empresa encontrada para "'+esc(term)+'".'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     }
     const filter = cods.length===1 ? `codempresa=eq.${enc(cods[0])}` : `codempresa=in.(${cods.map(enc).join(',')})`;
     const rows = await sbFetch('tabela_vista_teste', `${filter}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`);
-    lineResults(host, rows);
+    lineResults(host, rows, { view, gen });
   }});
 };
 LOADERS.secoesPorEmpresa = async () => {
   const pre = activeLine?.codempresa || '';
   searchPanel({ title:'Seções por Empresa', placeholder:'Código da empresa (ex. 101)', value:pre, onRun: async(term, host)=>{
-    if(!term){ host.innerHTML=emptyBox('Informe o código da empresa.'); return; }
+    const view = currentView, gen = beginGen(view);
+    if(!term){ host.innerHTML=emptyBox('Informe o código da empresa.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const rows = await sbFetch('tarifa_atual_teste', `codempresa=eq.${enc(term)}&select=codlinha,secao,nome_ligacao&order=codlinha&limit=1000`);
-    if(!rows.length){ host.innerHTML=emptyBox('Nenhuma seção cadastrada para a empresa '+esc(term)+'.'); return; }
+    if(!rows.length){ host.innerHTML=emptyBox('Nenhuma seção cadastrada para a empresa '+esc(term)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const cols = [{t:'Linha',w:'110px'},{t:'Seção',w:'70px'},{t:'Descrição'}];
     const rowHTML = r=>`<tr><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td></tr>`;
     host.innerHTML = `<div class="loc-tools"><label>Filtrar <input type="text" id="secF" placeholder="seção, linha ou descrição" autocomplete="off"></label></div><div id="secResult"></div>`;
@@ -1487,7 +1559,7 @@ LOADERS.secoesPorEmpresa = async () => {
       const q = norm(inp.value.trim());
       const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${fmtCode(r.codlinha)} ${r.codlinha} ${r.nome_ligacao||''}`).includes(q)) : rows;
       if(!f.length){ result.innerHTML = emptyBox('Nenhuma seção com esse filtro.'); return; }
-      paginateTable(result, f, { cols, rowHTML:r=>rowHTML(r), foot:t=>t+' seção(ões)', unit:'seções' });
+      paginateTable(result, f, { cols, rowHTML:r=>rowHTML(r), foot:t=>t+' seção(ões)', unit:'seções', view, gen });
     };
     inp.addEventListener('input', debounce(paint));
     paint();
@@ -1495,6 +1567,7 @@ LOADERS.secoesPorEmpresa = async () => {
 };
 // Renderiza o histórico (paginado) de UMA empresa dentro de um container
 async function renderEmpresaHistory(host, cod, nome){
+  const view = currentView, gen = beginGen(view);
   const [rows, lk, empRows] = await Promise.all([
     sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.asc&limit=500`),
     getEvLookups(),
@@ -1504,18 +1577,19 @@ async function renderEmpresaHistory(host, cod, nome){
   const head = docHead('Histórico da Empresa');
   const empSit = [ boolChip(E.cassada,'Cassada'), boolChip(E.sob_intervencao,'Sob intervenção') ].filter(Boolean).join(' ') || '<span class="chip chip-off">Regular</span>';
   const meta = metaRows([['Empresa',esc(nome||E.nome_empresa||'—'),true],['Código da Empresa',esc(cod)],['Situação',esc(orDash(E.situacao))],['Processo',esc(orDash(E.processo))],['Publicação',fmtDate(E.data_publicacao)],['Situação cadastral',empSit,true],['Total',rows.length+' evento(s)']]);
-  if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento para a empresa '+esc(cod)+'.'); if(currentView) currentView.pdfHTML=null; return; }
+  if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento para a empresa '+esc(cod)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const build = r => evBandHTML(r, 'Tipo Evento Empresa', lk.emp[r.evento_empresa]||lk.lin[r.evento_linha]||'—', !!(r.codlinha)) + evBlocksHTML(r);
   const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
-  paginateEvents(host, rows, build, meta, { onFilter:(vis)=>{ if(currentView) currentView.pdfHTML = ()=>pdfFrom(vis); } });
-  if(currentView) currentView.pdfHTML = ()=>pdfFrom(rows);
+  paginateEvents(host, rows, build, meta, { onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
+  commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(rows) });
 }
 LOADERS.historicoEmpresa = async () => {
   const pre = activeLine?.codempresa || '';
   searchPanel({ title:'Histórico da Empresa', placeholder:'Nome ou código da empresa (ex. 1001 ou AUTO VIAÇÃO)', value:pre,
     onRun: async(term, host)=>{
+      const view = currentView, gen = beginGen(view);
       term = (term||'').trim();
-      if(!term){ host.innerHTML=emptyBox('Busque pelo nome ou código da empresa.'); if(currentView) currentView.pdfHTML=null; return; }
+      if(!term){ host.innerHTML=emptyBox('Busque pelo nome ou código da empresa.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
       // busca client-side sobre o cadastro completo → insensível a maiúsc./minúsc. E acento
       await getEmpresas();
       const emps = searchEmpresas(term);
@@ -1524,7 +1598,7 @@ LOADERS.historicoEmpresa = async () => {
         host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para ver o histórico', sitWidth:'170px',
           extraChips:e=>boolChip(e.cassada,'cassada')+boolChip(e.sob_intervencao,'interv.') });
         bindEmpresaRows(host, (cod,nome)=>renderEmpresaHistory(host, cod, nome));
-        if(currentView) currentView.pdfHTML=null; return;
+        commitViewResult(view, gen, { pdfHTML:null }); return;
       }
       // não achou no cadastro de nomes → tenta o termo como código direto nos eventos
       await renderEmpresaHistory(host, term, null);
@@ -1534,36 +1608,39 @@ LOADERS.historicoEmpresa = async () => {
 /* ---- Consultas de Ligações ---- */
 LOADERS.ligacoesPorNome = async () => {
   searchPanel({ title:'Ligações pelo Nome', placeholder:'Parte do nome da ligação', note:'Esta consulta casa apenas o NOME da ligação (ordem alfabética). Para localizar por número ou código, use a busca do topo da página.', onRun: async(term, host)=>{
+    const view = currentView, gen = beginGen(view);
     const qs = term? `nome_ligacao=ilike.*${ilikeTerm(term)}*&` : '';
     const [rows] = await Promise.all([
       sbFetch('tabela_vista_teste', `${qs}select=${LINE_FIELDS}&order=nome_ligacao&limit=80`),
       getEmpresas()
     ]);
-    lineResults(host, rows);
+    lineResults(host, rows, { view, gen });
   }, auto:true});
 };
 LOADERS.ligacoesPorNumero = async () => {
   searchPanel({ title:'Identificar pelo Número', placeholder:'Número ou código da linha', onRun: async(term, host)=>{
-    if(!term){ host.innerHTML=emptyBox('Digite o número ou código.'); return; }
+    const view = currentView, gen = beginGen(view);
+    if(!term){ host.innerHTML=emptyBox('Digite o número ou código.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const e1=ilikeTerm(term), code=ilikeTerm(term.replace(/[-.\s]/g,''));
     const [rows] = await Promise.all([
       sbFetch('tabela_vista_teste', `or=(numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=codlinha&limit=80`),
       getEmpresas()
     ]);
-    lineResults(host, rows);
+    lineResults(host, rows, { view, gen });
   }});
 };
 LOADERS.ligacoesPorLogradouro = async () => {
   searchPanel({ title:'Ligações por Logradouro', placeholder:'Nome da via / logradouro', onRun: async(term, host)=>{
-    if(!term){ host.innerHTML=emptyBox('Digite o nome do logradouro.'); return; }
+    const view = currentView, gen = beginGen(view);
+    if(!term){ host.innerHTML=emptyBox('Digite o nome do logradouro.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     // RPC divat_busca_logradouro: busca sem acento e sem depender de maiúsc./minúsc.
     // (o ilike direto na coluna é sensível a acento — "getulio" não achava "Getúlio").
     const it = await sbFetch('rpc/divat_busca_logradouro', `termo=${ilikeTerm(term)}&select=codlinha&limit=2000`);
     const cods=distinctCods(it,500);
-    if(!cods.length){ host.innerHTML=emptyBox('Nenhuma linha passa por esse logradouro.'); return; }
+    if(!cods.length){ host.innerHTML=emptyBox('Nenhuma linha passa por esse logradouro.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const rows = await fetchLinesByCods(cods,{limit:500});
     const prefix = bannerTrunc(it) + `<p class="doc-note">${cods.length} linha(s) passam por "${esc(term)}"</p>`;
-    lineResults(host, rows, { prefixHTML: prefix });
+    lineResults(host, rows, { prefixHTML: prefix, view, gen });
   }});
 };
 LOADERS.municipioRegiao = async () => {
@@ -1602,16 +1679,17 @@ LOADERS.municipioRegiao = async () => {
       const scope  = host.querySelector('#regScope');
       host.querySelectorAll('.mun-chip').forEach(b=>b.addEventListener('click',()=>openLinhasPorIbge(b.dataset.ibge, ibge[b.dataset.ibge]?.nome)));
       async function paint(){
+        const view = currentView, gen = beginGen(view);
         result.innerHTML = loading();
         const modo = scope.value;
         const it = await sbFetch('rpc/divat_linhas_regiao', `p_regiao=${enc(region)}&p_modo=${enc(modo)}&select=codlinha&limit=2000`);
         const lc = distinctCods(it,500);
-        if(!lc.length){ result.innerHTML = emptyBox('Nenhuma linha para esse critério na região '+esc(region)+'.'); return; }
+        if(!lc.length){ result.innerHTML = emptyBox('Nenhuma linha para esse critério na região '+esc(region)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
         const rows = await fetchLinesByCods(lc,{limit:500});
         const label = modo==='origem' ? 'com origem na' : 'que trafegam dentro da';
         const prefix = bannerTrunc(it)
           + `<p class="doc-count">${lc.length} linha(s) ${label} região ${esc(region)}</p>`;
-        lineResults(result, rows, { prefixHTML: prefix });
+        lineResults(result, rows, { prefixHTML: prefix, view, gen });
       }
       scope.addEventListener('change', ()=>{ paint().catch(e=>{ result.innerHTML = errorBox(e.message); }); });
       paint().catch(e=>{ result.innerHTML = errorBox(e.message); });
@@ -1624,6 +1702,7 @@ LOADERS.municipioRegiao = async () => {
 /* --- DOC · Municípios / entre-municípios -------------------------- */
 function openLinhasPorIbge(codibge, nome){
   runView({ title:'Linhas no Município', tables:['itinerario_teste','tabela_vista_teste','codempresa_teste'], loader: async()=>{
+    const view = currentView, gen = beginGen(view);
     const it = await sbFetch('itinerario_teste', `cod_municipio_origem=eq.${enc(codibge)}&select=codlinha&limit=4000`);
     const allCods=distinctCods(it);          // total real (sem corte) para o "Total"
     const cods=allCods.slice(0,500);         // teto de listagem (alinha com as views irmãs)
@@ -1644,7 +1723,7 @@ function openLinhasPorIbge(codibge, nome){
     const scope  = modalBody.querySelector('#munScope');
     const metaPdf = metaRows([['Município',esc(nome||codibge),true],['Total',allCods.length+' linha(s)']]);
     // PDF determinístico: lista completa, sem a barra de filtro (evita espaço em branco / subconjunto filtrado)
-    if (currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead('Linhas no Município')}${metaPdf}${avisoTrunc}${linhasTable(rows)}</div>`;
+    commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Linhas no Município')}${metaPdf}${avisoTrunc}${linhasTable(rows)}</div>` });
     // classificação dentro×intermunicipal PREGUIÇOSA: só busca o itinerário completo das
     // linhas quando o usuário escolhe um filtro (o padrão "todas" mantém o custo atual).
     let cls = null;
@@ -1695,12 +1774,13 @@ async function linhasNoMunicipio(codibge){
   return distinctCods(rows);
 }
 async function mostrarLinhasResultado(host, cods, titulo){
-  if(!cods.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para este critério.'); return; }
+  const view = currentView, gen = beginGen(view);
+  if(!cods.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para este critério.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const slice = cods.slice(0,250);
   const rows = await fetchLinesByCods(slice,{limit:250});
   const extra = cods.length>slice.length ? ` (mostrando ${slice.length})` : '';
   const prefix = `<p class="doc-count">${cods.length} linha(s) — ${esc(titulo)}${extra}</p>`;
-  lineResults(host, rows, { prefixHTML: prefix });
+  lineResults(host, rows, { prefixHTML: prefix, view, gen });
 }
 // Município A × Município B — filtro direcional (A→B, respeita a ordem do itinerário) e
 // filtro "trafega pelos dois" (qualquer ordem). `inter` é o próprio resultado não-direcional;
@@ -1753,16 +1833,17 @@ async function mostrarLinhasEntreMunicipios(host, aTerm, bTerm, directional){
 LOADERS.ligacoesPorTerminal = async () => {
   const orig = await getOrigem();
   searchPanel({ title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', onRun: async(term, host)=>{
-    if(!term){ host.innerHTML=emptyBox('Digite o nome do terminal/origem.'); return; }
+    const view = currentView, gen = beginGen(view);
+    if(!term){ host.innerHTML=emptyBox('Digite o nome do terminal/origem.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const cods = Object.entries(orig).filter(([,n])=>norm(n).includes(norm(term))).map(([c])=>c);
-    if(!cods.length){ host.innerHTML=emptyBox('Nenhuma origem com esse nome.'); return; }
+    if(!cods.length){ host.innerHTML=emptyBox('Nenhuma origem com esse nome.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const inList = cods.slice(0,50).map(enc).join(',');
     const qi = await sbFetch('qh_intervalo_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`);
     const lineCods=distinctCods(qi,120);
-    if(!lineCods.length){ host.innerHTML=emptyBox('Nenhuma linha vinculada a esse terminal.'); return; }
+    if(!lineCods.length){ host.innerHTML=emptyBox('Nenhuma linha vinculada a esse terminal.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const rows = await fetchLinesByCods(lineCods,{limit:200});
     const prefix = `<p class="doc-note">${lineCods.length} linha(s) a partir de "${esc(term)}"</p>`;
-    lineResults(host, rows, { prefixHTML: prefix });
+    lineResults(host, rows, { prefixHTML: prefix, view, gen });
   }});
 };
 LOADERS.secoesPorLigacao = async () => {
@@ -1864,18 +1945,20 @@ LOADERS.frotaPorEmpresa = async () => {
 };
 LOADERS.pesquisaEvento = async () => {
   searchPanel({ title:'Pesquisa de Evento', placeholder:'Termo livre (processo, descrição, observação)', onRun: async(term, host)=>{
-    if(!term){ host.innerHTML=emptyBox('Digite um termo para pesquisar eventos.'); return; }
+    const view = currentView, gen = beginGen(view);
+    if(!term){ host.innerHTML=emptyBox('Digite um termo para pesquisar eventos.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const t=ilikeTerm(term);
     const [rows] = await Promise.all([
       sbFetch('evento_teste', `or=(descricao.ilike.*${t}*,observacao.ilike.*${t}*,numero_processo.ilike.*${t}*)&select=data_registro,codlinha,codempresa,numero_processo,descricao,observacao&order=data_registro.desc&limit=200`),
       getEmpresas()
     ]);
-    if(!rows.length){ host.innerHTML = emptyBox('Nenhum evento encontrado para "'+esc(term)+'".'); return; }
+    if(!rows.length){ host.innerHTML = emptyBox('Nenhum evento encontrado para "'+esc(term)+'".'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     paginateTable(host, rows, {
       cols:[{t:'Data',w:'82px'},{t:'Linha',w:'100px'},{t:'Empresa'},{t:'RJ',w:'60px'},{t:'Processo',w:'100px'},{t:'Descrição'},{t:'Observação'}],
       rowHTML:r=>`<tr><td class="td-num">${esc(fmtDate(r.data_registro))}</td><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-logr">${esc(empNome(r.codempresa))}</td><td class="td-num">${esc(orDash(r.codempresa))}</td>
         <td class="td-num">${esc(orDash(r.numero_processo))}</td><td class="td-logr">${esc(orDash(r.descricao))}</td><td class="td-logr">${esc(orDash(r.observacao))}</td></tr>`,
       foot:t=>t+' evento(s)', unit:'eventos',
+      view, gen,
     });
   }});
 };
@@ -1906,6 +1989,7 @@ LOADERS.portarias = async () => {
   const num=modalBody.querySelector('#pNum'), ano=modalBody.querySelector('#pAno'),
         vig=modalBody.querySelector('#pVig'), txt=modalBody.querySelector('#pTxt'), host=modalBody.querySelector('#pHost');
   const run = async()=>{
+    const view = currentView, gen = beginGen(view);
     host.innerHTML = loading();
     try{
       let qs='';
@@ -1914,18 +1998,19 @@ LOADERS.portarias = async () => {
       if(vig.value==='vigor') qs+='vigor=is.true&'; else if(vig.value==='revog') qs+='vigor=is.false&';
       const tx=txt.value.trim(); if(tx){ const e=ilikeTerm(tx); qs+=`or=(assunto.ilike.*${e}*,conteudo.ilike.*${e}*)&`; }
       const rows = await sbFetch('portaria_teste', `${qs}select=numero_portaria,data_portaria,data_publicacao,tipo_portaria,tipo_legislacao,assunto,conteudo,vigor,portaria_anterior&order=data_portaria.desc.nullslast&limit=300`);
-      if(!rows.length){ host.innerHTML=emptyBox('Nenhuma portaria para os filtros informados.'); return; }
+      if(!rows.length){ host.innerHTML=emptyBox('Nenhuma portaria para os filtros informados.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
       paginateTable(host, rows, {
         cols:[{t:'Número',w:'110px'},{t:'Data',w:'90px'},{t:'Tipo',w:'120px'},{t:'Assunto'},{t:'Vigor',w:'90px'}],
         // i = índice GLOBAL na `rows` completa → data-idx continua batendo mesmo paginado
         rowHTML:(r,i)=>`<tr class="clickable" tabindex="0" role="button" data-idx="${i}"><td class="td-num">${esc(orDash(r.numero_portaria))}</td><td class="td-num">${esc(fmtDate(r.data_portaria))}</td><td class="td-tipo">${esc(orDash(r.tipo_portaria||r.tipo_legislacao))}</td><td class="td-logr">${esc(orDash(r.assunto))}</td><td>${r.vigor?'<span class="chip chip-off">Em vigor</span>':'<span class="chip chip-on">Revogada</span>'}</td></tr>`,
         foot:t=>t+' portaria(s)'+(t>=300?' (mostrando 300)':'')+' · clique para ler',
         bind:c=>c.querySelectorAll('tr[data-idx]').forEach(tr=>{
-          const open=()=>showPortaria(rows[+tr.dataset.idx], host);
+          const open=()=>showPortaria(rows[+tr.dataset.idx], host, view);
           tr.addEventListener('click', open);
           tr.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } });
         }),
         unit:'portarias',
+        view, gen,
       });
     }catch(e){ host.innerHTML=errorBox(e.message); }
   };
@@ -1935,16 +2020,18 @@ LOADERS.portarias = async () => {
   if(currentView) currentView._panelRun = run;
   run();
 };
-function showPortaria(r, host){
-  host.innerHTML = `<button class="loc-btn mb12" id="pbBack">← Voltar aos resultados</button>
-    <div class="doc flush">
-    ${metaRows([['Portaria',esc(orDash(r.numero_portaria))],['Tipo',esc(orDash(r.tipo_portaria||r.tipo_legislacao))],
+// `view` = a view da LISTA (capturada por quem abriu o item) — pushDetail/popDetail trocam só
+// o pdfHTML dela, preservando a busca/paginação por baixo (ver `Seam do ciclo de vida da view`).
+function showPortaria(r, host, view){
+  const inner = `${metaRows([['Portaria',esc(orDash(r.numero_portaria))],['Tipo',esc(orDash(r.tipo_portaria||r.tipo_legislacao))],
       ['Data',esc(fmtDate(r.data_portaria))],['Publicação',esc(fmtDate(r.data_publicacao))],
       ['Situação', r.vigor?'Em vigor':'Revogada'], r.portaria_anterior?['Portaria anterior',esc(r.portaria_anterior)]:['','']])}
     <div class="ev-block"><div class="ev-label">Assunto</div><div class="ev-text${r.assunto?'':' empty'}">${r.assunto?esc(r.assunto):'—'}</div></div>
-    <div class="ev-block"><div class="ev-label">Conteúdo</div><div class="ev-text${r.conteudo?'':' empty'}">${r.conteudo?esc(r.conteudo):'—'}</div></div>
-  </div>`;
-  const b=host.querySelector('#pbBack'); if(b) b.addEventListener('click', ()=>{ if(currentView&&currentView._panelRun) currentView._panelRun(); });
+    <div class="ev-block"><div class="ev-label">Conteúdo</div><div class="ev-text${r.conteudo?'':' empty'}">${r.conteudo?esc(r.conteudo):'—'}</div></div>`;
+  pushDetail(view, { pdfHTML: ()=>`<div class="doc">${docHead('Portaria')}${inner}</div>` });
+  host.innerHTML = `<button class="loc-btn mb12" id="pbBack">← Voltar aos resultados</button>
+    <div class="doc flush">${inner}</div>`;
+  const b=host.querySelector('#pbBack'); if(b) b.addEventListener('click', ()=>{ popDetail(view); if(view&&view._panelRun) view._panelRun(); });
 }
 
 /* ---- Linhas por Localidade (cruza nome em tabela_vista_teste; enriquece com qh_teste) ---- */
@@ -2236,17 +2323,22 @@ function paginate(container, total, renderSlice, { pageSize=25, afterPaint, unit
 // Paginador de TABELA homogênea: cada página é um tableHTML da fatia. `rowHTML(item, i)` recebe
 // o índice GLOBAL (i = posição na lista inteira) — assim data-idx continua batendo com a lista
 // completa mesmo paginado. `foot(total)` monta o rodapé com o TOTAL. `bind(slot)` religa cliques.
-function paginateTable(container, items, { cols, rowHTML, foot, bind, cls='', pageSize=25, unit='itens', pdf=true } = {}){
+// `view`/`gen` vêm de quem chamou (capturados com `const view = currentView, gen =
+// beginGen(view)` ANTES do próprio await) — paginateTable não tem await próprio, então
+// capturar aqui seria tarde demais, e usar `currentView` (em vez do `view` recebido) escreveria
+// na view ATUAL mesmo que quem chamou já não seja mais ela (troca de view no meio do caminho).
+function paginateTable(container, items, { cols, rowHTML, foot, bind, cls='', pageSize=25, unit='itens', pdf=true, view, gen } = {}){
   const total = items.length;
   const renderSlice = (s,e)=>tableHTML(cols, items.slice(s,e).map((it,j)=>rowHTML(it, s+j)).join(''),
     typeof foot==='function' ? foot(total) : foot, cls);
   paginate(container, total, renderSlice, { pageSize, afterPaint:bind, unit });
   // PDF = lista INTEIRA (a paginação é só de tela). `pdf:false` p/ quem já define o próprio pdfHTML.
-  if(pdf && currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead(currentView.title)}${renderSlice(0, total)}</div>`;
+  if(pdf && view) commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead(view.title)}${renderSlice(0, total)}</div>` });
 }
 // Paginador de LISTAS de linha (25/página). `grouped` insere os cabeçalhos de empresa DENTRO de
 // cada página; a contagem do cabeçalho é a do grupo INTEIRO (não só a da página).
-function paginateLines(container, rows, { grouped=false, pageSize=25, pdf=true } = {}){
+// `view`/`gen` — mesma observação de paginateTable acima.
+function paginateLines(container, rows, { grouped=false, pageSize=25, pdf=true, view, gen } = {}){
   const groupTotals = grouped ? countBy(rows, r=>r.codempresa||'—') : null;
   const renderSlice = (s,e)=>{
     const slice = rows.slice(s,e);
@@ -2258,12 +2350,13 @@ function paginateLines(container, rows, { grouped=false, pageSize=25, pdf=true }
   paginate(container, rows.length, renderSlice, { pageSize, afterPaint:bindLineRows, unit:'linhas' });
   // PDF = todas as linhas (a paginação é só de tela). `pdf:false` p/ quem já define um pdfHTML
   // próprio mais rico (ex.: Município com meta/aviso).
-  if(pdf && currentView) currentView.pdfHTML = ()=>`<div class="doc">${docHead(currentView.title)}${renderSlice(0, rows.length)}</div>`;
+  if(pdf && view) commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead(view.title)}${renderSlice(0, rows.length)}</div>` });
 }
 // Lista de linhas com barra de filtro (situação) + agrupamento por empresa LIGADO por padrão,
 // com os grupos ordenados pelo RJ (codempresa). Padrão de qualquer consulta que lista linhas.
 // `prefixHTML` entra antes da barra (contadores/banner). Requer getEmpresas() já carregado.
-function lineResults(host, rows, { prefixHTML='', pdf=true } = {}){
+// `view`/`gen` — repassados pra paginateLines (ver observação lá).
+function lineResults(host, rows, { prefixHTML='', pdf=true, view, gen } = {}){
   if(!rows || !rows.length){ host.innerHTML = prefixHTML + emptyBox('Nenhuma ligação encontrada.'); return; }
   // bannerTrunc(rows) uma vez no topo: avisa "Resultado parcial" quando a QUERY atingiu o teto
   // (limit). A paginação abaixo exibe tudo em páginas — não corta mais no cliente.
@@ -2285,9 +2378,9 @@ function lineResults(host, rows, { prefixHTML='', pdf=true } = {}){
       // contando TODAS as linhas — os cabeçalhos de empresa entram dentro de cada página.
       const ordered = [...groupBy(f, r=>r.codempresa||'—')].sort((x,y)=>rjOrder(x[0],y[0]))
         .flatMap(([,rs])=>[...rs].sort(byCodlinha));
-      paginateLines(result, ordered, { grouped:true, pdf });
+      paginateLines(result, ordered, { grouped:true, pdf, view, gen });
     } else {
-      paginateLines(result, [...f].sort(byCodlinha), { grouped:false, pdf });
+      paginateLines(result, [...f].sort(byCodlinha), { grouped:false, pdf, view, gen });
     }
   };
   statusSel.addEventListener('change', paint);

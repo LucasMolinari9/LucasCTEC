@@ -100,7 +100,7 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | `STATE + CACHES` | `activeLine`, `*Map`, `getIbge/getOrigem/getEmpresas/getEvLookups` | Estado global e caches dos lookups. |
 | `BUSCA DE LINHAS (hero)` | `doSearch`, `closeDropdown` | Busca do topo e dropdown de resultados. |
 | `LINHA ATIVA — BANNER` | `selectLine`, `bannerEmpHTML` | Banner navy da linha selecionada. |
-| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody/loading/errorBox`, `baixarPdf`, `docHead`, `tableHTML`, `paginateEvents`, `matchEvent`, todos os `render*` | **Maior bloco**: abre/preenche o modal e renderiza TODOS os documentos. |
+| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody/loading/errorBox`, `baixarPdf`, `docHead`, `tableHTML`, `paginateEvents`, `matchEvent`, `beginGen`/`commitViewResult`/`pushDetail`/`popDetail` (seam do ciclo de vida da view), todos os `render*` | **Maior bloco**: abre/preenche o modal e renderiza TODOS os documentos. |
 | `COMPONENTES AUXILIARES` | `linhasTable`, `bindLineRows`, `searchPanel`, `lineResults`, `pageBounds`, `paginate`, `paginateTable`, `paginateLines` | Tabela de linhas + painel de busca reutilizável + **paginação de tela** (25/pág; ver `docs/estrutura-frontend.md` §4). |
 | `CLIQUE NOS CARDS` | — | Liga o clique do card → abre a view. |
 | `UTILITÁRIOS` | `groupBy`, `countBy`, `fmtMoney` | Agregação dos relatórios e moeda pt-BR. |
@@ -188,9 +188,36 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
 - **Paginação é SÓ de tela; o PDF sai INTEIRO:** listas longas são paginadas (25/pág) por
   `paginateTable`/`paginateLines` (núcleo `paginate` + `pageBounds`). Como só a fatia atual
   entra no DOM, o fallback do `baixarPdf` exportaria só a página aberta — por isso os wrappers
-  **definem `currentView.pdfHTML` com a lista completa**. Quem tem PDF próprio mais rico passa
-  **`pdf:false`** (Quadro "por empresa"; Município). Detalhes: `docs/estrutura-frontend.md` §4.
-  Em tela nova que lista muita coisa, **use esses helpers** em vez de `tableHTML` cru.
+  **escrevem `pdfHTML` (via `commitViewResult`) com a lista completa**. Quem tem PDF próprio mais
+  rico passa **`pdf:false`** (Quadro "por empresa"; Município). Detalhes: `docs/estrutura-frontend.md`
+  §4. Em tela nova que lista muita coisa, **use esses helpers** em vez de `tableHTML` cru.
+- **NUNCA atribua `currentView.pdfHTML` direto — use o seam do ciclo de vida da view:**
+  `beginGen`/`commitViewResult`/`pushDetail`/`popDetail` (declarados logo após `let currentView`,
+  seção `MODAL / SISTEMA DE VIEWS`). Todo loader/run/render que faz `await` e depois escreve um
+  resultado captura `const view = currentView, gen = beginGen(view);` **antes** do seu próprio
+  `await`, e troca a atribuição por `commitViewResult(view, gen, { pdfHTML: fn ou null })` — usando
+  o `view` CAPTURADO, nunca `currentView` de novo (se reler `currentView` no fim, uma escrita
+  atrasada pode acertar a view ERRADA, a que está aberta agora, não a que a busca pertencia). Sem
+  isso, uma resposta atrasada de uma busca/troca de linha anterior pode sobrescrever o resultado de
+  uma busca mais nova (ex.: digitar "101", trocar pra "202" antes da 1ª resposta voltar → PDF sai
+  da linha errada). `paginateTable`/`paginateLines`/`lineResults` escrevem `pdfHTML` DEPOIS do
+  `await` de quem os chama — por isso recebem `view` e `gen` como opções em vez de capturar os
+  próprios (capturar ali seria tarde demais, e um `view`/`gen` frescos ali dentro não identificam
+  qual tentativa é a mais recente). Painéis com lista+detalhe (hoje só Portarias) usam
+  `pushDetail`/`popDetail` em vez de `commitViewResult`, pra não perder o `pdfHTML`/busca da lista
+  quando um item é aberto (bug original: `showPortaria` nunca reescrevia `pdfHTML`, então o PDF
+  baixava a lista errada e o Realtime bouncava o usuário sem aviso). **`_panelRun` fica de fora do
+  seam de propósito** — é só a referência à função de busca do painel, atribuída uma vez,
+  **antes** de qualquer `await`, direto de dentro do loader (`if(currentView) currentView._panelRun
+  = run;`); não é resultado de operação assíncrona, então não há janela de corrida a proteger.
+  **Lacuna conhecida (não fechada ainda):** o guard de `gen` só protege `pdfHTML`— a pintura em
+  tela (`host.innerHTML = renderSlice(...)` dentro de `paginate`) continua sem proteção. Dentro do
+  MESMO painel já aberto (não numa troca de view inteira, onde o `host` antigo fica desanexado),
+  uma resposta atrasada ainda pode pintar a tabela errada por cima de uma mais nova, mesmo com o
+  `pdfHTML` já correto por baixo (verificado com Playwright+mocks: buscar "999", limpar antes da
+  resposta lenta voltar → tela mostra "999" mas o PDF já sai com a lista certa). Fechar isso exige
+  o mesmo guard de `gen` também no ponto que escreve `container.innerHTML` dentro de `paginate`
+  (app.js, seção `COMPONENTES AUXILIARES`) — ainda não feito.
 - **supabase-js vendorado:** para atualizar a versão: `npm pack @supabase/supabase-js@<v>`,
   extrair `dist/umd/supabase.js`, conferir a integridade contra o registro, trocar o arquivo em
   `vendor/` e a tag `<script src>` no `index.html`.

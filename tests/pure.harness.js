@@ -140,6 +140,38 @@ function resumoFrota(rows){
   };
 }
 
+// app.js:726 — inicia uma nova tentativa de escrever um resultado nesta view; retorna o
+// token (geração) que a chamadora deve guardar localmente e passar a commitViewResult
+// ao terminar. Chamado no INÍCIO de cada loader/run, antes do seu próprio await — é isso
+// que permite distinguir "tentativa mais recente" de uma resposta atrasada de uma busca
+// anterior (mesma view reaberta ou reexecutada).
+function beginGen(view){
+  if (!view) return null;   // modal já pode ter fechado (currentView virou null) — no-op seguro
+  view._gen = (view._gen || 0) + 1;
+  return view._gen;
+}
+// app.js:731 — único ponto de escrita em view.pdfHTML: só aplica o patch se `gen` ainda
+// for a tentativa mais recente para essa view. Descarta em silêncio uma escrita de uma
+// busca/troca de linha anterior que resolveu depois de uma mais nova.
+function commitViewResult(view, gen, patch){
+  if (!view || gen !== view._gen) return false;
+  if ('pdfHTML' in patch) view.pdfHTML = patch.pdfHTML;
+  return true;
+}
+// app.js:738 — entra num "detalhe" dentro de um painel de lista (hoje só Portarias):
+// guarda o pdfHTML que a lista tinha em view._detail e aplica o do item aberto.
+function pushDetail(view, patch){
+  if (!view) return;
+  view._detail = { pdfHTML: view.pdfHTML };
+  if ('pdfHTML' in patch) view.pdfHTML = patch.pdfHTML;
+}
+// app.js:743 — sai do detalhe: restaura o pdfHTML que a lista tinha antes.
+function popDetail(view){
+  if (!view || !view._detail) return;
+  view.pdfHTML = view._detail.pdfHTML;
+  view._detail = null;
+}
+
 // app.js:2850 — bordas de paginação das listagens de linha (clampa a página)
 function pageBounds(total, pageSize, page){
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -153,4 +185,5 @@ module.exports = {
   yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike, municipiosExatos,
   setRTState, rowMatchesActiveLine,
   resumoRelatorio, resumoFrota, pageBounds,
+  beginGen, commitViewResult, pushDetail, popDetail,
 };
