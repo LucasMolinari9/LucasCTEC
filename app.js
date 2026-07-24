@@ -351,6 +351,23 @@ function updateNeedChips(){
    STATE + CACHES
    ================================================================ */
 let activeLine = null;   // { codlinha, numero_ligacao, nome_ligacao, codempresa, ... }
+
+/* ---- Abas — modelo de "uma aba aberta" (prefactor #51 p/ #50: múltiplas abas de documento) ----
+   Cada aba guarda sua própria linha, sua própria view aberta e sua própria pilha de navegação
+   do botão Voltar (`navStack`; a pilha global antiga era `nav.stack`). `stale` ainda sem uso —
+   reservado p/ os tickets seguintes de #50 (marcar aba desatualizada em segundo plano).
+   `tabs` tem hoje sempre 1 elemento. `activeLine`/`currentView` (declarado mais abaixo, seção
+   MODAL) continuam sendo os pontos de LEITURA usados pelos loaders — não se espalha acesso "por
+   aba" pelos call sites existentes. Eles só são reatribuídos nos pontos de abrir/selecionar/
+   fechar aba (setActiveLine aqui; setCurrentView na seção MODAL), sempre em sincronia com
+   `activeTab()`. */
+let tabIdSeq = 0;
+function makeTab(){ return { id: ++tabIdSeq, line: null, view: null, navStack: [], stale: false }; }
+const tabs = [makeTab()];
+let activeTabId = tabs[0].id;
+function activeTab(){ return tabs.find(t => t.id === activeTabId); }
+function setActiveLine(row){ activeLine = row; activeTab().line = row; }
+
 let ibgeMap   = null;    // { [codibge]: {nome,regiao,regiaoPrograma} }
 let origemMap = null;    // { [cod_origem]: nome_origem }
 let terminalRows = null; // itinerario_teste com tipo_logradouro='Terminal': [{nome_logradouro,codlinha,cod_municipio_origem}]
@@ -545,7 +562,7 @@ function bannerEmpHTML(row){
   return `Empresa: ${esc(empNome(row.codempresa))} · RJ ${esc(row.codempresa || '—')} · Cód.: ${esc(fmtCode(row.codlinha))}`;
 }
 function selectLine(row) {
-  activeLine = row;
+  setActiveLine(row);
   banner.style.display = 'flex';
   banner.innerHTML = `
     <span class="lb-num">${esc(row.numero_ligacao || row.codlinha)}</span>
@@ -555,7 +572,7 @@ function selectLine(row) {
     </div>
     <button class="lb-clear" id="btnClearLine">✕ Limpar</button>`;
   document.getElementById('btnClearLine').addEventListener('click', () => {
-    activeLine = null; banner.style.display = 'none';
+    setActiveLine(null); banner.style.display = 'none';
     updateNeedChips(); syncHash();
   });
   updateNeedChips(); syncHash();
@@ -722,6 +739,10 @@ async function baixarPdf(){
 }
 
 let currentView = null, lastFocused = null;
+// ponto de escrita de currentView irmão de setActiveLine (seção STATE + CACHES) — mesma regra:
+// só chamado nos pontos de abrir/fechar aba (runView/closeModal), mantendo `currentView` em
+// sincronia com `activeTab().view` sem espalhar leitura "por aba" pelos loaders existentes.
+function setCurrentView(view){ currentView = view; activeTab().view = view; }
 const btnBack = document.getElementById('btnBack');
 
 // Seam do ciclo de vida da view: único caminho de escrita em view.pdfHTML (e no slot
@@ -766,17 +787,19 @@ function popDetail(view){
 // Pilha de navegação do modal (voltar). Estado que muda junto — pilha, flag de "indo p/ trás"
 // e o botão Voltar — encapsulado aqui em vez de três variáveis soltas espalhadas por
 // runView/btnBack/closeModal (o flag solto `_goingBack` era fácil de dessincronizar).
+// A pilha em si (`stack`) vive em `activeTab().navStack`, não mais numa variável de módulo —
+// cada aba terá a sua quando #50 adicionar mais de uma.
 const nav = {
-  stack: [],
   goingBack: false,
+  get stack(){ return activeTab().navStack; },
   get length(){ return this.stack.length; },
   push(view){ this.stack.push(view); btnBack.style.display = ''; },
   pop(){ const v = this.stack.pop(); btnBack.style.display = this.stack.length ? '' : 'none'; return v; },
-  reset(){ this.stack = []; this.goingBack = false; btnBack.style.display = 'none'; },
+  reset(){ activeTab().navStack = []; this.goingBack = false; btnBack.style.display = 'none'; },
 };
 function closeModal(){
   if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); }
-  overlay.classList.remove('open','fs-fallback'); currentView = null;
+  overlay.classList.remove('open','fs-fallback'); setCurrentView(null);
   nav.reset();
   // devolve o foco ao elemento que abriu o modal (acessibilidade)
   if (lastFocused && lastFocused.focus) { try { lastFocused.focus(); } catch(_){} lastFocused = null; }
@@ -807,7 +830,7 @@ async function runView(view, { silent=false } = {}){
   nav.goingBack = false;
   const wasOpen = overlay.classList.contains('open');
   if (!wasOpen) lastFocused = document.activeElement;
-  currentView = view;
+  setCurrentView(view);
   mtTitle.textContent = view.title;
   overlay.classList.add('open');
   modalClose.focus();                     // move o foco p/ dentro do diálogo
@@ -2805,7 +2828,7 @@ async function applyRoute(){
         if (rows[0]) selectLine(rows[0]);
       } catch(_){ /* linha inacessível → segue sem selecionar */ }
     }
-    if (!cod && activeLine){ activeLine = null; banner.style.display = 'none'; updateNeedChips(); }
+    if (!cod && activeLine){ setActiveLine(null); banner.style.display = 'none'; updateNeedChips(); }
     // tópico ativo no painel: dono do view (se houver), senão o segmento topico/, senão o padrão
     const topicoAlvo = (view && VIEW_TOPIC[view]) || topico || DEFAULT_TOPIC;
     if (currentTopicKey !== topicoAlvo) selectTopic(topicoAlvo);
