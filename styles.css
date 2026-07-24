@@ -777,6 +777,14 @@
   /* notas/contadores acima de listas */
   .doc-note{font-size:13.5px;color:var(--muted);margin:2px 0 8px}
   .doc-count{font-size:13.5px;color:var(--navy);font-weight:600;margin:2px 0 8px}
+  /* seletor de documentos da aba em branco (renderTabChooser): mesma grade/cards do painel
+     lateral, agrupados por tópico, dentro do pane da aba */
+  .tab-chooser{display:flex;flex-direction:column;gap:18px;margin-top:4px}
+  .tab-chooser-sec > h3{
+    font-family:'Archivo';font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--muted);margin:0 0 8px;padding-bottom:5px;border-bottom:1px solid var(--line);
+  }
+  .tab-chooser .grid{grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:10px}
   .doc-obs.tight{margin:0 0 10px}
   .doc.flush{padding:0}
   .m-loading.err{color:#b33a2e}

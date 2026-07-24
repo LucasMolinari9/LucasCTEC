@@ -164,3 +164,29 @@ direto no Postgres, prova mais forte que um teste de caixa-preta.
 - **Fix de dado na tela de Tarifas:** "Piso I" é **quilometragem** (extensão da seção), não
   valor — passou a exibir `… km` em vez de `R$ …`.
 - `node tests/check.js` verde (260/260). Sem mudança de schema/Realtime — só frontend.
+
+## 24/07/2026 — Aba nova deixa de ser beco sem saída (seletor de documentos no pane)
+
+- **Bug:** a aba aberta pelo "+" achava a linha e parava num aviso *"escolha um documento no
+  painel lateral"* — instrução impossível de cumprir. O painel lateral vive no `#app`, e o
+  `.modal-overlay` (`position:fixed; inset:0; z-index:1000`) cobre a viewport inteira enquanto
+  o modal está aberto: **nenhum clique chega nos cards**. Pelo mesmo motivo não dava pra ter
+  dois assuntos abertos ao mesmo tempo (Quadro de Horários + Portarias), já que o único caminho
+  pra isso — o ícone "abrir em nova aba" do card (`openViewInNewTab`) — também está atrás do
+  overlay. Não era regressão: o aviso nasceu junto com a faixa de abas (`a8f95bb`) e o overlay
+  nunca teve exceção de `pointer-events`; era funcionalidade entregue pela metade.
+- **Conserto:** `renderTabChooser` desenha o **seletor de documentos dentro do próprio pane**,
+  com TODOS os tópicos (não só "Documentos da Linha" — é o que alcança os cards que não exigem
+  linha, como Portarias) e reusando `topicGridHTML`, o mesmo markup/CSS dos cards do painel.
+  Escolher um documento **substitui a view daquela aba** (o `openView` de sempre, que roda na
+  aba ativa) — é o que preenche a aba em branco; aba nova continua nascendo só pelo "+" ou pelo
+  ícone/clique-do-meio no card. O seletor aparece com ou sem linha selecionada.
+- **Delegação de clique nova em `modalBodyWrap`**: o listener dos cards mora no `#app`, e o
+  modal é **irmão** do `#app` — cliques dentro do modal nunca subiriam até lá. Delegado no wrap
+  (não num pane) pelo mesmo motivo do `keydown` de linhas clicáveis: panes de aba são criados e
+  destruídos.
+- **`scripts/check_abas.mjs`** (novo): checagem de regressão em navegador headless (Playwright),
+  com o PostgREST stubado — determinística e sem acesso ao Supabase. Fora do CI, no mesmo
+  contrato manual do `check_realtime.mjs`, porque `tests/check.js` é offline e sem dependências
+  de propósito. Verificada vermelha no código anterior e verde depois do conserto.
+- `node tests/check.js` verde (331/331). Sem mudança de schema/Realtime — só frontend.
