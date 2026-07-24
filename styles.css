@@ -569,11 +569,15 @@
   .doc-search button{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:0 16px;font:inherit;font-weight:600;font-size:14.5px;cursor:pointer}
   .doc-search select{border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit;font-size:14.5px;background:#fff}
   /* autocomplete do searchPanel (opção `suggest`) — classes próprias (sp-*), não reaproveita
-     .results-drop/.selector do hero: são componentes/DOM diferentes. */
+     .results-drop/.selector do hero: são componentes/DOM diferentes. `position:fixed` (em vez de
+     absolute) de propósito: o campo mora dentro de .modal, que tem overflow:hidden (pros cantos
+     arredondados) e cortava o dropdown. Fixed escapa desse clip porque seu bloco de referência é
+     a viewport, não o .modal — top/left/width são calculados no JS (posicionaSug) a partir do
+     getBoundingClientRect() do input, a cada abertura. */
   .doc-search .sp-field{position:relative;flex:1;min-width:160px}
   .doc-search .sp-field input{width:100%}
   .sp-drop{
-    position:absolute;top:calc(100% + 6px);left:0;right:0;
+    position:fixed;
     background:#fff;border:1px solid var(--line);border-radius:10px;
     box-shadow:0 24px 50px -16px rgba(12,40,66,.34);z-index:200;
     max-height:280px;overflow-y:auto;display:none;

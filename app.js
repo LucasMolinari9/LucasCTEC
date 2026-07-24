@@ -2530,11 +2530,18 @@ function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=fal
   if(suggest){
     const drop = modalBody.querySelector('#spDrop');
     closeSug = ()=>{ drop.classList.remove('open'); drop.innerHTML=''; input.setAttribute('aria-expanded','false'); };
+    // fixed (não absolute) escapa do overflow:hidden do .modal — precisa recalcular a
+    // posição (viewport) a cada abertura, não só uma vez.
+    const posSug = ()=>{
+      const r = input.getBoundingClientRect();
+      drop.style.left = r.left+'px'; drop.style.width = r.width+'px'; drop.style.top = (r.bottom+6)+'px';
+    };
     const paintSug = debounce(()=>{
       const q = input.value.trim();
       const items = q? suggest(q).slice(0,8) : [];
       if(!items.length){ closeSug(); return; }
       drop.innerHTML = items.map(s=>`<button type="button" role="option">${esc(s)}</button>`).join('');
+      posSug();
       drop.classList.add('open'); input.setAttribute('aria-expanded','true');
     });
     input.addEventListener('input', paintSug);
