@@ -185,10 +185,33 @@ function pageBounds(total, pageSize, page){
   return { page:p, totalPages, start, end:Math.min(start + pageSize, total) };
 }
 
+// app.js:366 — teto de abas simultâneas (#52)
+const MAX_TABS = 5;
+// app.js:368 — formato de uma aba em branco (linha/view/histórico de Voltar próprios)
+function makeTab(id){ return { id, line: null, view: null, navStack: [], stale: false }; }
+// app.js:376 — abre uma aba em branco; nunca ultrapassa MAX_TABS (devolve blocked:true e
+// `tabs`/`activeTabId` originais intactos nesse caso — quem chama decide o toast)
+function openTabState(tabs, tabIdSeq){
+  if (tabs.length >= MAX_TABS) return { blocked:true, tabs, activeTabId:null, tabIdSeq };
+  const id = tabIdSeq + 1;
+  return { blocked:false, tabs:[...tabs, makeTab(id)], activeTabId:id, tabIdSeq:id };
+}
+// app.js:384 — fecha a aba `id`; se era a ativa, ativa a vizinha (direita, senão esquerda).
+// Fechar a última aba devolve closedModal:true (tabs fica vazio)
+function closeTabState(tabs, activeTabId, id){
+  const idx = tabs.findIndex(t => t.id === id);
+  if (idx === -1) return { tabs, activeTabId, closedModal:false };
+  const next = tabs.slice(0, idx).concat(tabs.slice(idx + 1));
+  if (!next.length) return { tabs: next, activeTabId:null, closedModal:true };
+  const nextActiveId = activeTabId !== id ? activeTabId : (next[idx] || next[idx - 1]).id;
+  return { tabs: next, activeTabId: nextActiveId, closedModal:false };
+}
+
 module.exports = {
   fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, situacaoHTML, isLinhaAtiva, isVigente, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike, municipiosExatos,
   setRTState, rowMatchesActiveLine,
   resumoRelatorio, resumoFrota, pageBounds,
   beginGen, isCurrentGen, commitViewResult, pushDetail, popDetail,
+  MAX_TABS, makeTab, openTabState, closeTabState,
 };

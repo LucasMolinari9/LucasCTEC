@@ -352,21 +352,43 @@ function updateNeedChips(){
    ================================================================ */
 let activeLine = null;   // { codlinha, numero_ligacao, nome_ligacao, codempresa, ... }
 
-/* ---- Abas — modelo de "uma aba aberta" (prefactor #51 p/ #50: múltiplas abas de documento) ----
+/* ---- Abas — modelo de múltiplas abas de documento (#51 prefactor + #52 faixa de abas) ----
    Cada aba guarda sua própria linha, sua própria view aberta e sua própria pilha de navegação
    do botão Voltar (`navStack`; a pilha global antiga era `nav.stack`). `stale` ainda sem uso —
-   reservado p/ os tickets seguintes de #50 (marcar aba desatualizada em segundo plano).
-   `tabs` tem hoje sempre 1 elemento. `activeLine`/`currentView` (declarado mais abaixo, seção
-   MODAL) continuam sendo os pontos de LEITURA usados pelos loaders — não se espalha acesso "por
-   aba" pelos call sites existentes. Eles só são reatribuídos nos pontos de abrir/selecionar/
-   fechar aba (setActiveLine aqui; setCurrentView na seção MODAL), sempre em sincronia com
-   `activeTab()`. */
-let tabIdSeq = 0;
-function makeTab(){ return { id: ++tabIdSeq, line: null, view: null, navStack: [], stale: false }; }
-const tabs = [makeTab()];
+   reservado p/ os tickets seguintes de #50 (marcar aba desatualizada em segundo plano). `paneEl`
+   (o `<div class="modal-body">` da aba) e `scrollTop` são propriedades de runtime/DOM, coladas
+   pela camada de UI (seção MODAL) — não fazem parte do formato "puro" abaixo, pra manter
+   openTabState/closeTabState testáveis sem DOM (cópia em tests/pure.harness.js).
+   `activeLine`/`currentView` (declarado mais abaixo, seção MODAL) continuam sendo os pontos de
+   LEITURA usados pelos loaders — não se espalha acesso "por aba" pelos call sites existentes.
+   Eles só são reatribuídos nos pontos de abrir/selecionar/fechar aba (setActiveLine aqui;
+   setCurrentView e activateTab na seção MODAL), sempre em sincronia com `activeTab()`. */
+const MAX_TABS = 5;
+let tabIdSeq = 1;
+function makeTab(id){ return { id, line: null, view: null, navStack: [], stale: false }; }
+let tabs = [makeTab(tabIdSeq)];
 let activeTabId = tabs[0].id;
 function activeTab(){ return tabs.find(t => t.id === activeTabId); }
 function setActiveLine(row){ activeLine = row; activeTab().line = row; }
+
+// abre uma aba em branco (linha/view null); nunca ultrapassa MAX_TABS — nesse caso devolve
+// blocked:true com `tabs`/`activeTabId` originais intactos (quem chama decide o toast).
+function openTabState(tabs, tabIdSeq){
+  if (tabs.length >= MAX_TABS) return { blocked:true, tabs, activeTabId:null, tabIdSeq };
+  const id = tabIdSeq + 1;
+  return { blocked:false, tabs:[...tabs, makeTab(id)], activeTabId:id, tabIdSeq:id };
+}
+// fecha a aba `id`. Se ela era a ativa, ativa a vizinha (prioriza a da direita, senão a da
+// esquerda — convenção comum de abas de navegador). Fechar a última aba devolve closedModal:true
+// (tabs fica vazio; quem chama decide fechar o modal e recriar a aba inicial em branco).
+function closeTabState(tabs, activeTabId, id){
+  const idx = tabs.findIndex(t => t.id === id);
+  if (idx === -1) return { tabs, activeTabId, closedModal:false };
+  const next = tabs.slice(0, idx).concat(tabs.slice(idx + 1));
+  if (!next.length) return { tabs: next, activeTabId:null, closedModal:true };
+  const nextActiveId = activeTabId !== id ? activeTabId : (next[idx] || next[idx - 1]).id;
+  return { tabs: next, activeTabId: nextActiveId, closedModal:false };
+}
 
 let ibgeMap   = null;    // { [codibge]: {nome,regiao,regiaoPrograma} }
 let origemMap = null;    // { [cod_origem]: nome_origem }
@@ -561,8 +583,11 @@ const banner = document.getElementById('lineBanner');
 function bannerEmpHTML(row){
   return `Empresa: ${esc(empNome(row.codempresa))} · RJ ${esc(row.codempresa || '—')} · Cód.: ${esc(fmtCode(row.codlinha))}`;
 }
-function selectLine(row) {
-  setActiveLine(row);
+// desenha o banner a partir de UMA linha (ou esconde, se `row` for null) — usado tanto por
+// selectLine (usuário escolheu uma linha nova) quanto por activateTab (troca de aba só repinta
+// o banner com a linha que a aba de destino já tinha, sem tocar em setActiveLine/activeTab().line).
+function paintBanner(row){
+  if (!row){ banner.style.display = 'none'; return; }
   banner.style.display = 'flex';
   banner.innerHTML = `
     <span class="lb-num">${esc(row.numero_ligacao || row.codlinha)}</span>
@@ -573,13 +598,17 @@ function selectLine(row) {
     <button class="lb-clear" id="btnClearLine">✕ Limpar</button>`;
   document.getElementById('btnClearLine').addEventListener('click', () => {
     setActiveLine(null); banner.style.display = 'none';
-    updateNeedChips(); syncHash();
+    updateNeedChips(); renderTabs(); syncHash();
   });
-  updateNeedChips(); syncHash();
   // se o cache de empresas ainda não chegou, atualiza o texto quando carregar
   if (!empresas.map) getEmpresas().then(() => {
     if (activeLine === row) { const el = banner.querySelector('.lb-emp'); if (el) el.innerHTML = bannerEmpHTML(row); }
   }).catch(()=>{});
+}
+function selectLine(row) {
+  setActiveLine(row);
+  paintBanner(row);
+  updateNeedChips(); renderTabs(); syncHash();
 }
 // `activeLine` é um snapshot do row (congelado no clique). Sem isto, uma edição ao vivo em
 // tabela_vista_teste (nome, empresa, cancelamento) recarregava o modal mas deixava o BANNER
@@ -619,7 +648,7 @@ async function refreshActiveLine(){
    pushDetail/popDetail logo abaixo de `let currentView`.
    ----------------------------------------------------------------
    SUB-ÍNDICE (grep `--- ` para pular). Na ordem atual do arquivo:
-     Chrome do modal · Dispatcher — runView ·
+     Chrome do modal · Faixa de abas · Dispatcher — runView ·
      Helpers de documento e busca de linha · DOC · Folha de Rosto ·
      Eventos — helpers compartilhados · DOC · Histórico (linha) ·
      DOC · Itinerários · DOC · Quadro de Horários · DOC · Tarifas ·
@@ -628,9 +657,16 @@ async function refreshActiveLine(){
      Relatórios · DOC · Portaria · DOC · Localidades
    ================================================================ */
 /* --- Chrome do modal --------------------------------------------- */
-const overlay    = document.getElementById('modalOverlay');
-const modalClose = document.getElementById('modalClose');
-const modalBody  = document.getElementById('modalBody');
+const overlay       = document.getElementById('modalOverlay');
+const modalClose    = document.getElementById('modalClose');
+const modalTabsEl   = document.getElementById('modalTabs');
+const modalBodyWrap = document.getElementById('modalBodyWrap');
+// `modalBody` deixou de ser fixo: aponta pro pane (`.modal-body`) da aba ATIVA no momento,
+// trocado só por activateTab() (seção "Faixa de abas", abaixo) — nunca por atribuição direta em
+// outro lugar. Todo `setBody`/`modalBody.querySelector(...)` lê o valor atual em tempo de
+// chamada, então helpers síncronos (baixarPdf, searchPanel, etc.) sempre acertam a aba certa.
+let modalBody    = modalBodyWrap.querySelector('.modal-body');
+tabs[0].paneEl   = modalBody;
 const mtTitle    = document.getElementById('mtTitle');
 const mtLive     = document.getElementById('mtLive');
 document.getElementById('btnPrint').addEventListener('click', () => window.print());
@@ -652,8 +688,10 @@ document.addEventListener('keydown', e => {
   if (e.shiftKey && a === first){ e.preventDefault(); last.focus(); }
   else if (!e.shiftKey && a === last){ e.preventDefault(); first.focus(); }
 });
-// Linhas de tabela clicáveis: Enter/Espaço disparam o clique (reaproveita os handlers de click)
-modalBody.addEventListener('keydown', e => {
+// Linhas de tabela clicáveis: Enter/Espaço disparam o clique (reaproveita os handlers de click).
+// Delegado em modalBodyWrap (não no `modalBody` de uma aba específica): o wrap é o único elemento
+// estável — panes de aba são criados/destruídos, um listener preso a um deles sumiria com ele.
+modalBodyWrap.addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const tr = e.target.closest('tr.clickable');
   if (!tr) return;
@@ -688,6 +726,130 @@ function syncFullLabel(){
 function onFsChange(){ if (!(document.fullscreenElement || document.webkitFullscreenElement)) overlay.classList.remove('fs-fallback'); syncFullLabel(); }
 document.addEventListener('fullscreenchange', onFsChange);
 document.addEventListener('webkitfullscreenchange', onFsChange);
+
+/* --- Faixa de abas ------------------------------------------------
+   Cada aba tem seu próprio pane de DOM (`tab.paneEl`, um `.modal-body` dentro de
+   `modalBodyWrap`) que fica vivo (escondido via CSS, não desmontado) enquanto a aba não é a
+   ativa — troca de aba nunca re-renderiza nem re-executa o loader, então paginação, posição de
+   rolagem e o histórico de Voltar (`tab.navStack`) da aba que vai pro fundo sobrevivem intactos.
+   `activateTab` é o ÚNICO ponto que troca `activeTabId` e realinha `activeLine`/`currentView`/
+   `modalBody`/o botão Voltar/o banner/a URL com a aba recém-ativada — switchTab/openTabUI/
+   closeTabUI só calculam QUAL aba deve ficar ativa (via openTabState/closeTabState, puras) e
+   chamam activateTab pra aplicar. */
+function createPane(){
+  const el = document.createElement('div');
+  el.className = 'modal-body';
+  el.innerHTML = loading();
+  modalBodyWrap.appendChild(el);
+  return el;
+}
+// ids (`#spInput`, `#spHost`, `#lrResult`, ...) usados pelos renderizadores de documento
+// assumem que só existe UM na página — verdade quando havia uma view por vez. Com panes de
+// várias abas vivos ao mesmo tempo, precisamos garantir que só a aba ATIVA carrega ids "de
+// verdade" (os outros viram data-id) — sem isso, document.getElementById/aria-controls/
+// Playwright etc. acertariam o primeiro pane no DOM, não necessariamente o visível.
+// `modalBody.querySelector('#x')` (escopado ao pane) já funcionaria sem isto, mas ids
+// duplicados no documento continuam inválidos e quebram o que depende de unicidade global.
+function stripIds(pane){ pane.querySelectorAll('[id]').forEach(el => { el.dataset.id = el.id; el.removeAttribute('id'); }); }
+function restoreIds(pane){ pane.querySelectorAll('[data-id]').forEach(el => { el.id = el.dataset.id; delete el.dataset.id; }); }
+function showPane(tab){
+  tabs.forEach(t => {
+    if (!t.paneEl) return;
+    const active = t === tab;
+    t.paneEl.classList.toggle('active', active);
+    if (active) restoreIds(t.paneEl); else stripIds(t.paneEl);
+  });
+}
+function syncBackButton(){ btnBack.style.display = nav.length ? '' : 'none'; }
+// rótulo da aba na faixa: título do documento (ou "Nova aba", sem view ainda) + a linha, se houver
+function tabLabel(t){
+  const title = t.view ? t.view.title : 'Nova aba';
+  const line = t.line ? (t.line.numero_ligacao || t.line.codlinha) : '';
+  return line ? `${title} · ${line}` : title;
+}
+function renderTabs(){
+  const items = tabs.map(t => `
+    <div class="modal-tab${t.id===activeTabId?' active':''}" role="tab" aria-selected="${t.id===activeTabId}">
+      <button type="button" class="mtab-select" data-select-tab="${t.id}" title="${esc(tabLabel(t))}">${esc(tabLabel(t))}</button>
+      <button type="button" class="mtab-close" data-close-tab="${t.id}" title="Fechar aba" aria-label="Fechar aba: ${esc(tabLabel(t))}">✕</button>
+    </div>`).join('');
+  // o "+" fica sempre clicável (mesmo no teto de MAX_TABS) — quem bloqueia com toast é
+  // openTabUI(); um botão disabled não dispararia click nenhum, e o critério de aceite pede
+  // exatamente "tentar abrir... é bloqueado com um toast", não um botão inerte.
+  modalTabsEl.innerHTML = items +
+    `<button type="button" class="modal-tab-add" id="modalTabAdd" title="Nova aba" aria-label="Nova aba">+</button>`;
+}
+modalTabsEl.addEventListener('click', e => {
+  const closeBtn = e.target.closest('[data-close-tab]');
+  if (closeBtn){ closeTabUI(+closeBtn.dataset.closeTab); return; }
+  const selBtn = e.target.closest('[data-select-tab]');
+  if (selBtn){ switchTab(+selBtn.dataset.selectTab); return; }
+  if (e.target.closest('#modalTabAdd')) openTabUI();
+});
+function activateTab(id){
+  activeTabId = id;
+  const t = activeTab();
+  activeLine = t.line;
+  currentView = t.view;
+  modalBody = t.paneEl;
+  showPane(t);
+  overlay.scrollTop = t.scrollTop || 0;
+  paintBanner(t.line);
+  updateNeedChips();
+  mtTitle.textContent = t.view ? t.view.title : 'Nova aba';
+  syncBackButton();
+  renderTabs();
+  syncHash();
+}
+function switchTab(id){
+  if (id === activeTabId) return;
+  const t = tabs.find(x => x.id === id);
+  if (!t) return;
+  const cur = activeTab();
+  if (cur) cur.scrollTop = overlay.scrollTop;   // preserva a rolagem de quem está saindo
+  activateTab(id);
+}
+function openTabUI(){
+  const res = openTabState(tabs, tabIdSeq);
+  if (res.blocked){ toast(`Máximo de ${MAX_TABS} abas abertas — feche uma para abrir outra.`, 'warn'); return; }
+  const cur = activeTab();
+  if (cur) cur.scrollTop = overlay.scrollTop;
+  tabIdSeq = res.tabIdSeq;
+  tabs = res.tabs;
+  tabs[tabs.length - 1].paneEl = createPane();
+  activateTab(res.activeTabId);
+  runView({ title:'Nova aba', tables:['tabela_vista_teste','codempresa_teste'], loader: renderBlankTab });
+}
+function closeTabUI(id){
+  const closed = tabs.find(t => t.id === id);
+  if (!closed) return;
+  const res = closeTabState(tabs, activeTabId, id);
+  if (closed.paneEl) closed.paneEl.remove();
+  if (res.closedModal){ closeModal(); return; }   // closeModal() já devolve a faixa a 1 aba em branco
+  tabs = res.tabs;
+  if (res.activeTabId === activeTabId){ renderTabs(); return; }   // fechou uma aba em 2º plano só
+  activateTab(res.activeTabId);
+}
+// devolve a faixa a UMA aba em branco — usado quando a última aba fecha, pra próxima abertura
+// do modal começar limpa (a página recarregada também só tem essa aba, nunca as antigas).
+function resetTabsToSingle(){
+  tabs.forEach(t => { if (t.paneEl) t.paneEl.remove(); });
+  const t = makeTab(++tabIdSeq);
+  t.paneEl = createPane();
+  t.paneEl.classList.add('active');
+  tabs = [t];
+  activeTabId = t.id;
+  modalBody = t.paneEl;
+  renderTabs();
+}
+// aba em branco (aberta pelo "+"): mesmo estado vazio de busca de linha que qualquer card de
+// "Documentos da Linha" mostra hoje sem linha ativa — reaproveita lineDocView/searchPanel direto,
+// sem view própria em VIEW_META (não é endereçável por card nem por hash, como os drill-downs).
+function renderBlankTab(){
+  lineDocView({ subtitle:'Documentos da Linha', render:(host)=>{
+    host.innerHTML = emptyBox('Linha selecionada — escolha um documento no painel lateral.');
+  } });
+}
 
 // Gera o PDF do documento aberto via impressão nativa do navegador
 let _exportandoPdf = false;
@@ -788,7 +950,7 @@ function popDetail(view){
 // e o botão Voltar — encapsulado aqui em vez de três variáveis soltas espalhadas por
 // runView/btnBack/closeModal (o flag solto `_goingBack` era fácil de dessincronizar).
 // A pilha em si (`stack`) vive em `activeTab().navStack`, não mais numa variável de módulo —
-// cada aba terá a sua quando #50 adicionar mais de uma.
+// cada aba tem a sua própria (ver "Faixa de abas", acima).
 const nav = {
   goingBack: false,
   get stack(){ return activeTab().navStack; },
@@ -801,6 +963,9 @@ function closeModal(){
   if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); }
   overlay.classList.remove('open','fs-fallback'); setCurrentView(null);
   nav.reset();
+  // fechar o modal descarta TODAS as abas (mesmo estado final do "fechar" único de antes de
+  // #52) — a próxima abertura começa de uma aba em branco só, nunca reaproveita as antigas.
+  resetTabsToSingle();
   // devolve o foco ao elemento que abriu o modal (acessibilidade)
   if (lastFocused && lastFocused.focus) { try { lastFocused.focus(); } catch(_){} lastFocused = null; }
   // rota: fechar pela UI desfaz a entrada criada na abertura (back) ou limpa o hash;
@@ -832,6 +997,7 @@ async function runView(view, { silent=false } = {}){
   if (!wasOpen) lastFocused = document.activeElement;
   setCurrentView(view);
   mtTitle.textContent = view.title;
+  renderTabs();   // título da aba ativa pode ter mudado (troca de documento dentro da mesma aba)
   overlay.classList.add('open');
   modalClose.focus();                     // move o foco p/ dentro do diálogo
   // rota: ABRIR o modal cria UMA entrada de histórico (Voltar do navegador fecha o modal);

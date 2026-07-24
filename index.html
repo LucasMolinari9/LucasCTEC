@@ -334,6 +334,7 @@
 <!-- Modal genérico (documentos / consultas) -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal modal-doc" role="dialog" aria-modal="true" aria-labelledby="mtTitle">
+    <div class="modal-tabs" id="modalTabs" role="tablist" aria-label="Abas abertas"></div>
     <div class="modal-toolbar">
       <span class="mt-label"><span id="mtTitle">Cadastro de Linhas</span><span class="mt-live" id="mtLive">● ao vivo</span></span>
       <button class="mt-btn" id="btnBack" title="Voltar" aria-label="Voltar" style="display:none">
@@ -356,8 +357,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="16" height="16"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
     </div>
-    <div class="modal-body" id="modalBody">
-      <div class="m-loading"><div class="spin"></div>Carregando…</div>
+    <div class="modal-body-wrap" id="modalBodyWrap">
+      <div class="modal-body active">
+        <div class="m-loading"><div class="spin"></div>Carregando…</div>
+      </div>
     </div>
   </div>
 </div>
