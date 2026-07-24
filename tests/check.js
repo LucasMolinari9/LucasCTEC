@@ -98,6 +98,9 @@ const canon = [
   ['resumoRelatorio',      'function resumoRelatorio(rows){'],
   ['resumoFrota',          'function resumoFrota(rows){'],
   ['pageBounds',           'const p = Math.min(Math.max(1, (page|0) || 1), totalPages);'],
+  ['makeTab',              'function makeTab(id){ return { id, line: null, view: null, navStack: [], stale: false }; }'],
+  ['openTabState',         'function openTabState(tabs, tabIdSeq){'],
+  ['closeTabState',        'function closeTabState(tabs, activeTabId, id){'],
 ];
 for (const [name, snippet] of canon){
   if (js.includes(snippet)) okline(`${name}`);

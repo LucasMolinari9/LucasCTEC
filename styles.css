@@ -335,6 +335,37 @@
     box-shadow:0 30px 80px -20px rgba(7,25,42,.6);overflow:hidden;
   }
   .modal-doc{max-width:880px}
+  /* faixa de abas (#52) — cada aba guarda seu próprio documento/linha/histórico de Voltar;
+     trocar de aba só troca qual .modal-body está visível (ver .modal-body-wrap abaixo) */
+  .modal-tabs{
+    display:flex;align-items:stretch;gap:2px;background:var(--navy-deep);
+    padding:6px 8px 0;overflow-x:auto;
+  }
+  .modal-tab{
+    display:flex;align-items:stretch;background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.14);border-bottom:none;border-radius:8px 8px 0 0;
+    flex-shrink:0;
+  }
+  .modal-tab.active{background:var(--surface)}
+  .mtab-select{
+    background:none;border:none;color:#cfe0ee;font:inherit;font-size:12.5px;
+    padding:7px 4px 7px 12px;cursor:pointer;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;max-width:170px;
+  }
+  .modal-tab.active .mtab-select{color:#0a3a63;font-weight:700}
+  .mtab-close{
+    background:none;border:none;color:#cfe0ee;font-size:12px;line-height:1;
+    padding:6px 9px 6px 4px;cursor:pointer;border-radius:5px;
+  }
+  .mtab-close:hover{background:rgba(255,255,255,.18)}
+  .modal-tab.active .mtab-close{color:#0a3a63}
+  .modal-tab-add{
+    align-self:center;margin:6px 4px;background:rgba(255,255,255,.1);
+    border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;
+    width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+    font-size:16px;line-height:1;cursor:pointer;flex-shrink:0;transition:background .12s;
+  }
+  .modal-tab-add:hover{background:rgba(255,255,255,.2)}
   /* thin toolbar above the document */
   .modal-toolbar{
     background:var(--navy-deep);color:#fff;padding:10px 16px;
@@ -358,7 +389,11 @@
     display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .12s;
   }
   .modal-close:hover{background:rgba(255,255,255,.2)}
-  .modal-body{padding:0;background:#fff;max-height:none}
+  /* uma .modal-body por aba, todas vivas ao mesmo tempo (não desmontadas) — só a .active
+     aparece, o que preserva rolagem/paginação/DOM da aba que fica em segundo plano */
+  .modal-body-wrap{background:#fff}
+  .modal-body{display:none;padding:0;background:#fff;max-height:none}
+  .modal-body.active{display:block}
 
   /* ===== Documento oficial (réplica do PDF) ===== */
   .doc{
@@ -659,6 +694,8 @@
     .modal-body .ev-grid,.modal-body .ev-grid.ev5{grid-template-columns:1fr}
     /* barra do modal: só ícones, sem rótulos, para caber na largura do celular */
     .modal-overlay{padding:14px 8px 30px}
+    .modal-tabs{padding:5px 6px 0}
+    .mtab-select{max-width:96px;padding:6px 2px 6px 8px;font-size:11.5px}
     .modal-toolbar{padding:9px 10px;gap:6px}
     .mt-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .mt-btn{padding:7px 9px}

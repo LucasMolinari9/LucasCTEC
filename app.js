@@ -351,6 +351,45 @@ function updateNeedChips(){
    STATE + CACHES
    ================================================================ */
 let activeLine = null;   // { codlinha, numero_ligacao, nome_ligacao, codempresa, ... }
+
+/* ---- Abas — modelo de múltiplas abas de documento (#51 prefactor + #52 faixa de abas) ----
+   Cada aba guarda sua própria linha, sua própria view aberta e sua própria pilha de navegação
+   do botão Voltar (`navStack`; a pilha global antiga era `nav.stack`). `stale` ainda sem uso —
+   reservado p/ os tickets seguintes de #50 (marcar aba desatualizada em segundo plano). `paneEl`
+   (o `<div class="modal-body">` da aba) e `scrollTop` são propriedades de runtime/DOM, coladas
+   pela camada de UI (seção MODAL) — não fazem parte do formato "puro" abaixo, pra manter
+   openTabState/closeTabState testáveis sem DOM (cópia em tests/pure.harness.js).
+   `activeLine`/`currentView` (declarado mais abaixo, seção MODAL) continuam sendo os pontos de
+   LEITURA usados pelos loaders — não se espalha acesso "por aba" pelos call sites existentes.
+   Eles só são reatribuídos nos pontos de abrir/selecionar/fechar aba (setActiveLine aqui;
+   setCurrentView e activateTab na seção MODAL), sempre em sincronia com `activeTab()`. */
+const MAX_TABS = 5;
+let tabIdSeq = 1;
+function makeTab(id){ return { id, line: null, view: null, navStack: [], stale: false }; }
+let tabs = [makeTab(tabIdSeq)];
+let activeTabId = tabs[0].id;
+function activeTab(){ return tabs.find(t => t.id === activeTabId); }
+function setActiveLine(row){ activeLine = row; activeTab().line = row; }
+
+// abre uma aba em branco (linha/view null); nunca ultrapassa MAX_TABS — nesse caso devolve
+// blocked:true com `tabs`/`activeTabId` originais intactos (quem chama decide o toast).
+function openTabState(tabs, tabIdSeq){
+  if (tabs.length >= MAX_TABS) return { blocked:true, tabs, activeTabId:null, tabIdSeq };
+  const id = tabIdSeq + 1;
+  return { blocked:false, tabs:[...tabs, makeTab(id)], activeTabId:id, tabIdSeq:id };
+}
+// fecha a aba `id`. Se ela era a ativa, ativa a vizinha (prioriza a da direita, senão a da
+// esquerda — convenção comum de abas de navegador). Fechar a última aba devolve closedModal:true
+// (tabs fica vazio; quem chama decide fechar o modal e recriar a aba inicial em branco).
+function closeTabState(tabs, activeTabId, id){
+  const idx = tabs.findIndex(t => t.id === id);
+  if (idx === -1) return { tabs, activeTabId, closedModal:false };
+  const next = tabs.slice(0, idx).concat(tabs.slice(idx + 1));
+  if (!next.length) return { tabs: next, activeTabId:null, closedModal:true };
+  const nextActiveId = activeTabId !== id ? activeTabId : (next[idx] || next[idx - 1]).id;
+  return { tabs: next, activeTabId: nextActiveId, closedModal:false };
+}
+
 let ibgeMap   = null;    // { [codibge]: {nome,regiao,regiaoPrograma} }
 let origemMap = null;    // { [cod_origem]: nome_origem }
 let terminalRows = null; // itinerario_teste com tipo_logradouro='Terminal': [{nome_logradouro,codlinha,cod_municipio_origem}]
@@ -544,8 +583,11 @@ const banner = document.getElementById('lineBanner');
 function bannerEmpHTML(row){
   return `Empresa: ${esc(empNome(row.codempresa))} · RJ ${esc(row.codempresa || '—')} · Cód.: ${esc(fmtCode(row.codlinha))}`;
 }
-function selectLine(row) {
-  activeLine = row;
+// desenha o banner a partir de UMA linha (ou esconde, se `row` for null) — usado tanto por
+// selectLine (usuário escolheu uma linha nova) quanto por activateTab (troca de aba só repinta
+// o banner com a linha que a aba de destino já tinha, sem tocar em setActiveLine/activeTab().line).
+function paintBanner(row){
+  if (!row){ banner.style.display = 'none'; return; }
   banner.style.display = 'flex';
   banner.innerHTML = `
     <span class="lb-num">${esc(row.numero_ligacao || row.codlinha)}</span>
@@ -555,14 +597,18 @@ function selectLine(row) {
     </div>
     <button class="lb-clear" id="btnClearLine">✕ Limpar</button>`;
   document.getElementById('btnClearLine').addEventListener('click', () => {
-    activeLine = null; banner.style.display = 'none';
-    updateNeedChips(); syncHash();
+    setActiveLine(null); banner.style.display = 'none';
+    updateNeedChips(); renderTabs(); syncHash();
   });
-  updateNeedChips(); syncHash();
   // se o cache de empresas ainda não chegou, atualiza o texto quando carregar
   if (!empresas.map) getEmpresas().then(() => {
     if (activeLine === row) { const el = banner.querySelector('.lb-emp'); if (el) el.innerHTML = bannerEmpHTML(row); }
   }).catch(()=>{});
+}
+function selectLine(row) {
+  setActiveLine(row);
+  paintBanner(row);
+  updateNeedChips(); renderTabs(); syncHash();
 }
 // `activeLine` é um snapshot do row (congelado no clique). Sem isto, uma edição ao vivo em
 // tabela_vista_teste (nome, empresa, cancelamento) recarregava o modal mas deixava o BANNER
@@ -602,7 +648,7 @@ async function refreshActiveLine(){
    pushDetail/popDetail logo abaixo de `let currentView`.
    ----------------------------------------------------------------
    SUB-ÍNDICE (grep `--- ` para pular). Na ordem atual do arquivo:
-     Chrome do modal · Dispatcher — runView ·
+     Chrome do modal · Faixa de abas · Dispatcher — runView ·
      Helpers de documento e busca de linha · DOC · Folha de Rosto ·
      Eventos — helpers compartilhados · DOC · Histórico (linha) ·
      DOC · Itinerários · DOC · Quadro de Horários · DOC · Tarifas ·
@@ -611,9 +657,16 @@ async function refreshActiveLine(){
      Relatórios · DOC · Portaria · DOC · Localidades
    ================================================================ */
 /* --- Chrome do modal --------------------------------------------- */
-const overlay    = document.getElementById('modalOverlay');
-const modalClose = document.getElementById('modalClose');
-const modalBody  = document.getElementById('modalBody');
+const overlay       = document.getElementById('modalOverlay');
+const modalClose    = document.getElementById('modalClose');
+const modalTabsEl   = document.getElementById('modalTabs');
+const modalBodyWrap = document.getElementById('modalBodyWrap');
+// `modalBody` deixou de ser fixo: aponta pro pane (`.modal-body`) da aba ATIVA no momento,
+// trocado só por activateTab() (seção "Faixa de abas", abaixo) — nunca por atribuição direta em
+// outro lugar. Todo `setBody`/`modalBody.querySelector(...)` lê o valor atual em tempo de
+// chamada, então helpers síncronos (baixarPdf, searchPanel, etc.) sempre acertam a aba certa.
+let modalBody    = modalBodyWrap.querySelector('.modal-body');
+tabs[0].paneEl   = modalBody;
 const mtTitle    = document.getElementById('mtTitle');
 const mtLive     = document.getElementById('mtLive');
 document.getElementById('btnPrint').addEventListener('click', () => window.print());
@@ -635,8 +688,10 @@ document.addEventListener('keydown', e => {
   if (e.shiftKey && a === first){ e.preventDefault(); last.focus(); }
   else if (!e.shiftKey && a === last){ e.preventDefault(); first.focus(); }
 });
-// Linhas de tabela clicáveis: Enter/Espaço disparam o clique (reaproveita os handlers de click)
-modalBody.addEventListener('keydown', e => {
+// Linhas de tabela clicáveis: Enter/Espaço disparam o clique (reaproveita os handlers de click).
+// Delegado em modalBodyWrap (não no `modalBody` de uma aba específica): o wrap é o único elemento
+// estável — panes de aba são criados/destruídos, um listener preso a um deles sumiria com ele.
+modalBodyWrap.addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const tr = e.target.closest('tr.clickable');
   if (!tr) return;
@@ -671,6 +726,131 @@ function syncFullLabel(){
 function onFsChange(){ if (!(document.fullscreenElement || document.webkitFullscreenElement)) overlay.classList.remove('fs-fallback'); syncFullLabel(); }
 document.addEventListener('fullscreenchange', onFsChange);
 document.addEventListener('webkitfullscreenchange', onFsChange);
+
+/* --- Faixa de abas ------------------------------------------------
+   Cada aba tem seu próprio pane de DOM (`tab.paneEl`, um `.modal-body` dentro de
+   `modalBodyWrap`) que fica vivo (escondido via CSS, não desmontado) enquanto a aba não é a
+   ativa — troca de aba nunca re-renderiza nem re-executa o loader, então paginação, posição de
+   rolagem e o histórico de Voltar (`tab.navStack`) da aba que vai pro fundo sobrevivem intactos.
+   `activateTab` é o ÚNICO ponto que troca `activeTabId` e realinha `activeLine`/`currentView`/
+   `modalBody`/o botão Voltar/o banner/a URL com a aba recém-ativada — switchTab/openTabUI/
+   closeTabUI só calculam QUAL aba deve ficar ativa (via openTabState/closeTabState, puras) e
+   chamam activateTab pra aplicar. */
+function createPane(){
+  const el = document.createElement('div');
+  el.className = 'modal-body';
+  el.innerHTML = loading();
+  modalBodyWrap.appendChild(el);
+  return el;
+}
+// ids (`#spInput`, `#spHost`, `#lrResult`, ...) usados pelos renderizadores de documento
+// assumem que só existe UM na página — verdade quando havia uma view por vez. Com panes de
+// várias abas vivos ao mesmo tempo, precisamos garantir que só a aba ATIVA carrega ids "de
+// verdade" (os outros viram data-id) — sem isso, document.getElementById/aria-controls/
+// Playwright etc. acertariam o primeiro pane no DOM, não necessariamente o visível.
+// `modalBody.querySelector('#x')` (escopado ao pane) já funcionaria sem isto, mas ids
+// duplicados no documento continuam inválidos e quebram o que depende de unicidade global.
+function stripIds(pane){ pane.querySelectorAll('[id]').forEach(el => { el.dataset.id = el.id; el.removeAttribute('id'); }); }
+function restoreIds(pane){ pane.querySelectorAll('[data-id]').forEach(el => { el.id = el.dataset.id; delete el.dataset.id; }); }
+function showPane(tab){
+  tabs.forEach(t => {
+    if (!t.paneEl) return;
+    const active = t === tab;
+    t.paneEl.classList.toggle('active', active);
+    if (active) restoreIds(t.paneEl); else stripIds(t.paneEl);
+  });
+}
+function syncBackButton(){ btnBack.style.display = nav.length ? '' : 'none'; }
+// rótulo da aba na faixa: título do documento (ou "Nova aba", sem view ainda) + a linha, se houver
+function tabLabel(t){
+  const title = t.view ? t.view.title : 'Nova aba';
+  const line = t.line ? (t.line.numero_ligacao || t.line.codlinha) : '';
+  return line ? `${title} · ${line}` : title;
+}
+function renderTabs(){
+  const items = tabs.map(t => `
+    <div class="modal-tab${t.id===activeTabId?' active':''}" role="tab" aria-selected="${t.id===activeTabId}">
+      <button type="button" class="mtab-select" data-select-tab="${t.id}" title="${esc(tabLabel(t))}">${esc(tabLabel(t))}</button>
+      <button type="button" class="mtab-close" data-close-tab="${t.id}" title="Fechar aba" aria-label="Fechar aba: ${esc(tabLabel(t))}">✕</button>
+    </div>`).join('');
+  // o "+" fica sempre clicável (mesmo no teto de MAX_TABS) — quem bloqueia com toast é
+  // openTabUI(); um botão disabled não dispararia click nenhum, e o critério de aceite pede
+  // exatamente "tentar abrir... é bloqueado com um toast", não um botão inerte.
+  modalTabsEl.innerHTML = items +
+    `<button type="button" class="modal-tab-add" id="modalTabAdd" title="Nova aba" aria-label="Nova aba">+</button>`;
+}
+modalTabsEl.addEventListener('click', e => {
+  const closeBtn = e.target.closest('[data-close-tab]');
+  if (closeBtn){ closeTabUI(+closeBtn.dataset.closeTab); return; }
+  const selBtn = e.target.closest('[data-select-tab]');
+  if (selBtn){ switchTab(+selBtn.dataset.selectTab); return; }
+  if (e.target.closest('#modalTabAdd')) openTabUI();
+});
+function activateTab(id){
+  activeTabId = id;
+  const t = activeTab();
+  activeLine = t.line;
+  currentView = t.view;
+  modalBody = t.paneEl;
+  showPane(t);
+  overlay.scrollTop = t.scrollTop || 0;
+  paintBanner(t.line);
+  updateNeedChips();
+  mtTitle.textContent = t.view ? t.view.title : 'Nova aba';
+  syncBackButton();
+  renderTabs();
+  syncHash();
+}
+// preserva a rolagem de quem está saindo (aba ativa ATUAL, antes de trocar) — chamado por
+// switchTab/openTabUI logo antes de activateTab() mudar `activeTabId`.
+function saveScroll(){ const cur = activeTab(); if (cur) cur.scrollTop = overlay.scrollTop; }
+function switchTab(id){
+  if (id === activeTabId) return;
+  const t = tabs.find(x => x.id === id);
+  if (!t) return;
+  saveScroll();
+  activateTab(id);
+}
+function openTabUI(){
+  const res = openTabState(tabs, tabIdSeq);
+  if (res.blocked){ toast(`Máximo de ${MAX_TABS} abas abertas — feche uma para abrir outra.`, 'warn'); return; }
+  saveScroll();
+  tabIdSeq = res.tabIdSeq;
+  tabs = res.tabs;
+  tabs[tabs.length - 1].paneEl = createPane();
+  activateTab(res.activeTabId);
+  runView({ title:'Nova aba', tables:['tabela_vista_teste','codempresa_teste'], loader: renderBlankTab });
+}
+function closeTabUI(id){
+  const closed = tabs.find(t => t.id === id);
+  if (!closed) return;
+  const res = closeTabState(tabs, activeTabId, id);
+  if (closed.paneEl) closed.paneEl.remove();
+  if (res.closedModal){ closeModal(); return; }   // closeModal() já devolve a faixa a 1 aba em branco
+  tabs = res.tabs;
+  if (res.activeTabId === activeTabId){ renderTabs(); return; }   // fechou uma aba em 2º plano só
+  activateTab(res.activeTabId);
+}
+// devolve a faixa a UMA aba em branco — usado quando a última aba fecha, pra próxima abertura
+// do modal começar limpa (a página recarregada também só tem essa aba, nunca as antigas).
+function resetTabsToSingle(){
+  tabs.forEach(t => { if (t.paneEl) t.paneEl.remove(); });
+  const t = makeTab(++tabIdSeq);
+  t.paneEl = createPane();
+  t.paneEl.classList.add('active');
+  tabs = [t];
+  activeTabId = t.id;
+  modalBody = t.paneEl;
+  renderTabs();
+}
+// aba em branco (aberta pelo "+"): mesmo estado vazio de busca de linha que qualquer card de
+// "Documentos da Linha" mostra hoje sem linha ativa — reaproveita lineDocView/searchPanel direto,
+// sem view própria em VIEW_META (não é endereçável por card nem por hash, como os drill-downs).
+function renderBlankTab(){
+  lineDocView({ subtitle:'Documentos da Linha', render:(host)=>{
+    host.innerHTML = emptyBox('Linha selecionada — escolha um documento no painel lateral.');
+  } });
+}
 
 // Gera o PDF do documento aberto via impressão nativa do navegador
 let _exportandoPdf = false;
@@ -722,6 +902,10 @@ async function baixarPdf(){
 }
 
 let currentView = null, lastFocused = null;
+// ponto de escrita de currentView irmão de setActiveLine (seção STATE + CACHES) — mesma regra:
+// só chamado nos pontos de abrir/fechar aba (runView/closeModal), mantendo `currentView` em
+// sincronia com `activeTab().view` sem espalhar leitura "por aba" pelos loaders existentes.
+function setCurrentView(view){ currentView = view; activeTab().view = view; }
 const btnBack = document.getElementById('btnBack');
 
 // Seam do ciclo de vida da view: único caminho de escrita em view.pdfHTML (e no slot
@@ -766,18 +950,23 @@ function popDetail(view){
 // Pilha de navegação do modal (voltar). Estado que muda junto — pilha, flag de "indo p/ trás"
 // e o botão Voltar — encapsulado aqui em vez de três variáveis soltas espalhadas por
 // runView/btnBack/closeModal (o flag solto `_goingBack` era fácil de dessincronizar).
+// A pilha em si (`stack`) vive em `activeTab().navStack`, não mais numa variável de módulo —
+// cada aba tem a sua própria (ver "Faixa de abas", acima).
 const nav = {
-  stack: [],
   goingBack: false,
+  get stack(){ return activeTab().navStack; },
   get length(){ return this.stack.length; },
   push(view){ this.stack.push(view); btnBack.style.display = ''; },
   pop(){ const v = this.stack.pop(); btnBack.style.display = this.stack.length ? '' : 'none'; return v; },
-  reset(){ this.stack = []; this.goingBack = false; btnBack.style.display = 'none'; },
+  reset(){ activeTab().navStack = []; this.goingBack = false; btnBack.style.display = 'none'; },
 };
 function closeModal(){
   if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); }
-  overlay.classList.remove('open','fs-fallback'); currentView = null;
+  overlay.classList.remove('open','fs-fallback'); setCurrentView(null);
   nav.reset();
+  // fechar o modal descarta TODAS as abas (mesmo estado final do "fechar" único de antes de
+  // #52) — a próxima abertura começa de uma aba em branco só, nunca reaproveita as antigas.
+  resetTabsToSingle();
   // devolve o foco ao elemento que abriu o modal (acessibilidade)
   if (lastFocused && lastFocused.focus) { try { lastFocused.focus(); } catch(_){} lastFocused = null; }
   // rota: fechar pela UI desfaz a entrada criada na abertura (back) ou limpa o hash;
@@ -807,8 +996,16 @@ async function runView(view, { silent=false } = {}){
   nav.goingBack = false;
   const wasOpen = overlay.classList.contains('open');
   if (!wasOpen) lastFocused = document.activeElement;
-  currentView = view;
+  setCurrentView(view);
+  // fixa o pane DESTA view no momento em que ela começa a rodar — não o `modalBody` ao vivo.
+  // Loaders que fazem `await` e só DEPOIS chamam setBody/modalBody.querySelector (grep
+  // `view._pane` neles) usam esse pane capturado, não o `modalBody` compartilhado: sem isso,
+  // se o usuário trocar de aba enquanto o loader está no ar, a resposta atrasada pintaria a
+  // aba ERRADA — a que está em foco agora, não a que pediu (mesma razão do seam beginGen/
+  // commitViewResult, só que pro HTML da tela em vez do pdfHTML).
+  view._pane = modalBody;
   mtTitle.textContent = view.title;
+  renderTabs();   // título da aba ativa pode ter mudado (troca de documento dentro da mesma aba)
   overlay.classList.add('open');
   modalClose.focus();                     // move o foco p/ dentro do diálogo
   // rota: ABRIR o modal cria UMA entrada de histórico (Voltar do navegador fecha o modal);
@@ -816,7 +1013,7 @@ async function runView(view, { silent=false } = {}){
   syncHash({ push: !wasOpen && !!view.key });
   if (!silent) setBody(loading());
   try { await view.loader(); }
-  catch(e){ setBody(errorBox(e.message)); }
+  catch(e){ view._pane.innerHTML = errorBox(e.message); }
 }
 
 // header institucional reutilizável — o SVG do logo vive no index.html (header #brandLogo);
@@ -1482,7 +1679,7 @@ LOADERS.estrutura = () => lineDocView({ subtitle:'Cadastro de Linhas: Estrutura 
 
 /* ---- Empresas ---- */
 LOADERS.empresasRegulares = async () => {
-  const view = currentView, gen = beginGen(view);
+  const view = currentView, gen = beginGen(view), pane = view._pane;
   // lista TODAS as empresas do cadastro (codempresa_teste), inclusive sem linhas
   const [lineRows] = await Promise.all([
     sbFetch('tabela_vista_teste', `select=codempresa,cancelado,paralisado&limit=5000`),
@@ -1501,15 +1698,15 @@ LOADERS.empresasRegulares = async () => {
   const statusCol = e => [boolChip(e.cassada,'Cassada'), boolChip(e.sob_intervencao,'Interv.')].filter(Boolean).join(' ') || `<span class="chip chip-off">${esc(orDash(e.situacao))}</span>`;
   const rowHTML = e => `<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}"><td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td><td class="td-tipo">${statusCol(e)}</td><td class="td-sentido">${e.total}</td><td class="td-tipo">${e.ativas}</td></tr>`;
   const cols = [{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Situação',w:'150px'},{t:'Total de linhas',w:'120px'},{t:'Linhas ativas',w:'110px'}];
-  setBody(`<div class="doc">${docHead('Empresas Regulares')}
+  pane.innerHTML = `<div class="doc">${docHead('Empresas Regulares')}
     <p class="doc-note">${list.length} empresas no cadastro${semLinha?` · ${semLinha} sem linhas`:''}. Clique para ver as ligações da empresa.</p>
     <div class="loc-tools">
       <label>Situação <select id="empSit"><option value="todas">Todas</option><option value="regular">Regulares</option><option value="cassada">Cassadas</option><option value="interv">Sob intervenção</option></select></label>
       <label>Buscar <input type="text" id="empBusca" placeholder="nome ou RJ" autocomplete="off"></label>
     </div>
-    <div id="empResult"></div></div>`);
-  const result = modalBody.querySelector('#empResult');
-  const sel = modalBody.querySelector('#empSit'), inp = modalBody.querySelector('#empBusca');
+    <div id="empResult"></div></div>`;
+  const result = pane.querySelector('#empResult');
+  const sel = pane.querySelector('#empSit'), inp = pane.querySelector('#empBusca');
   const paint = ()=>{
     const s = sel.value, termo = inp.value.trim(), q = norm(termo);
     const f = list.filter(e=>{
@@ -1535,15 +1732,15 @@ LOADERS.empresasRegulares = async () => {
 /* --- DOC · Empresas ----------------------------------------------- */
 function openEmpresaLigacoes(cod){
   runView({ title:'Ligações por Empresa', tables:['tabela_vista_teste','codempresa_teste'], loader: async()=>{
-    const view = currentView, gen = beginGen(view);
+    const view = currentView, gen = beginGen(view), pane = view._pane;
     const [rows] = await Promise.all([
       sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`),
       getEmpresas()
     ]);
-    setBody(`<div class="doc">${docHead('Ligações por Empresa')}
+    pane.innerHTML = `<div class="doc">${docHead('Ligações por Empresa')}
       ${metaRows([['Empresa',esc(empNome(cod)),true],['Registro','RJ-'+esc(cod)],['Total',rows.length+' ligação(ões)']])}
-      <div id="empLigResult"></div></div>`);
-    lineResults(modalBody.querySelector('#empLigResult'), rows, { view, gen });
+      <div id="empLigResult"></div></div>`;
+    lineResults(pane.querySelector('#empLigResult'), rows, { view, gen });
   }});
 }
 LOADERS.ligacoesPorEmpresa = async () => {
@@ -1728,15 +1925,15 @@ LOADERS.municipioRegiao = async () => {
 /* --- DOC · Municípios / entre-municípios -------------------------- */
 function openLinhasPorIbge(codibge, nome){
   runView({ title:'Linhas no Município', tables:['itinerario_teste','tabela_vista_teste','codempresa_teste'], loader: async()=>{
-    const view = currentView, gen = beginGen(view);
+    const view = currentView, gen = beginGen(view), pane = view._pane;
     const it = await sbFetch('itinerario_teste', `cod_municipio_origem=eq.${enc(codibge)}&select=codlinha&limit=4000`);
     const allCods=distinctCods(it);          // total real (sem corte) para o "Total"
     const cods=allCods.slice(0,500);         // teto de listagem (alinha com as views irmãs)
-    if(!cods.length){ setBody(`<div class="doc">${docHead('Linhas no Município')}${emptyBox('Nenhuma linha registrada em '+(nome||codibge)+'.')}</div>`); return; }
+    if(!cods.length){ pane.innerHTML = `<div class="doc">${docHead('Linhas no Município')}${emptyBox('Nenhuma linha registrada em '+(nome||codibge)+'.')}</div>`; return; }
     const rows = await fetchLinesByCods(cods,{limit:500});
     const avisoTrunc = allCods.length>cods.length
       ? `<div class="trunc-aviso"><b>Lista parcial:</b> ${allCods.length} linhas no total; mostrando as primeiras ${cods.length}.</div>` : '';
-    setBody(`<div class="doc">${docHead('Linhas no Município')}
+    pane.innerHTML = `<div class="doc">${docHead('Linhas no Município')}
       ${metaRows([['Município',esc(nome||codibge),true],['Total',allCods.length+' linha(s)']])}
       ${avisoTrunc}
       <div class="loc-tools"><label>Mostrar <select id="munScope">
@@ -1744,9 +1941,9 @@ function openLinhasPorIbge(codibge, nome){
         <option value="dentro">Só dentro do município</option>
         <option value="inter">Que vão para outros municípios</option>
       </select></label></div>
-      <div id="munResult"></div></div>`);
-    const result = modalBody.querySelector('#munResult');
-    const scope  = modalBody.querySelector('#munScope');
+      <div id="munResult"></div></div>`;
+    const result = pane.querySelector('#munResult');
+    const scope  = pane.querySelector('#munScope');
     const metaPdf = metaRows([['Município',esc(nome||codibge),true],['Total',allCods.length+' linha(s)']]);
     // PDF determinístico: lista completa, sem a barra de filtro (evita espaço em branco / subconjunto filtrado)
     commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Linhas no Município')}${metaPdf}${avisoTrunc}${linhasTable(rows)}</div>` });
@@ -1760,15 +1957,17 @@ function openLinhasPorIbge(codibge, nome){
       return cls;
     }
     async function paint(){
-      // gen PRÓPRIO (não o do loader): o usuário pode alternar o filtro de novo antes de
-      // ensureCls() (seu próprio await) resolver — mesma corrida que motivou o seam.
-      const pView = currentView, pGen = beginGen(pView);
+      // gen PRÓPRIO (nova geração da MESMA view capturada, não currentView): o usuário pode
+      // alternar o filtro de novo antes de ensureCls() (seu próprio await) resolver — mesma
+      // corrida que motivou o seam. Reler `currentView` aqui acertaria a aba ERRADA se o
+      // usuário tivesse trocado de aba nesse meio-tempo (mesma razão do `view._pane` acima).
+      const pGen = beginGen(view);
       // pdf:false → o PDF do Município é o determinístico definido acima (lista completa + meta)
-      if(scope.value==='todas'){ lineResults(result, rows, { pdf:false, view:pView, gen:pGen }); return; }
+      if(scope.value==='todas'){ lineResults(result, rows, { pdf:false, view, gen:pGen }); return; }
       result.innerHTML = loading();
       const c = await ensureCls();
       const set = scope.value==='dentro' ? c.dentro : c.inter;
-      lineResults(result, rows.filter(r=>set.has(String(r.codlinha))), { pdf:false, view:pView, gen:pGen });
+      lineResults(result, rows.filter(r=>set.has(String(r.codlinha))), { pdf:false, view, gen:pGen });
     }
     scope.addEventListener('change', ()=>{ paint().catch(e=>{ result.innerHTML = errorBox(e.message); }); });
     paint();
@@ -1897,15 +2096,16 @@ LOADERS.ligacoesPorTerminal = async () => {
   }});
 };
 LOADERS.secoesPorLigacao = async () => {
+  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,nome_ligacao,tarifa&order=secao`);
   const meta = metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]]);
-  if(!rows.length){ setBody(`<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyBox('Nenhuma seção cadastrada para esta linha.')}</div>`); return; }
+  if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyBox('Nenhuma seção cadastrada para esta linha.')}</div>`; return; }
   const cols = [{t:'Seção',w:'70px'},{t:'Descrição'},{t:'Tarifa',w:'90px'}];
   const rowHTML = r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td></tr>`;
-  setBody(`<div class="doc">${docHead('Seções por Ligação')}${meta}
+  pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}
     <div class="loc-tools"><label>Filtrar <input type="text" id="secF" placeholder="seção ou descrição" autocomplete="off"></label></div>
-    <div id="secResult"></div></div>`);
-  const result = modalBody.querySelector('#secResult'), inp = modalBody.querySelector('#secF');
+    <div id="secResult"></div></div>`;
+  const result = pane.querySelector('#secResult'), inp = pane.querySelector('#secF');
   const paint = ()=>{
     const q = norm(inp.value.trim());
     const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${r.nome_ligacao||''}`).includes(q)) : rows;
@@ -1931,12 +2131,13 @@ function resumoRelatorio(rows){
   };
 }
 LOADERS.relatoriosGerenciais = async () => {
+  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
   const [rows] = await Promise.all([
     sbFetch('tabela_vista_teste', `select=codempresa,tipo,cancelado,paralisado,sub_judice,transferido&limit=5000`),
     getEmpresas()
   ]);
   const { total, ativas, canc, paral, sj, empCount, porEmp } = resumoRelatorio(rows);
-  setBody(`<div class="doc">${docHead('Relatórios Gerenciais')}
+  pane.innerHTML = `<div class="doc">${docHead('Relatórios Gerenciais')}
     <div class="kpi-grid">
       <div class="kpi"><b>${total}</b><span>Linhas cadastradas</span></div>
       <div class="kpi"><b>${ativas}</b><span>Ativas</span></div>
@@ -1947,7 +2148,7 @@ LOADERS.relatoriosGerenciais = async () => {
     </div>
     <h3 class="doc-h3">Top empresas por nº de linhas</h3>
     ${tableHTML([{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Linhas',w:'90px'}], porEmp.map(([c,n])=>`<tr><td class="td-num">${esc(c)}</td><td class="td-logr">${esc(empNome(c))}</td><td class="td-sentido">${n}</td></tr>`).join(''))}
-    <div class="doc-foot">Consolidado sobre ${total} linhas · cadastro DETRO-RJ · DIVAT</div></div>`);
+    <div class="doc-foot">Consolidado sobre ${total} linhas · cadastro DETRO-RJ · DIVAT</div></div>`;
 };
 // Agregação PURA da Frota por Empresa (testável em tests/): total geral + quebra por empresa e
 // por hierarquia. num() trata vazio/inválido como 0; ordena por frota operacional desc.
@@ -1967,15 +2168,16 @@ function resumoFrota(rows){
 }
 // Frota consolidada por empresa (total geral + quebra por hierarquia) — item 16
 LOADERS.frotaPorEmpresa = async () => {
+  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
   const [rows] = await Promise.all([
     sbFetch('qh_teste', `select=codempresa,hierarquia,frota_operacional,reserva&limit=10000`),
     getEmpresas()
   ]);
-  if(!rows.length){ setBody(`<div class="doc">${docHead('Frota por Empresa')}${emptyBox('Nenhuma frota cadastrada.')}</div>`); return; }
+  if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}${emptyBox('Nenhuma frota cadastrada.')}</div>`; return; }
   const fmtN = n => n.toLocaleString('pt-BR');
   const { totOp, totRes, porEmp, porHier } = resumoFrota(rows);
   const h3 = t => `<h3 class="doc-h3">${t}</h3>`;
-  setBody(`<div class="doc">${docHead('Frota por Empresa')}
+  pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}
     ${bannerTrunc(rows)}
     <div class="kpi-grid">
       <div class="kpi"><b>${fmtN(totOp)}</b><span>Frota operacional</span></div>
@@ -1991,7 +2193,7 @@ LOADERS.frotaPorEmpresa = async () => {
     ${h3('Frota por hierarquia')}
     ${tableHTML([{t:'Hierarquia'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}],
       porHier.map(x=>`<tr><td class="td-logr">${esc(orDash(x.h))}</td><td class="td-num">${x.n}</td><td class="td-sentido">${fmtN(x.op)}</td><td class="td-num">${fmtN(x.res)}</td></tr>`).join(''))}
-    <div class="doc-foot">Consolidado sobre ${rows.length} linhas · cadastro DETRO-RJ · DIVAT</div></div>`);
+    <div class="doc-foot">Consolidado sobre ${rows.length} linhas · cadastro DETRO-RJ · DIVAT</div></div>`;
 };
 LOADERS.pesquisaEvento = async () => {
   searchPanel({ title:'Pesquisa de Evento', placeholder:'Termo livre (processo, descrição, observação)', onRun: async(term, host)=>{
@@ -2026,8 +2228,9 @@ async function getPortariaAnos(){
   return _portariaAnos;
 }
 LOADERS.portarias = async () => {
+  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
   const anos = await getPortariaAnos();
-  setBody(`<div class="doc">${docHead('Portarias / Legislação')}
+  pane.innerHTML = `<div class="doc">${docHead('Portarias / Legislação')}
     <div class="ev-filters">
       <div class="evf"><label>Número</label><input id="pNum" type="text" placeholder="ex.: 1975" autocomplete="off"></div>
       <div class="evf"><label>Ano</label><select id="pAno"><option value="">Todos</option>${anos.map(a=>`<option value="${a}">${a}</option>`).join('')}</select></div>
@@ -2035,9 +2238,9 @@ LOADERS.portarias = async () => {
       <div class="evf evf-wide"><label>Texto (assunto / conteúdo)</label><input id="pTxt" type="text" placeholder="palavra no assunto ou no texto da portaria" autocomplete="off"></div>
       <button class="evf-clear" id="pClear" type="button">Limpar</button>
     </div>
-    <div id="pHost"></div></div>`);
-  const num=modalBody.querySelector('#pNum'), ano=modalBody.querySelector('#pAno'),
-        vig=modalBody.querySelector('#pVig'), txt=modalBody.querySelector('#pTxt'), host=modalBody.querySelector('#pHost');
+    <div id="pHost"></div></div>`;
+  const num=pane.querySelector('#pNum'), ano=pane.querySelector('#pAno'),
+        vig=pane.querySelector('#pVig'), txt=pane.querySelector('#pTxt'), host=pane.querySelector('#pHost');
   const run = async()=>{
     const view = currentView, gen = beginGen(view);
     host.innerHTML = loading();
@@ -2066,7 +2269,7 @@ LOADERS.portarias = async () => {
   };
   [num,txt].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
   [ano,vig].forEach(el=>el.addEventListener('change', run));
-  modalBody.querySelector('#pClear').addEventListener('click', ()=>{ num.value=''; ano.value=''; vig.value=''; txt.value=''; run(); });
+  pane.querySelector('#pClear').addEventListener('click', ()=>{ num.value=''; ano.value=''; vig.value=''; txt.value=''; run(); });
   if(currentView) currentView._panelRun = run;
   run();
 };
@@ -2236,7 +2439,8 @@ const LOC_FILTERS = [
     hint:'Mostra as linhas que passam pelos dois municípios, em qualquer ordem.' },
 ];
 LOADERS.localidades = async () => {
-  setBody(`<div class="doc">${docHead('Linhas por Localidade e Município')}
+  const pane = currentView._pane;   // capturado agora — usado também pelo .then() assíncrono abaixo
+  pane.innerHTML = `<div class="doc">${docHead('Linhas por Localidade e Município')}
     <div class="doc-obs tight" id="locHint"><b>Dica:</b> ${esc(LOC_FILTERS[0].hint)}</div>
     <div class="loc-filters" id="locFilters" role="tablist">${LOC_FILTERS.map((f,i)=>
       `<button type="button" class="loc-filter-btn${i===0?' active':''}" data-idx="${i}" aria-pressed="${i===0}">${esc(f.label)}</button>`).join('')}</div>
@@ -2246,13 +2450,13 @@ LOADERS.localidades = async () => {
     </div>
     <datalist id="locList"></datalist><datalist id="munLocList"></datalist>
     <div class="loc-actions"><button class="loc-btn" id="locGo" type="button">Buscar linhas</button></div>
-    <div id="locHost">${emptyBox('Escolha um filtro, preencha os campos e clique em Buscar.')}</div></div>`);
+    <div id="locHost">${emptyBox('Escolha um filtro, preencha os campos e clique em Buscar.')}</div></div>`;
 
-  const A=modalBody.querySelector('#locA'), B=modalBody.querySelector('#locB'),
-        ALbl=modalBody.querySelector('#locALabel .loc-lbl-txt'), BLbl=modalBody.querySelector('#locBLabel'),
-        BLblTxt=modalBody.querySelector('#locBLabel .loc-lbl-txt'),
-        hint=modalBody.querySelector('#locHint'), host=modalBody.querySelector('#locHost'),
-        filtersBar=modalBody.querySelector('#locFilters');
+  const A=pane.querySelector('#locA'), B=pane.querySelector('#locB'),
+        ALbl=pane.querySelector('#locALabel .loc-lbl-txt'), BLbl=pane.querySelector('#locBLabel'),
+        BLblTxt=pane.querySelector('#locBLabel .loc-lbl-txt'),
+        hint=pane.querySelector('#locHint'), host=pane.querySelector('#locHost'),
+        filtersBar=pane.querySelector('#locFilters');
 
   let modeIdx = 0;
   function applyMode(){
@@ -2297,13 +2501,13 @@ LOADERS.localidades = async () => {
       await mostrarLinhasEntreMunicipios(host, a, b, f.directional);
     }
   };
-  modalBody.querySelector('#locGo').addEventListener('click', run);
+  pane.querySelector('#locGo').addEventListener('click', run);
   [A,B].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
   if(currentView) currentView._panelRun = run;   // realtime relê modeIdx a cada chamada, não fixa o modo
 
   Promise.all([getLocalidades(), getIbge()]).then(([locs, ibge])=>{
     const muns = [...new Set(Object.values(ibge).map(v=>v.nome).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    const locDL = modalBody.querySelector('#locList'), munDL = modalBody.querySelector('#munLocList');
+    const locDL = pane.querySelector('#locList'), munDL = pane.querySelector('#munLocList');
     if(locDL) locDL.innerHTML = locs.map(n=>`<option value="${esc(n)}"></option>`).join('');
     if(munDL) munDL.innerHTML = muns.map(n=>`<option value="${esc(n)}"></option>`).join('');
   }).catch(e=>{ console.warn('datalists de localidade/município indisponíveis:', e); });
@@ -2805,7 +3009,7 @@ async function applyRoute(){
         if (rows[0]) selectLine(rows[0]);
       } catch(_){ /* linha inacessível → segue sem selecionar */ }
     }
-    if (!cod && activeLine){ activeLine = null; banner.style.display = 'none'; updateNeedChips(); }
+    if (!cod && activeLine){ setActiveLine(null); banner.style.display = 'none'; updateNeedChips(); }
     // tópico ativo no painel: dono do view (se houver), senão o segmento topico/, senão o padrão
     const topicoAlvo = (view && VIEW_TOPIC[view]) || topico || DEFAULT_TOPIC;
     if (currentTopicKey !== topicoAlvo) selectTopic(topicoAlvo);

@@ -375,5 +375,75 @@ console.log('pushDetail / popDetail');
   ok(v2.pdfHTML === null, 'popDetail sem detalhe aberto não altera pdfHTML');
 }
 
+console.log('openTabState (#52 — abrir aba / teto de 5)');
+{
+  const t1 = P.makeTab(1);
+  const r = P.openTabState([t1], 1);
+  eq(r.blocked, false, 'openTabState abre normalmente abaixo do teto');
+  eq(r.tabs.length, 2, 'openTabState acrescenta 1 aba');
+  eq(r.tabs[0], t1, 'openTabState não mexe nas abas existentes (mesma referência)');
+  const novo = r.tabs[1];
+  eq(novo.id, 2, 'openTabState novo id = tabIdSeq + 1');
+  eq(novo.line, null, 'openTabState nova aba sem linha');
+  eq(novo.view, null, 'openTabState nova aba sem view');
+  eq(novo.navStack.length, 0, 'openTabState nova aba com histórico de Voltar vazio');
+  eq(novo.stale, false, 'openTabState nova aba stale:false');
+  eq(r.activeTabId, 2, 'openTabState ativa a aba recém-criada');
+  eq(r.tabIdSeq, 2, 'openTabState avança tabIdSeq');
+
+  // teto de MAX_TABS (5): a 6ª tentativa é bloqueada, nada muda
+  const cinco = [1,2,3,4,5].map(P.makeTab);
+  const bloqueado = P.openTabState(cinco, 5);
+  eq(bloqueado.blocked, true, 'openTabState bloqueia na 6ª aba');
+  eq(bloqueado.tabs, cinco, 'openTabState bloqueado devolve as mesmas 5 abas (não substitui nenhuma)');
+  eq(bloqueado.tabs.length, 5, 'openTabState bloqueado não passa de MAX_TABS');
+  eq(bloqueado.activeTabId, null, 'openTabState bloqueado não define aba ativa nova');
+}
+
+console.log('closeTabState (#52 — fechar aba / ativar vizinha / fechar modal)');
+{
+  const abas = () => [1,2,3].map(P.makeTab);
+
+  // fechar aba inexistente: no-op
+  {
+    const t = abas();
+    const r = P.closeTabState(t, 2, 99);
+    eq(r.tabs, t, 'closeTabState id inexistente devolve as mesmas abas');
+    eq(r.activeTabId, 2, 'closeTabState id inexistente não muda a aba ativa');
+    eq(r.closedModal, false, 'closeTabState id inexistente não fecha o modal');
+  }
+
+  // fechar uma aba em 2º plano (não é a ativa): a ativa continua a mesma
+  {
+    const r = P.closeTabState(abas(), 2, 1);
+    eq(r.tabs.map(t=>t.id).join(','), '2,3', 'closeTabState remove só a aba fechada');
+    eq(r.activeTabId, 2, 'closeTabState fechar aba em 2º plano mantém a ativa');
+    eq(r.closedModal, false, 'closeTabState com abas restantes não fecha o modal');
+  }
+
+  // fechar a aba ATIVA com vizinha à direita → ativa a da direita
+  {
+    const r = P.closeTabState(abas(), 2, 2);
+    eq(r.tabs.map(t=>t.id).join(','), '1,3', 'closeTabState remove a aba ativa (meio)');
+    eq(r.activeTabId, 3, 'closeTabState ativa a vizinha da DIREITA quando existe');
+  }
+
+  // fechar a aba ATIVA que é a ÚLTIMA da faixa (sem vizinha à direita) → ativa a da esquerda
+  {
+    const r = P.closeTabState(abas(), 3, 3);
+    eq(r.tabs.map(t=>t.id).join(','), '1,2', 'closeTabState remove a última aba');
+    eq(r.activeTabId, 2, 'closeTabState sem vizinha à direita ativa a da ESQUERDA');
+  }
+
+  // fechar a ÚNICA aba restante → fecha o modal inteiro
+  {
+    const t = [P.makeTab(7)];
+    const r = P.closeTabState(t, 7, 7);
+    eq(r.tabs.length, 0, 'closeTabState fechar a última aba esvazia tabs');
+    eq(r.activeTabId, null, 'closeTabState fechar a última aba não deixa aba ativa');
+    eq(r.closedModal, true, 'closeTabState fechar a última aba sinaliza closedModal');
+  }
+}
+
 console.log('\n==== PLACAR:', pass + '/' + (pass + fail), '====');
 if (fail){ console.log('FALHAS:'); fails.forEach(f => console.log('  -', f)); process.exit(1); }
