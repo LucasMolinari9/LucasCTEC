@@ -801,19 +801,20 @@ function activateTab(id){
   renderTabs();
   syncHash();
 }
+// preserva a rolagem de quem está saindo (aba ativa ATUAL, antes de trocar) — chamado por
+// switchTab/openTabUI logo antes de activateTab() mudar `activeTabId`.
+function saveScroll(){ const cur = activeTab(); if (cur) cur.scrollTop = overlay.scrollTop; }
 function switchTab(id){
   if (id === activeTabId) return;
   const t = tabs.find(x => x.id === id);
   if (!t) return;
-  const cur = activeTab();
-  if (cur) cur.scrollTop = overlay.scrollTop;   // preserva a rolagem de quem está saindo
+  saveScroll();
   activateTab(id);
 }
 function openTabUI(){
   const res = openTabState(tabs, tabIdSeq);
   if (res.blocked){ toast(`Máximo de ${MAX_TABS} abas abertas — feche uma para abrir outra.`, 'warn'); return; }
-  const cur = activeTab();
-  if (cur) cur.scrollTop = overlay.scrollTop;
+  saveScroll();
   tabIdSeq = res.tabIdSeq;
   tabs = res.tabs;
   tabs[tabs.length - 1].paneEl = createPane();
@@ -996,6 +997,13 @@ async function runView(view, { silent=false } = {}){
   const wasOpen = overlay.classList.contains('open');
   if (!wasOpen) lastFocused = document.activeElement;
   setCurrentView(view);
+  // fixa o pane DESTA view no momento em que ela começa a rodar — não o `modalBody` ao vivo.
+  // Loaders que fazem `await` e só DEPOIS chamam setBody/modalBody.querySelector (grep
+  // `view._pane` neles) usam esse pane capturado, não o `modalBody` compartilhado: sem isso,
+  // se o usuário trocar de aba enquanto o loader está no ar, a resposta atrasada pintaria a
+  // aba ERRADA — a que está em foco agora, não a que pediu (mesma razão do seam beginGen/
+  // commitViewResult, só que pro HTML da tela em vez do pdfHTML).
+  view._pane = modalBody;
   mtTitle.textContent = view.title;
   renderTabs();   // título da aba ativa pode ter mudado (troca de documento dentro da mesma aba)
   overlay.classList.add('open');
@@ -1005,7 +1013,7 @@ async function runView(view, { silent=false } = {}){
   syncHash({ push: !wasOpen && !!view.key });
   if (!silent) setBody(loading());
   try { await view.loader(); }
-  catch(e){ setBody(errorBox(e.message)); }
+  catch(e){ view._pane.innerHTML = errorBox(e.message); }
 }
 
 // header institucional reutilizável — o SVG do logo vive no index.html (header #brandLogo);
@@ -1671,7 +1679,7 @@ LOADERS.estrutura = () => lineDocView({ subtitle:'Cadastro de Linhas: Estrutura 
 
 /* ---- Empresas ---- */
 LOADERS.empresasRegulares = async () => {
-  const view = currentView, gen = beginGen(view);
+  const view = currentView, gen = beginGen(view), pane = view._pane;
   // lista TODAS as empresas do cadastro (codempresa_teste), inclusive sem linhas
   const [lineRows] = await Promise.all([
     sbFetch('tabela_vista_teste', `select=codempresa,cancelado,paralisado&limit=5000`),
@@ -1690,15 +1698,15 @@ LOADERS.empresasRegulares = async () => {
   const statusCol = e => [boolChip(e.cassada,'Cassada'), boolChip(e.sob_intervencao,'Interv.')].filter(Boolean).join(' ') || `<span class="chip chip-off">${esc(orDash(e.situacao))}</span>`;
   const rowHTML = e => `<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}"><td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td><td class="td-tipo">${statusCol(e)}</td><td class="td-sentido">${e.total}</td><td class="td-tipo">${e.ativas}</td></tr>`;
   const cols = [{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Situação',w:'150px'},{t:'Total de linhas',w:'120px'},{t:'Linhas ativas',w:'110px'}];
-  setBody(`<div class="doc">${docHead('Empresas Regulares')}
+  pane.innerHTML = `<div class="doc">${docHead('Empresas Regulares')}
     <p class="doc-note">${list.length} empresas no cadastro${semLinha?` · ${semLinha} sem linhas`:''}. Clique para ver as ligações da empresa.</p>
     <div class="loc-tools">
       <label>Situação <select id="empSit"><option value="todas">Todas</option><option value="regular">Regulares</option><option value="cassada">Cassadas</option><option value="interv">Sob intervenção</option></select></label>
       <label>Buscar <input type="text" id="empBusca" placeholder="nome ou RJ" autocomplete="off"></label>
     </div>
-    <div id="empResult"></div></div>`);
-  const result = modalBody.querySelector('#empResult');
-  const sel = modalBody.querySelector('#empSit'), inp = modalBody.querySelector('#empBusca');
+    <div id="empResult"></div></div>`;
+  const result = pane.querySelector('#empResult');
+  const sel = pane.querySelector('#empSit'), inp = pane.querySelector('#empBusca');
   const paint = ()=>{
     const s = sel.value, termo = inp.value.trim(), q = norm(termo);
     const f = list.filter(e=>{
@@ -1724,15 +1732,15 @@ LOADERS.empresasRegulares = async () => {
 /* --- DOC · Empresas ----------------------------------------------- */
 function openEmpresaLigacoes(cod){
   runView({ title:'Ligações por Empresa', tables:['tabela_vista_teste','codempresa_teste'], loader: async()=>{
-    const view = currentView, gen = beginGen(view);
+    const view = currentView, gen = beginGen(view), pane = view._pane;
     const [rows] = await Promise.all([
       sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`),
       getEmpresas()
     ]);
-    setBody(`<div class="doc">${docHead('Ligações por Empresa')}
+    pane.innerHTML = `<div class="doc">${docHead('Ligações por Empresa')}
       ${metaRows([['Empresa',esc(empNome(cod)),true],['Registro','RJ-'+esc(cod)],['Total',rows.length+' ligação(ões)']])}
-      <div id="empLigResult"></div></div>`);
-    lineResults(modalBody.querySelector('#empLigResult'), rows, { view, gen });
+      <div id="empLigResult"></div></div>`;
+    lineResults(pane.querySelector('#empLigResult'), rows, { view, gen });
   }});
 }
 LOADERS.ligacoesPorEmpresa = async () => {
@@ -1917,15 +1925,15 @@ LOADERS.municipioRegiao = async () => {
 /* --- DOC · Municípios / entre-municípios -------------------------- */
 function openLinhasPorIbge(codibge, nome){
   runView({ title:'Linhas no Município', tables:['itinerario_teste','tabela_vista_teste','codempresa_teste'], loader: async()=>{
-    const view = currentView, gen = beginGen(view);
+    const view = currentView, gen = beginGen(view), pane = view._pane;
     const it = await sbFetch('itinerario_teste', `cod_municipio_origem=eq.${enc(codibge)}&select=codlinha&limit=4000`);
     const allCods=distinctCods(it);          // total real (sem corte) para o "Total"
     const cods=allCods.slice(0,500);         // teto de listagem (alinha com as views irmãs)
-    if(!cods.length){ setBody(`<div class="doc">${docHead('Linhas no Município')}${emptyBox('Nenhuma linha registrada em '+(nome||codibge)+'.')}</div>`); return; }
+    if(!cods.length){ pane.innerHTML = `<div class="doc">${docHead('Linhas no Município')}${emptyBox('Nenhuma linha registrada em '+(nome||codibge)+'.')}</div>`; return; }
     const rows = await fetchLinesByCods(cods,{limit:500});
     const avisoTrunc = allCods.length>cods.length
       ? `<div class="trunc-aviso"><b>Lista parcial:</b> ${allCods.length} linhas no total; mostrando as primeiras ${cods.length}.</div>` : '';
-    setBody(`<div class="doc">${docHead('Linhas no Município')}
+    pane.innerHTML = `<div class="doc">${docHead('Linhas no Município')}
       ${metaRows([['Município',esc(nome||codibge),true],['Total',allCods.length+' linha(s)']])}
       ${avisoTrunc}
       <div class="loc-tools"><label>Mostrar <select id="munScope">
@@ -1933,9 +1941,9 @@ function openLinhasPorIbge(codibge, nome){
         <option value="dentro">Só dentro do município</option>
         <option value="inter">Que vão para outros municípios</option>
       </select></label></div>
-      <div id="munResult"></div></div>`);
-    const result = modalBody.querySelector('#munResult');
-    const scope  = modalBody.querySelector('#munScope');
+      <div id="munResult"></div></div>`;
+    const result = pane.querySelector('#munResult');
+    const scope  = pane.querySelector('#munScope');
     const metaPdf = metaRows([['Município',esc(nome||codibge),true],['Total',allCods.length+' linha(s)']]);
     // PDF determinístico: lista completa, sem a barra de filtro (evita espaço em branco / subconjunto filtrado)
     commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Linhas no Município')}${metaPdf}${avisoTrunc}${linhasTable(rows)}</div>` });
@@ -1949,15 +1957,17 @@ function openLinhasPorIbge(codibge, nome){
       return cls;
     }
     async function paint(){
-      // gen PRÓPRIO (não o do loader): o usuário pode alternar o filtro de novo antes de
-      // ensureCls() (seu próprio await) resolver — mesma corrida que motivou o seam.
-      const pView = currentView, pGen = beginGen(pView);
+      // gen PRÓPRIO (nova geração da MESMA view capturada, não currentView): o usuário pode
+      // alternar o filtro de novo antes de ensureCls() (seu próprio await) resolver — mesma
+      // corrida que motivou o seam. Reler `currentView` aqui acertaria a aba ERRADA se o
+      // usuário tivesse trocado de aba nesse meio-tempo (mesma razão do `view._pane` acima).
+      const pGen = beginGen(view);
       // pdf:false → o PDF do Município é o determinístico definido acima (lista completa + meta)
-      if(scope.value==='todas'){ lineResults(result, rows, { pdf:false, view:pView, gen:pGen }); return; }
+      if(scope.value==='todas'){ lineResults(result, rows, { pdf:false, view, gen:pGen }); return; }
       result.innerHTML = loading();
       const c = await ensureCls();
       const set = scope.value==='dentro' ? c.dentro : c.inter;
-      lineResults(result, rows.filter(r=>set.has(String(r.codlinha))), { pdf:false, view:pView, gen:pGen });
+      lineResults(result, rows.filter(r=>set.has(String(r.codlinha))), { pdf:false, view, gen:pGen });
     }
     scope.addEventListener('change', ()=>{ paint().catch(e=>{ result.innerHTML = errorBox(e.message); }); });
     paint();
@@ -2086,15 +2096,16 @@ LOADERS.ligacoesPorTerminal = async () => {
   }});
 };
 LOADERS.secoesPorLigacao = async () => {
+  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,nome_ligacao,tarifa&order=secao`);
   const meta = metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]]);
-  if(!rows.length){ setBody(`<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyBox('Nenhuma seção cadastrada para esta linha.')}</div>`); return; }
+  if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyBox('Nenhuma seção cadastrada para esta linha.')}</div>`; return; }
   const cols = [{t:'Seção',w:'70px'},{t:'Descrição'},{t:'Tarifa',w:'90px'}];
   const rowHTML = r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td></tr>`;
-  setBody(`<div class="doc">${docHead('Seções por Ligação')}${meta}
+  pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}
     <div class="loc-tools"><label>Filtrar <input type="text" id="secF" placeholder="seção ou descrição" autocomplete="off"></label></div>
-    <div id="secResult"></div></div>`);
-  const result = modalBody.querySelector('#secResult'), inp = modalBody.querySelector('#secF');
+    <div id="secResult"></div></div>`;
+  const result = pane.querySelector('#secResult'), inp = pane.querySelector('#secF');
   const paint = ()=>{
     const q = norm(inp.value.trim());
     const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${r.nome_ligacao||''}`).includes(q)) : rows;
@@ -2120,12 +2131,13 @@ function resumoRelatorio(rows){
   };
 }
 LOADERS.relatoriosGerenciais = async () => {
+  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
   const [rows] = await Promise.all([
     sbFetch('tabela_vista_teste', `select=codempresa,tipo,cancelado,paralisado,sub_judice,transferido&limit=5000`),
     getEmpresas()
   ]);
   const { total, ativas, canc, paral, sj, empCount, porEmp } = resumoRelatorio(rows);
-  setBody(`<div class="doc">${docHead('Relatórios Gerenciais')}
+  pane.innerHTML = `<div class="doc">${docHead('Relatórios Gerenciais')}
     <div class="kpi-grid">
       <div class="kpi"><b>${total}</b><span>Linhas cadastradas</span></div>
       <div class="kpi"><b>${ativas}</b><span>Ativas</span></div>
@@ -2136,7 +2148,7 @@ LOADERS.relatoriosGerenciais = async () => {
     </div>
     <h3 class="doc-h3">Top empresas por nº de linhas</h3>
     ${tableHTML([{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Linhas',w:'90px'}], porEmp.map(([c,n])=>`<tr><td class="td-num">${esc(c)}</td><td class="td-logr">${esc(empNome(c))}</td><td class="td-sentido">${n}</td></tr>`).join(''))}
-    <div class="doc-foot">Consolidado sobre ${total} linhas · cadastro DETRO-RJ · DIVAT</div></div>`);
+    <div class="doc-foot">Consolidado sobre ${total} linhas · cadastro DETRO-RJ · DIVAT</div></div>`;
 };
 // Agregação PURA da Frota por Empresa (testável em tests/): total geral + quebra por empresa e
 // por hierarquia. num() trata vazio/inválido como 0; ordena por frota operacional desc.
@@ -2156,15 +2168,16 @@ function resumoFrota(rows){
 }
 // Frota consolidada por empresa (total geral + quebra por hierarquia) — item 16
 LOADERS.frotaPorEmpresa = async () => {
+  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
   const [rows] = await Promise.all([
     sbFetch('qh_teste', `select=codempresa,hierarquia,frota_operacional,reserva&limit=10000`),
     getEmpresas()
   ]);
-  if(!rows.length){ setBody(`<div class="doc">${docHead('Frota por Empresa')}${emptyBox('Nenhuma frota cadastrada.')}</div>`); return; }
+  if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}${emptyBox('Nenhuma frota cadastrada.')}</div>`; return; }
   const fmtN = n => n.toLocaleString('pt-BR');
   const { totOp, totRes, porEmp, porHier } = resumoFrota(rows);
   const h3 = t => `<h3 class="doc-h3">${t}</h3>`;
-  setBody(`<div class="doc">${docHead('Frota por Empresa')}
+  pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}
     ${bannerTrunc(rows)}
     <div class="kpi-grid">
       <div class="kpi"><b>${fmtN(totOp)}</b><span>Frota operacional</span></div>
@@ -2180,7 +2193,7 @@ LOADERS.frotaPorEmpresa = async () => {
     ${h3('Frota por hierarquia')}
     ${tableHTML([{t:'Hierarquia'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}],
       porHier.map(x=>`<tr><td class="td-logr">${esc(orDash(x.h))}</td><td class="td-num">${x.n}</td><td class="td-sentido">${fmtN(x.op)}</td><td class="td-num">${fmtN(x.res)}</td></tr>`).join(''))}
-    <div class="doc-foot">Consolidado sobre ${rows.length} linhas · cadastro DETRO-RJ · DIVAT</div></div>`);
+    <div class="doc-foot">Consolidado sobre ${rows.length} linhas · cadastro DETRO-RJ · DIVAT</div></div>`;
 };
 LOADERS.pesquisaEvento = async () => {
   searchPanel({ title:'Pesquisa de Evento', placeholder:'Termo livre (processo, descrição, observação)', onRun: async(term, host)=>{
@@ -2215,8 +2228,9 @@ async function getPortariaAnos(){
   return _portariaAnos;
 }
 LOADERS.portarias = async () => {
+  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
   const anos = await getPortariaAnos();
-  setBody(`<div class="doc">${docHead('Portarias / Legislação')}
+  pane.innerHTML = `<div class="doc">${docHead('Portarias / Legislação')}
     <div class="ev-filters">
       <div class="evf"><label>Número</label><input id="pNum" type="text" placeholder="ex.: 1975" autocomplete="off"></div>
       <div class="evf"><label>Ano</label><select id="pAno"><option value="">Todos</option>${anos.map(a=>`<option value="${a}">${a}</option>`).join('')}</select></div>
@@ -2224,9 +2238,9 @@ LOADERS.portarias = async () => {
       <div class="evf evf-wide"><label>Texto (assunto / conteúdo)</label><input id="pTxt" type="text" placeholder="palavra no assunto ou no texto da portaria" autocomplete="off"></div>
       <button class="evf-clear" id="pClear" type="button">Limpar</button>
     </div>
-    <div id="pHost"></div></div>`);
-  const num=modalBody.querySelector('#pNum'), ano=modalBody.querySelector('#pAno'),
-        vig=modalBody.querySelector('#pVig'), txt=modalBody.querySelector('#pTxt'), host=modalBody.querySelector('#pHost');
+    <div id="pHost"></div></div>`;
+  const num=pane.querySelector('#pNum'), ano=pane.querySelector('#pAno'),
+        vig=pane.querySelector('#pVig'), txt=pane.querySelector('#pTxt'), host=pane.querySelector('#pHost');
   const run = async()=>{
     const view = currentView, gen = beginGen(view);
     host.innerHTML = loading();
@@ -2255,7 +2269,7 @@ LOADERS.portarias = async () => {
   };
   [num,txt].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
   [ano,vig].forEach(el=>el.addEventListener('change', run));
-  modalBody.querySelector('#pClear').addEventListener('click', ()=>{ num.value=''; ano.value=''; vig.value=''; txt.value=''; run(); });
+  pane.querySelector('#pClear').addEventListener('click', ()=>{ num.value=''; ano.value=''; vig.value=''; txt.value=''; run(); });
   if(currentView) currentView._panelRun = run;
   run();
 };
@@ -2425,7 +2439,8 @@ const LOC_FILTERS = [
     hint:'Mostra as linhas que passam pelos dois municípios, em qualquer ordem.' },
 ];
 LOADERS.localidades = async () => {
-  setBody(`<div class="doc">${docHead('Linhas por Localidade e Município')}
+  const pane = currentView._pane;   // capturado agora — usado também pelo .then() assíncrono abaixo
+  pane.innerHTML = `<div class="doc">${docHead('Linhas por Localidade e Município')}
     <div class="doc-obs tight" id="locHint"><b>Dica:</b> ${esc(LOC_FILTERS[0].hint)}</div>
     <div class="loc-filters" id="locFilters" role="tablist">${LOC_FILTERS.map((f,i)=>
       `<button type="button" class="loc-filter-btn${i===0?' active':''}" data-idx="${i}" aria-pressed="${i===0}">${esc(f.label)}</button>`).join('')}</div>
@@ -2435,13 +2450,13 @@ LOADERS.localidades = async () => {
     </div>
     <datalist id="locList"></datalist><datalist id="munLocList"></datalist>
     <div class="loc-actions"><button class="loc-btn" id="locGo" type="button">Buscar linhas</button></div>
-    <div id="locHost">${emptyBox('Escolha um filtro, preencha os campos e clique em Buscar.')}</div></div>`);
+    <div id="locHost">${emptyBox('Escolha um filtro, preencha os campos e clique em Buscar.')}</div></div>`;
 
-  const A=modalBody.querySelector('#locA'), B=modalBody.querySelector('#locB'),
-        ALbl=modalBody.querySelector('#locALabel .loc-lbl-txt'), BLbl=modalBody.querySelector('#locBLabel'),
-        BLblTxt=modalBody.querySelector('#locBLabel .loc-lbl-txt'),
-        hint=modalBody.querySelector('#locHint'), host=modalBody.querySelector('#locHost'),
-        filtersBar=modalBody.querySelector('#locFilters');
+  const A=pane.querySelector('#locA'), B=pane.querySelector('#locB'),
+        ALbl=pane.querySelector('#locALabel .loc-lbl-txt'), BLbl=pane.querySelector('#locBLabel'),
+        BLblTxt=pane.querySelector('#locBLabel .loc-lbl-txt'),
+        hint=pane.querySelector('#locHint'), host=pane.querySelector('#locHost'),
+        filtersBar=pane.querySelector('#locFilters');
 
   let modeIdx = 0;
   function applyMode(){
@@ -2486,13 +2501,13 @@ LOADERS.localidades = async () => {
       await mostrarLinhasEntreMunicipios(host, a, b, f.directional);
     }
   };
-  modalBody.querySelector('#locGo').addEventListener('click', run);
+  pane.querySelector('#locGo').addEventListener('click', run);
   [A,B].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
   if(currentView) currentView._panelRun = run;   // realtime relê modeIdx a cada chamada, não fixa o modo
 
   Promise.all([getLocalidades(), getIbge()]).then(([locs, ibge])=>{
     const muns = [...new Set(Object.values(ibge).map(v=>v.nome).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    const locDL = modalBody.querySelector('#locList'), munDL = modalBody.querySelector('#munLocList');
+    const locDL = pane.querySelector('#locList'), munDL = pane.querySelector('#munLocList');
     if(locDL) locDL.innerHTML = locs.map(n=>`<option value="${esc(n)}"></option>`).join('');
     if(munDL) munDL.innerHTML = muns.map(n=>`<option value="${esc(n)}"></option>`).join('');
   }).catch(e=>{ console.warn('datalists de localidade/município indisponíveis:', e); });
