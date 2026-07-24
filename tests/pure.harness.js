@@ -150,22 +150,27 @@ function beginGen(view){
   view._gen = (view._gen || 0) + 1;
   return view._gen;
 }
-// app.js:731 — único ponto de escrita em view.pdfHTML: só aplica o patch se `gen` ainda
+// app.js:733 — `gen` ainda é a tentativa mais recente para essa view? Usada por
+// commitViewResult e por todo ponto que pinta resultado NA TELA (paginate/paginateEvents).
+function isCurrentGen(view, gen){
+  return !!view && gen === view._gen;
+}
+// app.js:736 — único ponto de escrita em view.pdfHTML: só aplica o patch se `gen` ainda
 // for a tentativa mais recente para essa view. Descarta em silêncio uma escrita de uma
 // busca/troca de linha anterior que resolveu depois de uma mais nova.
 function commitViewResult(view, gen, patch){
-  if (!view || gen !== view._gen) return false;
+  if (!isCurrentGen(view, gen)) return false;
   if ('pdfHTML' in patch) view.pdfHTML = patch.pdfHTML;
   return true;
 }
-// app.js:738 — entra num "detalhe" dentro de um painel de lista (hoje só Portarias):
+// app.js:743 — entra num "detalhe" dentro de um painel de lista (hoje só Portarias):
 // guarda o pdfHTML que a lista tinha em view._detail e aplica o do item aberto.
 function pushDetail(view, patch){
   if (!view) return;
   view._detail = { pdfHTML: view.pdfHTML };
   if ('pdfHTML' in patch) view.pdfHTML = patch.pdfHTML;
 }
-// app.js:743 — sai do detalhe: restaura o pdfHTML que a lista tinha antes.
+// app.js:748 — sai do detalhe: restaura o pdfHTML que a lista tinha antes.
 function popDetail(view){
   if (!view || !view._detail) return;
   view.pdfHTML = view._detail.pdfHTML;
@@ -185,5 +190,5 @@ module.exports = {
   yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike, municipiosExatos,
   setRTState, rowMatchesActiveLine,
   resumoRelatorio, resumoFrota, pageBounds,
-  beginGen, commitViewResult, pushDetail, popDetail,
+  beginGen, isCurrentGen, commitViewResult, pushDetail, popDetail,
 };

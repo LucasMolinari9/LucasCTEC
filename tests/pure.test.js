@@ -346,6 +346,17 @@ console.log('commitViewResult');
   ok(P.commitViewResult(null, 1, { pdfHTML: fn }) === false, 'commit sem view → false, não lança');
 }
 
+console.log('isCurrentGen');
+{
+  const v = {};
+  const gen = P.beginGen(v);
+  ok(P.isCurrentGen(v, gen) === true, 'isCurrentGen com gen atual → true');
+  P.beginGen(v);
+  ok(P.isCurrentGen(v, gen) === false, 'isCurrentGen com gen velho → false');
+  ok(P.isCurrentGen(null, 1) === false, 'isCurrentGen sem view → false, não lança');
+  ok(P.isCurrentGen(v, null) === false, 'isCurrentGen com gen null (view fechada) → false');
+}
+
 console.log('pushDetail / popDetail');
 {
   const v = { pdfHTML: () => 'lista' };

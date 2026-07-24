@@ -582,7 +582,10 @@ async function refreshActiveLine(){
    depois de uma mais nova (ex.: digitar "101" e trocar pra "202" antes da 1ª resposta voltar).
    Helpers que escrevem pdfHTML DEPOIS do await de quem os chama (paginateTable, paginateLines,
    lineResults) recebem `view` E `gen` como opções em vez de capturar os próprios — capturar ali
-   seria tarde demais pro guard fazer sentido. `_panelRun` fica FORA do seam de propósito: é
+   seria tarde demais pro guard fazer sentido. A pintura em TELA usa o MESMO guard: paginate()
+   (núcleo de paginateTable/paginateLines) e paginateEvents() só escrevem container.innerHTML
+   se isCurrentGen(view, gen) — por isso todo call site passa view+gen, mesmo quem usa pdf:false
+   (o guard da tela independe de escrever PDF). `_panelRun` fica FORA do seam de propósito: é
    atribuído uma vez, antes de qualquer await, direto no loader — não é resultado de operação
    assíncrona, não há corrida a proteger. Painéis com lista+detalhe (hoje só Portarias) usam
    pushDetail(view, patch)/popDetail(view) em vez de commitViewResult, pra não perder o pdfHTML/
@@ -728,8 +731,13 @@ function beginGen(view){
   view._gen = (view._gen || 0) + 1;
   return view._gen;
 }
+// `gen` ainda é a tentativa mais recente para essa view? Usada por commitViewResult e por todo
+// ponto que pinta resultado NA TELA (paginate/paginateEvents) — a mesma pergunta protege os dois.
+function isCurrentGen(view, gen){
+  return !!view && gen === view._gen;
+}
 function commitViewResult(view, gen, patch){
-  if (!view || gen !== view._gen) return false;
+  if (!isCurrentGen(view, gen)) return false;
   if ('pdfHTML' in patch) view.pdfHTML = patch.pdfHTML;
   return true;
 }
@@ -965,8 +973,12 @@ function matchEvent(r, c){
   }
   return true;
 }
-// Paginador (um evento por vez) com filtros, "ir para a página N" e callback de filtro p/ PDF
+// Paginador (um evento por vez) com filtros, "ir para a página N" e callback de filtro p/ PDF.
+// `opts.view`/`opts.gen` guardam a escrita inicial em `container.innerHTML` (ver `isCurrentGen`
+// junto a `paginate`) — filtros digitados depois só alternam `.hid` em nós já commitados, sem
+// reescrever a partir do zero, então não precisam reconferir.
 function paginateEvents(container, rows, buildPage, headerHTML='', opts={}){
+  if (!isCurrentGen(opts.view, opts.gen)) return;
   const total = rows.length;
   let visible = rows.map((_,i)=>i);   // índices visíveis após o filtro
   let page = 1;
@@ -1029,7 +1041,7 @@ async function renderLineHistory(host, line){
   const build = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin[r.evento_linha] || lk.emp[r.evento_empresa] || '—', false) + evBlocksHTML(r);
   // PDF/impressão: um evento por página (cabeçalho repetido); segue o filtro aplicado na tela
   const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
-  paginateEvents(host, rows, build, meta, { onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
+  paginateEvents(host, rows, build, meta, { view, gen, onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
   commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(rows) });
 }
 LOADERS.historicoLinha = async () => {
@@ -1256,7 +1268,7 @@ async function renderEmpresaQuadros(host, cod, nome){
       <td class="td-num" data-label="Código">${esc(fmtCode(l.codlinha))}</td></tr>`,
     foot:t=>t+' linha(s) com quadro · clique para ver o quadro',
     bind:c=>c.querySelectorAll('tr[data-cod]').forEach(tr=>tr.addEventListener('click',()=>abrirQuadro(tr))),
-    unit:'linhas', pdf:false,   // o PDF desta tela é "todos os quadros" (definido acima), não a lista
+    unit:'linhas', pdf:false, view, gen,   // o PDF desta tela é "todos os quadros" (definido acima), não a lista
   });
 }
 
@@ -1580,7 +1592,7 @@ async function renderEmpresaHistory(host, cod, nome){
   if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento para a empresa '+esc(cod)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const build = r => evBandHTML(r, 'Tipo Evento Empresa', lk.emp[r.evento_empresa]||lk.lin[r.evento_linha]||'—', !!(r.codlinha)) + evBlocksHTML(r);
   const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
-  paginateEvents(host, rows, build, meta, { onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
+  paginateEvents(host, rows, build, meta, { view, gen, onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
   commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(rows) });
 }
 LOADERS.historicoEmpresa = async () => {
@@ -1734,12 +1746,15 @@ function openLinhasPorIbge(codibge, nome){
       return cls;
     }
     async function paint(){
+      // gen PRÓPRIO (não o do loader): o usuário pode alternar o filtro de novo antes de
+      // ensureCls() (seu próprio await) resolver — mesma corrida que motivou o seam.
+      const pView = currentView, pGen = beginGen(pView);
       // pdf:false → o PDF do Município é o determinístico definido acima (lista completa + meta)
-      if(scope.value==='todas'){ lineResults(result, rows, { pdf:false }); return; }
+      if(scope.value==='todas'){ lineResults(result, rows, { pdf:false, view:pView, gen:pGen }); return; }
       result.innerHTML = loading();
       const c = await ensureCls();
       const set = scope.value==='dentro' ? c.dentro : c.inter;
-      lineResults(result, rows.filter(r=>set.has(String(r.codlinha))), { pdf:false });
+      lineResults(result, rows.filter(r=>set.has(String(r.codlinha))), { pdf:false, view:pView, gen:pGen });
     }
     scope.addEventListener('change', ()=>{ paint().catch(e=>{ result.innerHTML = errorBox(e.message); }); });
     paint();
@@ -2291,7 +2306,13 @@ function pageBounds(total, pageSize, page){
 // (.doc-pager/.pg-*) e o `pageBounds` (testado). `renderSlice(start,end)` devolve o HTML da
 // página; `afterPaint(slot)` (opcional) religa cliques; `unit` rotula o .pg-info. Sem barra
 // quando total <= pageSize. Usado por paginateLines e paginateTable.
-function paginate(container, total, renderSlice, { pageSize=25, afterPaint, unit='itens' } = {}){
+// `view`/`gen`: guarda a escrita inicial em `container.innerHTML` (não só o pdfHTML — ver
+// `isCurrentGen`) contra uma resposta atrasada de uma busca/troca de linha anterior pintando a
+// tabela errada por cima de uma mais nova, mesmo DENTRO do mesmo painel (host ainda anexado).
+// Cliques de página (prev/next/ir) que rodam DEPOIS não reconferem: já pertencem ao commit
+// vencedor — se uma busca mais nova tivesse ganho, este container nem teria sido escrito.
+function paginate(container, total, renderSlice, { pageSize=25, afterPaint, unit='itens', view, gen } = {}){
+  if (!isCurrentGen(view, gen)) return;
   if(total <= pageSize){
     container.innerHTML = renderSlice(0, total);
     if(afterPaint) afterPaint(container);
@@ -2331,7 +2352,7 @@ function paginateTable(container, items, { cols, rowHTML, foot, bind, cls='', pa
   const total = items.length;
   const renderSlice = (s,e)=>tableHTML(cols, items.slice(s,e).map((it,j)=>rowHTML(it, s+j)).join(''),
     typeof foot==='function' ? foot(total) : foot, cls);
-  paginate(container, total, renderSlice, { pageSize, afterPaint:bind, unit });
+  paginate(container, total, renderSlice, { pageSize, afterPaint:bind, unit, view, gen });
   // PDF = lista INTEIRA (a paginação é só de tela). `pdf:false` p/ quem já define o próprio pdfHTML.
   if(pdf && view) commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead(view.title)}${renderSlice(0, total)}</div>` });
 }
@@ -2347,7 +2368,7 @@ function paginateLines(container, rows, { grouped=false, pageSize=25, pdf=true, 
           `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${groupTotals.get(cod)} linha(s)</span></h3>${linhasTable(seg)}`).join('')
       : linhasTable(slice);
   };
-  paginate(container, rows.length, renderSlice, { pageSize, afterPaint:bindLineRows, unit:'linhas' });
+  paginate(container, rows.length, renderSlice, { pageSize, afterPaint:bindLineRows, unit:'linhas', view, gen });
   // PDF = todas as linhas (a paginação é só de tela). `pdf:false` p/ quem já define um pdfHTML
   // próprio mais rico (ex.: Município com meta/aviso).
   if(pdf && view) commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead(view.title)}${renderSlice(0, rows.length)}</div>` });

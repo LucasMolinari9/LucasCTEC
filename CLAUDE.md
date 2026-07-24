@@ -100,7 +100,7 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | `STATE + CACHES` | `activeLine`, `*Map`, `getIbge/getOrigem/getEmpresas/getEvLookups` | Estado global e caches dos lookups. |
 | `BUSCA DE LINHAS (hero)` | `doSearch`, `closeDropdown` | Busca do topo e dropdown de resultados. |
 | `LINHA ATIVA — BANNER` | `selectLine`, `bannerEmpHTML` | Banner navy da linha selecionada. |
-| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody/loading/errorBox`, `baixarPdf`, `docHead`, `tableHTML`, `paginateEvents`, `matchEvent`, `beginGen`/`commitViewResult`/`pushDetail`/`popDetail` (seam do ciclo de vida da view), todos os `render*` | **Maior bloco**: abre/preenche o modal e renderiza TODOS os documentos. |
+| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody/loading/errorBox`, `baixarPdf`, `docHead`, `tableHTML`, `paginateEvents`, `matchEvent`, `beginGen`/`isCurrentGen`/`commitViewResult`/`pushDetail`/`popDetail` (seam do ciclo de vida da view), todos os `render*` | **Maior bloco**: abre/preenche o modal e renderiza TODOS os documentos. |
 | `COMPONENTES AUXILIARES` | `linhasTable`, `bindLineRows`, `searchPanel`, `lineResults`, `pageBounds`, `paginate`, `paginateTable`, `paginateLines` | Tabela de linhas + painel de busca reutilizável + **paginação de tela** (25/pág; ver `docs/estrutura-frontend.md` §4). |
 | `CLIQUE NOS CARDS` | — | Liga o clique do card → abre a view. |
 | `UTILITÁRIOS` | `groupBy`, `countBy`, `fmtMoney` | Agregação dos relatórios e moeda pt-BR. |
@@ -210,14 +210,15 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   seam de propósito** — é só a referência à função de busca do painel, atribuída uma vez,
   **antes** de qualquer `await`, direto de dentro do loader (`if(currentView) currentView._panelRun
   = run;`); não é resultado de operação assíncrona, então não há janela de corrida a proteger.
-  **Lacuna conhecida (não fechada ainda):** o guard de `gen` só protege `pdfHTML`— a pintura em
-  tela (`host.innerHTML = renderSlice(...)` dentro de `paginate`) continua sem proteção. Dentro do
-  MESMO painel já aberto (não numa troca de view inteira, onde o `host` antigo fica desanexado),
-  uma resposta atrasada ainda pode pintar a tabela errada por cima de uma mais nova, mesmo com o
-  `pdfHTML` já correto por baixo (verificado com Playwright+mocks: buscar "999", limpar antes da
-  resposta lenta voltar → tela mostra "999" mas o PDF já sai com a lista certa). Fechar isso exige
-  o mesmo guard de `gen` também no ponto que escreve `container.innerHTML` dentro de `paginate`
-  (app.js, seção `COMPONENTES AUXILIARES`) — ainda não feito.
+  **A pintura em TELA usa o mesmo guard, via `isCurrentGen(view, gen)`** (a mesma pergunta que
+  `commitViewResult` faz, extraída porque `paginate`/`paginateEvents` também precisam dela):
+  `paginate` (núcleo de `paginateTable`/`paginateLines`) e `paginateEvents` recebem `view`/`gen`
+  e só escrevem `container.innerHTML` se `isCurrentGen` for `true` — descartando em silêncio a
+  escrita inteira (nem tabela, nem PDF) quando a tentativa já está velha. Cliques de página
+  (prev/next/ir) que rodam DEPOIS **não** reconferem — já pertencem ao commit vencedor; se uma
+  busca mais nova tivesse ganho, o container nem teria sido escrito. Isso vale mesmo pra quem
+  passa `pdf:false` (o guard da tela é independente de escrever PDF ou não) — todo call site de
+  `paginateTable`/`paginateLines`/`lineResults`/`paginateEvents` passa `view`+`gen`, sem exceção.
 - **supabase-js vendorado:** para atualizar a versão: `npm pack @supabase/supabase-js@<v>`,
   extrair `dist/umd/supabase.js`, conferir a integridade contra o registro, trocar o arquivo em
   `vendor/` e a tag `<script src>` no `index.html`.
