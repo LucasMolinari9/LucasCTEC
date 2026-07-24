@@ -160,7 +160,8 @@ const I = {
   // ícones exclusivos (evitam repetição entre famílias — o ícone é o elemento mais escaneável)
   histEmp:'<path d="M4 21V7a2 2 0 0 1 2-2h5v16"/><path d="M7.5 9h2M7.5 13h2"/><path d="M3 21h8"/><circle cx="17" cy="15.5" r="4.2"/><path d="M17 13.8v1.7l1.4 1.2"/>',
   fleet:'<rect x="7" y="6" width="14" height="10" rx="2"/><path d="M7 11h14"/><circle cx="10.5" cy="18.5" r="1.3"/><circle cx="17.5" cy="18.5" r="1.3"/><path d="M4 14V6a2 2 0 0 1 2-2h9"/>',
-  ruler:'<path d="M3 9h18v6H3z"/><path d="M7 9v3M11 9v3M15 9v3"/>'
+  ruler:'<path d="M3 9h18v6H3z"/><path d="M7 9v3M11 9v3M15 9v3"/>',
+  openTab:'<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/>'
 };
 
 /* ================================================================
@@ -234,15 +235,23 @@ SECTIONS.forEach(sec => {
 
 const DEFAULT_TOPIC = 'doc';   // tópico mostrado ao abrir o site sem hash (o mais consultado)
 
-// grid dos cards-folha do tópico ativo (documentos/consultas dentro dele)
+// grid dos cards-folha do tópico ativo (documentos/consultas dentro dele). Cada card vem
+// envolto num `.card-slot` (não-interativo) só pra hospedar o ícone "abrir em nova aba" (#53)
+// como IRMÃO do `<button class="card">`, nunca filho dele — um <button> aninhado dentro de
+// outro <button> é fechado implicitamente pelo parser HTML (regra do "stack de botões"),
+// quebrando o layout; o `.card-slot` com position:relative é quem posiciona o ícone por cima.
 function topicGridHTML(sec){
   return sec.items.map(([ic, title, desc, view, needsLine]) => `
-    <button class="card${needsLine?' needs-line':''}" type="button"
-      style="--accent:${ACCENT};--accent-soft:${ACCENT_SOFT}"
-      data-view="${view}" data-needs-line="${needsLine?1:0}" data-title="${esc(title)}">
-      <span class="ico">${svg(I[ic])}</span>
-      <span class="card-txt"><h3>${title}</h3><p>${desc}</p>${needsLine?'<span class="need-chip"></span>':''}</span>
-    </button>`).join('');
+    <div class="card-slot">
+      <button class="card${needsLine?' needs-line':''}" type="button"
+        style="--accent:${ACCENT};--accent-soft:${ACCENT_SOFT}"
+        data-view="${view}" data-needs-line="${needsLine?1:0}" data-title="${esc(title)}">
+        <span class="ico">${svg(I[ic])}</span>
+        <span class="card-txt"><h3>${title}</h3><p>${desc}</p>${needsLine?'<span class="need-chip"></span>':''}</span>
+      </button>
+      <button class="card-newtab" type="button" data-newtab-view="${view}"
+        title="Abrir em nova aba" aria-label="Abrir ${esc(title)} em nova aba">${svg(I.openTab)}</button>
+    </div>`).join('');
 }
 
 // casca fixa: sidebar (nav) + painel de conteúdo — montada uma vez, preenchida por selectTopic()
@@ -811,14 +820,24 @@ function switchTab(id){
   saveScroll();
   activateTab(id);
 }
-function openTabUI(){
+// abre uma aba (openTabState) e prepara o pane de DOM dela; devolve a aba nova, ou `null` (com
+// o toast de bloqueio já disparado) se já no teto de MAX_TABS. Único ponto que cria aba de
+// verdade — usado pelo "+" (aba em branco, openTabUI) e por abrir um card direto numa aba nova
+// (clique-do-meio/ícone de hover, openViewInNewTab, seção CLIQUE NOS CARDS).
+function addTab(){
   const res = openTabState(tabs, tabIdSeq);
-  if (res.blocked){ toast(`Máximo de ${MAX_TABS} abas abertas — feche uma para abrir outra.`, 'warn'); return; }
+  if (res.blocked){ toast(`Máximo de ${MAX_TABS} abas abertas — feche uma para abrir outra.`, 'warn'); return null; }
   saveScroll();
   tabIdSeq = res.tabIdSeq;
   tabs = res.tabs;
-  tabs[tabs.length - 1].paneEl = createPane();
-  activateTab(res.activeTabId);
+  const newTab = tabs[tabs.length - 1];
+  newTab.paneEl = createPane();
+  return newTab;
+}
+function openTabUI(){
+  const newTab = addTab();
+  if (!newTab) return;
+  activateTab(newTab.id);
   runView({ title:'Nova aba', tables:['tabela_vista_teste','codempresa_teste'], loader: renderBlankTab });
 }
 function closeTabUI(id){
@@ -2802,6 +2821,27 @@ function openView(view){
   runView({ key:view, title:meta.title, tables: VIEW_TABLES[view]||[], lineFilter: meta.needsLine, loader });
   return true;
 }
+// Clique-do-meio no card / ícone "abrir em nova aba" revelado no hover (#53): SEMPRE abre uma
+// aba nova pra aquele documento (nunca substitui a ativa) — mesmo com o modal ainda fechado
+// (tabs[0] segue intacta como "Nova aba" ao lado). "Quando fizer sentido" no critério de aceite
+// qualifica só o PRÉ-PREENCHIMENTO da linha, não a criação da aba — abrir aba nova aqui não é
+// condicional. Reaproveita as mesmas checagens de meta/loader/needsLine do openView (view
+// inexistente, ainda não implementada, falta linha selecionada) em vez de duplicá-las: nesses
+// casos de erro nada abre de qualquer forma (ambos só mostram o mesmo toast), então delegar pro
+// openView não muda o resultado observável. A linha ativa da aba de origem vira a pré-seleção da
+// aba nova (mesmo padrão que os cards já usam hoje via `activeLine`); o teto de MAX_TABS é
+// aplicado por addTab(), com o mesmo toast do "+".
+function openViewInNewTab(view){
+  const meta = VIEW_META[view];
+  if (!meta) return false;
+  if (!LOADERS[view] || (meta.needsLine && !activeLine)) return openView(view);
+  const newTab = addTab();
+  if (!newTab) return false;
+  newTab.line = activeLine;
+  activateTab(newTab.id);
+  runView({ key:view, title:meta.title, tables: VIEW_TABLES[view]||[], lineFilter: meta.needsLine, loader: LOADERS[view] });
+  return true;
+}
 app.addEventListener('click', e => {
   if (e.target.closest('.side-search-btn')){ toggleSearchCard(); return; }
   const topicBtn = e.target.closest('.topic-btn');
@@ -2823,8 +2863,21 @@ app.addEventListener('click', e => {
   // sub-título da sidebar = mesmo alvo do card correspondente no painel de conteúdo
   const subBtn = e.target.closest('.sub-list button');
   if (subBtn){ openView(subBtn.dataset.view); return; }
+  const newTabBtn = e.target.closest('.card-newtab[data-newtab-view]');
+  if (newTabBtn){ openViewInNewTab(newTabBtn.dataset.newtabView); return; }
   const card = e.target.closest('.card[data-view]');
   if (card) openView(card.dataset.view);
+});
+// clique-do-meio num card = mesmo destino do ícone "abrir em nova aba" (openViewInNewTab).
+// `auxclick` é o evento certo pra botões não-primários (o `click` normal só dispara pro
+// botão esquerdo); o `mousedown` some com o autoscroll que o botão do meio abriria por padrão.
+app.addEventListener('mousedown', e => {
+  if (e.button === 1 && e.target.closest('.card[data-view]')) e.preventDefault();
+});
+app.addEventListener('auxclick', e => {
+  if (e.button !== 1) return;
+  const card = e.target.closest('.card[data-view]');
+  if (card){ e.preventDefault(); openViewInNewTab(card.dataset.view); }
 });
 
 /* ================================================================

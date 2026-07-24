@@ -261,6 +261,27 @@
   .ico svg{width:21px;height:21px}
   .card-txt h3{font-family:'Archivo';font-weight:600;font-size:15.5px;line-height:1.25;color:var(--navy)}
   .card-txt p{font-size:13.5px;color:var(--muted);margin-top:4px;line-height:1.45}
+  /* wrapper não-interativo do card (#53) — só existe pra hospedar o ícone "abrir em nova aba"
+     como IRMÃO do <button class="card">, nunca filho (ver comentário em topicGridHTML). */
+  .card-slot{position:relative}
+  /* padding-right reservado pro ícone (mesmo quando invisível) — sem isso, um título longo
+     (ex.: "Linhas por Localidade e Município") quebraria linha embaixo dele só no hover,
+     saltando o layout do card no momento exato em que o ícone aparece */
+  .card-slot > .card{width:100%;height:100%;padding-right:46px}
+  .card-newtab{
+    position:absolute;top:10px;right:10px;z-index:1;width:28px;height:28px;border-radius:8px;
+    display:grid;place-items:center;background:var(--surface);border:1px solid var(--line);
+    color:var(--muted);cursor:pointer;opacity:0;
+    transition:opacity .15s ease,color .15s ease,border-color .15s ease;
+  }
+  .card-newtab svg{width:14px;height:14px}
+  /* revela no hover/foco do card (não só do próprio ícone, senão nunca apareceria pra
+     descobrir); em telas sem hover (touch) fica sempre visível — é o único jeito de alcançar
+     a ação por lá, já que não existe clique-do-meio no toque. */
+  .card-slot:hover .card-newtab,.card-slot:focus-within .card-newtab{opacity:1}
+  @media (hover:none){ .card-newtab{opacity:1} }
+  .card-newtab:hover{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+  .card-newtab:focus-visible{opacity:1;outline:2px solid var(--accent);outline-offset:1px}
   footer{
     border-top:1px solid var(--line);background:var(--surface);
     color:var(--muted);font-size:13.5px;
@@ -806,6 +827,10 @@
     .ico svg{width:18px;height:18px}
     .grid{gap:9px}
     .need-chip{margin-top:4px}
+    /* card vira linha curta e centralizada — o ícone acompanha centralizado à direita
+       em vez de fixo no canto superior (que sobraria vazio sem a descrição) */
+    .card-newtab{top:50%;right:8px;transform:translateY(-50%);width:24px;height:24px}
+    .card-newtab svg{width:13px;height:13px}
     /* painel lateral: a sidebar não cabe do lado — vira uma faixa horizontal de ícones no
        topo; os sub-títulos ficam só no painel de conteúdo abaixo (não têm espaço na faixa).
        O truque de "painel preenche a tela e rola por dentro" (ver body/main/.side-shell)
