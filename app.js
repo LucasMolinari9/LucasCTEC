@@ -2821,19 +2821,20 @@ function openView(view){
   runView({ key:view, title:meta.title, tables: VIEW_TABLES[view]||[], lineFilter: meta.needsLine, loader });
   return true;
 }
-// Clique-do-meio no card / ícone "abrir em nova aba" revelado no hover (#53): abre o MESMO
-// documento numa aba nova, em vez de substituir a aba ativa (openView). Reaproveita as mesmas
-// checagens de meta/loader/needsLine do openView (view inexistente, ainda não implementada, falta
-// linha selecionada) em vez de duplicá-las — nesses casos e com o modal ainda FECHADO (sem "aba
-// de origem" cujo estado valha a pena preservar) cai no comportamento normal de openView (aba
-// única), igual ao clique esquerdo. Só cria aba extra quando já há algo aberto ao lado. A linha
-// ativa da aba de origem vira a pré-seleção da aba nova (mesmo padrão que os cards já usam hoje
-// via `activeLine`); o teto de MAX_TABS é aplicado por addTab(), com o mesmo toast do "+".
+// Clique-do-meio no card / ícone "abrir em nova aba" revelado no hover (#53): SEMPRE abre uma
+// aba nova pra aquele documento (nunca substitui a ativa) — mesmo com o modal ainda fechado
+// (tabs[0] segue intacta como "Nova aba" ao lado). "Quando fizer sentido" no critério de aceite
+// qualifica só o PRÉ-PREENCHIMENTO da linha, não a criação da aba — abrir aba nova aqui não é
+// condicional. Reaproveita as mesmas checagens de meta/loader/needsLine do openView (view
+// inexistente, ainda não implementada, falta linha selecionada) em vez de duplicá-las: nesses
+// casos de erro nada abre de qualquer forma (ambos só mostram o mesmo toast), então delegar pro
+// openView não muda o resultado observável. A linha ativa da aba de origem vira a pré-seleção da
+// aba nova (mesmo padrão que os cards já usam hoje via `activeLine`); o teto de MAX_TABS é
+// aplicado por addTab(), com o mesmo toast do "+".
 function openViewInNewTab(view){
   const meta = VIEW_META[view];
   if (!meta) return false;
   if (!LOADERS[view] || (meta.needsLine && !activeLine)) return openView(view);
-  if (!overlay.classList.contains('open')) return openView(view);
   const newTab = addTab();
   if (!newTab) return false;
   newTab.line = activeLine;
