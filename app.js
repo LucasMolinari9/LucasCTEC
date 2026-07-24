@@ -1860,9 +1860,13 @@ async function mostrarLinhasEntreMunicipios(host, aTerm, bTerm, directional){
   }catch(e){ host.innerHTML = errorBox(e.message); }
 }
 LOADERS.ligacoesPorTerminal = async () => {
-  const [orig, ibge] = await Promise.all([getOrigem(), getIbge()]);
+  const [orig, ibge, terminais] = await Promise.all([getOrigem(), getIbge(), getTerminais()]);
   const munOpts = Object.entries(ibge).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>[cod, v.nome]);
-  searchPanel({ title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', selectOpts:[['','Todos os municípios'],...munOpts], onRun: async(term, host, ibgeCod)=>{
+  const nomesOrigem = [...new Set(Object.values(orig).filter(Boolean))];
+  const nomesTerminal = [...new Set(terminais.map(r=>r.nome_logradouro).filter(Boolean))];
+  const nomesTodos = [...new Set([...nomesOrigem, ...nomesTerminal])].sort((a,b)=>a.localeCompare(b));
+  const suggest = q => { const nq=norm(q); return nomesTodos.filter(n=>norm(n).includes(nq)); };
+  searchPanel({ title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', selectOpts:[['','Todos os municípios'],...munOpts], suggest, onRun: async(term, host, ibgeCod)=>{
     const view = currentView, gen = beginGen(view);
     if(!term){ host.innerHTML=emptyBox('Digite o nome do terminal/origem.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const nTerm = norm(term);
@@ -2511,14 +2515,37 @@ function bindEmpresaRows(host, fn){
   host.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>fn(tr.dataset.emp, tr.dataset.nome)));
 }
 // painel com input de busca dentro do modal; o run() é re-executável (realtime)
-function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=false, note }){
+function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=false, note, suggest }){
   const selHTML = selectOpts? `<select id="spSel" aria-label="Filtro">${selectOpts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`:'';
+  // `suggest(termo)` (opcional) devolve nomes candidatos p/ autocomplete; dropdown próprio
+  // (classe sp-*, não results-drop/.selector — evita a armadilha do CSS ".selector > button").
+  const dropHTML = suggest? `<div class="sp-drop" id="spDrop" role="listbox"></div>` : '';
   setBody(`<div class="doc">${docHead(title)}
     ${note?`<div class="doc-obs tight"><b>Nota:</b> ${esc(note)}</div>`:''}
-    <div class="doc-search"><input id="spInput" type="text" placeholder="${esc(placeholder)}" value="${esc(value)}" aria-label="${esc(placeholder)}">${selHTML}<button id="spBtn">Buscar</button></div>
+    <div class="doc-search"><div class="sp-field"><input id="spInput" type="text" placeholder="${esc(placeholder)}" value="${esc(value)}" aria-label="${esc(placeholder)}" autocomplete="off"${suggest?' role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="spDrop"':''}>${dropHTML}</div>${selHTML}<button id="spBtn">Buscar</button></div>
     <div id="spHost"></div></div>`);
   const input=modalBody.querySelector('#spInput'), btn=modalBody.querySelector('#spBtn'), host=modalBody.querySelector('#spHost'), sel=modalBody.querySelector('#spSel');
-  const run = async()=>{ host.innerHTML=loading(); try{ await onRun(input.value.trim(), host, sel?sel.value:undefined); }catch(e){ host.innerHTML=errorBox(e.message);} };
+  const run = async()=>{ closeSug(); host.innerHTML=loading(); try{ await onRun(input.value.trim(), host, sel?sel.value:undefined); }catch(e){ host.innerHTML=errorBox(e.message);} };
+  let closeSug = ()=>{};
+  if(suggest){
+    const drop = modalBody.querySelector('#spDrop');
+    closeSug = ()=>{ drop.classList.remove('open'); drop.innerHTML=''; input.setAttribute('aria-expanded','false'); };
+    const paintSug = debounce(()=>{
+      const q = input.value.trim();
+      const items = q? suggest(q).slice(0,8) : [];
+      if(!items.length){ closeSug(); return; }
+      drop.innerHTML = items.map(s=>`<button type="button" role="option">${esc(s)}</button>`).join('');
+      drop.classList.add('open'); input.setAttribute('aria-expanded','true');
+    });
+    input.addEventListener('input', paintSug);
+    input.addEventListener('keydown', e=>{ if(e.key==='Escape') closeSug(); });
+    // mousedown (antes do blur do input) para o clique registrar antes do dropdown sumir
+    drop.addEventListener('mousedown', e=>{
+      const b = e.target.closest('button'); if(!b) return;
+      e.preventDefault(); input.value = b.textContent; closeSug(); run();
+    });
+    input.addEventListener('blur', ()=> setTimeout(closeSug, 120));
+  }
   btn.addEventListener('click', run);
   input.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
   if(sel) sel.addEventListener('change', run);

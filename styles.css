@@ -568,6 +568,24 @@
   .doc-search input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(20,102,166,.12)}
   .doc-search button{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:0 16px;font:inherit;font-weight:600;font-size:14.5px;cursor:pointer}
   .doc-search select{border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit;font-size:14.5px;background:#fff}
+  /* autocomplete do searchPanel (opção `suggest`) — classes próprias (sp-*), não reaproveita
+     .results-drop/.selector do hero: são componentes/DOM diferentes. */
+  .doc-search .sp-field{position:relative;flex:1;min-width:160px}
+  .doc-search .sp-field input{width:100%}
+  .sp-drop{
+    position:absolute;top:calc(100% + 6px);left:0;right:0;
+    background:#fff;border:1px solid var(--line);border-radius:10px;
+    box-shadow:0 24px 50px -16px rgba(12,40,66,.34);z-index:200;
+    max-height:280px;overflow-y:auto;display:none;
+  }
+  .sp-drop.open{display:block}
+  .sp-drop button{
+    display:block;width:100%;text-align:left;padding:9px 14px;
+    cursor:pointer;border:0;background:none;border-bottom:1px solid var(--line-soft);
+    font:inherit;font-size:14.5px;color:var(--ink);
+  }
+  .sp-drop button:last-child{border-bottom:0}
+  .sp-drop button:hover{background:#f1f6fb}
   .chip{display:inline-block;font-size:12px;padding:2px 8px;border-radius:20px;font-weight:600}
   .chip-on{background:#fde7e6;color:#b33a2e}
   .chip-off{background:#e4f4ec;color:#1f7a45}
