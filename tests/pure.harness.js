@@ -99,17 +99,24 @@ function classifyMunLines(itRows, codibge){
   return { dentro, inter };
 }
 
-/* app.js:2401 — filtro do Realtime. No app.js depende do estado de módulo
-   `currentView` e `activeLine`; aqui são variáveis locais ajustáveis via setRTState()
-   só para teste (o corpo da função é cópia verbatim). */
-let currentView = null, activeLine = null;
-function setRTState(st){ currentView = (st && st.currentView) || null; activeLine = (st && st.activeLine) || null; }
-function rowMatchesActiveLine(payload){
-  // se a view depende da linha ativa, só recarrega se a mudança for da mesma linha
-  if(!currentView || !currentView.lineFilter || !activeLine) return true;
+/* app.js:2966 — filtro do Realtime, por ABA (#54). Puro: recebe a aba (com sua própria
+   `view` e sua própria `line`) em vez de ler `currentView`/`activeLine` do módulo. */
+function tabMatchesEvent(tab, table, payload){
+  const view = tab && tab.view;
+  if(!view || !(view.tables||[]).includes(table)) return false;
+  if(!view.lineFilter || !tab.line) return true;      // documento não filtrado por linha → sempre casa
   const cod = payload?.new?.codlinha ?? payload?.old?.codlinha;
-  if(cod===undefined || cod===null) return true; // sem como filtrar → recarrega
-  return String(cod) === String(activeLine.codlinha);
+  if(cod===undefined || cod===null) return true;      // sem como filtrar → recarrega
+  return String(cod) === String(tab.line.codlinha);
+}
+/* app.js:2976 — dispatch do Realtime sobre o conjunto de abas abertas (#54): quem recarrega
+   agora (só a ativa) e quem só fica marcada como desatualizada (as de segundo plano). */
+function dispatchRealtime(tabs, activeTabId, table, payload){
+  const casam = (tabs||[]).filter(t => tabMatchesEvent(t, table, payload));
+  return {
+    reload: casam.some(t => t.id === activeTabId) ? activeTabId : null,
+    stale:  casam.filter(t => t.id !== activeTabId).map(t => t.id),
+  };
 }
 
 // app.js:2303 — agregação do Relatório Gerencial (depende de isLinhaAtiva e countBy)
@@ -185,18 +192,18 @@ function pageBounds(total, pageSize, page){
   return { page:p, totalPages, start, end:Math.min(start + pageSize, total) };
 }
 
-// app.js:366 — teto de abas simultâneas (#52)
+// app.js:376 — teto de abas simultâneas (#52)
 const MAX_TABS = 5;
-// app.js:368 — formato de uma aba em branco (linha/view/histórico de Voltar próprios)
+// app.js:378 — formato de uma aba em branco (linha/view/histórico de Voltar próprios)
 function makeTab(id){ return { id, line: null, view: null, navStack: [], stale: false }; }
-// app.js:376 — abre uma aba em branco; nunca ultrapassa MAX_TABS (devolve blocked:true e
+// app.js:386 — abre uma aba em branco; nunca ultrapassa MAX_TABS (devolve blocked:true e
 // `tabs`/`activeTabId` originais intactos nesse caso — quem chama decide o toast)
 function openTabState(tabs, tabIdSeq){
   if (tabs.length >= MAX_TABS) return { blocked:true, tabs, activeTabId:null, tabIdSeq };
   const id = tabIdSeq + 1;
   return { blocked:false, tabs:[...tabs, makeTab(id)], activeTabId:id, tabIdSeq:id };
 }
-// app.js:384 — fecha a aba `id`; se era a ativa, ativa a vizinha (direita, senão esquerda).
+// app.js:394 — fecha a aba `id`; se era a ativa, ativa a vizinha (direita, senão esquerda).
 // Fechar a última aba devolve closedModal:true (tabs fica vazio)
 function closeTabState(tabs, activeTabId, id){
   const idx = tabs.findIndex(t => t.id === id);
@@ -210,7 +217,7 @@ function closeTabState(tabs, activeTabId, id){
 module.exports = {
   fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, situacaoHTML, isLinhaAtiva, isVigente, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike, municipiosExatos,
-  setRTState, rowMatchesActiveLine,
+  tabMatchesEvent, dispatchRealtime,
   resumoRelatorio, resumoFrota, pageBounds,
   beginGen, isCurrentGen, commitViewResult, pushDetail, popDetail,
   MAX_TABS, makeTab, openTabState, closeTabState,

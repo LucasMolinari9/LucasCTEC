@@ -363,8 +363,9 @@ let activeLine = null;   // { codlinha, numero_ligacao, nome_ligacao, codempresa
 
 /* ---- Abas — modelo de múltiplas abas de documento (#51 prefactor + #52 faixa de abas) ----
    Cada aba guarda sua própria linha, sua própria view aberta e sua própria pilha de navegação
-   do botão Voltar (`navStack`; a pilha global antiga era `nav.stack`). `stale` ainda sem uso —
-   reservado p/ os tickets seguintes de #50 (marcar aba desatualizada em segundo plano). `paneEl`
+   do botão Voltar (`navStack`; a pilha global antiga era `nav.stack`). `stale` = aba em segundo
+   plano com dado novo esperando: o Realtime a marca sem recarregar nada e ela só recarrega ao
+   ser reativada (ver dispatchRealtime/reloadTab, seção REALTIME, e #54). `paneEl`
    (o `<div class="modal-body">` da aba) e `scrollTop` são propriedades de runtime/DOM, coladas
    pela camada de UI (seção MODAL) — não fazem parte do formato "puro" abaixo, pra manter
    openTabState/closeTabState testáveis sem DOM (cópia em tests/pure.harness.js).
@@ -778,8 +779,9 @@ function tabLabel(t){
 }
 function renderTabs(){
   const items = tabs.map(t => `
-    <div class="modal-tab${t.id===activeTabId?' active':''}" role="tab" aria-selected="${t.id===activeTabId}">
-      <button type="button" class="mtab-select" data-select-tab="${t.id}" title="${esc(tabLabel(t))}">${esc(tabLabel(t))}</button>
+    <div class="modal-tab${t.id===activeTabId?' active':''}${t.stale?' stale':''}" role="tab" aria-selected="${t.id===activeTabId}">
+      <button type="button" class="mtab-select" data-select-tab="${t.id}" title="${esc(tabLabel(t))}${t.stale?' — dados desatualizados, atualiza ao abrir':''}">${
+        t.stale ? `<span class="mtab-stale" role="img" aria-label="Dados desatualizados">●</span>` : ''}${esc(tabLabel(t))}</button>
       <button type="button" class="mtab-close" data-close-tab="${t.id}" title="Fechar aba" aria-label="Fechar aba: ${esc(tabLabel(t))}">✕</button>
     </div>`).join('');
   // o "+" fica sempre clicável (mesmo no teto de MAX_TABS) — quem bloqueia com toast é
@@ -809,6 +811,9 @@ function activateTab(id){
   syncBackButton();
   renderTabs();
   syncHash();
+  // aba desatualizada volta ao ar já recarregando (o fetch que ela NÃO fez enquanto estava em
+  // segundo plano acontece agora) — reloadTab limpa o indicador e repinta a faixa.
+  if (t.stale) reloadTab(t);
 }
 // preserva a rolagem de quem está saindo (aba ativa ATUAL, antes de trocar) — chamado por
 // switchTab/openTabUI logo antes de activateTab() mudar `activeTabId`.
@@ -2928,31 +2933,72 @@ function invalidateCaches(table){
   const fn = CACHE_INVALIDATORS[table];
   if (fn) fn();
 }
-function scheduleReload(){
+function scheduleReload(tab){
   clearTimeout(reloadTimer);
-  reloadTimer = setTimeout(async ()=>{
-    if(!currentView) return;
-    try {
-      await refreshActiveLine();                                  // banner ao vivo (activeLine é snapshot)
-      if(currentView._panelRun) await currentView._panelRun();   // painéis de busca
-      else await currentView.loader();                            // views diretas
-      mtLive.classList.remove('on'); void mtLive.offsetWidth; mtLive.classList.add('on');
-      toast('Atualizado ao vivo', 'live');
-    } catch(_){}
-  }, 350);
+  reloadTimer = setTimeout(()=>reloadTab(tab), 350);
 }
-function rowMatchesActiveLine(payload){
-  // se a view depende da linha ativa, só recarrega se a mudança for da mesma linha
-  if(!currentView || !currentView.lineFilter || !activeLine) return true;
+// recarrega UMA aba (a ativa). Se o usuário trocou de aba durante o debounce, a aba dona do
+// evento já não está na tela → vira desatualizada em vez de recarregar em segundo plano
+// (mesma regra do dispatch: só a aba visível gasta requisição de rede).
+async function reloadTab(tab){
+  if(!tab || !tab.view) return;
+  if(tab !== activeTab()){ markStale([tab.id]); return; }
+  const view = tab.view, eraStale = tab.stale;
+  // aba REATIVADA (estava desatualizada): o dado velho não fica na tela enquanto a rede responde —
+  // o pane vai pro estado de carregamento, como em qualquer abertura de documento (runView).
+  // Recarregamento ao vivo da aba que já está na tela continua sem piscar (mantém o conteúdo até
+  // o novo chegar), igual ao comportamento de sempre.
+  if(eraStale){ tab.stale = false; renderTabs(); if(tab.paneEl) tab.paneEl.innerHTML = loading('Atualizando…'); }
+  try {
+    await refreshActiveLine();                        // banner ao vivo (activeLine é snapshot)
+    // reconfere DEPOIS do await: os loaders capturam `currentView` no começo (seam beginGen/
+    // commitViewResult), então rodar o loader agora mexeria na aba que estiver ativa AGORA —
+    // não na dona do evento. Trocou de documento na mesma aba → o runView novo já trouxe dado
+    // fresco, nada a fazer; trocou de aba → ela volta a ser só "desatualizada".
+    if(tab.view !== view) return;
+    if(tab !== activeTab()){ markStale([tab.id]); return; }
+    if(view._panelRun) await view._panelRun();        // painéis de busca
+    else await view.loader();                         // views diretas
+    mtLive.classList.remove('on'); void mtLive.offsetWidth; mtLive.classList.add('on');
+    toast('Atualizado ao vivo', 'live');
+  } catch(e){
+    // falhou: a aba VOLTA a ser desatualizada (o indicador não pode sumir por um recarregamento
+    // que não aconteceu) — reativá-la de novo tenta outra vez.
+    if(eraStale){ if(tab.paneEl) tab.paneEl.innerHTML = errorBox(e.message); markStale([tab.id]); }
+  }
+}
+// marca abas em segundo plano como desatualizadas (sem fetch, sem re-render do documento) —
+// só a faixa de abas é repintada, pra mostrar o indicador.
+function markStale(ids){
+  let mudou = false;
+  ids.forEach(id => { const t = tabs.find(x => x.id === id); if (t && !t.stale){ t.stale = true; mudou = true; } });
+  if (mudou) renderTabs();
+}
+// a aba `tab` se importa com este evento? (view dela lê a tabela alterada E, se o documento
+// depende de linha, a mudança é da linha DAQUELA aba — cada aba tem a sua). Generalização do
+// antigo rowMatchesActiveLine, que perguntava isso do par global currentView/activeLine.
+function tabMatchesEvent(tab, table, payload){
+  const view = tab && tab.view;
+  if(!view || !(view.tables||[]).includes(table)) return false;
+  if(!view.lineFilter || !tab.line) return true;      // documento não filtrado por linha → sempre casa
   const cod = payload?.new?.codlinha ?? payload?.old?.codlinha;
-  if(cod===undefined || cod===null) return true; // sem como filtrar → recarrega
-  return String(cod) === String(activeLine.codlinha);
+  if(cod===undefined || cod===null) return true;      // sem como filtrar → recarrega
+  return String(cod) === String(tab.line.codlinha);
+}
+// dispatch por aba: quem recarrega AGORA (só a ativa, ao vivo como sempre) e quem só fica
+// marcada como desatualizada (as de segundo plano — recarregam ao serem reativadas).
+function dispatchRealtime(tabs, activeTabId, table, payload){
+  const casam = (tabs||[]).filter(t => tabMatchesEvent(t, table, payload));
+  return {
+    reload: casam.some(t => t.id === activeTabId) ? activeTabId : null,
+    stale:  casam.filter(t => t.id !== activeTabId).map(t => t.id),
+  };
 }
 function onRealtime(table, payload){
   invalidateCaches(table);
-  if(currentView && (currentView.tables||[]).includes(table) && rowMatchesActiveLine(payload)){
-    scheduleReload();
-  }
+  const { reload, stale } = dispatchRealtime(tabs, activeTabId, table, payload);
+  if (stale.length) markStale(stale);
+  if (reload !== null) scheduleReload(activeTab());
 }
 function initRealtime(){
   try {

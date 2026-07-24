@@ -74,14 +74,18 @@ exibe e **atualiza ao vivo** (Realtime).
 ## Como o Realtime funciona no código
 - Cada card abre uma "view": `runView({ title, tables:[...], lineFilter, loader })`.
 - Um canal assina `postgres_changes` de todas as tabelas (`RT_TABLES`). Quando chega evento de
-  tabela que a view aberta usa (`VIEW_TABLES`/`tables`) e bate o filtro de linha ativa, o
-  `loader()` (ou `_panelRun` dos painéis de busca) roda de novo, com debounce.
+  tabela que a view aberta usa (`VIEW_TABLES`/`tables`) e bate o filtro da linha **daquela aba**,
+  o `loader()` (ou `_panelRun` dos painéis de busca) roda de novo, com debounce.
   **`VIEW_TABLES` deve listar TODAS as tabelas que o loader lê — inclusive as lidas por baixo
   via lookups** (`getEmpresas→codempresa_teste`, `getIbge→municipio_teste`,
   `getOrigem→origem_teste`, `getEvLookups→evento_empresa_teste/evento_linha_teste`). Se faltar
   uma, mudanças nela não recarregam a tela. Obs.: `searchPanel(...)` **não** recebe `tables` —
   quem controla é o `VIEW_TABLES[view]` usado no `runView`.
-- Atualiza **a tela aberta**. Quem não está com o card aberto vê o dado novo na próxima busca.
+- Atualiza **a aba ativa** (a que está na tela), ao vivo. Uma **aba em segundo plano** cujo evento
+  bate só fica marcada como **desatualizada** (`stale`, ponto verde na faixa de abas): nenhum
+  fetch, nenhum re-render — ela recarrega quando o usuário volta pra ela (`dispatchRealtime` →
+  `markStale`; `activateTab` → `reloadTab`). Quem não está com o card aberto vê o dado novo na
+  próxima busca.
 
 ## Mapa do código (`app.js`)
 O JS é um arquivo só, dividido em seções com marcas `/* ===== TÍTULO ===== */`. **Para achar
@@ -105,7 +109,7 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | `CLIQUE NOS CARDS` | — | Liga o clique do card → abre a view. |
 | `UTILITÁRIOS` | `groupBy`, `countBy`, `fmtMoney` | Agregação dos relatórios e moeda pt-BR. |
 | `TOAST` | `toast` | Avisos transitórios. |
-| `REALTIME` | `RT_TABLES`, `invalidateCaches`, `scheduleReload`, `rowMatchesActiveLine`, `onRealtime`, `initRealtime` | Assina mudanças do Supabase e recarrega a tela aberta (supabase-js injetado dinamicamente aqui). |
+| `REALTIME` | `RT_TABLES`, `invalidateCaches`, `scheduleReload`/`reloadTab`, `markStale`, `tabMatchesEvent`, `dispatchRealtime`, `onRealtime`, `initRealtime` | Assina mudanças do Supabase e despacha por aba: a aba ativa recarrega ao vivo, as de segundo plano só ficam `stale` (recarregam ao serem reativadas). supabase-js injetado dinamicamente aqui. |
 | `AUTO-ATUALIZAÇÃO` | `checarNovaVersao` | Detector de novo deploy (ETags de `index.html`, `app.js` e `styles.css`) que recarrega sozinho. |
 | `ROTAS (hash)` | `syncHash`, `applyRoute` | Deep link (`#/linha/…`, `#/consulta/…`) e Voltar do navegador fechando o modal. |
 
