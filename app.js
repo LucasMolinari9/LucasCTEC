@@ -353,6 +353,7 @@ function updateNeedChips(){
 let activeLine = null;   // { codlinha, numero_ligacao, nome_ligacao, codempresa, ... }
 let ibgeMap   = null;    // { [codibge]: {nome,regiao,regiaoPrograma} }
 let origemMap = null;    // { [cod_origem]: nome_origem }
+let terminalRows = null; // itinerario_teste com tipo_logradouro='Terminal': [{nome_logradouro,codlinha,cod_municipio_origem}]
 // caches carregados e invalidados JUNTOS → cada grupo num objeto só (ver CACHE_INVALIDATORS)
 const evLookups = { emp:null, lin:null };  // lookups de evento: emp={[id]:evento_empresa}, lin={[id]:evento_linha}
 const empresas  = { map:null, list:null }; // cadastro (nome↔RJ): map={[codempresa]:nome_empresa}, list=linhas cruas p/ busca client-side
@@ -374,6 +375,14 @@ async function getOrigem() {
   const rows = await sbFetch('origem_teste', 'select=cod_origem,nome_origem&limit=2000');
   origemMap = {}; rows.forEach(r => { origemMap[r.cod_origem] = r.nome_origem; });
   return origemMap;
+}
+// terminais físicos (ex.: "Rodoviário Menezes Côrtes") — trechos de itinerário do tipo "Terminal",
+// conceito distinto de origem_teste (que é o ponto de origem do quadro de horários, quase sempre
+// nome de município). Ver Ligações por Terminais.
+async function getTerminais() {
+  if (terminalRows) return terminalRows;
+  terminalRows = await sbFetch('itinerario_teste', `tipo_logradouro=eq.Terminal&select=nome_logradouro,codlinha,cod_municipio_origem&limit=6000`);
+  return terminalRows;
 }
 async function getEmpresas() {
   if (empresas.map) return empresas.map;
@@ -1856,14 +1865,22 @@ LOADERS.ligacoesPorTerminal = async () => {
   searchPanel({ title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', selectOpts:[['','Todos os municípios'],...munOpts], onRun: async(term, host, ibgeCod)=>{
     const view = currentView, gen = beginGen(view);
     if(!term){ host.innerHTML=emptyBox('Digite o nome do terminal/origem.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    const cods = Object.entries(orig).filter(([,n])=>norm(n).includes(norm(term))).map(([c])=>c);
-    if(!cods.length){ host.innerHTML=emptyBox('Nenhuma origem com esse nome.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    const inList = cods.slice(0,50).map(enc).join(',');
-    const [qi, qp] = await Promise.all([
-      sbFetch('qh_intervalo_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`),
-      sbFetch('qh_predeterminado_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`)
-    ]);
-    let lineCods=distinctCods([...qi, ...qp],120);
+    const nTerm = norm(term);
+    // duas fontes distintas de "terminal": origem_teste (ponto de origem do quadro de horários,
+    // quase sempre nome de município) e itinerario_teste tipo "Terminal" (terminal físico, ex.
+    // "Rodoviário Menezes Côrtes") — busca casa qualquer uma das duas.
+    const cods = Object.entries(orig).filter(([,n])=>norm(n).includes(nTerm)).map(([c])=>c);
+    const termRows = (await getTerminais()).filter(r=>norm(r.nome_logradouro).includes(nTerm));
+    if(!cods.length && !termRows.length){ host.innerHTML=emptyBox('Nenhum terminal/origem com esse nome.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+    let qi=[], qp=[];
+    if(cods.length){
+      const inList = cods.slice(0,50).map(enc).join(',');
+      [qi, qp] = await Promise.all([
+        sbFetch('qh_intervalo_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`),
+        sbFetch('qh_predeterminado_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`)
+      ]);
+    }
+    let lineCods=distinctCods([...qi, ...qp, ...termRows],120);
     const munTxt = ibgeCod? ` em ${esc(ibge[ibgeCod]?.nome||'')}` : '';
     if(ibgeCod){
       const munSet = new Set(await linhasNoMunicipio(ibgeCod));
@@ -2609,6 +2626,7 @@ let reloadTimer = null;
 const CACHE_INVALIDATORS = {
   municipio_teste:      () => { ibgeMap = null; },
   origem_teste:         () => { origemMap = null; },
+  itinerario_teste:     () => { terminalRows = null; },
   evento_empresa_teste: () => { evLookups.emp = null; },
   evento_linha_teste:   () => { evLookups.lin = null; },
   codempresa_teste:     () => { empresas.map = null; empresas.list = null; getEmpresas().catch(()=>{}); },
