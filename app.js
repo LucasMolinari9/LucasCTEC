@@ -708,6 +708,23 @@ modalBodyWrap.addEventListener('keydown', e => {
   e.preventDefault();   // Espaço não rola a página
   tr.click();
 });
+// Cards do seletor da aba em branco (renderTabChooser). O listener de clique dos cards mora no
+// `#app`, e o modal é IRMÃO do `#app` (não descendente) — cliques aqui dentro nunca subiriam
+// até lá. Delegado no wrap pelo mesmo motivo do keydown acima: os panes de aba vão e voltam.
+// Reusa openView/openViewInNewTab (mesmas checagens de meta/loader/needsLine e o mesmo toast),
+// então o card do modal se comporta igual ao card do painel — inclusive o ícone "abrir em
+// nova aba", que aqui vira o caminho para dois assuntos abertos lado a lado.
+modalBodyWrap.addEventListener('click', e => {
+  const novaAba = e.target.closest('.card-newtab[data-newtab-view]');
+  if (novaAba){ openViewInNewTab(novaAba.dataset.newtabView); return; }
+  const card = e.target.closest('.card[data-view]');
+  if (card) openView(card.dataset.view);
+});
+modalBodyWrap.addEventListener('auxclick', e => {
+  if (e.button !== 1) return;
+  const card = e.target.closest('.card[data-view]');
+  if (card){ e.preventDefault(); openViewInNewTab(card.dataset.view); }
+});
 
 // Tela cheia do modal: tenta a Fullscreen API nativa; se o navegador recusar
 // (ex.: dentro de iframe/preview), cai para uma maximização via classe CSS.
@@ -867,13 +884,47 @@ function resetTabsToSingle(){
   modalBody = t.paneEl;
   renderTabs();
 }
-// aba em branco (aberta pelo "+"): mesmo estado vazio de busca de linha que qualquer card de
-// "Documentos da Linha" mostra hoje sem linha ativa — reaproveita lineDocView/searchPanel direto,
-// sem view própria em VIEW_META (não é endereçável por card nem por hash, como os drill-downs).
+/* aba em branco (aberta pelo "+"): busca de linha + o SELETOR DE DOCUMENTOS dentro do próprio
+   pane. Antes ela terminava num aviso "escolha um documento no painel lateral" — instrução
+   impossível de cumprir: o painel lateral vive no `#app`, e o `.modal-overlay`
+   (position:fixed; inset:0; z-index:1000) cobre a tela inteira enquanto o modal está aberto,
+   então nenhum clique chega nos cards. A aba nova achava a linha e virava beco sem saída, e
+   pelo mesmo motivo não dava pra abrir dois assuntos diferentes (Quadro + Portaria) em abas
+   distintas — o único caminho pra isso, o ícone "abrir em nova aba" do card
+   (openViewInNewTab), também está atrás do overlay.
+   O seletor mostra TODOS os tópicos (não só "Documentos da Linha") justamente pra alcançar
+   os cards que não exigem linha — Portarias, Empresas Regulares — e reusa `topicGridHTML`,
+   o mesmo markup/CSS dos cards do painel (nada de segunda cópia que diverge depois).
+   Escolher um documento SUBSTITUI a view desta aba (o `openView` de sempre, que roda na aba
+   ativa): é o que preenche a aba em branco recém-criada. Aba nova continua nascendo só pelo
+   "+" ou pelo ícone/clique-do-meio no card. Sem view própria em VIEW_META — não é endereçável
+   por card nem por hash, como os drill-downs. */
+function tabChooserHTML(){
+  return `<div class="tab-chooser">` + SECTIONS.map(sec => `
+    <section class="tab-chooser-sec">
+      <h3>${esc(sec.name)}</h3>
+      <div class="grid">${topicGridHTML(sec)}</div>
+    </section>`).join('') + `</div>`;
+}
+// `line` chega do lineDocRun (1 resultado ou escolha na tabela); null = nenhuma linha ainda.
+function renderTabChooser(host, line){
+  const aviso = line
+    ? `Linha ${esc(line.numero_ligacao || fmtCode(line.codlinha))} selecionada — escolha o documento desta aba:`
+    : 'Escolha o documento desta aba (os que exigem linha pedem a busca acima):';
+  host.innerHTML = `<p class="doc-note">${aviso}</p>` + tabChooserHTML();
+  updateNeedChips();
+}
 function renderBlankTab(){
-  lineDocView({ subtitle:'Documentos da Linha', render:(host)=>{
-    host.innerHTML = emptyBox('Linha selecionada — escolha um documento no painel lateral.');
-  } });
+  searchPanel({ title:'Documentos da Linha', placeholder:'Nome, número ou código da linha',
+    onRun:(term, host)=>lineDocRun(term, host, renderTabChooser) });
+  const host = modalBody.querySelector('#spHost');
+  if (activeLine){
+    const i = modalBody.querySelector('#spInput');
+    if (i) i.value = activeLine.numero_ligacao || activeLine.codlinha || '';
+  }
+  // o seletor aparece SEMPRE (com ou sem linha): sem ele, uma aba nova sem linha ficava presa
+  // no "busque a linha…" e os cards que não precisam de linha seguiam inalcançáveis.
+  renderTabChooser(host, activeLine);
 }
 
 // Gera o PDF do documento aberto via impressão nativa do navegador
