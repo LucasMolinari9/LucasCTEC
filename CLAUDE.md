@@ -100,7 +100,7 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | `STATE + CACHES` | `activeLine`, `*Map`, `getIbge/getOrigem/getEmpresas/getEvLookups` | Estado global e caches dos lookups. |
 | `BUSCA DE LINHAS (hero)` | `doSearch`, `closeDropdown` | Busca do topo e dropdown de resultados. |
 | `LINHA ATIVA — BANNER` | `selectLine`, `bannerEmpHTML` | Banner navy da linha selecionada. |
-| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody/loading/errorBox`, `baixarPdf`, `docHead`, `tableHTML`, `paginateEvents`, `matchEvent`, todos os `render*` | **Maior bloco**: abre/preenche o modal e renderiza TODOS os documentos. |
+| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody/loading/errorBox`, `baixarPdf`, `docHead`, `tableHTML`, `paginateEvents`, `matchEvent`, `beginGen`/`isCurrentGen`/`commitViewResult`/`pushDetail`/`popDetail` (seam do ciclo de vida da view), todos os `render*` | **Maior bloco**: abre/preenche o modal e renderiza TODOS os documentos. |
 | `COMPONENTES AUXILIARES` | `linhasTable`, `bindLineRows`, `searchPanel`, `lineResults`, `pageBounds`, `paginate`, `paginateTable`, `paginateLines` | Tabela de linhas + painel de busca reutilizável + **paginação de tela** (25/pág; ver `docs/estrutura-frontend.md` §4). |
 | `CLIQUE NOS CARDS` | — | Liga o clique do card → abre a view. |
 | `UTILITÁRIOS` | `groupBy`, `countBy`, `fmtMoney` | Agregação dos relatórios e moeda pt-BR. |
@@ -188,9 +188,37 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
 - **Paginação é SÓ de tela; o PDF sai INTEIRO:** listas longas são paginadas (25/pág) por
   `paginateTable`/`paginateLines` (núcleo `paginate` + `pageBounds`). Como só a fatia atual
   entra no DOM, o fallback do `baixarPdf` exportaria só a página aberta — por isso os wrappers
-  **definem `currentView.pdfHTML` com a lista completa**. Quem tem PDF próprio mais rico passa
-  **`pdf:false`** (Quadro "por empresa"; Município). Detalhes: `docs/estrutura-frontend.md` §4.
-  Em tela nova que lista muita coisa, **use esses helpers** em vez de `tableHTML` cru.
+  **escrevem `pdfHTML` (via `commitViewResult`) com a lista completa**. Quem tem PDF próprio mais
+  rico passa **`pdf:false`** (Quadro "por empresa"; Município). Detalhes: `docs/estrutura-frontend.md`
+  §4. Em tela nova que lista muita coisa, **use esses helpers** em vez de `tableHTML` cru.
+- **NUNCA atribua `currentView.pdfHTML` direto — use o seam do ciclo de vida da view:**
+  `beginGen`/`commitViewResult`/`pushDetail`/`popDetail` (declarados logo após `let currentView`,
+  seção `MODAL / SISTEMA DE VIEWS`). Todo loader/run/render que faz `await` e depois escreve um
+  resultado captura `const view = currentView, gen = beginGen(view);` **antes** do seu próprio
+  `await`, e troca a atribuição por `commitViewResult(view, gen, { pdfHTML: fn ou null })` — usando
+  o `view` CAPTURADO, nunca `currentView` de novo (se reler `currentView` no fim, uma escrita
+  atrasada pode acertar a view ERRADA, a que está aberta agora, não a que a busca pertencia). Sem
+  isso, uma resposta atrasada de uma busca/troca de linha anterior pode sobrescrever o resultado de
+  uma busca mais nova (ex.: digitar "101", trocar pra "202" antes da 1ª resposta voltar → PDF sai
+  da linha errada). `paginateTable`/`paginateLines`/`lineResults` escrevem `pdfHTML` DEPOIS do
+  `await` de quem os chama — por isso recebem `view` e `gen` como opções em vez de capturar os
+  próprios (capturar ali seria tarde demais, e um `view`/`gen` frescos ali dentro não identificam
+  qual tentativa é a mais recente). Painéis com lista+detalhe (hoje só Portarias) usam
+  `pushDetail`/`popDetail` em vez de `commitViewResult`, pra não perder o `pdfHTML`/busca da lista
+  quando um item é aberto (bug original: `showPortaria` nunca reescrevia `pdfHTML`, então o PDF
+  baixava a lista errada e o Realtime bouncava o usuário sem aviso). **`_panelRun` fica de fora do
+  seam de propósito** — é só a referência à função de busca do painel, atribuída uma vez,
+  **antes** de qualquer `await`, direto de dentro do loader (`if(currentView) currentView._panelRun
+  = run;`); não é resultado de operação assíncrona, então não há janela de corrida a proteger.
+  **A pintura em TELA usa o mesmo guard, via `isCurrentGen(view, gen)`** (a mesma pergunta que
+  `commitViewResult` faz, extraída porque `paginate`/`paginateEvents` também precisam dela):
+  `paginate` (núcleo de `paginateTable`/`paginateLines`) e `paginateEvents` recebem `view`/`gen`
+  e só escrevem `container.innerHTML` se `isCurrentGen` for `true` — descartando em silêncio a
+  escrita inteira (nem tabela, nem PDF) quando a tentativa já está velha. Cliques de página
+  (prev/next/ir) que rodam DEPOIS **não** reconferem — já pertencem ao commit vencedor; se uma
+  busca mais nova tivesse ganho, o container nem teria sido escrito. Isso vale mesmo pra quem
+  passa `pdf:false` (o guard da tela é independente de escrever PDF ou não) — todo call site de
+  `paginateTable`/`paginateLines`/`lineResults`/`paginateEvents` passa `view`+`gen`, sem exceção.
 - **supabase-js vendorado:** para atualizar a versão: `npm pack @supabase/supabase-js@<v>`,
   extrair `dist/umd/supabase.js`, conferir a integridade contra o registro, trocar o arquivo em
   `vendor/` e a tag `<script src>` no `index.html`.
@@ -200,3 +228,19 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   linha ativa / 1 / N), `searchEmpresas` + `empresaChooserHTML`/`bindEmpresaRows` (busca e
   escolha de empresa) e `distinctCods`/`fetchLinesByCods` (codlinhas distintos → linhas +
   empresas). Copiar esses blocos cria cópias que divergem (bug que reaparece só em alguns cards).
+
+## Agent skills
+
+### Issue tracker
+
+Issues vivem no GitHub Issues do repo (`LucasMolinari9/LucasCTEC`), via `gh` CLI. Ver
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Vocabulário padrão (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`,
+`wontfix`). Ver `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — `CONTEXT.md` + `docs/adr/` na raiz do repo. Ver `docs/agents/domain.md`.

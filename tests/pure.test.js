@@ -312,5 +312,68 @@ console.log('pageBounds');
   ok(mid.start===25 && mid.end===50, 'pageBounds página do meio → fatia [25,50)');
 }
 
+// --- beginGen / commitViewResult (seam do ciclo de vida da view) ---
+console.log('beginGen');
+{
+  const v = {};
+  eq(P.beginGen(v), 1, 'beginGen 1ª chamada → 1');
+  eq(v._gen, 1, 'beginGen grava em view._gen');
+  eq(P.beginGen(v), 2, 'beginGen 2ª chamada → 2 (incrementa)');
+  const v2 = {};
+  eq(P.beginGen(v2), 1, 'beginGen view independente começa do 1');
+  eq(P.beginGen(null), null, 'beginGen sem view → null, não lança (modal pode já ter fechado)');
+}
+
+console.log('commitViewResult');
+{
+  const v = {};
+  const gen = P.beginGen(v);
+  const fn = () => 'pdf';
+  ok(P.commitViewResult(v, gen, { pdfHTML: fn }) === true, 'commit com gen atual → true');
+  ok(v.pdfHTML === fn, 'commit com gen atual → escreve pdfHTML');
+
+  const staleGen = gen; // geração antiga: view avança sem essa tentativa saber
+  P.beginGen(v);        // simula uma tentativa mais nova começando
+  const staleFn = () => 'velho';
+  ok(P.commitViewResult(v, staleGen, { pdfHTML: staleFn }) === false, 'commit com gen velho → false');
+  ok(v.pdfHTML === fn, 'commit com gen velho → NÃO sobrescreve o resultado mais novo');
+
+  const v2 = {};
+  const gen2 = P.beginGen(v2);
+  ok(P.commitViewResult(v2, gen2, { pdfHTML: null }) === true, 'commit pdfHTML:null (caso "vazio") → true');
+  ok(v2.pdfHTML === null, 'commit pdfHTML:null → limpa');
+
+  ok(P.commitViewResult(null, 1, { pdfHTML: fn }) === false, 'commit sem view → false, não lança');
+}
+
+console.log('isCurrentGen');
+{
+  const v = {};
+  const gen = P.beginGen(v);
+  ok(P.isCurrentGen(v, gen) === true, 'isCurrentGen com gen atual → true');
+  P.beginGen(v);
+  ok(P.isCurrentGen(v, gen) === false, 'isCurrentGen com gen velho → false');
+  ok(P.isCurrentGen(null, 1) === false, 'isCurrentGen sem view → false, não lança');
+  ok(P.isCurrentGen(v, null) === false, 'isCurrentGen com gen null (view fechada) → false');
+}
+
+console.log('pushDetail / popDetail');
+{
+  const v = { pdfHTML: () => 'lista' };
+  const listaFn = v.pdfHTML;
+  const detFn = () => 'detalhe';
+  P.pushDetail(v, { pdfHTML: detFn });
+  ok(v.pdfHTML === detFn, 'pushDetail troca pdfHTML pro do item aberto');
+  ok(typeof v._detail === 'object' && v._detail.pdfHTML === listaFn, 'pushDetail guarda o pdfHTML da lista em _detail');
+
+  P.popDetail(v);
+  ok(v.pdfHTML === listaFn, 'popDetail restaura o pdfHTML da lista');
+  ok(v._detail == null, 'popDetail limpa o slot _detail');
+
+  const v2 = { pdfHTML: null };
+  P.popDetail(v2); // sem detalhe aberto: no-op, não lança
+  ok(v2.pdfHTML === null, 'popDetail sem detalhe aberto não altera pdfHTML');
+}
+
 console.log('\n==== PLACAR:', pass + '/' + (pass + fail), '====');
 if (fail){ console.log('FALHAS:'); fails.forEach(f => console.log('  -', f)); process.exit(1); }
