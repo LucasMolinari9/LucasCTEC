@@ -39,8 +39,9 @@ cada teste novo).
 - **Formatação:** `fmtCode`, `fmtTime`, `fmtDate`, `fmtMoney`, `orDash`, `boolChip`.
 - **Segurança/busca:** `esc` (escape HTML / XSS), `enc`, `norm` (acento+caixa).
 - **Lógica de negócio:** `matchEvent` (filtro do histórico por texto/processo/ano),
-  `groupBy`/`countBy` (agregação dos relatórios), `rowMatchesActiveLine` (filtro do
-  Realtime: só recarrega quando a mudança é da linha ativa).
+  `groupBy`/`countBy` (agregação dos relatórios), `tabMatchesEvent`/`dispatchRealtime`
+  (dispatch do Realtime por aba: a aba ativa recarrega ao vivo, as de segundo plano só
+  ficam marcadas como desatualizadas).
 - **Sincronização do Realtime** (`realtime.test.js`): `VIEW_TABLES` bate com o mapa canônico,
   toda tabela citada em `VIEW_TABLES` está em `RT_TABLES`, e `RT_TABLES` == a publicação esperada
   (a checagem **viva** contra o banco fica em `scripts/check_realtime.mjs`, que precisa de rede).

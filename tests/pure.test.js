@@ -197,20 +197,27 @@ console.log('matchEvent');
   ok(!P.matchEvent(r, {text:'', proc:'', ano:1999}),              'matchEvent ano sem match → false');
 }
 
-// --- rowMatchesActiveLine ---
-console.log('rowMatchesActiveLine');
+// --- tabMatchesEvent (#54 — filtro do Realtime, agora por ABA) ---
+// mesmos casos de borda que o antigo rowMatchesActiveLine cobria, avaliados contra a
+// linha/view DA ABA em vez de um `currentView`/`activeLine` global.
+console.log('tabMatchesEvent');
 {
-  P.setRTState({ currentView:null });
-  ok(P.rowMatchesActiveLine({new:{codlinha:'1'}}) === true,  'rmal sem view → true');
-  P.setRTState({ currentView:{lineFilter:false}, activeLine:{codlinha:'1'} });
-  ok(P.rowMatchesActiveLine({new:{codlinha:'2'}}) === true,  'rmal view sem lineFilter → true');
-  P.setRTState({ currentView:{lineFilter:true}, activeLine:null });
-  ok(P.rowMatchesActiveLine({new:{codlinha:'2'}}) === true,  'rmal sem activeLine → true');
-  P.setRTState({ currentView:{lineFilter:true}, activeLine:{codlinha:'101'} });
-  ok(P.rowMatchesActiveLine({new:{codlinha:'101'}}) === true,  'rmal mesma linha (new) → true');
-  ok(P.rowMatchesActiveLine({old:{codlinha:'101'}}) === true,  'rmal mesma linha (old) → true');
-  ok(P.rowMatchesActiveLine({new:{codlinha:'202'}}) === false, 'rmal linha diferente → false');
-  ok(P.rowMatchesActiveLine({new:{}}) === true,                'rmal payload sem codlinha → true');
+  const aba = (id, view, line) => Object.assign(P.makeTab(id), { view, line });
+  const T = 'qh_teste';
+  const semLinha  = { tables:[T], lineFilter:false };
+  const comLinha  = { tables:[T], lineFilter:true };
+
+  ok(P.tabMatchesEvent(aba(1, null, null), T, {new:{codlinha:'1'}}) === false, 'tme aba em branco (sem view) → false');
+  ok(P.tabMatchesEvent(aba(1, { tables:['tarifa_atual_teste'], lineFilter:false }), T, {new:{codlinha:'1'}}) === false,
+     'tme view que não lê a tabela alterada → false');
+  ok(P.tabMatchesEvent(aba(1, { lineFilter:false }), T, {new:{}}) === false, 'tme view sem `tables` → false');
+  ok(P.tabMatchesEvent(aba(1, semLinha, {codlinha:'1'}), T, {new:{codlinha:'2'}}) === true, 'tme view sem lineFilter → true (qualquer linha)');
+  ok(P.tabMatchesEvent(aba(1, comLinha, null), T, {new:{codlinha:'2'}}) === true, 'tme aba sem linha própria → true');
+  ok(P.tabMatchesEvent(aba(1, comLinha, {codlinha:'101'}), T, {new:{codlinha:'101'}}) === true, 'tme mesma linha (new) → true');
+  ok(P.tabMatchesEvent(aba(1, comLinha, {codlinha:'101'}), T, {old:{codlinha:'101'}}) === true, 'tme mesma linha (old) → true');
+  ok(P.tabMatchesEvent(aba(1, comLinha, {codlinha:'101'}), T, {new:{codlinha:'202'}}) === false, 'tme linha diferente → false');
+  ok(P.tabMatchesEvent(aba(1, comLinha, {codlinha:'101'}), T, {new:{}}) === true, 'tme payload sem codlinha → true');
+  ok(P.tabMatchesEvent(null, T, {new:{}}) === false, 'tme aba inexistente → false');
 }
 
 // --- resumoRelatorio (agregação do Relatório Gerencial) ---
@@ -442,6 +449,78 @@ console.log('closeTabState (#52 — fechar aba / ativar vizinha / fechar modal)'
     eq(r.tabs.length, 0, 'closeTabState fechar a última aba esvazia tabs');
     eq(r.activeTabId, null, 'closeTabState fechar a última aba não deixa aba ativa');
     eq(r.closedModal, true, 'closeTabState fechar a última aba sinaliza closedModal');
+  }
+}
+
+console.log('dispatchRealtime (#54 — recarrega a aba ativa, marca as de 2º plano)');
+{
+  const T = 'qh_teste';
+  const view = (lineFilter=true) => ({ tables:[T,'tabela_vista_teste'], lineFilter });
+  const aba = (id, line, lineFilter) => Object.assign(P.makeTab(id), { view: view(lineFilter), line });
+  const ids = r => r.stale.join(',');
+
+  // evento da linha da aba ATIVA → recarrega ela; a aba de 2º plano (outra linha) não é tocada
+  {
+    const abas = [aba(1, {codlinha:'101'}), aba(2, {codlinha:'202'})];
+    const r = P.dispatchRealtime(abas, 1, T, {new:{codlinha:'101'}});
+    eq(r.reload, 1, 'dr evento da linha ativa → recarrega a aba ativa');
+    eq(ids(r), '', 'dr evento da linha ativa não marca a aba de 2º plano de outra linha');
+  }
+
+  // evento da linha de uma aba em SEGUNDO PLANO → só marca stale, sem recarregar nada
+  {
+    const abas = [aba(1, {codlinha:'101'}), aba(2, {codlinha:'202'})];
+    const r = P.dispatchRealtime(abas, 1, T, {new:{codlinha:'202'}});
+    eq(r.reload, null, 'dr evento de aba em 2º plano não recarrega (sem requisição de rede)');
+    eq(ids(r), '2', 'dr evento de aba em 2º plano marca só ela como desatualizada');
+  }
+
+  // evento que bate em VÁRIAS abas ao mesmo tempo (mesma linha em 3 abas)
+  {
+    const abas = [aba(1, {codlinha:'101'}), aba(2, {codlinha:'101'}), aba(3, {codlinha:'101'})];
+    const r = P.dispatchRealtime(abas, 2, T, {new:{codlinha:'101'}});
+    eq(r.reload, 2, 'dr com várias abas casando recarrega a ativa');
+    eq(ids(r), '1,3', 'dr com várias abas casando marca todas as de 2º plano');
+  }
+
+  // payload sem codlinha (não dá pra filtrar) → bate em todas as abas que leem a tabela
+  {
+    const abas = [aba(1, {codlinha:'101'}), aba(2, {codlinha:'202'})];
+    const r = P.dispatchRealtime(abas, 1, T, {new:{}});
+    eq(r.reload, 1, 'dr payload sem codlinha recarrega a ativa');
+    eq(ids(r), '2', 'dr payload sem codlinha marca as demais');
+  }
+
+  // nenhuma aba casa (tabela que ninguém lê) → nada acontece
+  {
+    const abas = [aba(1, {codlinha:'101'}), aba(2, {codlinha:'202'})];
+    const r = P.dispatchRealtime(abas, 1, 'localidades_teste', {new:{codlinha:'101'}});
+    eq(r.reload, null, 'dr tabela que nenhuma aba lê não recarrega');
+    eq(ids(r), '', 'dr tabela que nenhuma aba lê não marca ninguém');
+  }
+
+  // aba ativa em branco (sem view) + aba de 2º plano que casa → só a stale
+  {
+    const abas = [P.makeTab(1), aba(2, {codlinha:'202'})];
+    const r = P.dispatchRealtime(abas, 1, T, {new:{codlinha:'202'}});
+    eq(r.reload, null, 'dr aba ativa em branco não recarrega');
+    eq(ids(r), '2', 'dr aba ativa em branco não impede de marcar a de 2º plano');
+  }
+
+  // modal fechado / estado vazio → no-op sem crash
+  {
+    const r = P.dispatchRealtime([], null, T, {new:{codlinha:'101'}});
+    eq(r.reload, null, 'dr sem abas não recarrega');
+    eq(ids(r), '', 'dr sem abas não marca ninguém');
+    const r2 = P.dispatchRealtime(null, null, T, {new:{codlinha:'101'}});
+    eq(r2.reload, null, 'dr tabs nulo não recarrega');
+  }
+
+  // uma aba já marcada como desatualizada continua marcada (idempotente)
+  {
+    const bg = aba(2, {codlinha:'202'}); bg.stale = true;
+    const r = P.dispatchRealtime([aba(1, {codlinha:'101'}), bg], 1, T, {new:{codlinha:'202'}});
+    eq(ids(r), '2', 'dr aba já desatualizada segue na lista (marcação idempotente)');
   }
 }
 

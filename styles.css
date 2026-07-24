@@ -374,6 +374,10 @@
     text-overflow:ellipsis;max-width:170px;
   }
   .modal-tab.active .mtab-select{color:#0a3a63;font-weight:700}
+  /* aba em segundo plano com dado novo esperando (#54): ponto verde antes do rótulo —
+     mesma cor do selo "ao vivo" da barra do modal, sem inventar linguagem visual nova */
+  .mtab-stale{color:#37d67a;font-size:9px;line-height:1;margin-right:6px;vertical-align:middle}
+  .modal-tab.stale .mtab-select{color:#eaf4ff}
   .mtab-close{
     background:none;border:none;color:#cfe0ee;font-size:12px;line-height:1;
     padding:6px 9px 6px 4px;cursor:pointer;border-radius:5px;
