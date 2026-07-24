@@ -53,7 +53,7 @@ const EXPECTED = {
   ligacoesPorNumero:['tabela_vista_teste','codempresa_teste'],
   ligacoesPorLogradouro:['itinerario_teste','tabela_vista_teste','codempresa_teste','municipio_teste'],
   municipioRegiao:['municipio_teste','itinerario_teste','tabela_vista_teste','codempresa_teste'],
-  ligacoesPorTerminal:['qh_intervalo_teste','origem_teste','tabela_vista_teste','codempresa_teste'],
+  ligacoesPorTerminal:['qh_intervalo_teste','qh_predeterminado_teste','origem_teste','tabela_vista_teste','codempresa_teste','municipio_teste','itinerario_teste'],
   secoesPorLigacao:['tarifa_atual_teste'],
   relatoriosGerenciais:['tabela_vista_teste','codempresa_teste'],
   frotaPorEmpresa:['qh_teste','codempresa_teste'],

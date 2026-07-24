@@ -1851,18 +1851,27 @@ async function mostrarLinhasEntreMunicipios(host, aTerm, bTerm, directional){
   }catch(e){ host.innerHTML = errorBox(e.message); }
 }
 LOADERS.ligacoesPorTerminal = async () => {
-  const orig = await getOrigem();
-  searchPanel({ title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', onRun: async(term, host)=>{
+  const [orig, ibge] = await Promise.all([getOrigem(), getIbge()]);
+  const munOpts = Object.entries(ibge).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>[cod, v.nome]);
+  searchPanel({ title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', selectOpts:[['','Todos os municípios'],...munOpts], onRun: async(term, host, ibgeCod)=>{
     const view = currentView, gen = beginGen(view);
     if(!term){ host.innerHTML=emptyBox('Digite o nome do terminal/origem.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const cods = Object.entries(orig).filter(([,n])=>norm(n).includes(norm(term))).map(([c])=>c);
     if(!cods.length){ host.innerHTML=emptyBox('Nenhuma origem com esse nome.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const inList = cods.slice(0,50).map(enc).join(',');
-    const qi = await sbFetch('qh_intervalo_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`);
-    const lineCods=distinctCods(qi,120);
-    if(!lineCods.length){ host.innerHTML=emptyBox('Nenhuma linha vinculada a esse terminal.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+    const [qi, qp] = await Promise.all([
+      sbFetch('qh_intervalo_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`),
+      sbFetch('qh_predeterminado_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`)
+    ]);
+    let lineCods=distinctCods([...qi, ...qp],120);
+    const munTxt = ibgeCod? ` em ${esc(ibge[ibgeCod]?.nome||'')}` : '';
+    if(ibgeCod){
+      const munSet = new Set(await linhasNoMunicipio(ibgeCod));
+      lineCods = lineCods.filter(c=>munSet.has(c));
+    }
+    if(!lineCods.length){ host.innerHTML=emptyBox(`Nenhuma linha vinculada a esse terminal${munTxt}.`); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const rows = await fetchLinesByCods(lineCods,{limit:200});
-    const prefix = `<p class="doc-note">${lineCods.length} linha(s) a partir de "${esc(term)}"</p>`;
+    const prefix = `<p class="doc-note">${lineCods.length} linha(s) a partir de "${esc(term)}"${munTxt}</p>`;
     lineResults(host, rows, { prefixHTML: prefix, view, gen });
   }});
 };
@@ -2520,7 +2529,7 @@ const VIEW_TABLES = {
   ligacoesPorEmpresa:['tabela_vista_teste','codempresa_teste'], secoesPorEmpresa:['tarifa_atual_teste'],
   ligacoesPorNome:['tabela_vista_teste','codempresa_teste'], ligacoesPorNumero:['tabela_vista_teste','codempresa_teste'],
   ligacoesPorLogradouro:['itinerario_teste','tabela_vista_teste','codempresa_teste','municipio_teste'], municipioRegiao:['municipio_teste','itinerario_teste','tabela_vista_teste','codempresa_teste'],
-  ligacoesPorTerminal:['qh_intervalo_teste','origem_teste','tabela_vista_teste','codempresa_teste'],
+  ligacoesPorTerminal:['qh_intervalo_teste','qh_predeterminado_teste','origem_teste','tabela_vista_teste','codempresa_teste','municipio_teste','itinerario_teste'],
   secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste','codempresa_teste'],
   frotaPorEmpresa:['qh_teste','codempresa_teste'],
   pesquisaEvento:['evento_teste','codempresa_teste'], portarias:['portaria_teste'],
