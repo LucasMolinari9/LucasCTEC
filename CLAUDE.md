@@ -200,3 +200,19 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   linha ativa / 1 / N), `searchEmpresas` + `empresaChooserHTML`/`bindEmpresaRows` (busca e
   escolha de empresa) e `distinctCods`/`fetchLinesByCods` (codlinhas distintos → linhas +
   empresas). Copiar esses blocos cria cópias que divergem (bug que reaparece só em alguns cards).
+
+## Agent skills
+
+### Issue tracker
+
+Issues vivem no GitHub Issues do repo (`LucasMolinari9/LucasCTEC`), via `gh` CLI. Ver
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Vocabulário padrão (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`,
+`wontfix`). Ver `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — `CONTEXT.md` + `docs/adr/` na raiz do repo. Ver `docs/agents/domain.md`.
