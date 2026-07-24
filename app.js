@@ -2943,15 +2943,29 @@ function scheduleReload(tab){
 async function reloadTab(tab){
   if(!tab || !tab.view) return;
   if(tab !== activeTab()){ markStale([tab.id]); return; }
-  const view = tab.view;
-  if(tab.stale){ tab.stale = false; renderTabs(); }   // o indicador some assim que o recarregamento começa
+  const view = tab.view, eraStale = tab.stale;
+  // aba REATIVADA (estava desatualizada): o dado velho não fica na tela enquanto a rede responde —
+  // o pane vai pro estado de carregamento, como em qualquer abertura de documento (runView).
+  // Recarregamento ao vivo da aba que já está na tela continua sem piscar (mantém o conteúdo até
+  // o novo chegar), igual ao comportamento de sempre.
+  if(eraStale){ tab.stale = false; renderTabs(); if(tab.paneEl) tab.paneEl.innerHTML = loading('Atualizando…'); }
   try {
     await refreshActiveLine();                        // banner ao vivo (activeLine é snapshot)
+    // reconfere DEPOIS do await: os loaders capturam `currentView` no começo (seam beginGen/
+    // commitViewResult), então rodar o loader agora mexeria na aba que estiver ativa AGORA —
+    // não na dona do evento. Trocou de documento na mesma aba → o runView novo já trouxe dado
+    // fresco, nada a fazer; trocou de aba → ela volta a ser só "desatualizada".
+    if(tab.view !== view) return;
+    if(tab !== activeTab()){ markStale([tab.id]); return; }
     if(view._panelRun) await view._panelRun();        // painéis de busca
     else await view.loader();                         // views diretas
     mtLive.classList.remove('on'); void mtLive.offsetWidth; mtLive.classList.add('on');
     toast('Atualizado ao vivo', 'live');
-  } catch(_){}
+  } catch(e){
+    // falhou: a aba VOLTA a ser desatualizada (o indicador não pode sumir por um recarregamento
+    // que não aconteceu) — reativá-la de novo tenta outra vez.
+    if(eraStale){ if(tab.paneEl) tab.paneEl.innerHTML = errorBox(e.message); markStale([tab.id]); }
+  }
 }
 // marca abas em segundo plano como desatualizadas (sem fetch, sem re-render do documento) —
 // só a faixa de abas é repintada, pra mostrar o indicador.
