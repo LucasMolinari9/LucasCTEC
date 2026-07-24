@@ -51,7 +51,7 @@ const EXPECTED = {
   secoesPorEmpresa:['tarifa_atual_teste'],
   ligacoesPorNome:['tabela_vista_teste','codempresa_teste'],
   ligacoesPorNumero:['tabela_vista_teste','codempresa_teste'],
-  ligacoesPorLogradouro:['itinerario_teste','tabela_vista_teste','codempresa_teste'],
+  ligacoesPorLogradouro:['itinerario_teste','tabela_vista_teste','codempresa_teste','municipio_teste'],
   municipioRegiao:['municipio_teste','itinerario_teste','tabela_vista_teste','codempresa_teste'],
   ligacoesPorTerminal:['qh_intervalo_teste','origem_teste','tabela_vista_teste','codempresa_teste'],
   secoesPorLigacao:['tarifa_atual_teste'],

@@ -1642,16 +1642,21 @@ LOADERS.ligacoesPorNumero = async () => {
   }});
 };
 LOADERS.ligacoesPorLogradouro = async () => {
-  searchPanel({ title:'Ligações por Logradouro', placeholder:'Nome da via / logradouro', onRun: async(term, host)=>{
+  const ibge = await getIbge();
+  const munOpts = Object.entries(ibge).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>[cod, v.nome]);
+  searchPanel({ title:'Ligações por Logradouro', placeholder:'Nome da via / logradouro', selectOpts:[['','Todos os municípios'],...munOpts], onRun: async(term, host, ibgeCod)=>{
     const view = currentView, gen = beginGen(view);
     if(!term){ host.innerHTML=emptyBox('Digite o nome do logradouro.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    // RPC divat_busca_logradouro: busca sem acento e sem depender de maiúsc./minúsc.
-    // (o ilike direto na coluna é sensível a acento — "getulio" não achava "Getúlio").
-    const it = await sbFetch('rpc/divat_busca_logradouro', `termo=${ilikeTerm(term)}&select=codlinha&limit=2000`);
+    // RPC divat_busca_logradouro: busca sem acento/caixa, casando TIPO + NOME do logradouro
+    // (ex. "Rua Acre" ou só "Acre" — nome_logradouro sozinho não tem o tipo) e filtra
+    // opcionalmente por município (cod_municipio_origem, via p_ibge).
+    const qsMun = ibgeCod? `&p_ibge=${enc(ibgeCod)}` : '';
+    const it = await sbFetch('rpc/divat_busca_logradouro', `termo=${ilikeTerm(term)}${qsMun}&select=codlinha&limit=2000`);
     const cods=distinctCods(it,500);
-    if(!cods.length){ host.innerHTML=emptyBox('Nenhuma linha passa por esse logradouro.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+    const munTxt = ibgeCod? ` em ${esc(ibge[ibgeCod]?.nome||'')}` : '';
+    if(!cods.length){ host.innerHTML=emptyBox(`Nenhuma linha passa por esse logradouro${munTxt}.`); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const rows = await fetchLinesByCods(cods,{limit:500});
-    const prefix = bannerTrunc(it) + `<p class="doc-note">${cods.length} linha(s) passam por "${esc(term)}"</p>`;
+    const prefix = bannerTrunc(it) + `<p class="doc-note">${cods.length} linha(s) passam por "${esc(term)}"${munTxt}</p>`;
     lineResults(host, rows, { prefixHTML: prefix, view, gen });
   }});
 };
@@ -2514,7 +2519,7 @@ const VIEW_TABLES = {
   empresasRegulares:['tabela_vista_teste','codempresa_teste'], historicoEmpresa:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste'],
   ligacoesPorEmpresa:['tabela_vista_teste','codempresa_teste'], secoesPorEmpresa:['tarifa_atual_teste'],
   ligacoesPorNome:['tabela_vista_teste','codempresa_teste'], ligacoesPorNumero:['tabela_vista_teste','codempresa_teste'],
-  ligacoesPorLogradouro:['itinerario_teste','tabela_vista_teste','codempresa_teste'], municipioRegiao:['municipio_teste','itinerario_teste','tabela_vista_teste','codempresa_teste'],
+  ligacoesPorLogradouro:['itinerario_teste','tabela_vista_teste','codempresa_teste','municipio_teste'], municipioRegiao:['municipio_teste','itinerario_teste','tabela_vista_teste','codempresa_teste'],
   ligacoesPorTerminal:['qh_intervalo_teste','origem_teste','tabela_vista_teste','codempresa_teste'],
   secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste','codempresa_teste'],
   frotaPorEmpresa:['qh_teste','codempresa_teste'],

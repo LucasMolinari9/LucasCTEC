@@ -261,7 +261,7 @@ CREATE INDEX idx_itinerario_cod_municipio_origem ON public.itinerario_teste USIN
 CREATE INDEX idx_itinerario_codlinha ON public.itinerario_teste USING btree (codlinha);
 CREATE INDEX trgm_itinerario_logradouro ON public.itinerario_teste USING gin (nome_logradouro gin_trgm_ops);
 -- depende de f_unaccent (seção 6) — rodar essa parte DEPOIS das funções
--- CREATE INDEX trgm_itin_logr_norm ON public.itinerario_teste USING gin (lower(f_unaccent(nome_logradouro)) gin_trgm_ops);
+-- CREATE INDEX trgm_itin_logr_tipo_nome_norm ON public.itinerario_teste USING gin (lower(f_unaccent(coalesce(tipo_logradouro,'') || ' ' || nome_logradouro)) gin_trgm_ops);
 
 CREATE INDEX idx_portaria_data ON public.portaria_teste USING btree (data_portaria);
 CREATE INDEX trgm_portaria_assunto ON public.portaria_teste USING gin (assunto gin_trgm_ops);
@@ -298,18 +298,25 @@ AS $function$
 $function$;
 
 -- índice que depende de f_unaccent — criar só agora que a função existe
-CREATE INDEX trgm_itin_logr_norm ON public.itinerario_teste
-  USING gin (lower(f_unaccent(nome_logradouro)) gin_trgm_ops);
+-- casa TIPO + NOME do logradouro (ex. "Rua Acre") — nome_logradouro sozinho não tem o tipo
+CREATE INDEX trgm_itin_logr_tipo_nome_norm ON public.itinerario_teste
+  USING gin (lower(f_unaccent(coalesce(tipo_logradouro,'') || ' ' || nome_logradouro)) gin_trgm_ops);
 
-CREATE OR REPLACE FUNCTION public.divat_busca_logradouro(termo text)
+-- termo casa TIPO + NOME do logradouro (concat) — nome_logradouro sozinho não guarda o tipo,
+-- então buscar "Rua Acre" (como o usuário fala a via) não achava nada antes; "Acre" sozinho
+-- continua funcionando (concat com string vazia quando tipo_logradouro é nulo).
+-- p_ibge (opcional): filtra por cod_municipio_origem (usa idx_itinerario_cod_municipio_origem)
+-- — o mesmo logradouro existe em municípios diferentes, e antes não dava pra restringir.
+CREATE OR REPLACE FUNCTION public.divat_busca_logradouro(termo text, p_ibge integer DEFAULT NULL)
  RETURNS TABLE(codlinha character varying)
  LANGUAGE sql
  STABLE PARALLEL SAFE
 AS $function$
   select distinct i.codlinha
   from public.itinerario_teste i
-  where lower(public.f_unaccent(i.nome_logradouro))
+  where lower(public.f_unaccent(coalesce(i.tipo_logradouro,'') || ' ' || i.nome_logradouro))
         ilike '%' || lower(public.f_unaccent(termo)) || '%'
+    and (p_ibge is null or i.cod_municipio_origem = p_ibge)
 $function$;
 
 CREATE OR REPLACE FUNCTION public.divat_linhas_regiao(p_regiao text, p_modo text)
