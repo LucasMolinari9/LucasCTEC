@@ -27,6 +27,10 @@ const setEq = (a, b) => { const A=new Set(a), B=new Set(b); return A.size===B.si
 function extrai(re, nome){
   const m = re.exec(html);
   if (!m){ ok(false, `achou o literal ${nome} no app.js`); return null; }
+  // A regra divat-eval-quebra-csp existe porque a CSP de produção (script-src 'self', sem
+  // 'unsafe-eval') mata new Function no NAVEGADOR. Este arquivo roda só no Node (é teste,
+  // não é servido), e o alvo é um literal puro — string/array — recortado do app.js.
+  // nosemgrep: divat-eval-quebra-csp
   try { return (new Function('return ' + m[1]))(); }   // literais puros (strings/arrays), sem chamadas
   catch(e){ ok(false, `parse do literal ${nome}`, e.message); return null; }
 }

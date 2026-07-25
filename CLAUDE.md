@@ -149,6 +149,16 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    atualize a cópia.) **Ao mexer nas abas do modal / no seletor de documentos**, rode também
    `node scripts/check_abas.mjs` — checagem de regressão em navegador headless (Playwright, com
    o PostgREST stubado); fica fora do `check.js` porque este é offline e sem dependências.
+2b. **Análise estática — `./scripts/semgrep.sh`** (Semgrep). Complementa o `check.js`, não
+   substitui: o `check.js` pergunta "faz o que deve?" (compila o `app.js` e roda a lógica
+   pura), o Semgrep pergunta "contém padrão proibido?". Pega o que só quebraria no navegador
+   do usuário — `eval`/`new Function` (a CSP é `script-src 'self'`, sem `'unsafe-eval'`, e o
+   `check.js` só COMPILA, não executa), CDN externo em runtime e atribuição direta a
+   `currentView.pdfHTML` (fora do seam). O modo padrão usa só as regras locais
+   (`.semgrep/rules/`) e roda **offline**; `--full` soma os rulesets do registry e **precisa
+   de rede** (bloqueada no ambiente do Claude — igual ao `vercel` CLI; lá rode sem `--full`).
+   O CI (`.github/workflows/semgrep.yml`) roda as duas metades. Runbook e como escrever regra
+   nova: **`docs/semgrep.md`**.
 3. Merge na `main` → republica sozinho (ou MCP `deploy_to_vercel`). As telas dos usuários se
    atualizam via detector de versão. Bumpe o carimbo se quiser confirmar a chegada.
 4. Mudanças de **dados** NÃO exigem deploy — o site lê o Supabase ao vivo.

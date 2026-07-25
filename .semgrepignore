@@ -1,0 +1,29 @@
+# O que o Semgrep NÃO deve escanear. Ver docs/semgrep.md.
+#
+# ATENÇÃO: este arquivo SUBSTITUI o .semgrepignore padrão do Semgrep quando existe —
+# por isso ele repete os padrões óbvios (node_modules etc.) em vez de só somar os nossos.
+
+# --- Código de terceiros, vendorado sem modificação ---
+# O supabase-js é minificado (uma linha de ~200 KB) e as fontes são binários .woff2:
+# escanear isso só gera ruído. A garantia aqui é a INTEGRIDADE do arquivo baixado
+# (conferida contra o registro do npm ao atualizar a versão — ver CLAUDE.md), não o lint.
+vendor/
+
+# --- Cópias verbatim para teste ---
+# Os *.harness.js são cópias literais de funções do app.js, guardadas pelo anti-drift do
+# tests/check.js. Achado aqui seria duplicata do achado no app.js (e "consertar" a cópia
+# quebraria o anti-drift).
+tests/*.harness.js
+
+# --- Casos de teste das próprias regras ---
+# .semgrep/tests/divat.js contém violações DE PROPÓSITO (é o que prova que a regra pega).
+# Sem esta linha, todo scan normal reportaria esses casos como achado.
+.semgrep/tests/
+
+# --- Saídas de backup (já ignoradas pelo git; aqui por garantia) ---
+backup_out/
+backup_*/
+
+# --- Padrões usuais ---
+node_modules/
+.git/

@@ -1,0 +1,80 @@
+# Regras LOCAIS do Portal DIVAT — invariantes deste projeto que nenhum ruleset genérico
+# conhece. Rodam OFFLINE (não precisam do registry semgrep.dev), então são a parte do scan
+# que funciona em qualquer ambiente, inclusive sem rede.
+#
+# Os rulesets genéricos (p/javascript, p/xss, p/secrets…) vêm do registry e rodam só no CI —
+# ver .github/workflows/semgrep.yml e docs/semgrep.md.
+#
+# Ao ADICIONAR regra aqui: escreva o caso ruim E o bom, e rode
+# `./scripts/semgrep.sh --test` (o Semgrep valida os dois contra .semgrep/tests/).
+
+rules:
+  # ---------------------------------------------------------------------------------
+  # 1) Seam do ciclo de vida da view (corrida de PDF entre buscas)
+  # ---------------------------------------------------------------------------------
+  # CLAUDE.md: "NUNCA atribua currentView.pdfHTML direto — use o seam".
+  # Escrever em `currentView` DEPOIS de um await pode acertar a view ERRADA: se o usuário
+  # buscou "101", trocou pra "202" e só então a 1ª resposta voltou, o PDF sai da linha
+  # errada. O seam (beginGen/commitViewResult) carrega a view capturada + a geração, e
+  # descarta a escrita atrasada. As únicas escritas legítimas em `.pdfHTML` são as de
+  # dentro do próprio seam, que usam a view CAPTURADA (`view.pdfHTML`), não `currentView`.
+  - id: divat-pdfhtml-fora-do-seam
+    patterns:
+      - pattern: currentView.pdfHTML = $X
+    message: >-
+      Atribuição direta a `currentView.pdfHTML`. Use o seam do ciclo de vida da view:
+      capture `const view = currentView, gen = beginGen(view);` ANTES do seu await e
+      troque por `commitViewResult(view, gen, { pdfHTML: ... })` (ou pushDetail/popDetail
+      em painel lista+detalhe). Sem isso, uma resposta atrasada de uma busca anterior
+      sobrescreve o resultado da busca mais nova. Ver CLAUDE.md § Armadilhas.
+    languages: [javascript]
+    severity: ERROR
+
+  # ---------------------------------------------------------------------------------
+  # 2) Sinks que a CSP de produção bloqueia
+  # ---------------------------------------------------------------------------------
+  # A CSP publicada (vercel.json) é `script-src 'self'` — SEM 'unsafe-eval'. Qualquer um
+  # destes compila string em código e morre no navegador do usuário, mas passa liso em
+  # `node tests/check.js` (que só COMPILA o app.js, não o roda). É o tipo de erro que só
+  # aparece em produção; por isso é ERROR.
+  - id: divat-eval-quebra-csp
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: new Function(...)
+          - pattern: window.execScript(...)
+    message: >-
+      `eval`/`new Function` compilam string em código e são BLOQUEADOS pela CSP de
+      produção (script-src 'self', sem 'unsafe-eval' — ver vercel.json). O gate offline
+      não pega isso: ele só compila o app.js, não executa. Reescreva sem compilar string.
+    languages: [javascript]
+    severity: ERROR
+
+  # `setTimeout('...')` / `setInterval('...')` com STRING é eval disfarçado — mesma CSP,
+  # mesmo bloqueio. Com função (o uso normal no app.js) não casa.
+  - id: divat-timer-com-string-quebra-csp
+    patterns:
+      - pattern-either:
+          - pattern: setTimeout("...", ...)
+          - pattern: setInterval("...", ...)
+    message: >-
+      `setTimeout`/`setInterval` com STRING é avaliado como código e cai na mesma proibição
+      da CSP (script-src 'self', sem 'unsafe-eval'). Passe uma FUNÇÃO.
+    languages: [javascript]
+    severity: ERROR
+
+  # ---------------------------------------------------------------------------------
+  # 3) Terceiro externo em runtime
+  # ---------------------------------------------------------------------------------
+  # O portal não fala com NINGUÉM além do Supabase: supabase-js e fontes são vendorados,
+  # e a CSP (`default-src 'self'` + connect-src só do projeto Supabase) faria a requisição
+  # falhar. Pega URL de CDN escrita à mão no JS antes de virar bug de produção.
+  - id: divat-cdn-externo-em-runtime
+    patterns:
+      - pattern-regex: https?://(cdn\.jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com|fonts\.googleapis\.com|fonts\.gstatic\.com|esm\.sh|code\.jquery\.com)/
+    message: >-
+      Referência a CDN externo. O portal não usa terceiro em runtime (supabase-js e fontes
+      são VENDORADOS em vendor/) e a CSP de produção bloquearia a requisição. Vendore o
+      arquivo — ver CLAUDE.md § Arquitetura.
+    languages: [javascript, html]
+    severity: ERROR

@@ -1,0 +1,61 @@
+# Semgrep — análise estática (SAST) em todo push e PR. Ver docs/semgrep.md.
+#
+# É COMPLEMENTAR ao ci.yml, não substituto: o `node tests/check.js` valida sintaxe,
+# anti-drift e a lógica pura (o que o projeto FAZ); o Semgrep procura padrão perigoso
+# (o que o projeto NÃO PODE fazer). São gates separados de propósito — um pode ficar
+# vermelho sem esconder o resultado do outro.
+#
+# Duas metades, na ordem de quem depende de menos coisa:
+#   [1] regras locais (.semgrep/rules/) — offline, deterministas, escritas pra este portal.
+#       Rodam antes: se quebrarem, é problema NOSSO, e o log fica no topo.
+#   [2] rulesets públicos (p/javascript, p/xss, p/secrets, p/github-actions) — baixados de
+#       semgrep.dev. Precisam de rede; por isso não dá pra rodar essa metade no ambiente do
+#       agente Claude (saída bloqueada), só aqui e na máquina do dono.
+#
+# Sem upload SARIF / Code Scanning: exige GitHub Advanced Security, que este repo (privado,
+# plano free) não tem. O resultado fica no log do job — e o job falha se houver achado.
+#
+# Os `uses:` estão presos ao SHA (o `# v4` ao lado é só legenda) — ver docs/semgrep.md
+# § "Actions presas ao SHA". Foi a regra `github-actions-mutable-action-tag` deste próprio
+# workflow que apontou isso, nos 3 arquivos.
+#
+# Versão FIXA (mesma disciplina do supabase-js vendorado): atualizar o Semgrep é uma decisão,
+# não um efeito colateral de um push qualquer — uma versão nova pode trazer regra nova e
+# deixar vermelho um PR que não mexeu em nada disso. Pra subir: troque o número abaixo,
+# rode `./scripts/semgrep.sh --full` localmente e resolva os achados no mesmo commit.
+name: Semgrep
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Instalar Semgrep (versão fixa)
+        run: pip install semgrep==1.171.0
+
+      # --metrics=off em ambas: o repo é privado, nada de telemetria pra semgrep.dev.
+      # --error faz o job falhar quando há achado (sem isso o Semgrep sai 0 e o gate é decorativo).
+      - name: '[1] Regras locais do portal (offline)'
+        run: semgrep scan --config=.semgrep/rules --metrics=off --error .
+
+      - name: '[2] Rulesets públicos (registry)'
+        run: >-
+          semgrep scan
+          --config=p/javascript
+          --config=p/xss
+          --config=p/secrets
+          --config=p/github-actions
+          --metrics=off --error .
+
+      # Guarda das próprias regras: garante que cada regra de .semgrep/rules/ ainda pega o
+      # caso ruim E ignora o bom (.semgrep/tests/). Roda por último porque é meta — se falhar,
+      # o problema está na REGRA, não no código do portal.
+      - name: '[3] Testes das regras locais'
+        run: semgrep --test --metrics=off --config=.semgrep/rules .semgrep/tests
