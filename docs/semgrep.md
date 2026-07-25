@@ -62,10 +62,12 @@ primeiro, depois a venv local).
 ./scripts/semgrep.sh                   # só regras locais (offline) — o padrão
 ./scripts/semgrep.sh --full            # locais + rulesets do registry (precisa de rede)
 ./scripts/semgrep.sh --test            # testa as REGRAS contra .semgrep/tests/
-./scripts/semgrep.sh --baseline origin/main   # só o que a sua branch introduziu
+./scripts/semgrep.sh --baseline-commit=origin/main   # só o que a SUA branch introduziu
 ```
 
-Sai com código != 0 quando há achado (`--error`), então serve de gate em script.
+Sai com código != 0 quando há achado (`--error`), então serve de gate em script. Argumento
+extra é repassado ao `semgrep scan` — é assim que o `--baseline-commit` chega lá (ele **aborta**
+se houver mudança não-staged, então dê `git add` antes).
 
 **Antes de publicar**, o par completo é:
 
@@ -138,3 +140,32 @@ achados **no mesmo commit**.
 
 Não há upload SARIF / Code Scanning: exige GitHub Advanced Security, que este repo (privado,
 plano free) não tem. O resultado vive no log do job.
+
+## Actions presas ao SHA
+
+O primeiro scan com os rulesets públicos achou **7 ocorrências** de
+`github-actions-mutable-action-tag` — os três workflows usavam `actions/checkout@v4` e
+companhia. Tag e branch são **ponteiros móveis**: quem controla a action pode repontar `v4`
+para outro commit, e o seu CI passa a rodar código diferente sem que nada no repo mude. Foi
+assim nos incidentes do `trivy-action` e do `kics-github-action`.
+
+É o **mesmo raciocínio que tirou o jsDelivr `@2` da CSP** em 17/07/2026 (CHANGELOG): versão
+móvel de terceiro vira código nosso sem revisão. Então os três workflows foram presos ao
+**SHA de 40 caracteres**, com a tag ao lado como legenda:
+
+```yaml
+- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+```
+
+O comentário `# v4` é **só legenda** — quem manda é o SHA. Trocar o comentário não troca a
+versão.
+
+**Contrapartida, e ela é real:** SHA preso não recebe correção sozinho. Não há Dependabot
+neste repo, então a atualização é **manual e consciente** — a mesma disciplina do supabase-js
+vendorado e da versão do próprio Semgrep. Para subir uma action:
+
+```sh
+git ls-remote --tags https://github.com/actions/checkout | grep 'refs/tags/v4$'
+```
+
+Troque o SHA **e** a legenda no mesmo commit. Vale revisar isso junto do backup mensal.

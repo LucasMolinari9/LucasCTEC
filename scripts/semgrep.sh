@@ -12,7 +12,9 @@
 #   ./scripts/semgrep.sh            # só regras locais (offline) — o padrão
 #   ./scripts/semgrep.sh --full     # locais + rulesets do registry (precisa de rede)
 #   ./scripts/semgrep.sh --test     # testa as REGRAS contra .semgrep/tests/
-#   ./scripts/semgrep.sh --baseline origin/main   # só o que a sua branch introduziu
+#   ./scripts/semgrep.sh --baseline-commit=origin/main   # só o que a SUA branch introduziu
+#
+# Argumento extra vai direto pro `semgrep scan` (é o caso do --baseline-commit acima).
 #
 # Sai != 0 se houver achado (--error), pra servir de gate.
 #

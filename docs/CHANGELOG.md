@@ -220,3 +220,14 @@ Runbook completo: **`docs/semgrep.md`**.
   a CSP não se aplica) e o alvo é um literal puro recortado do `app.js`.
 - `node tests/check.js` verde (331/331). Sem mudança de schema/Realtime — nada do portal servido
   mudou (só o teste ganhou um comentário).
+
+### Adendo — actions presas ao SHA (mesmo dia)
+
+O primeiro CI com os rulesets públicos veio **vermelho**: `github-actions-mutable-action-tag`,
+7 ocorrências nos 3 workflows (`actions/checkout@v4` e cia.). Tag é ponteiro **móvel** — quem
+controla a action pode repontar `v4` e o CI passa a rodar outro código sem nada mudar no repo
+(foi o que houve nos incidentes do `trivy-action` e do `kics-github-action`). É o **mesmo
+raciocínio que tirou o jsDelivr `@2`** em 17/07. Os 7 `uses:` foram presos ao SHA de 40
+caracteres, com a tag ao lado só como legenda. Contrapartida assumida: sem Dependabot, a
+atualização vira **manual** — o procedimento está em `docs/semgrep.md` § "Actions presas ao
+SHA". A metade offline do scan já tinha passado; foi só essa regra.
