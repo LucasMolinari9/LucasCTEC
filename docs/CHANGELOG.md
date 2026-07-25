@@ -190,3 +190,33 @@ direto no Postgres, prova mais forte que um teste de caixa-preta.
   contrato manual do `check_realtime.mjs`, porque `tests/check.js` é offline e sem dependências
   de propósito. Verificada vermelha no código anterior e verde depois do conserto.
 - `node tests/check.js` verde (331/331). Sem mudança de schema/Realtime — só frontend.
+
+## 25/07/2026 — Semgrep (análise estática) instalado
+
+Runbook completo: **`docs/semgrep.md`**.
+
+- **Por que:** o `tests/check.js` só **compila** o `app.js`, nunca o executa — então um
+  `eval`/`new Function` passa verde por ele e só morre no navegador do usuário, onde a CSP
+  (`script-src 'self'`, sem `'unsafe-eval'`) bloqueia. Essa faixa — "padrão que o gate atual
+  não consegue ver" — é o que o Semgrep cobre. Os dois gates ficam **separados de propósito**
+  (`ci.yml` × `semgrep.yml`): o `check.js` é Node puro e sem dependências, e vale manter assim.
+- **4 regras locais** em `.semgrep/rules/divat.yml`, escritas para invariantes já documentados
+  no `CLAUDE.md` que nenhum ruleset genérico conhece: `currentView.pdfHTML` atribuído fora do
+  seam (a corrida que faz o PDF sair da linha errada), `eval`/`new Function`, `setTimeout` com
+  string, e CDN externo em runtime (tudo é vendorado; a CSP bloquearia).
+- **As regras têm teste** (`.semgrep/tests/divat.js`, `./scripts/semgrep.sh --test`): cada uma
+  com o caso ruim **e** o bom, então falha tanto se parar de pegar quanto se virar falso
+  positivo. 4/4 verdes.
+- **`scripts/semgrep.sh`** com o padrão **offline** (só regras locais) e `--full` para somar os
+  rulesets do registry (`p/javascript`, `p/xss`, `p/secrets`, `p/github-actions`). A separação
+  não é estética: `semgrep.dev` é inalcançável do ambiente do agente Claude (mesma política de
+  rede que barra o `vercel` CLI), então o modo que roda **em qualquer lugar** é o padrão.
+- **`.github/workflows/semgrep.yml`** em push e PR, com a versão **fixa** (`semgrep==1.171.0`),
+  mesma disciplina do supabase-js vendorado — versão nova traz regra nova e deixaria vermelho
+  um PR que não mexeu em nada disso. Sem SARIF/Code Scanning (exige Advanced Security, que o
+  repo privado no plano free não tem).
+- **Repo limpo:** 0 achados nas regras locais. A única exceção é um `nosemgrep` **justificado**
+  em `tests/realtime.test.js` — o `new Function` ali roda no Node (não é servido ao navegador,
+  a CSP não se aplica) e o alvo é um literal puro recortado do `app.js`.
+- `node tests/check.js` verde (331/331). Sem mudança de schema/Realtime — nada do portal servido
+  mudou (só o teste ganhou um comentário).

@@ -15,6 +15,12 @@ divat_security_snapshot_*.sql
 node_modules/
 npm-debug.log*
 
+# === Semgrep (análise estática; binário instalado à parte, ver docs/semgrep.md) ===
+# As REGRAS (.semgrep/) são versionadas; o binário e o cache, não.
+.venv-semgrep/
+.semgrep_logs/
+.semgrep/cache/
+
 # === Lixo de SO / editor ===
 .DS_Store
 Thumbs.db
