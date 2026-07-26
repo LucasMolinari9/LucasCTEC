@@ -310,3 +310,54 @@ está provado, e o falso verde clássico é o job que passa por não ter rodado 
 
 **Nada servido ao usuário mudou** (só CI e documentação) — sem deploy e sem bump do carimbo de
 versão. A fatia 1 (asserções de **conteúdo** por view) segue adiada por decisão do dono.
+
+### Fecho do dia 26/07 — o que o dia inteiro foi (e o que ficou decidido)
+
+As duas entradas acima são o **quê**. Isto é o **porquê**, registrado aqui porque o documento
+onde ele morava (`docs/handoff-fatia2-ci.md`) era transitório de propósito e foi apagado ao fim
+da fatia 2 — sem isto, a decisão se perderia junto com ele.
+
+**De onde veio.** O dono levantou um medo: *"tenho medo do meu projeto estar todo bonito por
+fora e podre por dentro, e eu não sei como resolver"*. A conversa concluiu que o medo era
+**epistêmico** — falta de visibilidade — e não estrutural: não havia sinal de podridão, havia
+ausência de instrumento capaz de dizer que não há. E a consequência disso é que **laudo não
+resolve pergunta contínua**: uma auditoria responde "hoje está de pé" e envelhece no dia
+seguinte. Só instrumento — que roda sozinho, de novo, a cada mudança — responde a pergunta na
+forma em que ela foi feita.
+
+**O plano, em três fatias.**
+
+| Fatia | O que | Estado ao fim do dia |
+|---|---|---|
+| **0** | Laço de fumaça sobre as 23 views (`check_views.mjs` + `rig.mjs`) | ✅ `73f0d37` |
+| **2** | Pôr o laço no CI, rodando sozinho a cada push (`views.yml`) | ✅ `c7b6177` (PR #60) |
+| 1 | Asserções de **conteúdo** por view ("está certo?", não só "está de pé?") | **adiada** — ver o gatilho abaixo |
+
+A ordem (0 → 2 → 1) não foi acidente: primeiro o instrumento, depois a automação que garante
+que ele roda, e só então — se fizer falta — o refinamento do que ele mede.
+
+**Por que a fatia 1 ficou adiada, e qual é o gatilho para retomá-la.** O laço rodou 23/23 sem
+achar nada: não existe, hoje, **um caso concreto** de dado errado que passou despercebido numa
+tela. Escrever 23 asserções de conteúdo sem esse caso é adivinhar o que vai quebrar — e
+asserção adivinhada é a que quebra por mudança legítima e treina todo mundo a ignorar o
+vermelho. **Gatilho:** no dia em que aparecer na mão um dado errado numa view, escreva a
+asserção *daquela* view, nascida do erro real. Uma de cada vez, pagas pelo defeito que as
+justificou.
+
+**Estado do CI ao fim do dia — três workflows, separados de propósito** (um vermelho não
+esconde o resultado do outro):
+
+| Workflow | O que pergunta | Custo |
+|---|---|---|
+| `ci.yml` | "faz o que deve?" — sintaxe, anti-drift, lógica pura (Node puro, sem dependências) | ~14 s |
+| `views.yml` | "alguma tela explode ou fica em branco?" — 23 views + abas, em navegador | ~46 s |
+| `semgrep.yml` | "contém padrão proibido?" — regras locais + rulesets públicos | ~34 s |
+
+**Pendências abertas encontradas no caminho** (nenhuma urgente, nenhuma bloqueia nada):
+1. **Node 20 depreciado nas actions.** O runner avisa que `actions/checkout` e
+   `actions/setup-node` têm como alvo o Node 20 e estão sendo forçadas para o Node 24 — vale
+   para os **três** workflows, não só o novo. Nada quebrou; um dia vira erro. Consertar = subir
+   a versão das actions **e o SHA junto** (`docs/semgrep.md` § "Actions presas ao SHA").
+2. **Cache do Chromium no `views.yml`.** Ficou de fora porque não havia como resolver o SHA do
+   `actions/cache` no ambiente onde o workflow foi escrito, e SHA inventado é pior que cache
+   nenhum. Economizaria ~20 s num job de ~46 s — cosmético.
