@@ -1,0 +1,67 @@
+# Views (navegador) — laço de fumaça sobre as 23 views + regressão das abas, em todo push e PR.
+#
+# Por que em ARQUIVO/JOB SEPARADO e não dentro do ci.yml:
+# o `ci.yml` roda `node tests/check.js` — Node puro, sem dependências, segundos. Essa leveza é
+# uma propriedade que o repo valoriza (é o gate que dá o veredito rápido). O `check_views.mjs`
+# precisa de Playwright + Chromium (~1 min só de instalação, mais 1–2 min de navegação): pendurar
+# isso no job `check` transformaria o gate leve num gate lento. Aqui rodam ao lado, em paralelo,
+# e um pode ficar vermelho sem esconder o resultado do outro — mesma disciplina do semgrep.yml.
+#
+# O que cada script responde:
+#   scripts/check_views.mjs — "existe alguma tela que EXPLODE ou fica em branco?" Abre as 23
+#     views por deep link com o PostgREST stubado e falha se alguma lançar erro, ficar presa no
+#     spinner, pintar só a moldura ou não achar nada. É a rede sob a seção MODAL / SISTEMA DE
+#     VIEWS (~62% do app.js), que o tests/check.js não cobre — ele só testa a lógica pura.
+#   scripts/check_abas.mjs — regressão das abas do modal / seletor de documentos.
+# Os dois usam a mesma bancada (scripts/lib/rig.mjs) e o mesmo Chromium: com o navegador já
+# instalado no job, rodar o segundo sai quase de graça.
+#
+# Nenhum dos dois fala com o Supabase: toda resposta do PostgREST vem das fixtures do rig.
+# O job é offline depois da instalação — não precisa de segredo nem de rede pro banco.
+#
+# Versão do Playwright FIXA (mesma disciplina do Semgrep e do supabase-js vendorado): subir é
+# uma decisão, não efeito colateral de um push qualquer. Pra subir, troque o número abaixo e
+# rode os dois scripts localmente com a versão nova no mesmo commit.
+#
+# Sem cache do Chromium (actions/cache) de propósito: os `uses:` do repo são presos ao SHA de
+# 40 caracteres (ver docs/semgrep.md § "Actions presas ao SHA") e não havia como resolver o SHA
+# do actions/cache no ambiente onde este workflow foi escrito. `playwright install` leva ~30 s
+# num job que já leva ~2 min — se um dia incomodar, some o cache com o SHA conferido à mão.
+#
+# Os `uses:` estão presos ao SHA (o `# v4` ao lado é só legenda) — ver docs/semgrep.md
+# § "Actions presas ao SHA".
+name: Views
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  views:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+
+      # O repo é zero-build: não há package.json, e o rig.mjs procura o Playwright no
+      # `npm root -g`. Por isso a instalação é GLOBAL, igual à receita do cabeçalho do rig.
+      # PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD evita que o postinstall baixe os TRÊS navegadores;
+      # o passo seguinte baixa só o Chromium, que é o único que os scripts usam.
+      - name: Instalar Playwright (versão fixa)
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: npm i -g playwright@1.56.1
+
+      # `--with-deps` instala as bibliotecas de sistema do Chromium — sem elas o navegador
+      # nem sobe no runner do GitHub.
+      - name: Instalar Chromium (+ dependências de sistema)
+        run: playwright install --with-deps chromium
+
+      - name: Laço de fumaça das 23 views
+        run: node scripts/check_views.mjs
+
+      - name: Regressão das abas do modal
+        run: node scripts/check_abas.mjs
