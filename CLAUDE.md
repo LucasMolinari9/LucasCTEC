@@ -182,6 +182,16 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    de rede** (bloqueada no ambiente do Claude — igual ao `vercel` CLI; lá rode sem `--full`).
    O CI (`.github/workflows/semgrep.yml`) roda as duas metades. Runbook e como escrever regra
    nova: **`docs/semgrep.md`**.
+2c. **Deriva docs×banco — `node scripts/check_deriva.mjs`** (precisa de rede; irmão do
+   `check_realtime.mjs`, mesma anon key do `app.js`). Compara o OpenAPI de `anon` do PostgREST
+   com o que o repo afirma: toda tabela citada no `CLAUDE.md`/`docs/schema.md` existe no banco;
+   toda coluna do diagrama mermaid do `docs/schema.md` existe na tabela real; toda RPC chamada
+   no `app.js` existe e responde a `anon`; toda RPC exposta está documentada no `schema.md`.
+   Nasceu da auditoria de 26/07/2026 (8 divergências, todas de fato copiado à mão e nunca mais
+   conferido). Roda no CI (workflow `deriva.yml`): **semanal + sob demanda + push/PR** que
+   toque esses arquivos — o cron existe porque deriva também nasce de mudança NO BANCO, que
+   não gera push. Do ambiente do Claude não roda (rede até o Supabase bloqueada); é para a
+   máquina do dono e o CI. Fica **fora** do `tests/check.js` (contrato dele: offline).
 3. Merge na `main` → republica sozinho (ou MCP `deploy_to_vercel`). As telas dos usuários se
    atualizam via detector de versão. Bumpe o carimbo se quiser confirmar a chegada.
 4. Mudanças de **dados** NÃO exigem deploy — o site lê o Supabase ao vivo.
