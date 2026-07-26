@@ -10,7 +10,7 @@ empresas, relatórios). Os dados são **alimentados pelo dono direto no Supabase
 exibe e **atualiza ao vivo** (Realtime).
 
 ## Arquitetura (importante)
-- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (todo o JS, ~2,3k
+- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (todo o JS, ~3,2k
   linhas, num IIFE)** — zero-build: sem framework, sem `package.json`, `<script src>` clássico no
   fim do `<body>`. Todo JS novo vai no `app.js` (o `tests/check.js` **falha** se aparecer
   `<script>` inline no `index.html` — a CSP publica `script-src 'self'` e bloquearia) e todo CSS
@@ -66,8 +66,8 @@ exibe e **atualiza ao vivo** (Realtime).
 ## Tabelas → onde aparecem (cards)
 - `tabela_vista_teste` (cadastro de linhas) → busca, Folha de Rosto, Ligações por Empresa/
   Nome/Número, Empresas Regulares, Relatórios.
-- `itinerario_teste` (+ `cod_ibge_teste`) → Itinerários, Ligações por Logradouro/Município.
-- `qh_intervalo_teste` / `qh_predeterminado_teste` (+ `tab_origem_teste`) → Quadro de
+- `itinerario_teste` (+ `municipio_teste`) → Itinerários, Ligações por Logradouro/Município.
+- `qh_intervalo_teste` / `qh_predeterminado_teste` (+ `origem_teste`) → Quadro de
   Horários, Ligações por Terminais.
 - `qh_teste` (frota_*) → Frota, Estrutura.
 - `tarifa_atual_teste` → Tarifas, Seções por Ligação/Empresa.
