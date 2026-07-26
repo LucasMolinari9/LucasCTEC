@@ -311,6 +311,7 @@ CREATE OR REPLACE FUNCTION public.divat_busca_logradouro(termo text, p_ibge inte
  RETURNS TABLE(codlinha character varying)
  LANGUAGE sql
  STABLE PARALLEL SAFE
+ SET search_path TO 'pg_catalog', 'public'
 AS $function$
   select distinct i.codlinha
   from public.itinerario_teste i
