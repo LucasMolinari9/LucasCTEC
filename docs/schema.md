@@ -117,7 +117,7 @@ erDiagram
 | `evento_empresa_teste` | `row_id` (`id`) | `evento_teste` | `id` | convenção — descrição do evento de empresa (`getEvLookups`→`evLookups.emp`) |
 | `evento_linha_teste` | `row_id` (`id`) | `evento_teste` | `id` | convenção — descrição do evento de linha (`getEvLookups`→`evLookups.lin`) |
 | `localidades_teste` | `ordem_importacao` | — (lista de referência) | texto | convenção — "Linhas por Localidade e Município" |
-| `portaria_teste` | `id` | — (documento independente) | — | legislação/portarias |
+| `portaria_teste` | `id` | — (documento independente) | — | legislação/portarias · tem o trigger `trg_vigor_auto` (ver "Funções e trigger") |
 
 ## ⚠️ Armadilhas de nomenclatura (não confundir)
 
@@ -144,6 +144,25 @@ e sem grant para `anon`/`authenticated` → invisíveis pela API pública, de pr
 |---|---|---|---|
 | `evento_dados` | `evento_textos` | `id` | → `evento_teste` |
 | `portaria_data` | `portaria_texto_teste` | `id` | → `portaria_teste` |
+
+## Funções e trigger (schema `public`)
+
+O schema tem **0 views**, **6 funções** e **1 trigger** (snapshot vivo 26/07/2026; DDL
+completo em `docs/backup_schema.sql`, seção "FUNÇÕES + TRIGGER"). Todas as funções são
+`SECURITY INVOKER`. Duas são **RPCs chamadas pelo front** (`app.js`, via `rest/v1/rpc/…`);
+o resto é interno/diagnóstico.
+
+| Função | Papel | Quem chama |
+|---|---|---|
+| `divat_busca_logradouro(termo, p_ibge?)` | busca linhas por logradouro (tipo+nome, sem acento, trigram; `p_ibge` filtra por município) | **front via RPC** — Ligações por Logradouro |
+| `divat_linhas_regiao(p_regiao, p_modo)` | linhas por região do município de origem (`dentro`/`origem`) | **front via RPC** — Linhas por Região e Município |
+| `divat_data_quality()` | diagnóstico de qualidade pós-ETL (órfãos referenciais, U+FFFD) | ninguém no repo hoje — o runner semanal é a issue #63 |
+| `f_unaccent(text)` | wrapper IMMUTABLE do `unaccent` | `divat_busca_logradouro` + índice de expressão `trgm_itin_logr_tipo_nome_norm` |
+| `fn_vigor_auto()` | zera `vigor` quando a portaria vira `REVOGADA` | trigger `trg_vigor_auto` |
+| `realtime_tables()` | lista as tabelas da publicação `supabase_realtime` | `scripts/check_realtime.mjs` (como `anon`) |
+
+**Trigger:** `trg_vigor_auto` em `portaria_teste` — `BEFORE INSERT OR UPDATE`, executa
+`fn_vigor_auto()`.
 
 ## Contagem de linhas (referência — snapshot 15/07/2026)
 
