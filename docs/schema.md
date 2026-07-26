@@ -2,14 +2,14 @@
 
 Mapa **relacional** do banco: como as tabelas se ligam entre si, por qual chave, e se a
 ligação é uma **FK real** (garantida pelo banco) ou uma **convenção** (join feito no código
-do `index.html`, sem constraint no banco). Complementa a tabela *"Tabelas → onde aparecem
+do `app.js`, sem constraint no banco). Complementa a tabela *"Tabelas → onde aparecem
 (cards)"* do `CLAUDE.md`, que é o mapa **funcional** (qual tela lê qual tabela).
 
 > **Por que este arquivo existe:** quase todas as ligações deste banco são **implícitas** —
 > só **uma FK é declarada** (`fk_tarifa_linha`). O resto do "esquema" vive espalhado dentro
-> dos `loader()` do `index.html`. Este doc torna isso explícito, para reconstrução de dados,
-> conferência e para qualquer sessão futura (humana ou IA) entender os joins sem reler 1.800
-> linhas de JS. Gerado do schema **ao vivo** (Supabase) + os joins reais do frontend.
+> dos `loader()` do `app.js`. Este doc torna isso explícito, para reconstrução de dados,
+> conferência e para qualquer sessão futura (humana ou IA) entender os joins sem reler ~3,2
+> mil linhas de JS. Gerado do schema **ao vivo** (Supabase) + os joins reais do frontend.
 
 ## Visão geral — hub-and-spoke
 
@@ -94,14 +94,14 @@ erDiagram
 | `tabela_vista_teste` | (`codlinha`, `codempresa`) | Cadastro de linhas. **Hub** — origem do `codlinha` que amarra tudo. |
 
 ### Fatos (ligam ao hub por `codlinha`)
-| Tabela | Chave de join → hub | Tipo | Onde no código (`index.html`) |
+| Tabela | Chave de join → hub | Tipo | Onde no código (`app.js`) |
 |---|---|---|---|
-| `tarifa_atual_teste` | `codlinha` (+`codempresa`) | **FK REAL** `fk_tarifa_linha` | `renderTarifas`, `folhaDeRosto`, `renderQuadro` |
+| `tarifa_atual_teste` | `codlinha` (+`codempresa`) | **FK REAL** `fk_tarifa_linha` | `renderTarifas`, `renderFolhaRosto`, `renderLinhaQuadro` |
 | `itinerario_teste` | `codlinha` | convenção | `renderItinerarios` |
-| `qh_intervalo_teste` | `codlinha` | convenção | `fetchQHByLines`, `renderQuadro` |
-| `qh_predeterminado_teste` | `codlinha` | convenção | `fetchQHByLines`, `renderQuadro` |
+| `qh_intervalo_teste` | `codlinha` | convenção | `fetchQHByLines`, `renderLinhaQuadro` |
+| `qh_predeterminado_teste` | `codlinha` | convenção | `fetchQHByLines`, `renderLinhaQuadro` |
 | `qh_teste` (frota) | `codlinha` | convenção | `renderFrota`, folha de rosto |
-| `evento_teste` | `codlinha` | convenção | `renderHistorico`, pesquisa de evento |
+| `evento_teste` | `codlinha` | convenção | `renderLineHistory`, pesquisa de evento |
 
 > **`fk_tarifa_linha` é composta e "cruzada":** a constraint declara os dois pares
 > (`codlinha`↔`codlinha` e `codempresa`↔`codempresa`) contra a PK `(codlinha, codempresa)`
@@ -111,11 +111,11 @@ erDiagram
 ### Dimensões / lookups
 | Tabela | PK | Ligada de | Por | Tipo |
 |---|---|---|---|---|
-| `codempresa_teste` | `id`; `codempresa` único **por convenção do ETL** (índice btree não-UNIQUE `idx_codempresa_codempresa` — o banco NÃO garante) | `tabela_vista_teste`, `qh_teste`, `evento_teste`, `itinerario_teste` | `codempresa` | convenção — resolve nome da empresa (`empNome`/`empresaMap`) |
+| `codempresa_teste` | `id`; `codempresa` único **por convenção do ETL** (índice btree não-UNIQUE `idx_codempresa_codempresa` — o banco NÃO garante) | `tabela_vista_teste`, `qh_teste`, `evento_teste`, `itinerario_teste` | `codempresa` | convenção — resolve nome da empresa (`empNome`/`getEmpresas`) |
 | `origem_teste` | `cod_origem` | `qh_intervalo_teste` (`cod_origem`), `qh_predeterminado_teste` (`cod_origem`) | `cod_origem` | convenção — nome do terminal/origem (`origemMap`) |
 | `municipio_teste` | `cod_ibge` | `itinerario_teste` (`cod_municipio_origem`) | `cod_ibge` | convenção — nome do município (`ibgeMap`/`getIbge`) |
-| `evento_empresa_teste` | `row_id` (`id`) | `evento_teste` | `id` | convenção — descrição do evento de empresa (`evEmpMap`) |
-| `evento_linha_teste` | `row_id` (`id`) | `evento_teste` | `id` | convenção — descrição do evento de linha (`evLinMap`) |
+| `evento_empresa_teste` | `row_id` (`id`) | `evento_teste` | `id` | convenção — descrição do evento de empresa (`getEvLookups`→`evLookups.emp`) |
+| `evento_linha_teste` | `row_id` (`id`) | `evento_teste` | `id` | convenção — descrição do evento de linha (`getEvLookups`→`evLookups.lin`) |
 | `localidades_teste` | `ordem_importacao` | — (lista de referência) | texto | convenção — "Linhas por Localidade e Município" |
 | `portaria_teste` | `id` | — (documento independente) | — | legislação/portarias |
 
@@ -128,7 +128,7 @@ erDiagram
   - Em `itinerario_teste` → a coluna que antes se chamava `cod_origem` foi **renomeada** para
     **`cod_municipio_origem`** (tipo `int`): **NÃO é terminal** — o código faz
     `ibge[r.cod_municipio_origem]`, ou seja, é um **código de município (IBGE)** → `municipio_teste`
-    (ver `renderItinerarios` / `classifyMunLines` no `index.html`).
+    (ver `renderItinerarios` / `classifyMunLines` no `app.js`).
 - **`codlinha` e `codempresa` são strings** (`varchar`), não inteiros — comparar/encodar
   como texto nas queries.
 - **`nome_origem` vem denormalizado e às vezes trocado** nas tabelas de QH; o código dá
