@@ -76,7 +76,9 @@ próprio (`.github/workflows/views.yml`) em vez de um segundo job no `ci.yml`, t
 - **Confira o resultado real no GitHub Actions** depois do push — CI que ninguém olhou verde
   não está provado. Um workflow que passa por não ter rodado nada é o falso verde clássico:
   confirme nos logs que as 23 views apareceram.
-- Branch: `claude/ask-matt-toyp43` já existe e carrega a fatia 0. Não abra PR sem pedirem.
+- **Branch: parta da `main`** e abra uma branch nova. A fatia 0 já foi mergeada na `main` — não
+  empilhe commits sobre a `claude/ask-matt-toyp43`, que é história já mergeada. Não abra PR sem
+  pedirem.
 
 ### Pendência herdada (não é bloqueio)
 
