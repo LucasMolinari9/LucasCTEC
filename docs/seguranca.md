@@ -39,9 +39,19 @@ consistentemente. **Zero achados de segredo exposto.**
 
 **SQL injection / blind SQL injection:** sem superfície. O front nunca monta SQL — manda filtros
 para o PostgREST, que trata a entrada como **valor de parâmetro** (equivalente a prepared
-statement). Camada extra: `ilikeTerm` (`app.js`) remove `( ) *` e faz URL-encode. A única função
-SQL pública (`divat_busca_logradouro`) é `SECURITY INVOKER`, parâmetro tipado, `search_path`
-fixo. Confirmado pelo teste da seção 4.
+statement). Camada extra: `ilikeTerm` (`app.js`) remove `( ) *` e faz URL-encode. As funções SQL
+que o `anon` consegue executar (estado conferido no catálogo em 26/07/2026) são todas
+`SECURITY INVOKER`, com parâmetros tipados e `search_path` fixado, e cada uma tem motivo:
+`divat_busca_logradouro` e `divat_linhas_regiao` (as 2 RPCs que o front chama),
+`f_unaccent` (chamada por dentro da busca, que roda COMO `anon`, e usada no índice de
+expressão), `realtime_tables` (o `scripts/check_realtime.mjs` roda como `anon`) e
+`divat_data_quality` (o runner semanal planejado na issue #63 rodará como `anon`).
+Sobra um EXECUTE inútil de `anon` em `fn_vigor_auto` (função de trigger; herdou o default
+PUBLIC do Postgres) — inócuo (`anon` não escreve em `portaria_teste`, então o trigger nunca
+roda como ele), com REVOKE pendente: rodar o workflow **Backup** primeiro (regra do
+`CLAUDE.md` para REVOKE) e então
+`REVOKE ALL ON FUNCTION public.fn_vigor_auto() FROM PUBLIC, anon, authenticated;`.
+Confirmado pelo teste da seção 4.
 
 ## 4. Teste de invasão executado (evidência datada — 23/07/2026)
 Ataque real rodado **como a role `anon`** (a mesma identidade de qualquer visitante/atacante).
