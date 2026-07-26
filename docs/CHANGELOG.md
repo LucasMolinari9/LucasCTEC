@@ -269,4 +269,44 @@ busca) contava como "pane não-vazio". Daí a medição virar o **corpo** do doc
 
 **Escopo deliberadamente de fora:** conferir se o conteúdo está **certo** (colunas, totais) —
 isso é asserção por view. E o script fica **fora do CI**, como o `check_abas.mjs` e o
-`check_realtime.mjs`: exige Playwright, que o `check.js` não tem.
+`check_realtime.mjs`: exige Playwright, que o `check.js` não tem. *(Essa última parte durou um
+dia — ver a entrada seguinte.)*
+
+## 26/07/2026 — O laço de fumaça no CI (`views.yml`)
+
+**Motivação.** A fatia 0 (acima) deixou o `check_views.mjs` pronto, mas **manual**: valia
+enquanto alguém lembrasse de rodá-lo antes do push. Checagem que depende de memória humana é
+checagem que um dia não roda — e o buraco que ela cobre (~62% do `app.js`, todo o render) é
+grande demais para ficar nessa dependência.
+
+**O que entrou.** **`.github/workflows/views.yml`**, em todo push e PR: instala o Playwright
+(**versão fixa**, `playwright@1.56.1`) + Chromium e roda **`check_views.mjs`** e
+**`check_abas.mjs`** — os dois usam o mesmo rig e o mesmo navegador, então o segundo sai quase
+de graça depois de instalado.
+
+**Job/arquivo separado, decisão de projeto.** O `ci.yml` roda `node tests/check.js` — Node puro,
+sem dependências, segundos; essa leveza é uma propriedade que o repo valoriza e está escrita no
+cabeçalho do próprio workflow. Playwright + Chromium custam ~1 min só de instalação. Pendurar
+isso no job `check` transformaria o gate rápido num gate lento, então o navegador roda **ao
+lado** — mesma disciplina do `semgrep.yml`, e um vermelho não esconde o resultado do outro. São
+três workflows hoje: `ci.yml` (leve), `views.yml` (navegador), `semgrep.yml` (estático).
+
+**Detalhes com motivo:**
+- **Versão do Playwright fixa**, como o Semgrep e o supabase-js vendorado: subir é uma decisão,
+  não efeito colateral de um push qualquer.
+- **`PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`** na instalação global, e só então
+  `playwright install --with-deps chromium` — evita baixar os três navegadores quando os
+  scripts usam um. Sem `--with-deps` o Chromium não sobe no runner do GitHub.
+- **Instalação global** (`npm i -g`) porque o repo é zero-build (não há `package.json`) e o
+  `rig.mjs` procura o Playwright no `npm root -g`.
+- **Sem cache do Chromium:** os `uses:` do repo são presos ao **SHA de 40 caracteres** (regra de
+  26/07, adendo acima) e não havia como resolver o SHA do `actions/cache` no ambiente onde o
+  workflow foi escrito — inventar SHA seria pior que não cachear. `playwright install` leva
+  ~30 s num job de ~2 min; se um dia incomodar, some o cache com o SHA conferido à mão.
+
+**Verificação.** Gate local verde antes do commit (`check.js` 331/331, 23/23 views, abas OK) e
+**resultado real conferido no GitHub Actions** depois do push — workflow que ninguém olhou não
+está provado, e o falso verde clássico é o job que passa por não ter rodado nada.
+
+**Nada servido ao usuário mudou** (só CI e documentação) — sem deploy e sem bump do carimbo de
+versão. A fatia 1 (asserções de **conteúdo** por view) segue adiada por decisão do dono.

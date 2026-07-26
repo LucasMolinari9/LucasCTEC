@@ -142,13 +142,16 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    armadilhas antes de escrever SQL/JS. Ajuste isolado de CSS/texto/UI pula direto pro passo 1.
 1. Edite `app.js` (JS) e/ou `index.html` (HTML/CSS). **Trabalhe numa branch**, não direto na
    `main`: push na branch → o Vercel gera **preview deploy** → confira no preview → merge na
-   `main` (que é a publicada). O CI (`.github/workflows/ci.yml`) roda o gate em todo push.
+   `main` (que é a publicada). O CI roda **três workflows** em todo push/PR, separados de
+   propósito (um vermelho não esconde o outro): `ci.yml` (gate leve — `tests/check.js`),
+   `views.yml` (navegador — `check_views.mjs` + `check_abas.mjs`) e `semgrep.yml` (estático).
 2. **Antes de publicar, rode `node tests/check.js`** — valida a sintaxe do `app.js`, garante que
    não voltou `<script>` inline no `index.html`, confere as cópias de teste (anti-drift) e roda
    todos os testes. Só publique tudo verde. (Ao alterar função com cópia em `tests/*.harness.js`,
    atualize a cópia.) **Ao mexer nas abas do modal / no seletor de documentos**, rode também
    `node scripts/check_abas.mjs` — checagem de regressão em navegador headless (Playwright, com
-   o PostgREST stubado); fica fora do `check.js` porque este é offline e sem dependências.
+   o PostgREST stubado); fica fora do `check.js` porque este é offline e sem dependências, mas
+   **roda no CI** junto com o `check_views.mjs` (workflow `views.yml`).
 2a. **Ao mexer em qualquer render/loader, rode `node scripts/check_views.mjs`** — abre as **23
    views** num navegador headless e falha se alguma explodir (`errorBox`), ficar presa no
    spinner, pintar só a moldura ou não achar nada com um termo que casa as fixtures. É a rede
@@ -162,6 +165,10 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    coluna divergente chega `undefined` no render e a tela fica vazia *sem erro* — falso verde.
    Caminho de dado novo por **RPC** (`rpc/…`) precisa de stub em `serveRpc`, senão a view
    responde vazio e o laço acusa defeito que é da bancada, não do portal.
+   **No CI:** o workflow **`.github/workflows/views.yml`** roda os dois scripts de navegador em
+   todo push/PR (job separado do `check`, que continua leve e sem dependências; Playwright em
+   **versão fixa** — subir é decisão, não efeito colateral). Rodar localmente antes do push
+   continua valendo: dá o veredito em ~40 s, sem esperar o runner instalar o Chromium.
 2b. **Análise estática — `./scripts/semgrep.sh`** (Semgrep). Complementa o `check.js`, não
    substitui: o `check.js` pergunta "faz o que deve?" (compila o `app.js` e roda a lógica
    pura), o Semgrep pergunta "contém padrão proibido?". Pega o que só quebraria no navegador
