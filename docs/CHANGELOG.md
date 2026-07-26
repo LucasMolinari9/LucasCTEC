@@ -361,3 +361,54 @@ esconde o resultado do outro):
 2. **Cache do Chromium no `views.yml`.** Ficou de fora porque não havia como resolver o SHA do
    `actions/cache` no ambiente onde o workflow foi escrito, e SHA inventado é pior que cache
    nenhum. Economizaria ~20 s num job de ~46 s — cosmético.
+
+## 26/07/2026 — Auditoria docs×banco: estoque corrigido, guarda instalada
+
+Uma auditoria contra o catálogo do Postgres do projeto vivo achou **8 divergências** entre o
+que os docs afirmam e o que o banco é — todas com a mesma origem: um fato copiado à mão para
+`CLAUDE.md`/`docs/schema.md`/`docs/seguranca.md`/`docs/backup_schema.sql` e nunca mais
+conferido. Os tickets (`.scratch/doc-drift/`) foram implementados em sequência:
+
+- **Docs (tickets 01–04):** `CLAUDE.md` citava duas tabelas que não existem
+  (os nomes certos são `municipio_teste` e `origem_teste`); `schema.md` afirmava unicidade de
+  `codempresa` que o banco não garante (índice btree comum — unicidade é convenção do ETL),
+  apontava o código para o `index.html` (vive no `app.js` desde sempre, com nomes de função
+  que também tinham driftado) e não documentava **nenhuma** das 6 funções nem o trigger
+  `trg_vigor_auto` — ganhou a seção "Funções e trigger".
+- **Banco (ticket 05):** `divat_busca_logradouro` era a única função sem `SET search_path`
+  (o doc de segurança já dizia "fixo" — agora é verdade). `ALTER FUNCTION ... SET search_path`
+  aplicado via migration; advisor do Supabase limpo; baseline atualizada.
+- **Ticket 06 (parcial):** o `seguranca.md` dizia "a única função SQL pública" — eram 6 com
+  EXECUTE para `anon`; o doc agora lista as que têm motivo. **Decisão que contraria a
+  auditoria:** `divat_data_quality` NÃO foi revogada — a issue #63 (aberta no mesmo dia,
+  antes da auditoria) planeja o runner semanal chamando-a exatamente como `anon`, e os grants
+  atuais já são o estado final que a #63 prescreve. Sobrou 1 REVOKE (inócuo) pendente em
+  `fn_vigor_auto`, bloqueado pela regra "backup fresco antes de REVOKE" (o ambiente do Claude
+  não alcança o Supabase nem consegue disparar o workflow Backup — passo a passo no ticket).
+  **Fechado no mesmo dia, a pedido do dono:** o backup fresco saiu por um workflow
+  temporário disparado por push na branch (artifact `divat-backup-pre-revoke-30212757689`,
+  90 dias; o workflow foi removido em seguida), e o REVOKE foi aplicado via migration e
+  verificado — trigger disparando num UPDATE de teste (revertido), `anon` sem EXECUTE na
+  função e com as RPCs do portal intactas (busca por logradouro e `realtime_tables` testadas
+  como `anon`). Primeiro run real da regra "backup antes de REVOKE": funcionou, e o caminho
+  do workflow-por-push fica registrado para a próxima vez que a integração não puder usar o
+  dispatch manual.
+- **Baseline (ticket 07):** ressincronizada com `pg_get_functiondef` do vivo. Além do previsto
+  (faltava `divat_data_quality` inteira; `realtime_tables` é INVOKER, não DEFINER), a conferência
+  achou mais duas: `f_unaccent` no banco usa `extensions.unaccent` com `search_path` fixado (a
+  baseline dizia `public.unaccent`, o que quebraria a reconstrução) e `divat_linhas_regiao`
+  também tem `search_path` que a baseline omitia.
+- **Guarda (ticket 08):** `scripts/check_deriva.mjs` + workflow `deriva.yml` (semanal + sob
+  demanda + push/PR nos arquivos relevantes). Compara a visão de `anon` do banco com os docs:
+  cada uma das 4 checagens teria pego uma divergência real desta auditoria. Verificado numa
+  bancada local (mock da API): verde no repo corrigido; reintroduzir um nome fantasma num doc
+  deixa o script vermelho apontando arquivo:linha. **O 1º run no CI derrubou o plano
+  original:** o ticket apostava no OpenAPI do PostgREST como fonte de fatos, mas neste
+  projeto o endpoint é restrito à service_role (HTTP 401 com a anon key). Saída: a RPC
+  `divat_api_shape()` (INVOKER, EXECUTE p/ anon — a alternativa que o próprio ticket previa),
+  criada via migration e versionada na baseline; rodando como `anon`, devolve exatamente a
+  visão de `anon` (tabelas/colunas via `information_schema`, RPCs via
+  `has_function_privilege`), sem vazar nada que a API pública já não mostre.
+
+Nada servido ao usuário mudou (docs + CI + metadado de função no banco) — sem deploy e sem
+bump do carimbo.

@@ -1,0 +1,49 @@
+# Deriva (docs × banco) — roda scripts/check_deriva.mjs.
+#
+# Por que existe: as 8 divergências da auditoria de 26/07/2026 nasceram todas de um fato do
+# banco copiado à mão para um doc e nunca mais conferido. O script pergunta ao PostgREST o
+# OpenAPI de `anon` (mesma anon key pública do app.js — nenhum segredo aqui) e compara com o
+# que CLAUDE.md / docs/schema.md / app.js afirmam.
+#
+# Por que SEMANAL além de push/PR: a deriva nasce de mudança NO BANCO (que não gera push)
+# tanto quanto de mudança nos docs — mesma razão do backup.yml. O filtro de `paths` cobre o
+# lado do repo; o cron cobre o lado do banco.
+#
+# ARQUIVO/JOB separado (padrão do repo: um workflow por preocupação — um vermelho não esconde
+# o outro) e FORA do tests/check.js (contrato dele: offline e sem dependências; este precisa
+# de rede até o Supabase).
+#
+# Os `uses:` estão presos ao SHA (o `# v4` ao lado é só legenda) — ver docs/semgrep.md
+# § "Actions presas ao SHA".
+name: Deriva
+
+on:
+  schedule:
+    - cron: '0 7 * * 1' # toda segunda 07:00 UTC (1 h depois do backup semanal)
+  workflow_dispatch:
+  push:
+    paths:
+      - CLAUDE.md
+      - docs/schema.md
+      - app.js
+      - scripts/check_deriva.mjs
+      - .github/workflows/deriva.yml
+  pull_request:
+    paths:
+      - CLAUDE.md
+      - docs/schema.md
+      - app.js
+      - scripts/check_deriva.mjs
+      - .github/workflows/deriva.yml
+
+jobs:
+  deriva:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+      - name: Verificador de deriva docs×banco
+        run: node scripts/check_deriva.mjs

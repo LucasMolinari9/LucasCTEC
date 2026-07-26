@@ -10,7 +10,7 @@ empresas, relatórios). Os dados são **alimentados pelo dono direto no Supabase
 exibe e **atualiza ao vivo** (Realtime).
 
 ## Arquitetura (importante)
-- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (todo o JS, ~2,3k
+- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (todo o JS, ~3,2k
   linhas, num IIFE)** — zero-build: sem framework, sem `package.json`, `<script src>` clássico no
   fim do `<body>`. Todo JS novo vai no `app.js` (o `tests/check.js` **falha** se aparecer
   `<script>` inline no `index.html` — a CSP publica `script-src 'self'` e bloquearia) e todo CSS
@@ -66,8 +66,8 @@ exibe e **atualiza ao vivo** (Realtime).
 ## Tabelas → onde aparecem (cards)
 - `tabela_vista_teste` (cadastro de linhas) → busca, Folha de Rosto, Ligações por Empresa/
   Nome/Número, Empresas Regulares, Relatórios.
-- `itinerario_teste` (+ `cod_ibge_teste`) → Itinerários, Ligações por Logradouro/Município.
-- `qh_intervalo_teste` / `qh_predeterminado_teste` (+ `tab_origem_teste`) → Quadro de
+- `itinerario_teste` (+ `municipio_teste`) → Itinerários, Ligações por Logradouro/Município.
+- `qh_intervalo_teste` / `qh_predeterminado_teste` (+ `origem_teste`) → Quadro de
   Horários, Ligações por Terminais.
 - `qh_teste` (frota_*) → Frota, Estrutura.
 - `tarifa_atual_teste` → Tarifas, Seções por Ligação/Empresa.
@@ -182,6 +182,17 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    de rede** (bloqueada no ambiente do Claude — igual ao `vercel` CLI; lá rode sem `--full`).
    O CI (`.github/workflows/semgrep.yml`) roda as duas metades. Runbook e como escrever regra
    nova: **`docs/semgrep.md`**.
+2c. **Deriva docs×banco — `node scripts/check_deriva.mjs`** (precisa de rede; irmão do
+   `check_realtime.mjs`, mesma anon key do `app.js`). Compara a visão de `anon` do banco
+   (RPC `divat_api_shape()` — o OpenAPI do PostgREST deste projeto é restrito à service_role)
+   com o que o repo afirma: toda tabela citada no `CLAUDE.md`/`docs/schema.md` existe no banco;
+   toda coluna do diagrama mermaid do `docs/schema.md` existe na tabela real; toda RPC chamada
+   no `app.js` existe e responde a `anon`; toda RPC exposta está documentada no `schema.md`.
+   Nasceu da auditoria de 26/07/2026 (8 divergências, todas de fato copiado à mão e nunca mais
+   conferido). Roda no CI (workflow `deriva.yml`): **semanal + sob demanda + push/PR** que
+   toque esses arquivos — o cron existe porque deriva também nasce de mudança NO BANCO, que
+   não gera push. Do ambiente do Claude não roda (rede até o Supabase bloqueada); é para a
+   máquina do dono e o CI. Fica **fora** do `tests/check.js` (contrato dele: offline).
 3. Merge na `main` → republica sozinho (ou MCP `deploy_to_vercel`). As telas dos usuários se
    atualizam via detector de versão. Bumpe o carimbo se quiser confirmar a chegada.
 4. Mudanças de **dados** NÃO exigem deploy — o site lê o Supabase ao vivo.
