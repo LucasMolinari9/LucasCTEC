@@ -231,3 +231,42 @@ raciocínio que tirou o jsDelivr `@2`** em 17/07. Os 7 `uses:` foram presos ao S
 caracteres, com a tag ao lado só como legenda. Contrapartida assumida: sem Dependabot, a
 atualização vira **manual** — o procedimento está em `docs/semgrep.md` § "Actions presas ao
 SHA". A metade offline do scan já tinha passado; foi só essa regra.
+
+## 26/07/2026 — Laço de fumaça sobre as 23 views (rede sob o render)
+
+**Motivação.** O `tests/check.js` é offline e sem dependências de propósito, então só cobre a
+lógica **pura** copiada nos `*.harness.js` (~224 linhas). A seção `MODAL / SISTEMA DE VIEWS`
+ocupa as linhas 636–2591 do `app.js` — **~62% do arquivo, todo o render** — e não tinha
+nenhuma checagem automatizada além do `check_abas.mjs`, que cobre só as abas. Ou seja: uma
+view podia passar a explodir ou a pintar em branco e **nada acusaria** até um usuário abrir.
+
+**O que entrou.**
+
+- **`scripts/lib/rig.mjs`** — bancada compartilhada: servidor estático, Chromium headless,
+  placar, e as **fixtures do PostgREST em definição única** (uma linha plausível por tabela das
+  14 lidas pelo portal + stub das 2 RPCs, `divat_busca_logradouro` e `divat_linhas_regiao`).
+  Extraída de dentro do `check_abas.mjs` justamente para as fixtures não divergirem em duas
+  cópias — o modo de falha que o `CLAUDE.md` chama de "cópias que divergem".
+- **`scripts/check_views.mjs`** — abre as 23 views por deep link, digita um termo que casa as
+  fixtures quando há painel de busca, e falha se a view lançar erro (`errorBox`), ficar presa
+  no spinner, pintar **só a moldura** ou não achar nada. Um laço genérico em vez de 23 testes
+  escritos à mão. Fecha com uma checagem **anti-drift**: view no seletor que não esteja em
+  `VIEWS` derruba o script.
+- **`check_abas.mjs` migrado** para o rig (assertions inalteradas, segue verde).
+
+**Resultado.** 23/23 verdes — **nenhum defeito encontrado** no `app.js`. Os 4 vermelhos da
+primeira execução eram todos defeito **do teste**, e cada um ensinou algo que virou regra:
+`secoesPorEmpresa` pede **código** de empresa (não nome); `ligacoesPorLogradouro` e
+`municipioRegiao` passam por **RPC**, não por tabela; `localidades` tem formulário próprio
+(`#locA`/`#locGo`), não o painel padrão; e documentos como o Histórico renderizam **blocos, não
+`<table>`** — contar tabelas era a asserção errada.
+
+**Validado por mutação** (a checagem só vale se souber ficar vermelha): um `null.x` dentro de
+`LOADERS.frota` foi pego com a mensagem exata e **sem** contaminar as outras 22; um
+`renderFrota` devolvendo vazio **passou** na primeira versão — a moldura (cabeçalho + campo de
+busca) contava como "pane não-vazio". Daí a medição virar o **corpo** do documento
+(`#spHost`/`#locHost`), não o pane. Só depois disso a mutação foi pega.
+
+**Escopo deliberadamente de fora:** conferir se o conteúdo está **certo** (colunas, totais) —
+isso é asserção por view. E o script fica **fora do CI**, como o `check_abas.mjs` e o
+`check_realtime.mjs`: exige Playwright, que o `check.js` não tem.

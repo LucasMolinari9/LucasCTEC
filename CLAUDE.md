@@ -149,6 +149,19 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    atualize a cópia.) **Ao mexer nas abas do modal / no seletor de documentos**, rode também
    `node scripts/check_abas.mjs` — checagem de regressão em navegador headless (Playwright, com
    o PostgREST stubado); fica fora do `check.js` porque este é offline e sem dependências.
+2a. **Ao mexer em qualquer render/loader, rode `node scripts/check_views.mjs`** — abre as **23
+   views** num navegador headless e falha se alguma explodir (`errorBox`), ficar presa no
+   spinner, pintar só a moldura ou não achar nada com um termo que casa as fixtures. É a rede
+   sob a seção `MODAL / SISTEMA DE VIEWS` (~62% do `app.js`), que o `check.js` **não** cobre —
+   ele só testa a lógica pura copiada nos `*.harness.js`. Aceita filtro: `check_views.mjs frota`.
+   Ele **não** confere se o conteúdo está certo (isso é asserção por view, ainda não existe).
+   **View nova = uma entrada em `VIEWS` no script** — a checagem anti-drift do final compara a
+   lista com os `data-view` do seletor e falha se você esquecer.
+   Servidor + fixtures + Chromium moram em **`scripts/lib/rig.mjs`**, compartilhados com o
+   `check_abas.mjs`. **Ao mudar um `select=` do `app.js`, ajuste a fixture junto**: nome de
+   coluna divergente chega `undefined` no render e a tela fica vazia *sem erro* — falso verde.
+   Caminho de dado novo por **RPC** (`rpc/…`) precisa de stub em `serveRpc`, senão a view
+   responde vazio e o laço acusa defeito que é da bancada, não do portal.
 2b. **Análise estática — `./scripts/semgrep.sh`** (Semgrep). Complementa o `check.js`, não
    substitui: o `check.js` pergunta "faz o que deve?" (compila o `app.js` e roda a lógica
    pura), o Semgrep pergunta "contém padrão proibido?". Pega o que só quebraria no navegador

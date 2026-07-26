@@ -14,101 +14,15 @@
 // Uso:
 //   node scripts/check_abas.mjs
 //
-// Requer Playwright + Chromium instalados (global ou local): `npm i -g playwright && npx playwright install chromium`.
-// NÃO fala com o Supabase: o PostgREST é stubado no browser com fixtures mínimas, o que deixa
-// a checagem determinística (e roda em ambiente sem acesso ao banco). Sai 0 = tudo verde.
+// Servidor, fixtures do PostgREST e Chromium vêm de scripts/lib/rig.mjs (definição única,
+// compartilhada com check_views.mjs). Sai 0 = tudo verde.
 
-import http from 'node:http';
-import fs from 'node:fs';
-import path from 'node:path';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { startServer, getChromium, launchPage, makeReporter } from './lib/rig.mjs';
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8099;
-
-// Playwright pode estar instalado local ou globalmente — tenta os dois antes de desistir.
-const req = createRequire(import.meta.url);
-let chromium;
-try {
-  let mod;
-  try { mod = req('playwright'); }
-  catch {
-    const globalRoot = req('node:child_process').execSync('npm root -g', { encoding:'utf8' }).trim();
-    mod = req(path.join(globalRoot, 'playwright'));
-  }
-  chromium = mod.chromium;
-} catch {
-  console.error('Playwright não encontrado. Instale com: npm i -g playwright && npx playwright install chromium');
-  process.exit(2);
-}
-
-const MIME = { '.html':'text/html', '.js':'text/javascript', '.css':'text/css',
-  '.woff2':'font/woff2', '.webmanifest':'application/manifest+json', '.json':'application/json' };
-
-const server = http.createServer((req, res) => {
-  const url = decodeURIComponent(req.url.split('?')[0].split('#')[0]);
-  const file = path.join(ROOT, url === '/' ? 'index.html' : url);
-  fs.readFile(file, (err, buf) => {
-    if (err) { res.writeHead(404); res.end('404'); return; }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
-    res.end(buf);
-  });
-});
-await new Promise(r => server.listen(PORT, '127.0.0.1', r));
-
-/* ---- fixtures mínimas do PostgREST (2 linhas, 2 empresas, 1 horário cada) ---- */
-const linha = (codlinha, numero_ligacao, nome_ligacao, codempresa, via) => ({
-  codlinha, numero_ligacao, nome_ligacao, nome_lig_cresc:null, via, codempresa,
-  tipo:'REGULAR', caracteristica:'CONVENCIONAL', licitado:null, cancelado:null, paralisado:null,
-  sub_judice:null, transferido:null, data_criacao:null, processo_criacao:null,
-});
-const LINES = [
-  linha('549000001', '549M', 'RIO DE JANEIRO X NITEROI', '101', 'PONTE'),
-  linha('740000001', '740D', 'PETROPOLIS X TERESOPOLIS', '102', 'BR-495'),
-];
-const EMPRESAS = [
-  { codempresa:'101', nome_empresa:'VIACAO ALFA', situacao:'REGULAR', cassada:false, sob_intervencao:false },
-  { codempresa:'102', nome_empresa:'VIACAO BETA', situacao:'REGULAR', cassada:false, sob_intervencao:false },
-];
-const QH_INTERVALO = [
-  { codlinha:'549000001', cod_origem:'1', dia:'UTEIS', hora_inicio:'05:00', hora_fim:'23:00', intervalo:'30' },
-  { codlinha:'740000001', cod_origem:'2', dia:'UTEIS', hora_inicio:'06:00', hora_fim:'20:00', intervalo:'60' },
-];
-const ORIGEM = [{ cod_origem:'1', nome_origem:'RIO DE JANEIRO' }, { cod_origem:'2', nome_origem:'PETROPOLIS' }];
-
-function serve(table, qs) {
-  const params = new URLSearchParams(qs);
-  const eqCod = (qs.match(/codlinha=eq\.([^&]+)/) || [])[1];
-  const filtra = rows => eqCod ? rows.filter(r => r.codlinha === decodeURIComponent(eqCod)) : rows;
-  if (table === 'tabela_vista_teste') {
-    const or = params.get('or');
-    if (or) {
-      const termo = ((or.match(/nome_ligacao\.ilike\.\*([^*]*)\*/) || [])[1] || '').toLowerCase();
-      return LINES.filter(l => [l.nome_ligacao, l.numero_ligacao, l.codlinha]
-        .some(v => String(v).toLowerCase().includes(termo)));
-    }
-    return filtra(LINES);
-  }
-  if (table === 'codempresa_teste')   return EMPRESAS;
-  if (table === 'qh_intervalo_teste') return filtra(QH_INTERVALO);
-  if (table === 'origem_teste')       return ORIGEM;
-  return [];
-}
-
-const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
-await page.route('**/rest/v1/**', route => {
-  const u = new URL(route.request().url());
-  route.fulfill({ status: 200, contentType: 'application/json',
-    body: JSON.stringify(serve(u.pathname.split('/rest/v1/')[1], u.search.slice(1))) });
-});
-
-const falhas = [];
-const check = (ok, nome, detalhe = '') => {
-  console.log(`${ok ? '  ok  ' : ' FALHA'} ${nome}${detalhe ? ' — ' + detalhe : ''}`);
-  if (!ok) falhas.push(nome);
-};
+const server = await startServer(PORT);
+const { browser, page } = await launchPage(getChromium());
+const { falhas, check } = makeReporter();
 
 // 1. deep link abre o Quadro de Horários da 549M na 1ª aba
 await page.goto(`http://127.0.0.1:${PORT}/#/linha/549000001/consulta/quadroHorarios`);
