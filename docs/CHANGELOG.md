@@ -391,10 +391,16 @@ conferido. Os tickets (`.scratch/doc-drift/`) foram implementados em sequência:
   baseline dizia `public.unaccent`, o que quebraria a reconstrução) e `divat_linhas_regiao`
   também tem `search_path` que a baseline omitia.
 - **Guarda (ticket 08):** `scripts/check_deriva.mjs` + workflow `deriva.yml` (semanal + sob
-  demanda + push/PR nos arquivos relevantes). Compara o OpenAPI de `anon` com os docs: cada
-  uma das 4 checagens teria pego uma divergência real desta auditoria. Verificado numa bancada
-  local (mock do OpenAPI): verde no repo corrigido; reintroduzir um nome fantasma num doc
-  deixa o script vermelho apontando arquivo:linha.
+  demanda + push/PR nos arquivos relevantes). Compara a visão de `anon` do banco com os docs:
+  cada uma das 4 checagens teria pego uma divergência real desta auditoria. Verificado numa
+  bancada local (mock da API): verde no repo corrigido; reintroduzir um nome fantasma num doc
+  deixa o script vermelho apontando arquivo:linha. **O 1º run no CI derrubou o plano
+  original:** o ticket apostava no OpenAPI do PostgREST como fonte de fatos, mas neste
+  projeto o endpoint é restrito à service_role (HTTP 401 com a anon key). Saída: a RPC
+  `divat_api_shape()` (INVOKER, EXECUTE p/ anon — a alternativa que o próprio ticket previa),
+  criada via migration e versionada na baseline; rodando como `anon`, devolve exatamente a
+  visão de `anon` (tabelas/colunas via `information_schema`, RPCs via
+  `has_function_privilege`), sem vazar nada que a API pública já não mostre.
 
 Nada servido ao usuário mudou (docs + CI + metadado de função no banco) — sem deploy e sem
 bump do carimbo.

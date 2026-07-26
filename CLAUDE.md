@@ -183,7 +183,8 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    O CI (`.github/workflows/semgrep.yml`) roda as duas metades. Runbook e como escrever regra
    nova: **`docs/semgrep.md`**.
 2c. **Deriva docs×banco — `node scripts/check_deriva.mjs`** (precisa de rede; irmão do
-   `check_realtime.mjs`, mesma anon key do `app.js`). Compara o OpenAPI de `anon` do PostgREST
+   `check_realtime.mjs`, mesma anon key do `app.js`). Compara a visão de `anon` do banco
+   (RPC `divat_api_shape()` — o OpenAPI do PostgREST deste projeto é restrito à service_role)
    com o que o repo afirma: toda tabela citada no `CLAUDE.md`/`docs/schema.md` existe no banco;
    toda coluna do diagrama mermaid do `docs/schema.md` existe na tabela real; toda RPC chamada
    no `app.js` existe e responde a `anon`; toda RPC exposta está documentada no `schema.md`.

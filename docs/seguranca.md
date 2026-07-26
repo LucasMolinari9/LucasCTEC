@@ -44,8 +44,10 @@ que o `anon` consegue executar (estado conferido no catálogo em 26/07/2026) sã
 `SECURITY INVOKER`, com parâmetros tipados e `search_path` fixado, e cada uma tem motivo:
 `divat_busca_logradouro` e `divat_linhas_regiao` (as 2 RPCs que o front chama),
 `f_unaccent` (chamada por dentro da busca, que roda COMO `anon`, e usada no índice de
-expressão), `realtime_tables` (o `scripts/check_realtime.mjs` roda como `anon`) e
-`divat_data_quality` (o runner semanal planejado na issue #63 rodará como `anon`).
+expressão), `realtime_tables` (o `scripts/check_realtime.mjs` roda como `anon`),
+`divat_data_quality` (o runner semanal planejado na issue #63 rodará como `anon`) e
+`divat_api_shape` (o `scripts/check_deriva.mjs` roda como `anon`; devolve só o que a API
+pública já mostra).
 Sobra um EXECUTE inútil de `anon` em `fn_vigor_auto` (função de trigger; herdou o default
 PUBLIC do Postgres) — inócuo (`anon` não escreve em `portaria_teste`, então o trigger nunca
 roda como ele), com REVOKE pendente: rodar o workflow **Backup** primeiro (regra do

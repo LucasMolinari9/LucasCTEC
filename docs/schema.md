@@ -147,7 +147,7 @@ e sem grant para `anon`/`authenticated` → invisíveis pela API pública, de pr
 
 ## Funções e trigger (schema `public`)
 
-O schema tem **0 views**, **6 funções** e **1 trigger** (snapshot vivo 26/07/2026; DDL
+O schema tem **0 views**, **7 funções** e **1 trigger** (snapshot vivo 26/07/2026; DDL
 completo em `docs/backup_schema.sql`, seção "FUNÇÕES + TRIGGER"). Todas as funções são
 `SECURITY INVOKER`. Duas são **RPCs chamadas pelo front** (`app.js`, via `rest/v1/rpc/…`);
 o resto é interno/diagnóstico.
@@ -157,6 +157,7 @@ o resto é interno/diagnóstico.
 | `divat_busca_logradouro(termo, p_ibge?)` | busca linhas por logradouro (tipo+nome, sem acento, trigram; `p_ibge` filtra por município) | **front via RPC** — Ligações por Logradouro |
 | `divat_linhas_regiao(p_regiao, p_modo)` | linhas por região do município de origem (`dentro`/`origem`) | **front via RPC** — Linhas por Região e Município |
 | `divat_data_quality()` | diagnóstico de qualidade pós-ETL (órfãos referenciais, U+FFFD) | ninguém no repo hoje — o runner semanal é a issue #63 |
+| `divat_api_shape()` | o que a API pública enxerga (tabelas/colunas/RPCs, na visão de quem chama) | `scripts/check_deriva.mjs` (como `anon`) |
 | `f_unaccent(text)` | wrapper IMMUTABLE do `unaccent` | `divat_busca_logradouro` + índice de expressão `trgm_itin_logr_tipo_nome_norm` |
 | `fn_vigor_auto()` | zera `vigor` quando a portaria vira `REVOGADA` | trigger `trg_vigor_auto` |
 | `realtime_tables()` | lista as tabelas da publicação `supabase_realtime` | `scripts/check_realtime.mjs` (como `anon`) |

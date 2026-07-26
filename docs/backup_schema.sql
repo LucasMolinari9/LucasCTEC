@@ -444,6 +444,40 @@ $function$;
 REVOKE ALL ON FUNCTION public.divat_data_quality() FROM public;
 GRANT EXECUTE ON FUNCTION public.divat_data_quality() TO anon, authenticated;
 
+-- divat_api_shape(): o que a API pública enxerga — tabelas/colunas (information_schema,
+-- filtrado pelos privilégios de quem chama) e RPCs executáveis pelo chamador. Fonte de
+-- fatos do scripts/check_deriva.mjs (o endpoint OpenAPI do PostgREST deste projeto é
+-- restrito à service_role — HTTP 401 com anon). SECURITY INVOKER: como anon, devolve
+-- exatamente a visão de anon; não vaza nada que a API pública já não mostre.
+-- (Criada em 26/07/2026, ticket 08 da auditoria docs×banco.)
+CREATE OR REPLACE FUNCTION public.divat_api_shape()
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+select jsonb_build_object(
+  'tables', (
+    select coalesce(jsonb_object_agg(t.table_name, t.cols), '{}'::jsonb) from (
+      select c.table_name, jsonb_agg(c.column_name::text order by c.ordinal_position) as cols
+      from information_schema.columns c
+      where c.table_schema = 'public'
+      group by c.table_name
+    ) t
+  ),
+  'rpcs', (
+    select coalesce(jsonb_agg(distinct p.proname::text), '[]'::jsonb)
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.prokind = 'f'
+      and p.prorettype <> 'trigger'::regtype
+      and has_function_privilege(p.oid, 'execute')
+  )
+);
+$function$;
+REVOKE ALL ON FUNCTION public.divat_api_shape() FROM public;
+GRANT EXECUTE ON FUNCTION public.divat_api_shape() TO anon, authenticated;
+
 -- realtime_tables(): lista as tabelas da publicação supabase_realtime, read-only. Usada por
 -- scripts/check_realtime.mjs para conferir RT_TABLES (app.js) contra o banco.
 -- SECURITY INVOKER: o anon enxerga pg_publication_tables direto — testado como anon em

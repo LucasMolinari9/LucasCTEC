@@ -3,11 +3,15 @@
 // As 8 divergências da auditoria de 26/07/2026 nasceram todas do mesmo jeito: um fato do
 // banco copiado à mão para um doc (CLAUDE.md, docs/schema.md, docs/seguranca.md,
 // docs/backup_schema.sql) e nunca mais conferido. Este script fecha o laço para os fatos
-// que a API pública consegue ver: pergunta ao PostgREST o OpenAPI de `anon`
-// (GET ${SB_URL}/rest/v1/ — tabelas, colunas e RPCs visíveis) e compara com o que os docs
-// afirmam. Irmão do check_realtime.mjs; o que ELE já cobre (publicação Realtime) e o que o
-// OpenAPI de anon não enxerga (RLS/grants/policies — guarda: gen_security_snapshot.sql +
-// auditoria periódica do docs/seguranca.md) ficam de fora, de propósito.
+// que a API pública consegue ver: chama a RPC `divat_api_shape()` (SECURITY INVOKER,
+// EXECUTE p/ anon — rodando como anon devolve exatamente a visão de anon: tabelas, colunas
+// e RPCs executáveis) e compara com o que os docs afirmam. O plano original era o OpenAPI
+// do PostgREST (GET ${SB_URL}/rest/v1/), mas neste projeto esse endpoint é restrito à
+// service_role (HTTP 401 com a anon key — descoberto no 1º run do CI, 26/07/2026); daí a
+// RPC, no espírito da realtime_tables. Irmão do check_realtime.mjs; o que ELE já cobre
+// (publicação Realtime) e o que a visão de anon não enxerga (RLS/grants/policies — guarda:
+// gen_security_snapshot.sql + auditoria periódica do docs/seguranca.md) ficam de fora,
+// de propósito.
 //
 // Checagens:
 //   1. Toda tabela citada em CLAUDE.md / docs/schema.md existe no banco (teria pego os
@@ -89,11 +93,14 @@ console.log(`Repo lido: ${citacoes.length} citações de tabela nos docs, ` +
 
 let api;
 try {
-  const resp = await fetch(`${SB_URL}/rest/v1/`, {
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` },
+  const resp = await fetch(`${SB_URL}/rest/v1/rpc/divat_api_shape`, {
+    method: 'POST',
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    body: '{}',
   });
   if (!resp.ok) {
-    console.error(`OpenAPI do PostgREST falhou (HTTP ${resp.status}): ${await resp.text()}`);
+    console.error(`RPC divat_api_shape falhou (HTTP ${resp.status}): ${await resp.text()}`);
+    console.error('A função public.divat_api_shape() existe e tem GRANT EXECUTE para anon? (DDL na baseline docs/backup_schema.sql.)');
     console.error('(Se o HTTP 403 vier de um proxy: o ambiente do Claude não alcança *.supabase.co — rode na sua máquina ou no CI.)');
     process.exit(1);
   }
@@ -104,10 +111,8 @@ try {
   process.exit(1);
 }
 
-const tabelasDoBanco = new Set(Object.keys(api.definitions || {}));
-const rpcsDoBanco = new Set(
-  Object.keys(api.paths || {}).filter(p => p.startsWith('/rpc/')).map(p => p.slice('/rpc/'.length))
-);
+const tabelasDoBanco = new Set(Object.keys(api.tables || {}));
+const rpcsDoBanco = new Set(api.rpcs || []);
 
 // ---------- comparação ----------
 
@@ -123,9 +128,9 @@ for (const c of citacoes) {
 
 // 2. coluna do diagrama existe na tabela real
 for (const c of colunas) {
-  const def = api.definitions?.[c.tabela];
-  if (!def) { erros.push(`docs/schema.md:${c.linha} — a entidade "${c.tabela}" do diagrama não existe no banco.`); continue; }
-  if (!def.properties?.[c.coluna]) {
+  const cols = api.tables?.[c.tabela];
+  if (!cols) { erros.push(`docs/schema.md:${c.linha} — a entidade "${c.tabela}" do diagrama não existe no banco.`); continue; }
+  if (!cols.includes(c.coluna)) {
     erros.push(`docs/schema.md:${c.linha} — a coluna "${c.tabela}.${c.coluna}" do diagrama não existe na tabela real.`);
   }
 }
