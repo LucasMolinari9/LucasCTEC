@@ -46,6 +46,9 @@ exibe e **atualiza ao vivo** (Realtime).
     nunca `ALL USING(true)`.
   - **Signup do Auth: manter FECHADO** (Dashboard → Authentication → "Allow new users to sign
     up" = OFF). Pendente (só dashboard): ligar **Leaked Password Protection**.
+  - **Manual de segurança do dono + auditoria/pentest** (linguagem direta, modelo de ameaça,
+    checklist trimestral e resposta a incidente): **`docs/seguranca.md`**. Auditoria completa +
+    teste de invasão ao vivo em 23/07/2026 (sem achados de segredo; sem caminho de escrita).
   - **Como o dono alimenta:** direto pelo **painel do Supabase** (service role, ignora RLS).
   - **Teto do PostgREST:** `pgrst.db_max_rows = 30000` no role `authenticator` (igual ao maior
     `limit` do front). **Ao criar query com `limit` > 30000, suba o teto junto**
