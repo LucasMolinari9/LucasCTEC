@@ -48,11 +48,9 @@ expressão), `realtime_tables` (o `scripts/check_realtime.mjs` roda como `anon`)
 `divat_data_quality` (o runner semanal planejado na issue #63 rodará como `anon`) e
 `divat_api_shape` (o `scripts/check_deriva.mjs` roda como `anon`; devolve só o que a API
 pública já mostra).
-Sobra um EXECUTE inútil de `anon` em `fn_vigor_auto` (função de trigger; herdou o default
-PUBLIC do Postgres) — inócuo (`anon` não escreve em `portaria_teste`, então o trigger nunca
-roda como ele), com REVOKE pendente: rodar o workflow **Backup** primeiro (regra do
-`CLAUDE.md` para REVOKE) e então
-`REVOKE ALL ON FUNCTION public.fn_vigor_auto() FROM PUBLIC, anon, authenticated;`.
+A única exceção, `fn_vigor_auto` (função de trigger), teve o EXECUTE de `anon` revogado em
+26/07/2026 (era herança inútil do default PUBLIC do Postgres; REVOKE aplicado após backup
+fresco, com o trigger conferido disparando e as RPCs do portal intactas).
 Confirmado pelo teste da seção 4.
 
 ## 4. Teste de invasão executado (evidência datada — 23/07/2026)

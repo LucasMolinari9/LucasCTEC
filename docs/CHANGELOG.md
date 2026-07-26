@@ -385,6 +385,14 @@ conferido. Os tickets (`.scratch/doc-drift/`) foram implementados em sequência:
   atuais já são o estado final que a #63 prescreve. Sobrou 1 REVOKE (inócuo) pendente em
   `fn_vigor_auto`, bloqueado pela regra "backup fresco antes de REVOKE" (o ambiente do Claude
   não alcança o Supabase nem consegue disparar o workflow Backup — passo a passo no ticket).
+  **Fechado no mesmo dia, a pedido do dono:** o backup fresco saiu por um workflow
+  temporário disparado por push na branch (artifact `divat-backup-pre-revoke-30212757689`,
+  90 dias; o workflow foi removido em seguida), e o REVOKE foi aplicado via migration e
+  verificado — trigger disparando num UPDATE de teste (revertido), `anon` sem EXECUTE na
+  função e com as RPCs do portal intactas (busca por logradouro e `realtime_tables` testadas
+  como `anon`). Primeiro run real da regra "backup antes de REVOKE": funcionou, e o caminho
+  do workflow-por-push fica registrado para a próxima vez que a integração não puder usar o
+  dispatch manual.
 - **Baseline (ticket 07):** ressincronizada com `pg_get_functiondef` do vivo. Além do previsto
   (faltava `divat_data_quality` inteira; `realtime_tables` é INVOKER, não DEFINER), a conferência
   achou mais duas: `f_unaccent` no banco usa `extensions.unaccent` com `search_path` fixado (a

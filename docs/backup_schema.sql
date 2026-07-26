@@ -357,6 +357,10 @@ BEGIN
 END;
 $function$;
 
+-- Sem EXECUTE para PUBLIC/anon/authenticated (REVOKE de 26/07/2026, ticket 06 da auditoria):
+-- função de trigger — só o dono escreve em portaria_teste; postgres e service_role mantêm.
+REVOKE ALL ON FUNCTION public.fn_vigor_auto() FROM public, anon, authenticated;
+
 CREATE TRIGGER trg_vigor_auto
   BEFORE INSERT OR UPDATE ON public.portaria_teste
   FOR EACH ROW EXECUTE FUNCTION public.fn_vigor_auto();
