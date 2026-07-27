@@ -223,9 +223,25 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    `qh_predeterminado_teste` (5) e `evento_teste` (7) apontando para `codlinha` que não existe
    em `tabela_vista_teste` — mais **4 linhas** de `qh_predeterminado_teste` com `cod_origem`
    inexistente em `origem_teste`. `146016000` e `191020001` aparecem órfãos em **três** tabelas
-   cada: cara de linha apagada do pai deixando os filhos atrás. **Consequência prática: as views
-   dessas linhas renderizam VAZIAS, sem erro** — é exatamente o modo de falha que a issue #63
-   descreve, já acontecendo. (U+FFFD e `codempresa` inválida: zero achados, os dois limpos.)
+   cada. **Consequência prática: as views dessas linhas renderizam VAZIAS, sem erro** — é
+   exatamente o modo de falha que a issue #63 descreve, já acontecendo.
+   (U+FFFD e `codempresa` inválida: zero achados, os dois limpos.)
+   **Órfã não quer dizer a mesma coisa em toda tabela** (apurado em 27/07/2026, contra o banco):
+   as 7 de `evento_teste` são **atos reais de 1974–1996**, da época do DTC/RJ, de linhas
+   anteriores ao cadastro atual — e linha extinta **não some** do cadastro (o hub tem a coluna
+   `cancelado`, com **500 linhas** marcadas assim), então órfã em `evento_teste` não é rastro de
+   exclusão, é história mais velha que o cadastro. Por isso o `check_data_quality.mjs`
+   **rebaixa `evento_teste` órfã a aviso** (`REBAIXADOS_A_AVISO`, no próprio script — a RPC
+   *mede* o fato, a *política* de severidade fica versionada no repo) e mantém as demais como
+   erro. **NÃO apagar os filhos órfãos de `evento_teste`: é arquivo institucional
+   insubstituível.** O preço do rebaixamento é conhecido e aceito: achado **novo** em
+   `evento_teste` também sai como aviso e não derruba o gate — inclusive `186006400`, evento de
+   2021 com sufixo anômalo (o hub tem `186006000`/`186006001`), **suspeito de digitação**.
+   As 12 codlinhas órfãs estão listadas **uma a uma e classificadas** em `orfaos_conhecidos`
+   dentro do `data_quality_baseline.json` (a RPC agrega e não diz *quais*; o campo é mantido à
+   mão e o `--atualizar-baseline` o preserva). **O gate compara CONTAGEM, não a lista** — uma
+   órfã corrigida e outra criada mantêm o número e passam despercebidas; ao mexer nesses dados,
+   confira a lista, não só o número.
    Por isso o script tem **baseline** (`scripts/data_quality_baseline.json`): gate vermelho desde
    o primeiro dia é gate que se aprende a ignorar, e apagar achado seria mentir. Ele passa com a
    dívida conhecida e falha no instante em que aparece achado **novo** ou um conhecido **piora**.

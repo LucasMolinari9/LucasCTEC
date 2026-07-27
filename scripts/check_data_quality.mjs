@@ -76,20 +76,70 @@ const unidade = v => (v === 'codlinha_orfa' ? 'codlinha(s) distinta(s)' : 'linha
 const SEP = '\u0000';
 const chave = a => `${a.verificacao}${SEP}${a.detalhe}`;
 
+// --- Reclassificação de severidade por NATUREZA da tabela ---------------------------------
+//
+// Mora aqui, e não na função do banco, de propósito: a RPC MEDE um fato ("este filho aponta
+// para codlinha que não existe no pai"); se aquele fato é DEFEITO é POLÍTICA de cadastro. Fato
+// no banco, política no repo — versionada, diffável e revisável em PR, em vez de invisível
+// dentro de um CREATE OR REPLACE FUNCTION que o git nunca vê.
+//
+// evento_teste é a única rebaixada, e o motivo é o que o banco mostra (medido em 27/07/2026):
+//   1. É tabela de HISTÓRICO. As órfãs de lá são atos reais de 1974–1996, da época do DTC/RJ,
+//      anteriores ao próprio DETRO (ex.: CAMPOS–CONCEIÇÃO DE MACABÚ e RIO–MACAÉ, da RÁPIDO
+//      MACAENSE). O cadastro atual não pretende ter linha-pai para ato de 1974.
+//   2. Linha extinta NÃO some do cadastro: o hub tem a coluna `cancelado`, e 500 linhas estão
+//      lá marcadas assim. Ou seja, órfã em evento não é rastro de exclusão do pai — é história
+//      mais velha que o cadastro.
+//   3. A "correção" óbvia (apagar o filho órfão) destruiria arquivo institucional
+//      insubstituível. Gate que só pode ser fechado destruindo dado é gate mal calibrado.
+//
+// As demais continuam ERRO: itinerario_teste/qh_teste/qh_predeterminado_teste são o estado
+// OPERACIONAL. Itinerário e quadro de horários de linha que a busca não acha é defeito de
+// verdade — e é o modo de falha da issue #63 (tela vazia, sem erro).
+//
+// Isto REBAIXA, nunca silencia: as rebaixadas continuam impressas como aviso a cada rodada.
+// Cuidado ao ampliar esta lista: rebaixar uma tabela inteira também rebaixa achado NOVO nela.
+// `186006400` (evento de 2021 com sufixo anômalo — o hub tem 186006000/186006001) é um
+// suspeito de digitação que passa a sair como aviso; está registrado no baseline e na issue.
+const REBAIXADOS_A_AVISO = new Set([
+  `codlinha_orfa${SEP}evento_teste sem match em tabela_vista_teste`,
+]);
+const severidadeDe = a => (REBAIXADOS_A_AVISO.has(chave(a)) ? 'aviso' : a.severidade);
+const foiRebaixado = a => REBAIXADOS_A_AVISO.has(chave(a)) && a.severidade === 'erro';
+
 if (atualizar) {
+  // `orfaos_conhecidos` é escrito À MÃO (a RPC agrega e não devolve QUAIS codlinhas). Sem este
+  // resgate, o primeiro --atualizar-baseline montaria um objeto novo e apagaria em silêncio o
+  // levantamento inteiro — que custou uma sessão para reconstruir.
+  let herdado = null;
+  try {
+    herdado = JSON.parse(await readFile(BASELINE, 'utf8')).orfaos_conhecidos ?? null;
+  } catch (e) {
+    if (e.code !== 'ENOENT') console.error(`Aviso: não consegui reler o baseline atual (${e.message}); orfaos_conhecidos não será preservado.`);
+  }
   const registro = {
     gerado_em: new Date().toISOString().slice(0, 10),
-    nota: 'Dívida de integridade conhecida. Cada entrada é dado para consertar; ao consertar, rode --atualizar-baseline.',
+    nota: 'Dívida de integridade conhecida. Cada entrada é dado para consertar; ao consertar, rode --atualizar-baseline. Só entra aqui o que pode DERRUBAR o gate — erro DEPOIS da reclassificação por natureza feita no check_data_quality.mjs (evento_teste órfã é aviso, não erro; o porquê está no comentário REBAIXADOS_A_AVISO do script).',
     // A função agrega. Para agir é preciso saber QUAIS codlinhas — esta query devolve as
     // órfãs uma por uma, e fica aqui para não se perder a cada regeneração do baseline.
     como_listar_os_orfaos:
       "select 'itinerario_teste' as tabela, codlinha, count(*) as linhas from itinerario_teste i " +
       'where codlinha is not null and not exists (select 1 from tabela_vista_teste t where t.codlinha = i.codlinha) ' +
       'group by 1,2 -- repita o padrão para qh_teste, qh_predeterminado_teste, evento_teste',
-    achados: achados.map(a => ({ verificacao: a.verificacao, severidade: a.severidade, qtd: Number(a.qtd), detalhe: a.detalhe })),
+    // Reinserido AQUI, e não no fim, para a regeneração não reordenar o arquivo e produzir um
+    // diff gigante que esconde a única linha que de fato mudou.
+    ...(herdado ? { orfaos_conhecidos: herdado } : {}),
+    // Só entra no baseline o que pode DERRUBAR o gate, isto é, erro DEPOIS da reclassificação
+    // por natureza. Sem este filtro, o primeiro `--atualizar-baseline` reintroduziria as
+    // rebaixadas (a RPC continua devolvendo `erro` para elas) e o arquivo passaria a carregar
+    // entradas que nunca são consultadas — dívida de mentira, ruído no diff.
+    achados: achados
+      .filter(a => severidadeDe(a) === 'erro')
+      .map(a => ({ verificacao: a.verificacao, severidade: severidadeDe(a), qtd: Number(a.qtd), detalhe: a.detalhe })),
   };
   await writeFile(BASELINE, JSON.stringify(registro, null, 2) + '\n', 'utf8');
   console.log(`✓ Baseline reescrito com ${registro.achados.length} achado(s) → scripts/data_quality_baseline.json`);
+  if (herdado) console.log('  · `orfaos_conhecidos` preservado do arquivo anterior — é MANTIDO À MÃO. Se você acabou de corrigir dado, atualize a lista também; a contagem sozinha não denuncia órfã trocada por outra.');
   process.exit(0);
 }
 
@@ -106,7 +156,7 @@ if (!semBaseline) {
 const novos = [], piorados = [], conhecidos = [], avisos = [];
 for (const a of achados) {
   const qtd = Number(a.qtd);
-  if (a.severidade !== 'erro') { avisos.push({ ...a, qtd }); continue; }
+  if (severidadeDe(a) !== 'erro') { avisos.push({ ...a, qtd, rebaixado: foiRebaixado(a) }); continue; }
   if (!base.has(chave(a))) { novos.push({ ...a, qtd }); continue; }
   const antes = base.get(chave(a));
   if (qtd > antes) piorados.push({ ...a, qtd, antes });
@@ -118,7 +168,12 @@ const linha = a => `    ${a.detalhe} — ${a.qtd} ${unidade(a.verificacao)}${a.a
 
 if (avisos.length) {
   console.log(`\n⚠ Avisos (${avisos.length}) — não derrubam o gate:`);
-  for (const a of avisos) console.log(`    [${a.verificacao}] ${a.detalhe} — ${a.qtd} ${unidade(a.verificacao)}`);
+  for (const a of avisos) {
+    // O sufixo é o que impede o rebaixamento de virar silêncio: quem lê a saída vê que a
+    // severidade foi decidida AQUI, não pelo banco, e sabe onde ir discutir.
+    const nota = a.rebaixado ? ' [rebaixado por natureza — ver REBAIXADOS_A_AVISO]' : '';
+    console.log(`    [${a.verificacao}] ${a.detalhe} — ${a.qtd} ${unidade(a.verificacao)}${nota}`);
+  }
 }
 if (conhecidos.length) {
   console.log(`\n· Dívida conhecida, dentro do baseline (${conhecidos.length}):`);
