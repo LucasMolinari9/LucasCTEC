@@ -29,27 +29,50 @@ const esperar = ms => new Promise(r => setTimeout(r, ms));
 const SB_TIMEOUT_MS = 20000;   // teto por requisição: evita a tela presa em "Carregando…" pra sempre
 const SB_RETRIES    = 2;       // tentativas extras só p/ erros transitórios (rede / 5xx / 429)
 
-// fetch com timeout via AbortController — cancela a requisição se passar do teto
-async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS){
+// Erro de requisição CANCELADA de propósito (busca ficou obsoleta), distinto de timeout e de
+// falha de rede. Quem chama trata isto como "ignore em silêncio", não como erro para exibir.
+const CANCELADO = 'RequisicaoCancelada';
+const ehCancelamento = e => e && e.name === CANCELADO;
+
+// fetch com timeout via AbortController — cancela a requisição se passar do teto.
+// `sinal` (opcional) é um AbortSignal EXTERNO, de quem quer cancelar antes disso (busca obsoleta).
+// Os dois são compostos, e a distinção entre eles é preservada: timeout vira mensagem para o
+// usuário, cancelamento externo é engolido. Sem essa distinção, trocar de termo de busca pintaria
+// "Tempo de resposta esgotado" na tela.
+async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal){
+  if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
-  finally { clearTimeout(t); }
+  const repassar = () => ctrl.abort();
+  if (sinal) sinal.addEventListener('abort', repassar, { once: true });
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } catch (e) {
+    // o abort veio de fora, não do relógio
+    if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
+    throw e;
+  } finally {
+    clearTimeout(t);
+    if (sinal) sinal.removeEventListener('abort', repassar);
+  }
 }
 
-async function sbFetch(table, qs = '') {
+async function sbFetch(table, qs = '', sinal) {
   const url = `${SB_URL}/rest/v1/${table}?${qs}`;
   let ultimoErro;
   for (let tentativa = 0; tentativa <= SB_RETRIES; tentativa++) {
     try {
       const res = await fetchComTimeout(url, {
         headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
-      });
+      }, SB_TIMEOUT_MS, sinal);
       if (!res.ok) {
         // 5xx/429 são transitórios → vale repetir; demais 4xx são definitivos
         if ((res.status >= 500 || res.status === 429) && tentativa < SB_RETRIES) {
           ultimoErro = new Error(`HTTP ${res.status}`);
           await esperar(400 * 2 ** tentativa);          // backoff: 400ms, 800ms
+          // o cancelamento pode chegar DURANTE o backoff: sem esta conferência, a tentativa
+          // seguinte sairia para a rede depois de a busca já ter sido abandonada.
+          if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
           continue;
         }
         const err = await res.json().catch(() => ({}));
@@ -57,9 +80,15 @@ async function sbFetch(table, qs = '') {
       }
       return marcarTrunc(await res.json(), qs);
     } catch (e) {
+      // cancelamento nunca repete: foi pedido, não é falha.
+      if (ehCancelamento(e)) throw e;
       ultimoErro = e;
       const transitorio = (e.name === 'AbortError') || (e instanceof TypeError); // timeout ou falha de rede
-      if (transitorio && tentativa < SB_RETRIES) { await esperar(400 * 2 ** tentativa); continue; }
+      if (transitorio && tentativa < SB_RETRIES) {
+        await esperar(400 * 2 ** tentativa);
+        if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
+        continue;
+      }
       if (e.name === 'AbortError') throw new Error('Tempo de resposta esgotado — verifique a conexão e tente novamente.');
       throw ultimoErro;
     }
@@ -219,7 +248,11 @@ const svg = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 
 // cor única (mesmo azul de "Documentos da Linha") pra todos os cards e pro destaque do
 // tópico ativo na sidebar — parou de variar por família de tópico.
-const ACCENT = 'var(--c-doc)', ACCENT_SOFT = '#e7f0f8';
+// (ACCENT/ACCENT_SOFT viviam aqui. Eram injetados como `style="--accent:…"` em 4 templates e
+//  valiam SEMPRE a mesma constante — nunca foram dinâmicos. Viraram `--accent`/`--accent-soft`
+//  estáticos no :root do styles.css em 27/07/2026, o que permitiu fechar o `'unsafe-inline'` do
+//  style-src da CSP. Se um dia o tema precisar variar por seção, o caminho é `setProperty` via
+//  CSSOM — que a CSP permite —, não o atributo de volta.)
 
 // metadados por view (título, ícone, cores, pré-requisito) — usados pelo clique do card,
 // pela busca do topo (consultas no dropdown) e pelo roteamento por hash. Populados eagerly,
@@ -228,7 +261,7 @@ const VIEW_META = {};
 const VIEW_TOPIC = {};   // view → key do tópico dono (SECTIONS[].key) — usado pela busca do topo
 SECTIONS.forEach(sec => {
   sec.items.forEach(([ic, title, desc, view, needsLine]) => {
-    VIEW_META[view] = { title, icon:ic, needsLine:!!needsLine, color:ACCENT, soft:ACCENT_SOFT };
+    VIEW_META[view] = { title, icon:ic, needsLine:!!needsLine };
     VIEW_TOPIC[view] = sec.key;
   });
 });
@@ -244,7 +277,6 @@ function topicGridHTML(sec){
   return sec.items.map(([ic, title, desc, view, needsLine]) => `
     <div class="card-slot">
       <button class="card${needsLine?' needs-line':''}" type="button"
-        style="--accent:${ACCENT};--accent-soft:${ACCENT_SOFT}"
         data-view="${view}" data-needs-line="${needsLine?1:0}" data-title="${esc(title)}">
         <span class="ico">${svg(I[ic])}</span>
         <span class="card-txt"><h3>${title}</h3><p>${desc}</p>${needsLine?'<span class="need-chip"></span>':''}</span>
@@ -281,8 +313,7 @@ function renderSideNav(activeKey){
       <span class="t-ico">${svg(I.search)}</span>Buscar Linha
     </button>` +
     SECTIONS.map(sec => `
-    <button type="button" class="topic-btn${(sec.key===activeKey&&!(activeKey==='doc'&&searchOpen))?' active':''}${sec.key===expandedTopicKey?' expanded':''}" data-topic="${sec.key}"
-      style="--accent:${ACCENT}">
+    <button type="button" class="topic-btn${(sec.key===activeKey&&!(activeKey==='doc'&&searchOpen))?' active':''}${sec.key===expandedTopicKey?' expanded':''}" data-topic="${sec.key}">
       <span class="t-ico">${svg(I[sec.icon])}</span>${sec.name}
       <span class="chev">${svg('<path d="m9 6 6 6-6 6"/>')}</span>
     </button>
@@ -301,12 +332,12 @@ function renderSideContent(key){
   // listeners de busca já ligados).
   if (key === 'doc' && searchOpen){
     sideContent.innerHTML = '';
-    selector.style.display = '';
+    selector.classList.remove('is-hidden');
     sideContent.appendChild(selector);
     return;
   }
   sideContent.innerHTML = `
-    <div class="sec-head" style="--accent:${ACCENT}"><h2>${sec.name}</h2></div>
+    <div class="sec-head"><h2>${sec.name}</h2></div>
     <p class="content-sub">${sec.desc}</p>
     <div class="grid">${topicGridHTML(sec)}</div>`;
 }
@@ -495,8 +526,7 @@ function matchViews(term){
     .slice(0, 4);
 }
 const viewResultsHTML = views => views.map(([view, m]) => `
-  <button class="result-view" type="button" data-open-view="${esc(view)}"
-    style="--accent:${m.color};--accent-soft:${m.soft}">
+  <button class="result-view" type="button" data-open-view="${esc(view)}">
     <span class="rv-ico">${svg(I[m.icon])}</span>
     <span class="rv-txt">${esc(m.title)}</span>
     <span class="rv-kind">consulta</span>
@@ -514,17 +544,25 @@ function openViewFromSearch(view){
 
 // `auto:true` = disparo da busca-enquanto-digita: sem toast de campo vazio e sem
 // mexer no rótulo do botão (feedback visual só na busca manual).
+// Controller da busca em voo. Trocar de termo CANCELA a anterior: antes, o descarte era só
+// pós-resposta (`if (term !== searchInput.value.trim()) return`), então a requisição obsoleta
+// ainda ia à rede e era paga inteira — com debounce de 300 ms, digitar "132004001" disparava
+// várias buscas completas das quais só a última importava.
+let buscaEmVoo = null;
 async function doSearch({ auto = false } = {}) {
   const term = searchInput.value.trim();
   if (!term) { if (!auto) toast('Digite o número ou nome da linha.', 'warn'); return; }
   if (!auto) { searchBtn.textContent = '…'; searchBtn.disabled = true; }
+  if (buscaEmVoo) buscaEmVoo.abort();
+  const ctrl = new AbortController();
+  buscaEmVoo = ctrl;
   try {
     const e1 = ilikeTerm(term);
     const encCode = ilikeTerm(term.replace(/[-.\s]/g, ''));
     const rows = await sbFetch('tabela_vista_teste',
       `select=${LINE_FIELDS}` +
       `&or=(numero_ligacao.ilike.*${e1}*,nome_ligacao.ilike.*${e1}*,codlinha.ilike.*${encCode}*)` +
-      `&limit=15`);
+      `&limit=15`, ctrl.signal);
     if (term !== searchInput.value.trim()) return;   // usuário já digitou outra coisa → descarta
     const viewsHTML = viewResultsHTML(matchViews(term));
     if (!rows.length && !viewsHTML) {
@@ -540,10 +578,15 @@ async function doSearch({ auto = false } = {}) {
     }
     openDropdown();
   } catch (e) {
+    // cancelada por uma busca mais nova: não é erro do usuário, não pinta nada.
+    if (ehCancelamento(e)) return;
     if (auto) return;                               // busca automática falhou → silencioso
     dropdown.innerHTML = `<div class="drop-error">Erro: ${esc(e.message)}</div>`;
     openDropdown();
   } finally {
+    // só limpa se ainda for a MINHA busca: uma busca antiga terminando depois não pode apagar o
+    // controller da busca nova, senão a próxima troca de termo não teria o que cancelar.
+    if (buscaEmVoo === ctrl) buscaEmVoo = null;
     if (!auto) { searchBtn.textContent = 'Abrir linha'; searchBtn.disabled = false; }
   }
 }
@@ -597,8 +640,8 @@ function bannerEmpHTML(row){
 // selectLine (usuário escolheu uma linha nova) quanto por activateTab (troca de aba só repinta
 // o banner com a linha que a aba de destino já tinha, sem tocar em setActiveLine/activeTab().line).
 function paintBanner(row){
-  if (!row){ banner.style.display = 'none'; return; }
-  banner.style.display = 'flex';
+  if (!row){ banner.classList.add('is-hidden'); return; }
+  banner.classList.remove('is-hidden');
   banner.innerHTML = `
     <span class="lb-num">${esc(row.numero_ligacao || row.codlinha)}</span>
     <div>
@@ -607,7 +650,7 @@ function paintBanner(row){
     </div>
     <button class="lb-clear" id="btnClearLine">✕ Limpar</button>`;
   document.getElementById('btnClearLine').addEventListener('click', () => {
-    setActiveLine(null); banner.style.display = 'none';
+    setActiveLine(null); banner.classList.add('is-hidden');
     updateNeedChips(); renderTabs(); syncHash();
   });
   // se o cache de empresas ainda não chegou, atualiza o texto quando carregar
@@ -787,7 +830,7 @@ function showPane(tab){
     if (active) restoreIds(t.paneEl); else stripIds(t.paneEl);
   });
 }
-function syncBackButton(){ btnBack.style.display = nav.length ? '' : 'none'; }
+function syncBackButton(){ btnBack.classList.toggle('is-hidden', !nav.length); }
 // rótulo da aba na faixa: título do documento (ou "Nova aba", sem view ainda) + a linha, se houver
 function tabLabel(t){
   const title = t.view ? t.view.title : 'Nova aba';
@@ -1031,9 +1074,9 @@ const nav = {
   goingBack: false,
   get stack(){ return activeTab().navStack; },
   get length(){ return this.stack.length; },
-  push(view){ this.stack.push(view); btnBack.style.display = ''; },
-  pop(){ const v = this.stack.pop(); btnBack.style.display = this.stack.length ? '' : 'none'; return v; },
-  reset(){ activeTab().navStack = []; this.goingBack = false; btnBack.style.display = 'none'; },
+  push(view){ this.stack.push(view); btnBack.classList.remove('is-hidden'); },
+  pop(){ const v = this.stack.pop(); btnBack.classList.toggle('is-hidden', !this.stack.length); return v; },
+  reset(){ activeTab().navStack = []; this.goingBack = false; btnBack.classList.add('is-hidden'); },
 };
 function closeModal(){
   if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen||document.webkitExitFullscreen||(()=>{})).call(document); }
@@ -1103,8 +1146,15 @@ function docHead(subtitle){
 function metaRows(pairs){
   return `<div class="doc-meta">${pairs.map(([k,v,full])=> k===''? '<div class="row"></div>' : `<div class="row${full?' full':''}"><b>${esc(k)}:</b><span>${v}</span></div>`).join('')}</div>`;
 }
+// Largura de coluna vira CLASSE, não `style="width:…"`: a CSP publica `style-src-attr 'none'`
+// e atributo style em markup é ignorado pelo navegador (verificado em Chromium headless).
+// `c.w` é sempre constante do próprio código — nunca dado do usuário —, então o conjunto é
+// FECHADO e cabe numa allowlist. Valor sem classe correspondente em styles.css derruba o
+// gate (tests/check.js, seção [2b]): sem essa guarda, uma largura nova viraria classe
+// inexistente e a coluna sairia torta EM SILÊNCIO.
+const colClass = w => (w ? ` class="w-${String(w).replace('px','').replace('%','p')}"` : '');
 function tableHTML(cols, bodyRows, foot, cls=''){
-  return `<div class="doc-table-wrap"><table class="doc-table${cls?' '+cls:''}"><thead><tr>${cols.map(c=>`<th${c.w?` style="width:${c.w}"`:''}>${esc(c.t)}</th>`).join('')}</tr></thead>
+  return `<div class="doc-table-wrap"><table class="doc-table${cls?' '+cls:''}"><thead><tr>${cols.map(c=>`<th${colClass(c.w)}>${esc(c.t)}</th>`).join('')}</tr></thead>
     <tbody>${bodyRows}</tbody></table></div>${foot?`<div class="doc-foot">${esc(foot)}</div>`:''}`;
 }
 
@@ -1399,7 +1449,7 @@ function quadroHorariosBodyHTML(interv, predet, orig){
         const body = rows.map(r=>`<tr><td class="td-num">${esc(fmtTime(r.hora_inicio))}</td>
           <td class="td-num">${esc(fmtTime(r.hora_fim))}</td><td class="td-tipo">${esc(orDash(r.intervalo))} min</td></tr>`).join('');
         html += `<div class="mt6"><div class="sentido-sep sm">${esc(dia)}</div>
-          <div class="doc-table-wrap"><table class="doc-table"><thead><tr><th style="width:33%">Início</th><th style="width:33%">Fim</th><th>Intervalo</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
+          <div class="doc-table-wrap"><table class="doc-table"><thead><tr><th class="w-33p">Início</th><th class="w-33p">Fim</th><th>Intervalo</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
       }
     }
   }
@@ -2072,11 +2122,27 @@ function classifyMunLines(itRows, codibge){
   return { dentro, inter };
 }
 // linhas (codlinha distintos) cujo itinerário passa por um município (codibge)
-async function linhasNoMunicipio(codibge){
-  // limite alto de propósito: Rio de Janeiro tem ~13,5 mil trechos de itinerário — com
-  // limite menor o conjunto chega incompleto e as interseções entre municípios encolhem
-  const rows = await sbFetch('itinerario_teste', `cod_municipio_origem=eq.${enc(codibge)}&select=codlinha&limit=30000`);
-  return distinctCods(rows);
+//
+// `memo` (opcional): Map de UMA execução, para não repetir a mesma consulta dentro da mesma
+// busca. NÃO é cache global de propósito — cache global aqui envelheceria em silêncio se o
+// Realtime caísse, e precisaria entrar no invalidateCaches; o ganho não paga o acoplamento,
+// porque a repetição que importa acontece toda dentro de uma única busca (ver
+// mostrarLinhasEntreMunicipios).
+async function linhasNoMunicipio(codibge, memo){
+  const chave = String(codibge);
+  // guarda a PROMESSA, não o resultado: duas chamadas para o mesmo município no mesmo tick
+  // pegam o mesmo voo em vez de disparar dois.
+  if (memo && memo.has(chave)) return memo.get(chave);
+  const p = (async () => {
+    // limite alto de propósito: Rio de Janeiro tem ~13,5 mil trechos de itinerário — com
+    // limite menor o conjunto chega incompleto e as interseções entre municípios encolhem
+    const rows = await sbFetch('itinerario_teste', `cod_municipio_origem=eq.${enc(codibge)}&select=codlinha&limit=30000`);
+    return distinctCods(rows);
+  })();
+  // promessa REJEITADA sai do memo: senão um erro transitório de rede ficaria memorizado
+  // pelo resto da busca e toda combinação seguinte falharia pelo mesmo motivo já superado.
+  if (memo){ memo.set(chave, p); p.catch(() => memo.delete(chave)); }
+  return p;
 }
 async function mostrarLinhasResultado(host, cods, titulo){
   const view = currentView, gen = beginGen(view);
@@ -2113,11 +2179,17 @@ async function mostrarLinhasEntreMunicipios(host, aTerm, bTerm, directional){
   try{
     const all = new Set();    // direcional: A→B, nessa ordem
     const inter = new Set();  // trafega pelos dois, qualquer ordem
+    // Memo de UMA execução. O laço é 5×5, e sem ele o mesmo `ca` era rebuscado nas 5 iterações
+    // internas e cada `cb` reaparecia a cada volta externa: 50 consultas de município para no
+    // máximo 10 municípios distintos. Com o memo, no pior caso 75 requisições viram ~35.
+    // Isso reduz a carga que o PORTAL gera — NÃO é rate limiting: quem quiser abusar chama o
+    // PostgREST direto com a chave anon, que é pública por design (ver docs/seguranca.md §9.2).
+    const memoMun = new Map();
     for(const ca of codsA.slice(0,5)){
       for(const cb of codsB.slice(0,5)){
         if(ca===cb) continue;
-        const lA = await linhasNoMunicipio(ca);
-        const sB = new Set(await linhasNoMunicipio(cb));
+        const lA = await linhasNoMunicipio(ca, memoMun);
+        const sB = new Set(await linhasNoMunicipio(cb, memoMun));
         const interPar = lA.filter(c=>sB.has(c));
         interPar.forEach(c=>inter.add(c));
         if(!directional || !interPar.length) continue;
@@ -3161,7 +3233,7 @@ async function applyRoute(){
         if (rows[0]) selectLine(rows[0]);
       } catch(_){ /* linha inacessível → segue sem selecionar */ }
     }
-    if (!cod && activeLine){ setActiveLine(null); banner.style.display = 'none'; updateNeedChips(); }
+    if (!cod && activeLine){ setActiveLine(null); banner.classList.add('is-hidden'); updateNeedChips(); }
     // tópico ativo no painel: dono do view (se houver), senão o segmento topico/, senão o padrão
     const topicoAlvo = (view && VIEW_TOPIC[view]) || topico || DEFAULT_TOPIC;
     if (currentTopicKey !== topicoAlvo) selectTopic(topicoAlvo);

@@ -20,6 +20,14 @@
     --surface:#ffffff;
     --line:#dbe4ec;
     --line-soft:#e9eff4;
+    /* Cor de destaque dos cards/tópicos/resultados. Até 27/07/2026 era injetada por
+       `style="--accent:…"` em 4 templates do app.js, e era o que exigia `'unsafe-inline'` no
+       style-src da CSP. Sempre valeu a MESMA constante (`ACCENT`/`ACCENT_SOFT` no app.js), então
+       nunca precisou ser dinâmica. Estática aqui, a CSP fecha e nada muda visualmente —
+       `--blue` e `--c-doc` são a mesma cor, então os `var(--accent, var(--blue))` espalhados
+       pelo arquivo continuam resolvendo igual. */
+    --accent:var(--c-doc);
+    --accent-soft:#e7f0f8;
     /* códigos de família (wayfinding) */
     --c-doc:#1466a6;
     --c-emp:#1f9d57;
@@ -325,6 +333,9 @@
 
   /* ---------- Active line banner ---------- */
   .line-banner{
+    /* veio do `style="display:none;margin-top:20px"` do index.html — o display virou .is-hidden,
+       o margin-top ficou aqui (era fácil perder no caminho, e sem ele o banner cola no topo). */
+    margin-top:20px;
     background:var(--navy-deep);
     border:1px solid rgba(255,255,255,.06);border-left:4px solid var(--green);
     border-radius:var(--radius);
@@ -867,3 +878,30 @@
     .content{padding:18px 16px}
   }
   .banner-wrap{max-width:1140px;margin:0 auto;padding:0 24px}
+
+  /* ---- Utilitários que substituíram atributos `style=` inline (27/07/2026) ----------------
+     A CSP passou a publicar `style-src-attr 'none'`, e atributo style em markup deixou de ter
+     efeito (verificado em Chromium headless: markup e setAttribute são bloqueados; o CSSOM —
+     el.style.x e setProperty — continua funcionando, e é por isso que o posicionamento dinâmico
+     do dropdown segue em JS).
+
+     `!important` aqui é deliberado, não preguiça: `.is-hidden` substitui um `style="display:none"`
+     inline, que ganhava de qualquer regra por especificidade. `.selector` e `.line-banner` são
+     `display:flex` com a MESMA especificidade de uma classe, e `.mt-btn` ainda reaparece dentro de
+     media query — depender de ordem de fonte deixaria o esconder à mercê da próxima regra que
+     alguém escrever depois. Um utilitário cujo trabalho é vencer precisa vencer. */
+  .is-hidden{display:none !important}
+
+  /* Larguras de coluna de tabela. Conjunto FECHADO: `c.w` no app.js é sempre constante do código,
+     nunca dado do usuário. O gate tests/check.js §[2b] falha se aparecer um `w:'…'` sem classe
+     aqui — sem essa guarda a coluna sairia torta em silêncio. */
+  .doc-table th.w-52{width:52px}   .doc-table th.w-55{width:55px}
+  .doc-table th.w-60{width:60px}   .doc-table th.w-62{width:62px}
+  .doc-table th.w-70{width:70px}   .doc-table th.w-78{width:78px}
+  .doc-table th.w-80{width:80px}   .doc-table th.w-82{width:82px}
+  .doc-table th.w-84{width:84px}   .doc-table th.w-90{width:90px}
+  .doc-table th.w-95{width:95px}   .doc-table th.w-100{width:100px}
+  .doc-table th.w-108{width:108px} .doc-table th.w-110{width:110px}
+  .doc-table th.w-120{width:120px} .doc-table th.w-130{width:130px}
+  .doc-table th.w-150{width:150px} .doc-table th.w-160{width:160px}
+  .doc-table th.w-33p{width:33%}

@@ -29,8 +29,15 @@ exibe e **atualiza ao vivo** (Realtime).
 - O botão **PDF** (barra do modal) monta o documento **completo** num container oculto
   `.pdf-export` e usa `window.print()` (vetorial) — sem dependência externa de PDF.
 - `vercel.json` define os cabeçalhos de segurança e `Cache-Control: must-revalidate`. A CSP é
-  **`script-src 'self'`** (sem `unsafe-inline` de script) e **`font-src 'self'`**; o `style-src`
-  mantém `'unsafe-inline'` (CSS embutido, decisão consciente).
+  **`script-src 'self'`**, **`style-src 'self'` + `style-src-attr 'none'`** e **`font-src 'self'`**
+  — **sem nenhum `unsafe-inline`** desde 27/07/2026 (achado SEC-08). Consequência prática:
+  **atributo `style=` em markup é IGNORADO pelo navegador, em silêncio.** Estilo novo vai em
+  **classe no `styles.css`**; o que for genuinamente dinâmico (posição calculada, p. ex.) vai por
+  **CSSOM** — `el.style.x = …` e `setProperty`, que a CSP permite (medido em Chromium headless).
+  Duas guardas cobram isso: `tests/check.js` §[1] e a regra Semgrep `divat-style-attr-quebra-csp`.
+- **`.vercelignore` é allowlist**: o deploy publica só `index.html`, `app.js`, `styles.css`,
+  `manifest.webmanifest`, `vercel.json` e `vendor/`. Arquivo público novo (ícone, fonte) precisa
+  ser reaberto lá, senão vira 404.
 
 ## Supabase
 - Projeto: **`bd_teste`** · ref **`lwzsxuaqqeoamukduhev`** · região sa-east-1.

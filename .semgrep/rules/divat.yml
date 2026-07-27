@@ -78,3 +78,25 @@ rules:
       arquivo — ver CLAUDE.md § Arquitetura.
     languages: [javascript, html]
     severity: ERROR
+
+  # ---------------------------------------------------------------------------------
+  # 4) Atributo style= em markup (quebra a CSP style-src-attr 'none')
+  # ---------------------------------------------------------------------------------
+  # Desde 27/07/2026 a CSP publica `style-src 'self'; style-src-attr 'none'`. Atributo
+  # `style=` em markup — inclusive dentro de template string que vira innerHTML — é
+  # IGNORADO pelo navegador (medido em Chromium headless: markup e setAttribute são
+  # bloqueados; o CSSOM, `el.style.x = …`, continua permitido). O sintoma da recaída é
+  # MUDO: a largura ou o esconder simplesmente não acontece, sem erro no console.
+  #
+  # Dobra a guarda equivalente do tests/check.js. Aqui pelo mesmo motivo das outras
+  # regras deste arquivo: o check.js pergunta "faz o que deve?", o Semgrep pergunta
+  # "contém padrão proibido?" — e este padrão só quebraria no navegador do usuário.
+  - id: divat-style-attr-quebra-csp
+    patterns:
+      - pattern-regex: '<[a-zA-Z][^>]*\sstyle\s*=\s*["`'']'
+    message: >-
+      Atributo `style=` em markup. A CSP de produção publica `style-src-attr 'none'` e o
+      navegador IGNORA o atributo — em silêncio. Use classe no styles.css (larguras de
+      coluna têm classes `.w-*`), ou `el.style.propriedade = …` via JS, que é permitido.
+    languages: [javascript, html]
+    severity: ERROR

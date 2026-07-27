@@ -323,7 +323,7 @@
      tópico "Documentos da Linha" — o app.js relocaliza este MESMO nó (não duplica)
      pra cima da grade de cards daquele tópico, onde a busca realmente é usada (ver
      `renderSideContent` no app.js). -->
-<div class="selector" style="display:none">
+<div class="selector is-hidden">
   <div class="field">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     <input id="lineInput" type="text" placeholder="Buscar linha por número (ex. 132004001) ou nome" autocomplete="off" aria-label="Buscar linha por número ou nome">
@@ -337,7 +337,7 @@
     <div class="modal-tabs" id="modalTabs" role="tablist" aria-label="Abas abertas"></div>
     <div class="modal-toolbar">
       <span class="mt-label"><span id="mtTitle">Cadastro de Linhas</span><span class="mt-live" id="mtLive">● ao vivo</span></span>
-      <button class="mt-btn" id="btnBack" title="Voltar" aria-label="Voltar" style="display:none">
+      <button class="mt-btn is-hidden" id="btnBack" title="Voltar" aria-label="Voltar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
         <span class="mt-btn-label">Voltar</span>
       </button>
@@ -367,7 +367,7 @@
 
 <!-- Banner linha ativa -->
 <div class="banner-wrap">
-  <div id="lineBanner" class="line-banner" style="display:none;margin-top:20px"></div>
+  <div id="lineBanner" class="line-banner is-hidden"></div>
 </div>
 
 <main id="app"><!-- seções renderizadas via JS --></main>
@@ -376,7 +376,7 @@
   <div class="footer-in">
     <span>DETRO/RJ · DIVAT — Cadastro de Linhas Regulares</span>
     <span class="pill">consulta pública</span>
-    <span class="right">Dados atualizados em tempo real · <span class="pill pill-ver" id="verTag">build 24/07-E</span></span>
+    <span class="right">Dados atualizados em tempo real · <span class="pill pill-ver" id="verTag">build 27/07-A</span></span>
   </div>
 </footer>
 

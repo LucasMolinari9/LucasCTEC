@@ -129,6 +129,65 @@ function jsonRespBadBody(status){
   ok(H.bannerTrunc(null)==='', 'h null -> empty');
   ok(H.bannerTrunc([])==='', 'h plain array -> empty');
 
+  // i) cancelamento externo (busca obsoleta) — SEC-02
+  // Cada caso aqui corresponde a um cuidado levantado na revisão de 27/07/2026. Sem eles o
+  // AbortController "funciona" no caso feliz e erra exatamente onde importa.
+  console.log('i) cancelamento por busca obsoleta');
+
+  // i1) sinal JÁ abortado: nem chega a sair para a rede.
+  {
+    const c = new AbortController(); c.abort();
+    setFetch(() => jsonResp(200, [{id:1}]));
+    let threw = null;
+    try { await H.sbFetch('t','select=*', c.signal); } catch(e){ threw = e; }
+    ok(H.ehCancelamento(threw), 'i1 sinal ja abortado -> CANCELADO', threw && threw.name);
+    ok(calls===0, 'i1 nao foi a rede', 'calls='+calls);
+  }
+
+  // i2) aborta DURANTE o voo: vira CANCELADO, não "Tempo de resposta esgotado".
+  // A distinção importa: sem ela, trocar de termo pintava erro de timeout na tela.
+  {
+    const c = new AbortController();
+    setFetch(() => new Promise((_res, rej) => {
+      c.signal.addEventListener('abort', () => {
+        const e = new Error('aborted'); e.name = 'AbortError'; rej(e);
+      });
+    }));
+    const p = H.sbFetch('t','select=*', c.signal);
+    setTimeout(() => c.abort(), 10);
+    let threw = null;
+    try { await p; } catch(e){ threw = e; }
+    ok(H.ehCancelamento(threw), 'i2 abort em voo -> CANCELADO', threw && (threw.name+'/'+threw.message));
+    ok(!/Tempo de resposta/.test(threw ? threw.message : ''), 'i2 nao vira mensagem de timeout');
+  }
+
+  // i3) cancelamento NÃO repete. Um 503 normalmente geraria 3 tentativas; com o sinal abortado
+  // durante o backoff, para na primeira.
+  {
+    const c = new AbortController();
+    setFetch((n) => { if (n === 1) { setTimeout(()=>c.abort(), 0); return jsonResp(503, {}); } return jsonResp(200, [{id:9}]); });
+    let threw = null;
+    try { await H.sbFetch('t','select=*', c.signal); } catch(e){ threw = e; }
+    ok(H.ehCancelamento(threw), 'i3 abort durante backoff -> CANCELADO', threw && threw.name);
+    ok(calls===1, 'i3 nao tentou de novo depois de cancelado', 'calls='+calls);
+  }
+
+  // i4) sem sinal, o comportamento antigo continua igual (503 -> retry -> 200).
+  {
+    setFetch((n) => n < 3 ? jsonResp(503, {}) : jsonResp(200, [{id:7}]));
+    const r4 = await H.sbFetch('t','select=*');
+    ok(Array.isArray(r4) && r4[0].id===7, 'i4 sem sinal: retry segue funcionando');
+    ok(calls===3, 'i4 tres tentativas', 'calls='+calls);
+  }
+
+  // i5) sinal que NUNCA aborta não atrapalha o caminho feliz.
+  {
+    const c = new AbortController();
+    setFetch(() => jsonResp(200, [{id:5}]));
+    const r5 = await H.sbFetch('t','select=*', c.signal);
+    ok(Array.isArray(r5) && r5[0].id===5, 'i5 sinal ocioso nao interfere');
+  }
+
   console.log('\n==== PLACAR:', pass+'/'+(pass+fail), '====');
   if (fail){ console.log('FALHAS:'); fails.forEach(f=>console.log('  -',f)); process.exit(1); }
 })();
