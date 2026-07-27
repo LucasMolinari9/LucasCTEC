@@ -149,9 +149,12 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    propósito (um vermelho não esconde o outro): `ci.yml` (gate leve — `tests/check.js`),
    `views.yml` (navegador — `check_views.mjs` + `check_abas.mjs`) e `semgrep.yml` (estático).
 2. **Antes de publicar, rode `node tests/check.js`** — valida a sintaxe do `app.js`, garante que
-   não voltou `<script>` inline no `index.html`, confere as cópias de teste (anti-drift) e roda
-   todos os testes. Só publique tudo verde. (Ao alterar função com cópia em `tests/*.harness.js`,
-   atualize a cópia.) **Ao mexer nas abas do modal / no seletor de documentos**, rode também
+   não voltou `<script>` inline no `index.html`, confere as cópias de teste (anti-drift), cobra a
+   **deriva docs×código** (seção `[2b]`, ver abaixo) e roda todos os testes. Só publique tudo
+   verde. (Ao alterar função com cópia em `tests/*.harness.js`, atualize a cópia — e se criar
+   cópia nova, **adicione a guarda no `canon`**: o `check.js` agora falha se um símbolo exportado
+   pelo harness não tiver guarda, porque foi assim que `ilikeTerm` e `MAX_TABS` ficaram
+   descobertos.) **Ao mexer nas abas do modal / no seletor de documentos**, rode também
    `node scripts/check_abas.mjs` — checagem de regressão em navegador headless (Playwright, com
    o PostgREST stubado); fica fora do `check.js` porque este é offline e sem dependências, mas
    **roda no CI** junto com o `check_views.mjs` (workflow `views.yml`).
@@ -193,6 +196,24 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    toque esses arquivos — o cron existe porque deriva também nasce de mudança NO BANCO, que
    não gera push. Do ambiente do Claude não roda (rede até o Supabase bloqueada); é para a
    máquina do dono e o CI. Fica **fora** do `tests/check.js` (contrato dele: offline).
+2d. **Deriva docs×código — seção `[2b]` do `tests/check.js`** (offline, roda no gate de sempre).
+   Irmã do `check_deriva.mjs`: ele guarda docs×**banco**, esta guarda docs×**código** — o eixo
+   que ficava descoberto. Nasceu da auditoria externa de 27/07/2026, que achou 6 derivas
+   plantadas pela extração de 21-22/07 (o README ainda anunciava "um único arquivo `index.html`
+   com CSS e JS embutidos" e `supabase-js` vindo de CDN; o runbook de restauração mandava editar
+   `SB_URL`/`SB_KEY` no `index.html`; <!-- deriva-ok: reconta o bug --> duas contagens erradas; dois docs terminando com
+   `</content>` vazado). **Extração de arquivo é exatamente o tipo de mudança que esquece a
+   prosa que menciona o arquivo antigo** — e nenhuma ferramenta do repo era capaz de ver isso.
+   Ela cobra 4 coisas nos **docs vivos** (o `CHANGELOG`, os `analise-*.md` e os
+   `revisao-externa-*.md` ficam fora de propósito: são snapshots datados): (1) **fatos numéricos**
+   declarados na prosa batem com o código — linhas do `app.js`, tamanho/percentual da seção
+   `MODAL`, nº de views do `check_views.mjs`, `RT_TABLES`, tabelas do `backup_rest.mjs` (tolerância
+   de 8% nos "~Nk" e 1,5 ponto nos "~N%", para arredondamento não virar alarme); (2) todo **link
+   markdown** resolve; (3) `SB_URL`/`SB_KEY` **nunca** aparecem na mesma linha que `index.html` <!-- deriva-ok: enuncia a regra -->;
+   (4) nenhum arquivo termina com **tag de ferramenta de IA vazada**. Se você mudar uma frase que
+   carrega número, o gate cobra o número — **atualize o número, não apague a guarda** (se a frase
+   mudou de forma, ajuste o regex na tabela `FATOS`). Ela é deliberadamente estreita: a 1ª versão
+   varria todo token em backtick e deu 61 falsos positivos contra 0 verdadeiros.
 3. Merge na `main` → republica sozinho (ou MCP `deploy_to_vercel`). As telas dos usuários se
    atualizam via detector de versão. Bumpe o carimbo se quiser confirmar a chegada.
 4. Mudanças de **dados** NÃO exigem deploy — o site lê o Supabase ao vivo.
