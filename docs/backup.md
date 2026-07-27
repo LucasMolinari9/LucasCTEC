@@ -152,6 +152,32 @@ voltam certos. Para só visualizar certo: Excel → Dados → De Texto/CSV → o
 (Obs.: isto é diferente da corrupção `U+FFFD` "�" já documentada no `CLAUDE.md`, que é perda
 real na origem da importação — essa não volta reimportando, só reimportando o dado original em UTF-8.)
 
+## O que a integridade do dump garante (e o que NÃO garante)
+
+Desde 27/07/2026 (achado SEC-06 da auditoria externa), o `backup_rest.mjs`:
+
+- **Pagina por KEYSET**, não por `OFFSET`. O cabeçalho do script sempre afirmou "pagina pela
+  PRIMARY KEY", mas o código fazia `order=PK` + `offset` — que é outra coisa: sob escrita
+  concorrente, o offset desloca a janela e o dump **pula ou duplica** linhas em silêncio.
+- **Confere a contagem** contra o `Content-Range` (`count=exact`) do próprio servidor. Se descer
+  **menos** do que o servidor contou, o backup **aborta** — dump incompleto não pode terminar com
+  cara de sucesso. Se descer **mais**, apenas avisa (linha inserida durante a corrida é benigna).
+- **Grava SHA-256 por tabela** no `manifest.json`.
+
+**O que isso NÃO prova:** o SHA-256 responde "este arquivo é o mesmo que eu gerei?", não "este
+dump presta?". Um dump internamente incoerente tem hash tão válido quanto um bom. E nenhuma dessas
+verificações substitui o item abaixo.
+
+> ### ⚠️ Pendência aberta: o restore nunca foi testado ponta a ponta
+>
+> Apontado pela revisão de 16/07/2026, repetido em 27/07, e **ainda sem evidência de ter sido
+> feito**. O plano é Free, sem PITR. Ter backup que ninguém restaurou é ter uma hipótese, não uma
+> rede de segurança — e o momento de descobrir que ela não funciona não pode ser o da perda real.
+>
+> Nenhum agente fecha isso: é rodar o roteiro da seção "Como RESTAURAR" contra um projeto Supabase
+> descartável, na máquina do dono, e anotar quanto tempo levou (RTO) e quanto dado se perderia
+> (RPO). Enquanto não for feito, **SEC-06 é "mitigado", não "encerrado"**.
+
 ## O que este backup NÃO cobre
 
 - **Auth** (usuário logado do dono) — recriar manualmente; é 1 login.

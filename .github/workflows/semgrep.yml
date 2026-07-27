@@ -29,11 +29,19 @@ on:
   push:
   pull_request:
 
+# GITHUB_TOKEN no mínimo: nenhum destes workflows faz push, abre PR ou comenta.
+# Sem este bloco o token herda o default do repo/organização, que pode ser contents: write
+# (achado SEC-07 da auditoria de 27/07/2026).
+permissions:
+  contents: read
+
 jobs:
   semgrep:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false   # nenhum job faz push; token fora do .git/config do runner
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'

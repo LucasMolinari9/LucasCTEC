@@ -1,15 +1,20 @@
 // backup_rest.mjs — Backup lógico (só DADOS) das tabelas do portal DIVAT.
 //
-// Para quem NÃO tem pg_dump instalado. Usa a REST do Supabase (PostgREST) e pagina
-// pela PRIMARY KEY de cada tabela. Gera 1 arquivo NDJSON por tabela + manifest.json.
+// Para quem NÃO tem pg_dump instalado. Usa a REST do Supabase (PostgREST) e pagina por KEYSET
+// sobre a PRIMARY KEY de cada tabela ("traga o que vem depois desta chave"), não por OFFSET.
+// Gera 1 arquivo NDJSON por tabela + manifest.json com contagem e SHA-256 por tabela.
+//
+// (Até 27/07/2026 este cabeçalho dizia "pagina pela PRIMARY KEY" enquanto o código fazia
+// `order=PK` + `offset` — que é outra coisa, e vulnerável a pular/duplicar linha sob escrita
+// concorrente. Achado da revisão externa.)
 //
 // DOIS MODOS (decidido pela chave presente no ambiente):
 //   COMPLETO — SUPABASE_SERVICE_KEY (ignora RLS): baixa TUDO, inclusive as 4 tabelas
 //              de staging do ETL. Rodar só na SUA máquina; a service key jamais sai dela.
 //   PÚBLICO  — SUPABASE_ANON_KEY (só o que o RLS deixa): baixa as 14 tabelas públicas
 //              do portal (sem staging). É o modo do workflow do GitHub Actions
-//              (.github/workflows/backup.yml) — o repo é público e a anon key também,
-//              então o artifact não expõe nada além do que a API pública já expõe.
+//              (.github/workflows/backup.yml) — a anon key é pública por design, então o
+//              artifact não expõe nada além do que a API pública já expõe.
 //
 // NÃO substitui o pg_dump (que também salva schema/policies/índices). Ver docs/backup.md.
 //
@@ -24,6 +29,7 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 
 const URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -65,19 +71,62 @@ const TABELAS = {
 
 const headers = { apikey: KEY, Authorization: `Bearer ${KEY}` };
 
+// Filtro keyset: "traga o que vem DEPOIS desta chave". Para PK de uma coluna é um `gt` simples;
+// para PK composta é a comparação lexicográfica escrita à mão, porque o PostgREST não expõe
+// comparação de tupla: (a,b) > (x,y)  ⇔  a > x OR (a = x AND b > y).
+function filtroKeyset(cols, ultimo) {
+  const v = c => encodeURIComponent(String(ultimo[c]));
+  if (cols.length === 1) return `&${cols[0]}=gt.${v(cols[0])}`;
+  const termos = [];
+  for (let i = 0; i < cols.length; i++) {
+    const iguais = cols.slice(0, i).map(c => `${c}.eq.${v(c)}`);
+    const maior = `${cols[i]}.gt.${v(cols[i])}`;
+    termos.push(iguais.length ? `and(${[...iguais, maior].join(',')})` : maior);
+  }
+  return `&or=(${termos.join(',')})`;
+}
+
+// Paginação KEYSET, não OFFSET. Com offset, uma escrita concorrente que insere ou apaga uma linha
+// antes da página atual desloca a janela: linhas são PULADAS ou DUPLICADAS silenciosamente, e o
+// dump sai plausível e errado. O keyset ancora na última chave lida, então uma escrita concorrente
+// pode fazer faltar/sobrar dado novo, mas nunca embaralha o que já passou.
+// (O cabeçalho deste arquivo dizia "pagina pela PRIMARY KEY" desde sempre; era `order=PK` +
+// `offset`, que é outra coisa. Achado da revisão externa de 27/07/2026.)
 async function dumpTabela(tabela, pk) {
+  const cols = pk.split(',');
   const linhas = [];
-  for (let offset = 0; ; offset += PAGE) {
-    const url = `${URL}/rest/v1/${tabela}?select=*&order=${pk}.asc&limit=${PAGE}&offset=${offset}`;
-    const r = await fetch(url, { headers });
+  let ultimo = null;
+
+  // count=exact na primeira requisição: o total do servidor, para conferir no fim se o que desceu
+  // é o que existia. Sem isso, uma página curta espúria encerra o laço e o dump termina "com
+  // sucesso" faltando dado — falha silenciosa, a pior espécie num backup.
+  let esperado = null;
+
+  for (;;) {
+    const url = `${URL}/rest/v1/${tabela}?select=*&order=${cols.map(c => `${c}.asc`).join(',')}&limit=${PAGE}`
+      + (ultimo ? filtroKeyset(cols, ultimo) : '');
+    const r = await fetch(url, { headers: ultimo ? headers : { ...headers, Prefer: 'count=exact' } });
     if (!r.ok) throw new Error(`${tabela}: HTTP ${r.status} — ${await r.text()}`);
+    if (esperado === null) {
+      // Content-Range: "0-999/52146" — o que vem depois da barra é o total.
+      const m = /\/(\d+)\s*$/.exec(r.headers.get('content-range') || '');
+      if (m) esperado = Number(m[1]);
+    }
     const page = await r.json();
     linhas.push(...page);
     if (page.length < PAGE) break; // última página
+    ultimo = page[page.length - 1];
   }
+
   const arquivo = join(OUT, `${tabela}.ndjson`);
-  await writeFile(arquivo, linhas.map((x) => JSON.stringify(x)).join('\n') + (linhas.length ? '\n' : ''));
-  return linhas.length;
+  const conteudo = linhas.map((x) => JSON.stringify(x)).join('\n') + (linhas.length ? '\n' : '');
+  await writeFile(arquivo, conteudo);
+
+  // SHA-256 do arquivo: detecta corrupção em trânsito e no armazenamento. NÃO prova consistência
+  // lógica — um dump internamente incoerente tem hash tão válido quanto um bom. Está aqui para
+  // responder "este arquivo é o mesmo que eu gerei?", não "este dump presta?".
+  const sha256 = createHash('sha256').update(conteudo).digest('hex');
+  return { linhas: linhas.length, esperado, sha256 };
 }
 
 async function main() {
@@ -86,17 +135,37 @@ async function main() {
   console.log(`Modo: ${PUBLICO ? 'PÚBLICO (anon key — sem staging)' : 'COMPLETO (service key)'} — ${alvo.length} tabelas`);
   const manifest = { gerado_em: new Date().toISOString(), url: URL, modo: PUBLICO ? 'publico' : 'completo', tabelas: {} };
   let total = 0;
+  const faltando = [], sobrando = [];
   for (const [tabela, pk] of alvo) {
     process.stdout.write(`  ${tabela} … `);
-    const n = await dumpTabela(tabela, pk);
-    manifest.tabelas[tabela] = n;
-    total += n;
-    console.log(`${n} linhas`);
+    const { linhas, esperado, sha256 } = await dumpTabela(tabela, pk);
+    manifest.tabelas[tabela] = { linhas, esperado, sha256 };
+    total += linhas;
+    // Assimetria deliberada: baixar MENOS que o servidor contou é dado faltando — backup corrompido,
+    // aborta. Baixar MAIS é linha inserida durante a corrida — benigno, só avisa. Falhar nos dois
+    // casos jogaria fora um backup bom por causa de uma escrita concorrente; não falhar no primeiro
+    // entregaria um backup incompleto com cara de sucesso.
+    if (esperado !== null && linhas < esperado) faltando.push(`${tabela}: baixou ${linhas}, servidor contou ${esperado}`);
+    if (esperado !== null && linhas > esperado) sobrando.push(`${tabela}: baixou ${linhas}, servidor contou ${esperado}`);
+    console.log(`${linhas} linhas${esperado !== null && linhas !== esperado ? ` (servidor: ${esperado})` : ''}`);
   }
   manifest.total_linhas = total;
   await writeFile(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+
+  if (sobrando.length) {
+    console.log(`\n⚠ Mais linhas que a contagem inicial (provável escrita durante o dump) — não invalida:`);
+    for (const s of sobrando) console.log(`    ${s}`);
+  }
+  if (faltando.length) {
+    console.error(`\n✗ BACKUP INCOMPLETO — desceu menos do que o servidor contou:`);
+    for (const s of faltando) console.error(`    ${s}`);
+    console.error('\nNão use este dump. Rode de novo; se repetir, investigue antes de confiar.');
+    process.exit(1);
+  }
+
   console.log(`\nOK — ${total} linhas em ${alvo.length} tabelas → ${OUT}/`);
   console.log('Guarde essa pasta FORA do git (o .gitignore já ignora backup_*/).');
+  console.log('SHA-256 por tabela está no manifest.json — confere BYTES, não consistência lógica.');
 }
 
 main().catch((e) => {

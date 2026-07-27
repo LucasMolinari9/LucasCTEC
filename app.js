@@ -1982,7 +1982,9 @@ LOADERS.municipioRegiao = async () => {
         const modo = scope.value;
         const it = await sbFetch('rpc/divat_linhas_regiao', `p_regiao=${enc(region)}&p_modo=${enc(modo)}&select=codlinha&limit=2000`);
         const lc = distinctCods(it,500);
-        if(!lc.length){ result.innerHTML = emptyBox('Nenhuma linha para esse critério na região '+esc(region)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+        // sem esc() aqui de propósito: emptyBox já escapa. Escapar duas vezes fazia uma região
+        // com apóstrofo sair como &amp;#39; na tela.
+        if(!lc.length){ result.innerHTML = emptyBox('Nenhuma linha para esse critério na região '+region+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
         const rows = await fetchLinesByCods(lc,{limit:500});
         const label = modo==='origem' ? 'com origem na' : 'que trafegam dentro da';
         const prefix = bannerTrunc(it)

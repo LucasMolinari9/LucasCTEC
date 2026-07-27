@@ -1,0 +1,26 @@
+# O que a Vercel PODE publicar. Allowlist (nega tudo, reabre o necessário), não denylist.
+#
+# Achado SEC-03 da auditoria externa de 27/07/2026: sem este arquivo, o deploy estático mandava a
+# RAIZ INTEIRA do repositório para o ar. Foram confirmados HTTP 200 em produção para /CLAUDE.md,
+# /docs/backup_schema.sql e /tests/check.js — ou seja, esquema do banco, nomes de tabelas,
+# policies, rotinas de backup e histórico de auditorias, servidos publicamente. Não é acesso ao
+# banco, mas entrega de graça todo o reconhecimento de um atacante.
+#
+# Por que ALLOWLIST e não denylist: uma lista de "não publique docs/, tests/, scripts/" esquece o
+# diretório que alguém criar mês que vem. Negar tudo e reabrir o que é público falha do lado
+# seguro — arquivo novo nasce não publicado, e o sintoma (404 num asset) é barulhento e imediato,
+# ao contrário do vazamento, que é silencioso.
+#
+# `!/vendor` sozinho basta para liberar vendor/fonts/*.woff2, os ícones e o supabase-js: o padrão
+# `/*` é ancorado e casa só o primeiro nível, então reabrir o diretório reabre o conteúdo.
+# Verificado com `git check-ignore` (mesma semântica de .gitignore que a Vercel usa) — não
+# assumido. Um `!/vendor/**` extra seria redundante.
+#
+# AO ADICIONAR ARQUIVO PÚBLICO NOVO (ícone, fonte, página), reabra-o aqui — senão vira 404.
+/*
+!/index.html
+!/app.js
+!/styles.css
+!/manifest.webmanifest
+!/vercel.json
+!/vendor
