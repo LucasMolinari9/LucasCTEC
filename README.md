@@ -52,12 +52,14 @@ ou de rede ficam de fora dele e rodam no CI:
 | `./scripts/semgrep.sh` | padrões proibidos (`eval`, CDN em runtime, `pdfHTML` fora do seam) | Semgrep |
 | `node scripts/check_realtime.mjs` | publicação Realtime × `RT_TABLES` | rede |
 | `node scripts/check_deriva.mjs` | deriva docs × banco | rede |
+| `node scripts/check_data_quality.mjs` | órfãos referenciais e `U+FFFD` no banco (pós-ETL) | rede |
 
 O CI roda esses em workflows **separados de propósito**, para que um vermelho não esconda o
 outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 [`views.yml`](.github/workflows/views.yml) (navegador),
 [`semgrep.yml`](.github/workflows/semgrep.yml) (estático),
-[`deriva.yml`](.github/workflows/deriva.yml) (semanal + sob demanda) e
+[`deriva.yml`](.github/workflows/deriva.yml) (semanal + sob demanda),
+[`db-checks.yml`](.github/workflows/db-checks.yml) (semanal — Realtime e qualidade dos dados) e
 [`backup.yml`](.github/workflows/backup.yml) (backup semanal).
 
 ## Publicação
@@ -82,7 +84,7 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 | `docs/` | Documentação técnica (abaixo). |
 | `CLAUDE.md` | Contexto detalhado do projeto para sessões de IA (mapa do código, banco, armadilhas). |
 | `CONTEXT.md` | Glossário do domínio (termos do cadastro de linhas). |
-| `.github/workflows/` | Os 5 workflows de CI (ver a tabela de testes acima). |
+| `.github/workflows/` | Os 6 workflows de CI (ver a tabela de testes acima). |
 
 ### Documentação (`docs/`)
 

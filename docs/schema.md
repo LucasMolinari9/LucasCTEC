@@ -11,6 +11,14 @@ do `app.js`, sem constraint no banco). Complementa a tabela *"Tabelas → onde a
 > conferência e para qualquer sessão futura (humana ou IA) entender os joins sem reler ~3,2
 > mil linhas de JS. Gerado do schema **ao vivo** (Supabase) + os joins reais do frontend.
 
+> **⚠ Ligação implícita não é ligação garantida — e já falhou.** Como o Postgres não valida
+> essas ligações, a integridade depende só da disciplina do ETL. Medição de 27/07/2026: **17
+> `codlinha` órfãs** (filhos em `itinerario_teste`, `qh_teste`, `qh_predeterminado_teste` e
+> `evento_teste` apontando para linha que não existe no hub) + **4 linhas** com `cod_origem`
+> inexistente. Quando isso acontece o portal **não avisa: a tela sai vazia, sem erro.** O alarme
+> é `scripts/check_data_quality.mjs` (semanal, workflow `db-checks.yml`) e a dívida atual está
+> registrada em `scripts/data_quality_baseline.json`. Ver `CLAUDE.md` §2e.
+
 ## Visão geral — hub-and-spoke
 
 `tabela_vista_teste` (cadastro de linhas) é o **hub**. Praticamente tudo se liga a ela por
@@ -156,7 +164,7 @@ o resto é interno/diagnóstico.
 |---|---|---|
 | `divat_busca_logradouro(termo, p_ibge?)` | busca linhas por logradouro (tipo+nome, sem acento, trigram; `p_ibge` filtra por município) | **front via RPC** — Ligações por Logradouro |
 | `divat_linhas_regiao(p_regiao, p_modo)` | linhas por região do município de origem (`dentro`/`origem`) | **front via RPC** — Linhas por Região e Município |
-| `divat_data_quality()` | diagnóstico de qualidade pós-ETL (órfãos referenciais, U+FFFD) | ninguém no repo hoje — o runner semanal é a issue #63 |
+| `divat_data_quality()` | diagnóstico de qualidade pós-ETL (órfãos referenciais, U+FFFD) | `scripts/check_data_quality.mjs` (como `anon`), semanal no workflow `db-checks.yml` |
 | `divat_api_shape()` | o que a API pública enxerga (tabelas/colunas/RPCs, na visão de quem chama) | `scripts/check_deriva.mjs` (como `anon`) |
 | `f_unaccent(text)` | wrapper IMMUTABLE do `unaccent` | `divat_busca_logradouro` + índice de expressão `trgm_itin_logr_tipo_nome_norm` |
 | `fn_vigor_auto()` | zera `vigor` quando a portaria vira `REVOGADA` | trigger `trg_vigor_auto` |

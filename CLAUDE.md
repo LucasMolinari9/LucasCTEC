@@ -214,6 +214,25 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    carrega número, o gate cobra o número — **atualize o número, não apague a guarda** (se a frase
    mudou de forma, ajuste o regex na tabela `FATOS`). Ela é deliberadamente estreita: a 1ª versão
    varria todo token em backtick e deu 61 falsos positivos contra 0 verdadeiros.
+2e. **Qualidade dos dados pós-ETL — `node scripts/check_data_quality.mjs`** (precisa de rede;
+   chama a RPC `divat_data_quality()` como `anon`). Fecha a issue #63. Roda semanal no workflow
+   `db-checks.yml`, que **também passou a rodar o `check_realtime.mjs`** — ele existia desde
+   sempre e não estava em nenhum workflow, só rodava se alguém lembrasse.
+   **A integridade hub-and-spoke JÁ ESTÁ VIOLADA no banco** (medido em 27/07/2026): há **17
+   codlinhas órfãs** — filhos em `itinerario_teste` (2), `qh_teste` (3),
+   `qh_predeterminado_teste` (5) e `evento_teste` (7) apontando para `codlinha` que não existe
+   em `tabela_vista_teste` — mais **4 linhas** de `qh_predeterminado_teste` com `cod_origem`
+   inexistente em `origem_teste`. `146016000` e `191020001` aparecem órfãos em **três** tabelas
+   cada: cara de linha apagada do pai deixando os filhos atrás. **Consequência prática: as views
+   dessas linhas renderizam VAZIAS, sem erro** — é exatamente o modo de falha que a issue #63
+   descreve, já acontecendo. (U+FFFD e `codempresa` inválida: zero achados, os dois limpos.)
+   Por isso o script tem **baseline** (`scripts/data_quality_baseline.json`): gate vermelho desde
+   o primeiro dia é gate que se aprende a ignorar, e apagar achado seria mentir. Ele passa com a
+   dívida conhecida e falha no instante em que aparece achado **novo** ou um conhecido **piora**.
+   O baseline é dívida registrada, não perdão — ao consertar dado, rode
+   `--atualizar-baseline` para o gate voltar a apertar; para ver o estado cru, `--sem-baseline`.
+   **Atenção:** `qtd` não tem unidade única — em `codlinha_orfa` é `count(distinct codlinha)`,
+   nas outras verificações é `count(*)` de linhas (a saída rotula qual é qual).
 3. Merge na `main` → republica sozinho (ou MCP `deploy_to_vercel`). As telas dos usuários se
    atualizam via detector de versão. Bumpe o carimbo se quiser confirmar a chegada.
 4. Mudanças de **dados** NÃO exigem deploy — o site lê o Supabase ao vivo.

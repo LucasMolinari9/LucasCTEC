@@ -246,6 +246,22 @@ console.log('\n[2b] Deriva docs × código');
   }
   if (!sbErrado) okline('SB_URL/SB_KEY sempre atribuídas ao app.js');
 
+  // --- o baseline de qualidade dos dados é legível offline ---
+  // O check_data_quality.mjs só roda no cron semanal (precisa de rede). Um baseline malformado
+  // ou com entrada incompleta só apareceria uma semana depois, e o gate semanal falharia por
+  // motivo errado. Conferir aqui custa nada.
+  if (existe('scripts/data_quality_baseline.json')){
+    try {
+      const b = JSON.parse(ler('scripts/data_quality_baseline.json'));
+      if (!Array.isArray(b.achados)) throw new Error('campo "achados" não é um array');
+      const ruim = b.achados.filter(a => !a.verificacao || !a.detalhe || !a.severidade || !Number.isFinite(a.qtd));
+      if (ruim.length) throw new Error(`${ruim.length} entrada(s) sem verificacao/detalhe/severidade/qtd`);
+      okline(`baseline de qualidade dos dados válido (${b.achados.length} achado(s) de dívida registrada)`);
+    } catch (e){
+      fail(`scripts/data_quality_baseline.json inválido: ${e.message}`);
+    }
+  }
+
   // --- nenhum arquivo termina com tag de ferramenta de sessão de IA vazada ---
   // Dois docs terminavam com </content> (e um com </invoke>): sobra de chamada de ferramenta
   // que virou conteúdo do arquivo. Só sobrevive porque ninguém releu o arquivo até o fim.

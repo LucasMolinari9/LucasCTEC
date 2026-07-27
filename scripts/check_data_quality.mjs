@@ -1,0 +1,152 @@
+// check_data_quality.mjs — Checagem VIVA de qualidade dos dados pós-ETL (issue #63).
+//
+// Por que existe: o banco é "hub-and-spoke" — quase tudo se liga a tabela_vista_teste por
+// codlinha, mas a ÚNICA foreign key real é a fk_tarifa_linha. Os outros joins são convenção,
+// feitos no JavaScript, e o Postgres não os garante. Logo a integridade depende da disciplina
+// do ETL, não do banco. Quando um filho aponta para codlinha/cod_origem que não existe no pai,
+// o portal NÃO avisa: a tela simplesmente aparece vazia, sem erro. Este script é o alarme.
+//
+// Irmão do check_realtime.mjs e do check_deriva.mjs: mesma anon key pública do app.js, mesma
+// forma (função read-only no banco + runner fino aqui). A função public.divat_data_quality()
+// é SECURITY INVOKER com EXECUTE para anon, então roda exatamente com a visão de anon.
+//
+// Uso (na SUA máquina / CI — daqui o ambiente do Claude não alcança o Supabase):
+//   node scripts/check_data_quality.mjs                  # respeita o baseline
+//   node scripts/check_data_quality.mjs --sem-baseline    # estado cru do banco
+//   node scripts/check_data_quality.mjs --atualizar-baseline
+//
+// Requer apenas Node 18+ (fetch nativo). Nenhuma dependência. Sai 1 se houver achado de
+// severidade `erro` além do baseline; avisos nunca derrubam.
+//
+// SOBRE O BASELINE (leia antes de mexer): quando este script nasceu, o banco JÁ tinha 5
+// achados de erro (17 codlinhas órfãs em 4 tabelas + 4 linhas com cod_origem inválido) — a
+// integridade hub-and-spoke já estava violada, sem ninguém saber. Um gate vermelho desde o
+// primeiro dia é um gate que se aprende a ignorar, e apagar os achados seria mentir. Então o
+// estado conhecido fica registrado em data_quality_baseline.json: o script passa hoje e falha
+// no instante em que aparecer um achado NOVO ou um conhecido PIORAR. O baseline é dívida
+// registrada, não perdão — cada linha dele é dado para consertar, e ao consertar rode
+// --atualizar-baseline para o gate voltar a apertar.
+
+import { readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const BASELINE = join(ROOT, 'scripts', 'data_quality_baseline.json');
+
+const args = new Set(process.argv.slice(2));
+const semBaseline = args.has('--sem-baseline') || args.has('--all');
+const atualizar = args.has('--atualizar-baseline');
+
+function extrair(js, re, oquê) {
+  const m = re.exec(js);
+  if (!m) { console.error(`Não achei ${oquê} no app.js.`); process.exit(1); }
+  return m[1];
+}
+
+const js = await readFile(join(ROOT, 'app.js'), 'utf8');
+const SB_URL = extrair(js, /const SB_URL\s*=\s*'([^']+)'/, 'SB_URL');
+const SB_KEY = extrair(js, /const SB_KEY\s*=\s*'([^']+)'/, 'SB_KEY');
+
+let achados;
+try {
+  const resp = await fetch(`${SB_URL}/rest/v1/rpc/divat_data_quality`, {
+    method: 'POST',
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    console.error(`RPC divat_data_quality falhou (HTTP ${resp.status}): ${txt}`);
+    console.error('A função public.divat_data_quality() existe e tem GRANT EXECUTE para anon?');
+    process.exit(1);
+  }
+  achados = await resp.json();
+} catch (e) {
+  console.error('Erro de rede ao chamar o Supabase (este script precisa de rede):', e.message);
+  process.exit(1);
+}
+
+// `qtd` NÃO tem unidade única: em codlinha_orfa é count(distinct codlinha), nas outras é
+// count(*) de linhas. Rotulado na saída para ninguém somar peras com maçãs.
+const unidade = v => (v === 'codlinha_orfa' ? 'codlinha(s) distinta(s)' : 'linha(s)');
+// Separador NUL: o `detalhe` contém espaços, então espaço não serve de delimitador.
+// Escrito como escape para não deixar byte invisível no fonte — com NUL cru o grep passa a
+// tratar o arquivo como binário, o diff fica ilegível e um editor distraído come o byte.
+const SEP = '\u0000';
+const chave = a => `${a.verificacao}${SEP}${a.detalhe}`;
+
+if (atualizar) {
+  const registro = {
+    gerado_em: new Date().toISOString().slice(0, 10),
+    nota: 'Dívida de integridade conhecida. Cada entrada é dado para consertar; ao consertar, rode --atualizar-baseline.',
+    // A função agrega. Para agir é preciso saber QUAIS codlinhas — esta query devolve as
+    // órfãs uma por uma, e fica aqui para não se perder a cada regeneração do baseline.
+    como_listar_os_orfaos:
+      "select 'itinerario_teste' as tabela, codlinha, count(*) as linhas from itinerario_teste i " +
+      'where codlinha is not null and not exists (select 1 from tabela_vista_teste t where t.codlinha = i.codlinha) ' +
+      'group by 1,2 -- repita o padrão para qh_teste, qh_predeterminado_teste, evento_teste',
+    achados: achados.map(a => ({ verificacao: a.verificacao, severidade: a.severidade, qtd: Number(a.qtd), detalhe: a.detalhe })),
+  };
+  await writeFile(BASELINE, JSON.stringify(registro, null, 2) + '\n', 'utf8');
+  console.log(`✓ Baseline reescrito com ${registro.achados.length} achado(s) → scripts/data_quality_baseline.json`);
+  process.exit(0);
+}
+
+let base = new Map();
+if (!semBaseline) {
+  try {
+    const b = JSON.parse(await readFile(BASELINE, 'utf8'));
+    base = new Map((b.achados || []).map(a => [chave(a), Number(a.qtd)]));
+  } catch (e) {
+    if (e.code !== 'ENOENT') { console.error(`Baseline ilegível (${BASELINE}): ${e.message}`); process.exit(1); }
+  }
+}
+
+const novos = [], piorados = [], conhecidos = [], avisos = [];
+for (const a of achados) {
+  const qtd = Number(a.qtd);
+  if (a.severidade !== 'erro') { avisos.push({ ...a, qtd }); continue; }
+  if (!base.has(chave(a))) { novos.push({ ...a, qtd }); continue; }
+  const antes = base.get(chave(a));
+  if (qtd > antes) piorados.push({ ...a, qtd, antes });
+  else conhecidos.push({ ...a, qtd, antes });
+}
+const resolvidos = [...base.keys()].filter(k => !achados.some(a => chave(a) === k));
+
+const linha = a => `    ${a.detalhe} — ${a.qtd} ${unidade(a.verificacao)}${a.antes !== undefined ? ` (baseline: ${a.antes})` : ''}`;
+
+if (avisos.length) {
+  console.log(`\n⚠ Avisos (${avisos.length}) — não derrubam o gate:`);
+  for (const a of avisos) console.log(`    [${a.verificacao}] ${a.detalhe} — ${a.qtd} ${unidade(a.verificacao)}`);
+}
+if (conhecidos.length) {
+  console.log(`\n· Dívida conhecida, dentro do baseline (${conhecidos.length}):`);
+  for (const a of conhecidos) console.log(linha(a));
+}
+if (resolvidos.length) {
+  console.log(`\n✓ Resolvido desde o baseline (${resolvidos.length}) — rode --atualizar-baseline para apertar o gate:`);
+  for (const k of resolvidos) console.log(`    ${k.split(SEP)[1]}`);
+}
+
+if (!novos.length && !piorados.length) {
+  const total = conhecidos.reduce((s, a) => s + a.qtd, 0);
+  console.log(`\n✓ Qualidade dos dados: nenhum achado de erro${base.size ? ' novo' : ''}.${total ? ` (${total} item(ns) de dívida conhecida — ver acima.)` : ''}`);
+  process.exit(0);
+}
+
+console.error(semBaseline
+  ? '\n✗ ESTADO CRU DO BANCO (baseline ignorado) — achados de erro:'
+  : '\n✗ QUALIDADE DOS DADOS PIOROU desde o baseline:');
+if (novos.length) {
+  console.error(`  ${semBaseline ? `Achado(s) (${novos.length})` : `Achado(s) NOVO(s) (${novos.length})`}:`);
+  for (const a of novos) console.error(`    [${a.verificacao}] ${a.detalhe} — ${a.qtd} ${unidade(a.verificacao)}`);
+}
+if (piorados.length) {
+  console.error(`  Achado(s) que PIORARAM (${piorados.length}):`);
+  for (const a of piorados) console.error(`    [${a.verificacao}] ${a.detalhe} — era ${a.antes}, agora ${a.qtd} ${unidade(a.verificacao)}`);
+}
+console.error('\nCausa provável: import do ETL escreveu codlinha/cod_origem que não existe no pai,');
+console.error('ou uma linha foi apagada da tabela_vista_teste deixando os filhos órfãos.');
+console.error('Para ver o estado cru do banco: node scripts/check_data_quality.mjs --sem-baseline');
+process.exit(1);
