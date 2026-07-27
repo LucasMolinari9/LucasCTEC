@@ -60,7 +60,7 @@ Requer só **Node 18+** (nenhuma dependência). Tem **dois modos**, decididos pe
 - **Completo** (`SUPABASE_SERVICE_KEY`): as **18 tabelas**, inclusive staging. A `service_role` key
   fica em Dashboard → Settings → API (é **SECRETA** — não commite, não cole em lugar público).
 - **Público** (`SUPABASE_ANON_KEY`): as **14 tabelas públicas** (sem staging). É o modo usado pelo
-  workflow automático do Actions — a anon key é a mesma pública do `index.html`.
+  workflow automático do Actions — a anon key é a mesma pública do `app.js`.
 
 ```bash
 SUPABASE_URL="https://lwzsxuaqqeoamukduhev.supabase.co" \
@@ -136,7 +136,7 @@ criar/alterar tabela, índice, policy ou função, atualize-o. As consultas-font
 4. **Table Editor** → em cada tabela → **Import data from CSV**, usando os CSVs guardados.
    - **Ordem importa:** `tabela_vista_teste` **antes** de `tarifa_atual_teste` (por causa da
      FK `fk_tarifa_linha`). As demais podem entrar em qualquer ordem.
-5. Se o projeto for **novo**, atualize `SB_URL` e `SB_KEY` no `index.html` (a chave anon muda
+5. Se o projeto for **novo**, atualize `SB_URL` e `SB_KEY` no topo do `app.js` (a chave anon muda
    de projeto para projeto) e confira a CSP (`vercel.json` → `connect-src` apontando para o
    novo host `*.supabase.co`).
 6. Recrie o **usuário do Auth** do dono (1 login) manualmente no Dashboard — não vai nos CSVs.
@@ -158,4 +158,3 @@ real na origem da importação — essa não volta reimportando, só reimportand
 - **Storage** — hoje está zerado (0 GB), nada a salvar.
 - **Extensões padrão do Supabase** (`pg_stat_statements`, `uuid-ossp`, `pgcrypto`,
   `supabase_vault`) — já vêm em qualquer projeto novo; o `.sql` só recria `pg_trgm` e `unaccent`.
-</content>

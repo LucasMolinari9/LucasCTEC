@@ -2,7 +2,7 @@
 
 > **Por que este arquivo existe:** o frontend são **três arquivos**: `index.html` (HTML),
 > `styles.css` (todo o CSS — extraído do HTML em 22/07/2026) e **`app.js`** (todo o JS,
-> ~2,3k linhas — extraído do HTML em 21/07/2026, envolto num IIFE desde 22/07/2026). Continua
+> ~3,2k linhas — extraído do HTML em 21/07/2026, envolto num IIFE desde 22/07/2026). Continua
 > **zero-build**: nada de bundler, framework ou `package.json`. Este doc registra (1) *por que*
 > essa forma, (2) *como navegar* no `app.js` sem se perder, e (3) as **regras de segurança** para
 > reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do `CLAUDE.md` (que lista as
@@ -63,7 +63,7 @@ achar por `grep` do texto da marca, nunca por linha.
   `COMPONENTES AUXILIARES` · `CLIQUE NOS CARDS` · `UTILITÁRIOS` · `TOAST` · `REALTIME` ·
   `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~57% do JS (~1,7k linhas, ~60 funções).
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~62% do JS (~2,0k linhas, ~90 funções).
 
 ### Sub-marcas do bloco `MODAL / SISTEMA DE VIEWS`
 

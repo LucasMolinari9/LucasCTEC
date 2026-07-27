@@ -71,6 +71,10 @@ const canon = [
   ['fmtDate',       'm[3]}/${m[2]}/${m[1]}'],
   ['esc',                  "'&':'&amp;'"],
   ['enc',                  'const enc = s => encodeURIComponent(s);'],
+  // ilikeTerm é o saneador que neutraliza ( ) * antes de entrar no filtro or=() do
+  // PostgREST — os testes dele rodam contra a CÓPIA, então o trecho vigiado é a
+  // declaração INTEIRA: qualquer mudança no saneador tem de derrubar este gate.
+  ['ilikeTerm',            "const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));"],
   ['orDash',               "==='') ? '—'"],
   ['fmtLineName',          "split(' - ').map(p => p.replace(/ /g, '&nbsp;'))"],
   ['byCodlinha',           "localeCompare(String(b.codlinha||''), undefined, { numeric:true })"],
@@ -99,6 +103,7 @@ const canon = [
   ['resumoRelatorio',      'function resumoRelatorio(rows){'],
   ['resumoFrota',          'function resumoFrota(rows){'],
   ['pageBounds',           'const p = Math.min(Math.max(1, (page|0) || 1), totalPages);'],
+  ['MAX_TABS',             'const MAX_TABS = 5;'],
   ['makeTab',              'function makeTab(id){ return { id, line: null, view: null, navStack: [], stale: false }; }'],
   ['openTabState',         'function openTabState(tabs, tabIdSeq){'],
   ['closeTabState',        'function closeTabState(tabs, activeTabId, id){'],
@@ -106,6 +111,175 @@ const canon = [
 for (const [name, snippet] of canon){
   if (js.includes(snippet)) okline(`${name}`);
   else fail(`harness DESATUALIZADO p/ "${name}": não achei no app.js → ${snippet}`);
+}
+
+// A guarda acima só vale para quem está no `canon`. Uma cópia exportada pelo harness SEM
+// entrada aqui passa batido — foi o que aconteceu com `ilikeTerm` e `MAX_TABS` (37 cópias
+// exportadas × 36 guardas; descoberto na auditoria externa de 27/07/2026, contando à mão).
+// Esta checagem fecha o laço: cada símbolo exportado pelo pure.harness.js tem de ter guarda.
+{
+  const src = fs.readFileSync(path.join(TESTS_DIR, 'pure.harness.js'), 'utf8');
+  const m = src.match(/module\.exports\s*=\s*\{([\s\S]*?)\}\s*;/);
+  if (!m) fail('não achei o module.exports do pure.harness.js (a cobertura do canon não pôde ser conferida)');
+  else {
+    const exportados = m[1].split(',').map(s => s.trim()).filter(Boolean)
+      .map(s => s.split(':')[0].trim());
+    const guardados = new Set(canon.map(([n]) => n));
+    const semGuarda = exportados.filter(n => !guardados.has(n));
+    if (semGuarda.length) fail(`cópia exportada sem guarda anti-drift: ${semGuarda.join(', ')} — adicione ao \`canon\` do check.js`);
+    else okline(`cobertura do canon (${exportados.length} cópias exportadas, todas com guarda)`);
+  }
+}
+
+// ---------- [2b] guarda docs × código ----------
+// Irmã offline do scripts/check_deriva.mjs. Ele guarda docs × BANCO (tabelas, colunas, RPCs);
+// esta guarda o eixo que ficava descoberto: docs × CÓDIGO. As duas nascem da mesma causa —
+// fato copiado à mão para a prosa e nunca mais conferido. A auditoria externa de 27/07/2026
+// achou 6 derivas desse tipo, todas plantadas pela extração de 21-22/07 (JS/CSS saíram do
+// index.html), e nenhuma ferramenta do repo era capaz de vê-las.
+//
+// Só policia os docs VIVOS. O CHANGELOG, os `analise-*.md` e os `revisao-externa-*.md` são
+// snapshots datados de propósito: os números deles descrevem o estado de quando foram
+// escritos, e cobrá-los transformaria esta guarda em alarme falso.
+console.log('\n[2b] Deriva docs × código');
+{
+  const RAIZ = path.join(__dirname, '..');
+  const ler = p => fs.readFileSync(path.join(RAIZ, p), 'utf8');
+  const existe = p => fs.existsSync(path.join(RAIZ, p));
+
+  const DOCS_VIVOS = ['CLAUDE.md', 'README.md', 'CONTEXT.md', 'docs/estrutura-frontend.md',
+    'docs/schema.md', 'docs/backup.md', 'docs/seguranca.md', 'docs/semgrep.md',
+    'docs/agents/domain.md', 'docs/agents/issue-tracker.md', 'docs/agents/triage-labels.md',
+    'tests/README.md'].filter(existe);
+
+  // --- fatos computados do CÓDIGO (a fonte da verdade) ---
+  const linhasApp = js.split('\n').length;
+  const linhasArr = js.split('\n');
+  const marcas = [];
+  linhasArr.forEach((l, i) => { if (/^\/\* ={10,}/.test(l)) marcas.push({ i, titulo: (linhasArr[i + 1] || '').trim() }); });
+  const iModal = marcas.findIndex(m => m.titulo === 'MODAL / SISTEMA DE VIEWS');
+  const modalLinhas = (iModal >= 0 && marcas[iModal + 1]) ? marcas[iModal + 1].i - marcas[iModal].i : null;
+  const modalPct = modalLinhas == null ? null : Math.round(modalLinhas / linhasApp * 1000) / 10;
+
+  const bloco = (txt, re) => { const m = txt.match(re); return m ? m[1] : null; };
+  const conta = (txt, re, item) => { const b = bloco(txt, re); return b == null ? null : (b.match(item) || []).length; };
+
+  const views = existe('scripts/check_views.mjs')
+    ? conta(ler('scripts/check_views.mjs'), /const VIEWS\s*=\s*\[([\s\S]*?)^\];/m, /\bkey\s*:/g) : null;
+  const rtTables = conta(js, /RT_TABLES\s*=\s*\[([\s\S]*?)\]/, /'[a-z_]+'/g);
+  const bk = existe('scripts/backup_rest.mjs') ? ler('scripts/backup_rest.mjs') : '';
+  const bkTodas = bk ? conta(bk, /const TABELAS\s*=\s*\{([\s\S]*?)^\};/m, /^\s*[a-z_]+\s*:/gm) : null;
+  const bkStaging = bk ? conta(bk, /const STAGING\s*=\s*new Set\(\[([\s\S]*?)\]\)/, /'[a-z_]+'/g) : null;
+  const bkPublicas = (bkTodas != null && bkStaging != null) ? bkTodas - bkStaging : null;
+
+  // --- fatos que os docs AFIRMAM (regex contra o texto com espaços normalizados,
+  //     para que quebra de linha do markdown não escape da checagem) ---
+  const num = s => parseFloat(String(s).replace(',', '.'));
+  const FATOS = [
+    { doc:'docs/estrutura-frontend.md', o:'linhas do app.js',      re:/~([\d,.]+)k linhas — extraído do HTML/, real:linhasApp,   esc:'k' },
+    { doc:'CLAUDE.md',                  o:'linhas do app.js',      re:/~([\d,.]+)k\s*linhas, num IIFE/,        real:linhasApp,   esc:'k' },
+    { doc:'README.md',                  o:'linhas do app.js',      re:/~([\d,.]+)k linhas num IIFE/,           real:linhasApp,   esc:'k' },
+    { doc:'docs/estrutura-frontend.md', o:'linhas da seção MODAL', re:/é ~[\d,.]+% do JS \(~([\d,.]+)k linhas/, real:modalLinhas, esc:'k' },
+    { doc:'docs/estrutura-frontend.md', o:'% da seção MODAL',      re:/é ~([\d,.]+)% do JS/,                   real:modalPct,    esc:'pct' },
+    { doc:'CLAUDE.md',                  o:'% da seção MODAL',      re:/~([\d,.]+)% do `app\.js`/,              real:modalPct,    esc:'pct' },
+    { doc:'CLAUDE.md',                  o:'views do check_views',  re:/abre as \*\*([\d]+)\s*views\*\*/,       real:views,       esc:'exato' },
+    { doc:'README.md',                  o:'views do check_views',  re:/abre as ([\d]+) views/,                 real:views,       esc:'exato' },
+    { doc:'CLAUDE.md',                  o:'tabelas do RT_TABLES',  re:/as ([\d]+) tabelas lidas pelo portal/,  real:rtTables,    esc:'exato' },
+    { doc:'docs/backup.md',             o:'tabelas do backup',     re:/as \*\*([\d]+) tabelas\*\*, inclusive staging/, real:bkTodas,   esc:'exato' },
+    { doc:'docs/backup.md',             o:'tabelas públicas',      re:/as \*\*([\d]+) tabelas públicas\*\*/,   real:bkPublicas,  esc:'exato' },
+  ];
+  let fatosOk = 0, fatosPulados = 0;
+  for (const f of FATOS){
+    if (!existe(f.doc)) { fatosPulados++; continue; }
+    if (f.real == null) { fail(`[${f.doc}] não consegui computar "${f.o}" no código — a guarda ficou cega, conserte o extrator`); continue; }
+    const txt = ler(f.doc).replace(/\s+/g, ' ');
+    const dito = bloco(txt, f.re);
+    if (dito == null) { fail(`[${f.doc}] não achei a afirmação sobre "${f.o}" — se a frase mudou, atualize o regex em check.js (não apague a guarda)`); continue; }
+    const d = num(dito);
+    let ok, esperado;
+    if (f.esc === 'k'){ ok = Math.abs(d * 1000 - f.real) / f.real <= 0.08; esperado = `~${(Math.round(f.real / 100) / 10).toFixed(1).replace('.', ',')}k`; }
+    else if (f.esc === 'pct'){ ok = Math.abs(d - f.real) <= 1.5; esperado = `~${String(f.real).replace('.', ',')}%`; }
+    else { ok = d === f.real; esperado = String(f.real); }
+    if (ok) fatosOk++;
+    else fail(`[${f.doc}] "${f.o}": doc diz ${dito}${f.esc === 'pct' ? '%' : f.esc === 'k' ? 'k' : ''}, código diz ${f.real} (escreva ${esperado})`);
+  }
+  okline(`fatos numéricos conferidos (${fatosOk}/${FATOS.length - fatosPulados})`);
+
+  // --- todo LINK markdown aponta para algo que existe ---
+  // Deliberadamente só links `[texto](caminho)`, não qualquer token em backtick: a primeira
+  // versão desta checagem varria os backticks e deu 61 falsos positivos contra 0 verdadeiros
+  // — confundia nome de função (`fmtCode/fmtTime`), ruleset do Semgrep (`p/xss`), slash
+  // command (`/triage`), caminho de sistema (`/opt/...`), diretório gerado (`node_modules/`)
+  // e o próprio `package.json`, citado justamente para dizer que NÃO existe. Um gate que
+  // grita à toa é um gate que alguém desliga. Link markdown é promessa de navegabilidade:
+  // se está quebrado, é defeito, sem julgamento a fazer.
+  let refs = 0, quebrados = 0;
+  for (const doc of DOCS_VIVOS){
+    const base = path.dirname(doc);
+    for (const m of ler(doc).matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)){
+      const bruto = m[1].split('#')[0].trim();
+      if (!bruto || /^(https?|mailto):/.test(bruto)) continue;
+      refs++;
+      const alvo = path.posix.normalize(path.posix.join(base === '.' ? '' : base, bruto)).replace(/\/$/, '');
+      if (!existe(alvo)) { fail(`[${doc}] link para "${m[1]}" está quebrado (resolvido: ${alvo})`); quebrados++; }
+    }
+  }
+  if (!quebrados) okline(`links markdown resolvem (${refs} links em ${DOCS_VIVOS.length} docs)`);
+
+  // --- SB_URL/SB_KEY nunca mais apontados para o index.html ---
+  // A deriva concreta: o passo 5 do runbook de restauração mandava editá-los no index.html
+  // por 6 dias depois de eles terem ido para o app.js. Num runbook de perda total, isso
+  // custa tempo exatamente quando não há tempo.
+  // Escape hatch: prosa que RECONTA o bug histórico ("o runbook mandava editar no index.html")
+  // é legítima e a regra não sabe distinguir isso de uma instrução. Quem recontar marca a linha
+  // com `<!-- deriva-ok: <motivo> -->` (invisível no markdown renderizado). A regra fica
+  // estrita; a exceção fica explícita e visível no fonte, para quem revisar o diff.
+  let sbErrado = 0;
+  for (const doc of DOCS_VIVOS){
+    ler(doc).split('\n').forEach((l, i) => {
+      if (/deriva-ok/.test(l)) return;
+      if (/SB_URL|SB_KEY/.test(l) && /index\.html/.test(l)){
+        fail(`[${doc}:${i + 1}] associa SB_URL/SB_KEY ao index.html — elas moram no topo do app.js (se a linha reconta o bug histórico, marque com \`<!-- deriva-ok: histórico -->\`)`);
+        sbErrado++;
+      }
+    });
+  }
+  if (!sbErrado) okline('SB_URL/SB_KEY sempre atribuídas ao app.js');
+
+  // --- o baseline de qualidade dos dados é legível offline ---
+  // O check_data_quality.mjs só roda no cron semanal (precisa de rede). Um baseline malformado
+  // ou com entrada incompleta só apareceria uma semana depois, e o gate semanal falharia por
+  // motivo errado. Conferir aqui custa nada.
+  if (existe('scripts/data_quality_baseline.json')){
+    try {
+      const b = JSON.parse(ler('scripts/data_quality_baseline.json'));
+      if (!Array.isArray(b.achados)) throw new Error('campo "achados" não é um array');
+      const ruim = b.achados.filter(a => !a.verificacao || !a.detalhe || !a.severidade || !Number.isFinite(a.qtd));
+      if (ruim.length) throw new Error(`${ruim.length} entrada(s) sem verificacao/detalhe/severidade/qtd`);
+      okline(`baseline de qualidade dos dados válido (${b.achados.length} achado(s) de dívida registrada)`);
+    } catch (e){
+      fail(`scripts/data_quality_baseline.json inválido: ${e.message}`);
+    }
+  }
+
+  // --- nenhum arquivo termina com tag de ferramenta de sessão de IA vazada ---
+  // Dois docs terminavam com </content> (e um com </invoke>): sobra de chamada de ferramenta
+  // que virou conteúdo do arquivo. Só sobrevive porque ninguém releu o arquivo até o fim.
+  const varrer = dir => fs.readdirSync(path.join(RAIZ, dir), { withFileTypes:true }).flatMap(e => {
+    const rel = dir === '.' ? e.name : `${dir}/${e.name}`;
+    if (e.isDirectory()) return (e.name === '.git' || e.name === 'node_modules' || e.name === 'vendor') ? [] : varrer(rel);
+    return /\.(md|sql|js|mjs|css|html|json|yml|yaml|sh)$/.test(e.name) ? [rel] : [];
+  });
+  let vazadas = 0;
+  for (const f of varrer('.')){
+    const fim = ler(f).trimEnd().split('\n').slice(-3);
+    for (const l of fim){
+      if (/^\s*<\/(content|invoke|parameter|function_calls|antml:[a-z_]+)>\s*$/.test(l)){
+        fail(`[${f}] termina com tag de ferramenta vazada: ${l.trim()}`); vazadas++;
+      }
+    }
+  }
+  if (!vazadas) okline('nenhum arquivo termina com tag de ferramenta vazada');
 }
 
 // ---------- [3] roda os testes unitários ----------

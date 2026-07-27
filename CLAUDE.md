@@ -149,9 +149,12 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    propósito (um vermelho não esconde o outro): `ci.yml` (gate leve — `tests/check.js`),
    `views.yml` (navegador — `check_views.mjs` + `check_abas.mjs`) e `semgrep.yml` (estático).
 2. **Antes de publicar, rode `node tests/check.js`** — valida a sintaxe do `app.js`, garante que
-   não voltou `<script>` inline no `index.html`, confere as cópias de teste (anti-drift) e roda
-   todos os testes. Só publique tudo verde. (Ao alterar função com cópia em `tests/*.harness.js`,
-   atualize a cópia.) **Ao mexer nas abas do modal / no seletor de documentos**, rode também
+   não voltou `<script>` inline no `index.html`, confere as cópias de teste (anti-drift), cobra a
+   **deriva docs×código** (seção `[2b]`, ver abaixo) e roda todos os testes. Só publique tudo
+   verde. (Ao alterar função com cópia em `tests/*.harness.js`, atualize a cópia — e se criar
+   cópia nova, **adicione a guarda no `canon`**: o `check.js` agora falha se um símbolo exportado
+   pelo harness não tiver guarda, porque foi assim que `ilikeTerm` e `MAX_TABS` ficaram
+   descobertos.) **Ao mexer nas abas do modal / no seletor de documentos**, rode também
    `node scripts/check_abas.mjs` — checagem de regressão em navegador headless (Playwright, com
    o PostgREST stubado); fica fora do `check.js` porque este é offline e sem dependências, mas
    **roda no CI** junto com o `check_views.mjs` (workflow `views.yml`).
@@ -193,6 +196,59 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    toque esses arquivos — o cron existe porque deriva também nasce de mudança NO BANCO, que
    não gera push. Do ambiente do Claude não roda (rede até o Supabase bloqueada); é para a
    máquina do dono e o CI. Fica **fora** do `tests/check.js` (contrato dele: offline).
+2d. **Deriva docs×código — seção `[2b]` do `tests/check.js`** (offline, roda no gate de sempre).
+   Irmã do `check_deriva.mjs`: ele guarda docs×**banco**, esta guarda docs×**código** — o eixo
+   que ficava descoberto. Nasceu da auditoria externa de 27/07/2026, que achou 6 derivas
+   plantadas pela extração de 21-22/07 (o README ainda anunciava "um único arquivo `index.html`
+   com CSS e JS embutidos" e `supabase-js` vindo de CDN; o runbook de restauração mandava editar
+   `SB_URL`/`SB_KEY` no `index.html`; <!-- deriva-ok: reconta o bug --> duas contagens erradas; dois docs terminando com
+   `</content>` vazado). **Extração de arquivo é exatamente o tipo de mudança que esquece a
+   prosa que menciona o arquivo antigo** — e nenhuma ferramenta do repo era capaz de ver isso.
+   Ela cobra 4 coisas nos **docs vivos** (o `CHANGELOG`, os `analise-*.md` e os
+   `revisao-externa-*.md` ficam fora de propósito: são snapshots datados): (1) **fatos numéricos**
+   declarados na prosa batem com o código — linhas do `app.js`, tamanho/percentual da seção
+   `MODAL`, nº de views do `check_views.mjs`, `RT_TABLES`, tabelas do `backup_rest.mjs` (tolerância
+   de 8% nos "~Nk" e 1,5 ponto nos "~N%", para arredondamento não virar alarme); (2) todo **link
+   markdown** resolve; (3) `SB_URL`/`SB_KEY` **nunca** aparecem na mesma linha que `index.html` <!-- deriva-ok: enuncia a regra -->;
+   (4) nenhum arquivo termina com **tag de ferramenta de IA vazada**. Se você mudar uma frase que
+   carrega número, o gate cobra o número — **atualize o número, não apague a guarda** (se a frase
+   mudou de forma, ajuste o regex na tabela `FATOS`). Ela é deliberadamente estreita: a 1ª versão
+   varria todo token em backtick e deu 61 falsos positivos contra 0 verdadeiros.
+2e. **Qualidade dos dados pós-ETL — `node scripts/check_data_quality.mjs`** (precisa de rede;
+   chama a RPC `divat_data_quality()` como `anon`). Fecha a issue #63. Roda semanal no workflow
+   `db-checks.yml`, que **também passou a rodar o `check_realtime.mjs`** — ele existia desde
+   sempre e não estava em nenhum workflow, só rodava se alguém lembrasse.
+   **A integridade hub-and-spoke JÁ ESTÁ VIOLADA no banco** (medido em 27/07/2026): há **17
+   codlinhas órfãs** — filhos em `itinerario_teste` (2), `qh_teste` (3),
+   `qh_predeterminado_teste` (5) e `evento_teste` (7) apontando para `codlinha` que não existe
+   em `tabela_vista_teste` — mais **4 linhas** de `qh_predeterminado_teste` com `cod_origem`
+   inexistente em `origem_teste`. `146016000` e `191020001` aparecem órfãos em **três** tabelas
+   cada. **Consequência prática: as views dessas linhas renderizam VAZIAS, sem erro** — é
+   exatamente o modo de falha que a issue #63 descreve, já acontecendo.
+   (U+FFFD e `codempresa` inválida: zero achados, os dois limpos.)
+   **Órfã não quer dizer a mesma coisa em toda tabela** (apurado em 27/07/2026, contra o banco):
+   as 7 de `evento_teste` são **atos reais de 1974–1996**, da época do DTC/RJ, de linhas
+   anteriores ao cadastro atual — e linha extinta **não some** do cadastro (o hub tem a coluna
+   `cancelado`, com **500 linhas** marcadas assim), então órfã em `evento_teste` não é rastro de
+   exclusão, é história mais velha que o cadastro. Por isso o `check_data_quality.mjs`
+   **rebaixa `evento_teste` órfã a aviso** (`REBAIXADOS_A_AVISO`, no próprio script — a RPC
+   *mede* o fato, a *política* de severidade fica versionada no repo) e mantém as demais como
+   erro. **NÃO apagar os filhos órfãos de `evento_teste`: é arquivo institucional
+   insubstituível.** O preço do rebaixamento é conhecido e aceito: achado **novo** em
+   `evento_teste` também sai como aviso e não derruba o gate — inclusive `186006400`, evento de
+   2021 com sufixo anômalo (o hub tem `186006000`/`186006001`), **suspeito de digitação**.
+   As 12 codlinhas órfãs estão listadas **uma a uma e classificadas** em `orfaos_conhecidos`
+   dentro do `data_quality_baseline.json` (a RPC agrega e não diz *quais*; o campo é mantido à
+   mão e o `--atualizar-baseline` o preserva). **O gate compara CONTAGEM, não a lista** — uma
+   órfã corrigida e outra criada mantêm o número e passam despercebidas; ao mexer nesses dados,
+   confira a lista, não só o número.
+   Por isso o script tem **baseline** (`scripts/data_quality_baseline.json`): gate vermelho desde
+   o primeiro dia é gate que se aprende a ignorar, e apagar achado seria mentir. Ele passa com a
+   dívida conhecida e falha no instante em que aparece achado **novo** ou um conhecido **piora**.
+   O baseline é dívida registrada, não perdão — ao consertar dado, rode
+   `--atualizar-baseline` para o gate voltar a apertar; para ver o estado cru, `--sem-baseline`.
+   **Atenção:** `qtd` não tem unidade única — em `codlinha_orfa` é `count(distinct codlinha)`,
+   nas outras verificações é `count(*)` de linhas (a saída rotula qual é qual).
 3. Merge na `main` → republica sozinho (ou MCP `deploy_to_vercel`). As telas dos usuários se
    atualizam via detector de versão. Bumpe o carimbo se quiser confirmar a chegada.
 4. Mudanças de **dados** NÃO exigem deploy — o site lê o Supabase ao vivo.

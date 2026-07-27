@@ -1,0 +1,117 @@
+{
+  "gerado_em": "2026-07-27",
+  "nota": "Dívida de integridade conhecida. Cada entrada é dado para consertar; ao consertar, rode --atualizar-baseline. Só entra aqui o que pode DERRUBAR o gate — erro DEPOIS da reclassificação por natureza feita no check_data_quality.mjs (evento_teste órfã é aviso, não erro; o porquê está no comentário REBAIXADOS_A_AVISO do script).",
+  "como_listar_os_orfaos": "select 'itinerario_teste' as tabela, codlinha, count(*) as linhas from itinerario_teste i where codlinha is not null and not exists (select 1 from tabela_vista_teste t where t.codlinha = i.codlinha) group by 1,2 -- repita o padrão para qh_teste, qh_predeterminado_teste, evento_teste",
+  "orfaos_conhecidos": {
+    "nota": "A RPC AGREGA (devolve contagem por tabela). Para AGIR é preciso saber QUAIS codlinhas, e redescobri-las custou uma sessão inteira — ficam registradas aqui, classificadas por natureza. Levantado em 27/07/2026 contra o banco vivo. ATENÇÃO: o gate compara CONTAGEM, não esta lista; uma órfã corrigida e outra criada mantêm o número e passariam despercebidas. Ao mexer em dado destas tabelas, confira a lista, não só o número.",
+    "operacional_sem_pai": {
+      "severidade": "erro",
+      "descricao": "Itinerário e/ou quadro de horários de linha que a busca do portal não acha. Defeito de verdade — é o modo de falha da issue #63 (tela vazia, sem erro).",
+      "itens": [
+        {
+          "codlinha": "146016000",
+          "empresa": "LINAVE TRANSPORTES LTDA.",
+          "onde": "itinerario_teste:19, qh_predeterminado_teste:11, qh_teste:1",
+          "nota": "o hub vai só até 146015000; esta é a seguinte da sequência"
+        },
+        {
+          "codlinha": "191020001",
+          "empresa": "VIAÇÃO PROGRESSO E TURISMO S/A",
+          "onde": "itinerario_teste:22, qh_predeterminado_teste:8, qh_teste:1",
+          "nota": "o hub tem 191020000; falta a variante 001"
+        },
+        {
+          "codlinha": "116000001",
+          "empresa": "(indeterminada — só existe em qh_predeterminado_teste, que não tem coluna codempresa)",
+          "onde": "qh_predeterminado_teste:28"
+        },
+        {
+          "codlinha": "121003000",
+          "empresa": "(indeterminada — só existe em qh_predeterminado_teste, que não tem coluna codempresa)",
+          "onde": "qh_predeterminado_teste:8",
+          "nota": "o hub vai só até 121002001"
+        },
+        {
+          "codlinha": "150006000",
+          "empresa": "RÁPIDO MACAENSE LTDA.",
+          "onde": "qh_predeterminado_teste:32, evento_teste:16",
+          "nota": "único caso que é as duas coisas: histórico de 1983–1996 E quadro de horários vivo"
+        },
+        {
+          "codlinha": "156002003",
+          "empresa": "TRANSPORTADORA TINGUÁ LTDA.",
+          "onde": "qh_teste:1",
+          "nota": "o hub tem 156002000/001/002; falta a variante 003"
+        }
+      ]
+    },
+    "historico_anterior_ao_cadastro": {
+      "severidade": "aviso",
+      "descricao": "Só evento_teste. Atos reais de 1974–1996 (DTC/RJ, antes do DETRO) de linhas anteriores ao cadastro atual. NÃO apagar: é arquivo institucional insubstituível, e o hub guarda linha extinta MARCADA (cancelado=true, 500 delas) em vez de excluí-la.",
+      "itens": [
+        {
+          "codlinha": "150004000",
+          "empresa": "RÁPIDO MACAENSE LTDA.",
+          "onde": "evento_teste:16",
+          "nota": "CAMPOS–CONCEIÇÃO DE MACABÚ; atos de 1974 a 1987"
+        },
+        {
+          "codlinha": "150008000",
+          "empresa": "RÁPIDO MACAENSE LTDA.",
+          "onde": "evento_teste:9",
+          "nota": "MACAÉ–SANTA MARIA MADALENA; atos de 1982 a 1996"
+        },
+        {
+          "codlinha": "150009000",
+          "empresa": "RÁPIDO MACAENSE LTDA.",
+          "onde": "evento_teste:14",
+          "nota": "atos de 1975 a 1996"
+        },
+        {
+          "codlinha": "116000000",
+          "empresa": "COLITUR TRANSPORTES RODOVIÁRIOS LTDA.",
+          "onde": "evento_teste:2",
+          "nota": "atos de 1995; sufixo 000000, fora do padrão do hub (que começa em 116001000)"
+        },
+        {
+          "codlinha": "122000000",
+          "empresa": "CAVALCANTI CIA LTDA. (codempresa 123, não 122)",
+          "onde": "evento_teste:2",
+          "nota": "atos de 1986; sufixo 000000 e prefixo da codlinha que não bate com a codempresa"
+        },
+        {
+          "codlinha": "186006400",
+          "empresa": "VIAÇÃO NOSSA SENHORA DO AMPARO LTDA.",
+          "onde": "evento_teste:1",
+          "nota": "SUSPEITO DE DIGITAÇÃO, não histórico: evento de 2021 (recente) e sufixo anômalo — o hub tem 186006000/186006001. Vale conferir contra o processo original."
+        }
+      ]
+    }
+  },
+  "achados": [
+    {
+      "verificacao": "codlinha_orfa",
+      "severidade": "erro",
+      "qtd": 2,
+      "detalhe": "itinerario_teste sem match em tabela_vista_teste"
+    },
+    {
+      "verificacao": "codlinha_orfa",
+      "severidade": "erro",
+      "qtd": 3,
+      "detalhe": "qh_teste sem match em tabela_vista_teste"
+    },
+    {
+      "verificacao": "codlinha_orfa",
+      "severidade": "erro",
+      "qtd": 5,
+      "detalhe": "qh_predeterminado_teste sem match em tabela_vista_teste"
+    },
+    {
+      "verificacao": "cod_origem_invalido",
+      "severidade": "erro",
+      "qtd": 4,
+      "detalhe": "qh_predeterminado_teste.cod_origem sem match em origem_teste"
+    }
+  ]
+}
