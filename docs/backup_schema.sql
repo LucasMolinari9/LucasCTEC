@@ -514,6 +514,86 @@ $function$;
 REVOKE ALL ON FUNCTION public.realtime_tables() FROM public;
 GRANT EXECUTE ON FUNCTION public.realtime_tables() TO anon, authenticated;
 
+-- divat_security_shape(): postura de segurança do schema public em fatos DERIVADOS. Usada pelo
+-- gate scripts/check_grants.mjs (achado SEC-04 da auditoria de 27/07/2026 — RLS/grants/policies
+-- não eram verificados por nada, só por um checklist trimestral manual).
+--
+-- Devolve fatos derivados e não a ACL crua de propósito: `proacl` NULO não significa "sem acesso",
+-- significa "default do PostgreSQL", que para função concede EXECUTE a PUBLIC. Um gate que lesse
+-- proacl cru e o tratasse como vazio nasceria FAIL-OPEN — a função recém-criada, que é a mais
+-- perigosa, apareceria como a mais fechada. Daí has_*_privilege (respeita herança) e
+-- coalesce(proacl, acldefault(...)).
+--
+-- SECURITY INVOKER: os catálogos são legíveis por PUBLIC, então DEFINER seria privilégio à toa —
+-- e DEFINER é justamente um dos padrões que este gate vigia.
+CREATE OR REPLACE FUNCTION public.divat_security_shape()
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+  select jsonb_build_object(
+    'gerado_em', now(),
+    'tabelas', coalesce((
+      select jsonb_agg(t order by t->>'nome') from (
+        select jsonb_build_object(
+          'nome', c.relname, 'rls', c.relrowsecurity, 'force_rls', c.relforcerowsecurity,
+          'anon', jsonb_build_object(
+            'select', has_table_privilege('anon', c.oid, 'SELECT'),
+            'insert', has_table_privilege('anon', c.oid, 'INSERT'),
+            'update', has_table_privilege('anon', c.oid, 'UPDATE'),
+            'delete', has_table_privilege('anon', c.oid, 'DELETE'),
+            'truncate', has_table_privilege('anon', c.oid, 'TRUNCATE'),
+            'maintain', has_table_privilege('anon', c.oid, 'MAINTAIN')),
+          'authenticated', jsonb_build_object(
+            'select', has_table_privilege('authenticated', c.oid, 'SELECT'),
+            'insert', has_table_privilege('authenticated', c.oid, 'INSERT'),
+            'update', has_table_privilege('authenticated', c.oid, 'UPDATE'),
+            'delete', has_table_privilege('authenticated', c.oid, 'DELETE'),
+            'truncate', has_table_privilege('authenticated', c.oid, 'TRUNCATE'),
+            'maintain', has_table_privilege('authenticated', c.oid, 'MAINTAIN')),
+          'policies', coalesce((
+            select jsonb_agg(jsonb_build_object('nome', p.polname, 'cmd', p.polcmd::text) order by p.polname)
+            from pg_policy p where p.polrelid = c.oid), '[]'::jsonb)
+        ) as t
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind in ('r','p','v','m')
+      ) s), '[]'::jsonb),
+    'funcoes', coalesce((
+      select jsonb_agg(f order by f->>'assinatura') from (
+        select jsonb_build_object(
+          'assinatura', p.oid::regprocedure::text,
+          'security_definer', p.prosecdef,
+          'search_path_fixo', coalesce(array_to_string(p.proconfig,' ') like '%search_path%', false),
+          'public_execute', exists (
+            select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+            where a.grantee = 0 and a.privilege_type = 'EXECUTE'),
+          'anon_execute', has_function_privilege('anon', p.oid, 'EXECUTE'),
+          'authenticated_execute', has_function_privilege('authenticated', p.oid, 'EXECUTE')
+        ) as f
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+      ) s), '[]'::jsonb),
+    'default_privileges', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'dono', d.defaclrole::regrole::text,
+        'schema', coalesce(d.defaclnamespace::regnamespace::text, '(global)'),
+        'tipo', d.defaclobjtype::text,
+        'anon_privs', coalesce((select array_agg(distinct a.privilege_type order by a.privilege_type)
+          from aclexplode(d.defaclacl) a where a.grantee = 'anon'::regrole::oid), '{}'),
+        'authenticated_privs', coalesce((select array_agg(distinct a.privilege_type order by a.privilege_type)
+          from aclexplode(d.defaclacl) a where a.grantee = 'authenticated'::regrole::oid), '{}'),
+        'public_privs', coalesce((select array_agg(distinct a.privilege_type order by a.privilege_type)
+          from aclexplode(d.defaclacl) a where a.grantee = 0), '{}')
+      ) order by d.defaclrole::regrole::text, d.defaclobjtype::text)
+      from pg_default_acl d
+      where d.defaclnamespace = 'public'::regnamespace or d.defaclnamespace = 0
+    ), '[]'::jsonb)
+  );
+$function$;
+REVOKE ALL ON FUNCTION public.divat_security_shape() FROM public;
+GRANT EXECUTE ON FUNCTION public.divat_security_shape() TO anon, authenticated;
+
 -- ============================================================
 -- 6) ROW LEVEL SECURITY — habilitar em TODAS as tabelas
 -- ============================================================

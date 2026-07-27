@@ -155,17 +155,19 @@ e sem grant para `anon`/`authenticated` → invisíveis pela API pública, de pr
 
 ## Funções e trigger (schema `public`)
 
-O schema tem **0 views**, **7 funções** e **1 trigger** (snapshot vivo 26/07/2026; DDL
+O schema tem **0 views**, **8 funções** e **1 trigger** (snapshot vivo 27/07/2026; DDL
 completo em `docs/backup_schema.sql`, seção "FUNÇÕES + TRIGGER"). Todas as funções são
-`SECURITY INVOKER`. Duas são **RPCs chamadas pelo front** (`app.js`, via `rest/v1/rpc/…`);
-o resto é interno/diagnóstico.
+`SECURITY INVOKER` e fixam `search_path` — as duas coisas são cobradas pelo gate
+`scripts/check_grants.mjs`. Duas são **RPCs chamadas pelo front** (`app.js`, via
+`rest/v1/rpc/…`); o resto é interno/diagnóstico.
 
 | Função | Papel | Quem chama |
 |---|---|---|
 | `divat_busca_logradouro(termo, p_ibge?)` | busca linhas por logradouro (tipo+nome, sem acento, trigram; `p_ibge` filtra por município) | **front via RPC** — Ligações por Logradouro |
 | `divat_linhas_regiao(p_regiao, p_modo)` | linhas por região do município de origem (`dentro`/`origem`) | **front via RPC** — Linhas por Região e Município |
-| `divat_data_quality()` | diagnóstico de qualidade pós-ETL (órfãos referenciais, U+FFFD) | `scripts/check_data_quality.mjs` (como `anon`), semanal no workflow `db-checks.yml` |
+| `divat_data_quality()` | diagnóstico de qualidade pós-ETL (órfãos referenciais, U+FFFD) | `scripts/check_data_quality.mjs` (como `anon`), diário no workflow `db-checks.yml` |
 | `divat_api_shape()` | o que a API pública enxerga (tabelas/colunas/RPCs, na visão de quem chama) | `scripts/check_deriva.mjs` (como `anon`) |
+| `divat_security_shape()` | postura de segurança em fatos **derivados**: RLS/grants/policies por tabela, `SECURITY DEFINER`/`search_path`/`EXECUTE` por função, e os default privileges. Usa `has_*_privilege` e `coalesce(proacl, acldefault(…))` — ACL nula é o *default* do PostgreSQL, não ausência de acesso, e um gate que lesse ACL crua nasceria fail-open | `scripts/check_grants.mjs` (como `anon`), diário no workflow `db-checks.yml` |
 | `f_unaccent(text)` | wrapper IMMUTABLE do `unaccent` | `divat_busca_logradouro` + índice de expressão `trgm_itin_logr_tipo_nome_norm` |
 | `fn_vigor_auto()` | zera `vigor` quando a portaria vira `REVOGADA` | trigger `trg_vigor_auto` |
 | `realtime_tables()` | lista as tabelas da publicação `supabase_realtime` | `scripts/check_realtime.mjs` (como `anon`) |

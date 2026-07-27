@@ -262,6 +262,22 @@ console.log('\n[2b] Deriva docs × código');
     }
   }
 
+  // --- o baseline de segurança é legível offline ---
+  // Mesma razão do de cima, com um agravante: este baseline registra EXCEÇÕES de segurança
+  // aceitas. Se ele ficar ilegível, o check_grants.mjs aborta e o gate diário some — e um gate
+  // que some não avisa que sumiu.
+  if (existe('scripts/security_baseline.json')){
+    try {
+      const b = JSON.parse(ler('scripts/security_baseline.json'));
+      if (!Array.isArray(b.achados)) throw new Error('campo "achados" não é um array');
+      const ruim = b.achados.filter(a => !a.tipo || !a.alvo || !a.detalhe);
+      if (ruim.length) throw new Error(`${ruim.length} entrada(s) sem tipo/alvo/detalhe`);
+      okline(`baseline de segurança válido (${b.achados.length} exceção(ões) aceita(s))`);
+    } catch (e){
+      fail(`scripts/security_baseline.json inválido: ${e.message}`);
+    }
+  }
+
   // --- nenhum arquivo termina com tag de ferramenta de sessão de IA vazada ---
   // Dois docs terminavam com </content> (e um com </invoke>): sobra de chamada de ferramenta
   // que virou conteúdo do arquivo. Só sobrevive porque ninguém releu o arquivo até o fim.
