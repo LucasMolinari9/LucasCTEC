@@ -73,3 +73,16 @@ function cdnBom() {
   const api = 'https://lwzsxuaqqeoamukduhev.supabase.co/rest/v1/';
   return [s, api];
 }
+
+function styleAttrRuim() {
+  // ruleid: divat-style-attr-quebra-csp
+  return `<div class="sec-head" style="--accent:var(--c-doc)"><h2>x</h2></div>`;
+}
+
+function styleAttrBom() {
+  // ok: divat-style-attr-quebra-csp
+  const markup = `<th class="w-90">Código</th>`;
+  // ok: divat-style-attr-quebra-csp
+  document.body.style.display = 'none';
+  return markup;
+}

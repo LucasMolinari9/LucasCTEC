@@ -1,0 +1,21 @@
+{
+  "gerado_em": "2026-07-27",
+  "nota": "Exceções de segurança CONHECIDAS e aceitas. Cada entrada precisa de justificativa em docs/seguranca.md §9. Isto não é perdão: se um achado NOVO aparecer, revogue — não baseline.",
+  "achados": [
+    {
+      "tipo": "default_privilege_permissivo",
+      "alvo": "supabase_admin:public:S",
+      "detalhe": "objeto novo (S) criado por supabase_admin em public já nasce com anon=SELECT,UPDATE,USAGE authenticated=SELECT,UPDATE,USAGE"
+    },
+    {
+      "tipo": "default_privilege_permissivo",
+      "alvo": "supabase_admin:public:f",
+      "detalhe": "objeto novo (f) criado por supabase_admin em public já nasce com anon=EXECUTE authenticated=EXECUTE"
+    },
+    {
+      "tipo": "default_privilege_permissivo",
+      "alvo": "supabase_admin:public:r",
+      "detalhe": "objeto novo (r) criado por supabase_admin em public já nasce com anon=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE authenticated=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    }
+  ]
+}

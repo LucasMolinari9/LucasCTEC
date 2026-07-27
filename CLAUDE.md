@@ -29,8 +29,15 @@ exibe e **atualiza ao vivo** (Realtime).
 - O botão **PDF** (barra do modal) monta o documento **completo** num container oculto
   `.pdf-export` e usa `window.print()` (vetorial) — sem dependência externa de PDF.
 - `vercel.json` define os cabeçalhos de segurança e `Cache-Control: must-revalidate`. A CSP é
-  **`script-src 'self'`** (sem `unsafe-inline` de script) e **`font-src 'self'`**; o `style-src`
-  mantém `'unsafe-inline'` (CSS embutido, decisão consciente).
+  **`script-src 'self'`**, **`style-src 'self'` + `style-src-attr 'none'`** e **`font-src 'self'`**
+  — **sem nenhum `unsafe-inline`** desde 27/07/2026 (achado SEC-08). Consequência prática:
+  **atributo `style=` em markup é IGNORADO pelo navegador, em silêncio.** Estilo novo vai em
+  **classe no `styles.css`**; o que for genuinamente dinâmico (posição calculada, p. ex.) vai por
+  **CSSOM** — `el.style.x = …` e `setProperty`, que a CSP permite (medido em Chromium headless).
+  Duas guardas cobram isso: `tests/check.js` §[1] e a regra Semgrep `divat-style-attr-quebra-csp`.
+- **`.vercelignore` é allowlist**: o deploy publica só `index.html`, `app.js`, `styles.css`,
+  `manifest.webmanifest`, `vercel.json` e `vendor/`. Arquivo público novo (ícone, fonte) precisa
+  ser reaberto lá, senão vira 404.
 
 ## Supabase
 - Projeto: **`bd_teste`** · ref **`lwzsxuaqqeoamukduhev`** · região sa-east-1.
@@ -38,9 +45,22 @@ exibe e **atualiza ao vivo** (Realtime).
   design; a segurança vem do **RLS + privilégio mínimo** (anon só lê).
 - **RLS / segurança (LER COM ATENÇÃO):**
   - Todas as tabelas têm RLS ligado; cada tabela de consulta tem policy `anon_read_*` (SELECT).
-  - O portal é **read-only de verdade**: `anon` e `authenticated` têm **apenas SELECT** — toda
-    escrita foi revogada e um `ALTER DEFAULT PRIVILEGES` garante que tabelas novas não voltem a
-    conceder. **Não há caminho de escrita pela API pública.**
+  - O portal é **read-only de verdade**: `anon` e `authenticated` têm **apenas SELECT** nas 14
+    tabelas de consulta, e toda escrita foi revogada. **Não há caminho de escrita pela API pública**
+    (conferido contra o banco vivo em 27/07/2026, não só contra o SQL versionado).
+  - **Objeto novo nasce FECHADO (default deny), desde 27/07/2026.** Os `ALTER DEFAULT PRIVILEGES`
+    do schema `public` **revogam** de `anon`/`authenticated`: tabelas, sequências e `EXECUTE` de
+    funções. Antes eles faziam o oposto — `GRANT SELECT ON TABLES` — e a prosa daqui afirmava que
+    "garantiam que tabelas novas não voltassem a conceder", o que estava invertido (era o achado
+    SEC-01). **Consequência prática: tabela nova exige `GRANT SELECT` + policy explícitos, e RPC
+    nova exige `GRANT EXECUTE` explícito** — sem isso o portal recebe 401/404 e parece bug de
+    front. A skill `db-change` cobra isso. **Fechar o default não conserta o que já existe:** as
+    18 tabelas atuais nasceram sob o default antigo e ficaram com `MAINTAIN` até um `REVOKE
+    MAINTAIN ON ALL TABLES` explícito — achado do próprio gate na 1ª rodada contra o banco.
+  - **Limitação aceita:** há um segundo conjunto de defaults, do role `supabase_admin`, que concede
+    escrita a `anon` em tabelas de `public`. Só atinge objetos criados **por esse role** (o painel
+    cria como `postgres`), e não é fechável — `postgres` não é superusuário no Supabase. Mitigação:
+    o gate `scripts/check_grants.mjs` roda **diariamente** enquanto esse default existir.
   - **NUNCA conceda escrita (GRANT nem policy de INSERT/UPDATE/DELETE) a `anon`/`authenticated`.**
     Se um dia precisar de edição logada legítima, crie policy **restrita por tabela/coluna** —
     nunca `ALL USING(true)`.

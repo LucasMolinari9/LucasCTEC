@@ -11,11 +11,19 @@ on:
   push:
   pull_request:
 
+# GITHUB_TOKEN no mínimo: nenhum destes workflows faz push, abre PR ou comenta.
+# Sem este bloco o token herda o default do repo/organização, que pode ser contents: write
+# (achado SEC-07 da auditoria de 27/07/2026).
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false   # nenhum job faz push; token fora do .git/config do runner
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'

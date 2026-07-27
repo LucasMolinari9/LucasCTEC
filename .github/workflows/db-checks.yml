@@ -6,17 +6,23 @@
 # escreva codlinha/cod_origem inexistente no pai não é barrado por ninguém — e o portal não
 # avisa: a tela fica vazia, sem erro. Este workflow é o alarme.
 #
-# Por que SEMANAL e não em push: os dois scripts leem o BANCO, e mudança de dado não gera push.
-# É a mesma razão do backup.yml e do cron do deriva.yml. O filtro de `paths` cobre o caso em
-# que o próprio script (ou a lista de tabelas que ele confere) muda.
+# Por que por CRON e não só em push: os scripts leem o BANCO, e mudança de dado (ou um clique no
+# painel do Supabase) não gera push. É a mesma razão do backup.yml e do cron do deriva.yml. O
+# filtro de `paths` cobre o caso em que o próprio script (ou a lista que ele confere) muda.
+#
+# Por que DIÁRIO desde 27/07/2026 (era semanal): quem dita a cadência é o job `seguranca`. Existe
+# um conjunto de default privileges do role `supabase_admin` que concede escrita a anon e que NÃO
+# é fechável (postgres não é superusuário no Supabase) — ver docs/seguranca.md §9.1. Enquanto essa
+# porta existir, a janela entre "alguém criou uma tabela por ali" e "o gate percebeu" precisa ser
+# de um dia, não de uma semana. Os outros dois jobs pegam carona: são read-only e levam segundos.
 #
 # JOBS SEPARADOS, não steps do mesmo job, de propósito: em steps sequenciais o primeiro
 # vermelho aborta o job e esconde o resultado do segundo — e "um vermelho não esconde o outro"
 # é o padrão que o repo já segue ao ter ci/views/semgrep/deriva em arquivos distintos. Aqui os
-# dois rodam em paralelo e reportam independentemente. O ticket #63 pediu um arquivo só; o
-# arquivo é um, os veredictos são dois.
+# TRÊS rodam em paralelo e reportam independentemente. O ticket #63 pediu um arquivo só; o
+# arquivo é um, os veredictos são três.
 #
-# Nenhum segredo: ambos usam a anon key pública que já está no app.js. Não há chave no
+# Nenhum segredo: os três usam a anon key pública que já está no app.js. Não há chave no
 # ambiente deste workflow — se algum dia precisar de service key, ela NÃO vem para cá.
 #
 # Os `uses:` estão presos ao SHA (o `# v4` ao lado é só legenda) — ver docs/semgrep.md
@@ -25,7 +31,7 @@ name: DB checks
 
 on:
   schedule:
-    - cron: '0 8 * * 1' # toda segunda 08:00 UTC (1 h depois do Deriva, 2 h depois do Backup)
+    - cron: '0 8 * * *' # todo dia 08:00 UTC (1 h depois do Deriva, 2 h depois do Backup)
   workflow_dispatch:
   push:
     paths:
@@ -33,6 +39,10 @@ on:
       - scripts/check_realtime.mjs
       - scripts/check_data_quality.mjs
       - scripts/data_quality_baseline.json
+      - scripts/check_grants.mjs
+      - scripts/security_baseline.json
+      - docs/backup_schema.sql
+      - docs/schema.md
       - .github/workflows/db-checks.yml
   pull_request:
     paths:
@@ -40,7 +50,17 @@ on:
       - scripts/check_realtime.mjs
       - scripts/check_data_quality.mjs
       - scripts/data_quality_baseline.json
+      - scripts/check_grants.mjs
+      - scripts/security_baseline.json
+      - docs/backup_schema.sql
+      - docs/schema.md
       - .github/workflows/db-checks.yml
+
+# GITHUB_TOKEN no mínimo: nenhum destes workflows faz push, abre PR ou comenta.
+# Sem este bloco o token herda o default do repo/organização, que pode ser contents: write
+# (achado SEC-07 da auditoria de 27/07/2026).
+permissions:
+  contents: read
 
 jobs:
   realtime:
@@ -48,6 +68,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false   # nenhum job faz push; token fora do .git/config do runner
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
@@ -59,6 +81,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false   # nenhum job faz push; token fora do .git/config do runner
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
@@ -67,3 +91,25 @@ jobs:
       # rode localmente com --sem-baseline.
       - name: Qualidade dos dados pos-ETL (orfaos referenciais, U+FFFD)
         run: node scripts/check_data_quality.mjs
+
+  # Achado SEC-04 da auditoria externa de 27/07/2026: RLS, grants, policies e privilegios de
+  # funcao nao eram verificados por nada — a conferencia era um checklist TRIMESTRAL manual, e uma
+  # alteracao perigosa feita no painel podia ficar viva por meses. Este job e o que sustenta as
+  # correcoes SEC-01/SEC-05: sem ele, os default privileges recem-fechados podem ser reabertos por
+  # um clique sem que ninguem saiba.
+  #
+  # Job separado, nao step dos outros, pela mesma razao do cabecalho: um vermelho nao pode
+  # esconder o outro. NUNCA rodar --atualizar-baseline aqui: baseline se atualiza local, com diff
+  # revisavel em PR.
+  seguranca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false   # nenhum job faz push; token fora do .git/config do runner
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+      - name: RLS, grants, policies e privilegios de funcao
+        run: node scripts/check_grants.mjs

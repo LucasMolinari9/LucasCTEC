@@ -19,8 +19,10 @@ Releia `CLAUDE.md` (seção "Supabase") e `docs/schema.md` e responda, para a mu
 
 1. **Tabela é nova ou é alteração de existente?**
    - Nova → precisa de PK própria (surrogate `row_id` se for tabela grande com `id` repetido),
-     RLS ligado + policy `anon_read_*` (SELECT only), e conferir `ALTER DEFAULT PRIVILEGES`
-     (não deveria precisar mexer, mas confirme que a tabela nova não herdou grant de escrita).
+     RLS ligado + policy `anon_read_*` (SELECT only) **e `GRANT SELECT ... TO anon, authenticated`
+     EXPLÍCITO**. Desde 27/07/2026 os default privileges são **deny** (achado SEC-01): tabela nova
+     **não** nasce mais legível. Esquecer o GRANT dá 401/404 no portal e parece bug de front.
+     Mesma regra para RPC nova: **`GRANT EXECUTE` explícito**, senão o `anon` não chama.
    - Alteração → a coluna nova muda algum nome que o ETL escreve? (ver armadilha
      `cod_origem`/`cod_municipio_origem` — nomes errados recriam colunas velhas.)
 2. **Essa tabela vai ser lida por algum card/view do `app.js`?**

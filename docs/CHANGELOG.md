@@ -412,3 +412,109 @@ conferido. Os tickets (`.scratch/doc-drift/`) foram implementados em sequência:
 
 Nada servido ao usuário mudou (docs + CI + metadado de função no banco) — sem deploy e sem
 bump do carimbo.
+
+## 27/07/2026 — 4ª auditoria externa: privilégios fecham por padrão, CSP fecha de vez
+
+Chegou um relatório externo com 8 achados (SEC-01…SEC-08) e, depois, um **parecer de revisão do
+próprio plano de correção**. Os 8 foram verificados contra o repo **e contra o banco vivo** — a
+lição registrada no handoff anterior ("pergunte ao banco, não ao doc") virou método. Todos
+procediam. Do parecer de revisão, 12 dos 14 pontos foram aceitos; **dois estavam errados**, e a
+diferença mudou o que foi executado.
+
+### O que o banco mostrou e nenhum dos dois relatórios podia ver
+
+`pg_default_acl` tinha **dois** conjuntos de defaults para `public`. O do `postgres` concedia
+`anon=rm` a tabelas novas — e o `CLAUDE.md` afirmava o **oposto** do que o SQL fazia ("um
+`ALTER DEFAULT PRIVILEGES` garante que tabelas novas não voltem a conceder"; o comando
+**concedia**). O `m` de `rm` é **MAINTAIN** (VACUUM/ANALYZE/CLUSTER/REINDEX/LOCK), não leitura —
+daí `REVOKE ALL` e não `REVOKE SELECT`, ponto do parecer, aceito.
+
+### A probe que derrubou a premissa dos dois relatórios
+
+Antes de aplicar DDL, uma **probe em transação** (cria tabela/função/sequência descartáveis, mede
+com `has_*_privilege`, `RAISE EXCEPTION` para desfazer) mostrou que, nas **funções**, os dois
+relatórios miravam no alvo errado: pediam revogar `EXECUTE` de `PUBLIC`, mas o default do Supabase
+**já excluía `PUBLIC`** — quem estava aberto era **`anon`**. Revogar só de `PUBLIC` não fecharia
+nada, e uma função administrativa criada em `public` continuaria chamável pelo PostgREST. O revoke
+aplicado inclui `anon`/`authenticated`; a probe confirmou o resultado (ACL final: `postgres` +
+`service_role`).
+
+O parecer também afirmava que `REVOKE EXECUTE` **não deve** usar `IN SCHEMA`, porque "revogação
+limitada a schema não neutraliza o default global". A premissa está errada — `defaclacl` guarda a
+ACL **completa** do objeto novo, não um delta (prova: a entrada de tabelas deste banco carregava
+`postgres=arwdDxtm`, vindo do `acldefault`). Seguir a justificativa levaria a **pular** o escopo
+que pega o caso real. Aplicados os dois escopos, e a decisão veio da probe, não do argumento.
+
+### Aberto e aceito
+
+`ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin` responde **`42501`** — `postgres` não é
+superusuário no Supabase. Esse segundo conjunto de defaults concede escrita a `anon` e **não é
+fechável**. Registrado em `docs/seguranca.md` §9.1; por causa dele o gate de segurança roda
+**diariamente**, não semanalmente.
+
+### O gate que sustenta tudo (SEC-04)
+
+RLS, grants, policies e privilégios de função não eram verificados por **nada** — a conferência
+era um checklist trimestral manual, e o dono alimenta o banco pelo painel com service role. Agora
+há a RPC `divat_security_shape()` + `scripts/check_grants.mjs`, em job independente no
+`db-checks.yml`. A RPC devolve **fatos derivados**, não ACL crua (ponto do parecer, e o mais
+valioso dele): `proacl` nulo não é "sem acesso", é o *default* do PostgreSQL — um gate lendo ACL
+crua trataria a função recém-criada, a mais perigosa, como a mais fechada. Bancada em
+`tests/check_grants.rig.mjs`, 13 casos, **dois deles cobrindo fail-open**: RPC devolvendo lista
+vazia ou faltando campo tem de **abortar**, não relatar "nenhum achado".
+
+### Frontend: a CSP fecha (SEC-08)
+
+A premissa que o handoff anterior deixou explicitamente por conferir foi **medida em Chromium
+headless** antes de qualquer mudança: markup `style=` e `setAttribute('style')` são bloqueados;
+CSSOM (`el.style.x`, `setProperty`) é permitido. (`cssText` **não** é bloqueado — correção ao
+parecer.) Os 10 atributos saíram: os 4 de accent eram **sempre a mesma constante** e viraram
+`--accent`/`--accent-soft` estáticos no `:root`; larguras de `<th>` viraram classes `.w-*`; os 3
+`display:none` viraram `.is-hidden`, obrigando 8 sites de `.style.display` a virarem `classList`.
+`vercel.json` passa a `style-src 'self'; style-src-attr 'none'`.
+
+Como o sintoma de uma recaída é **mudo** (a regra simplesmente não acontece, sem erro no console),
+foram três guardas: `tests/check.js` §[1] (cobre `index.html` **e** os templates do `app.js`, e
+exige classe para toda largura declarada) e a regra Semgrep `divat-style-attr-quebra-csp`. As duas
+primeiras foram testadas **plantando a recaída** e vendo o gate ficar vermelho.
+
+E os gates de navegador passaram a servir a **CSP de produção, lida do `vercel.json`**. Rodavam
+sem cabeçalho nenhum — num mundo mais permissivo que o real —, então jamais teriam pego uma
+regressão de CSP.
+
+### Achados que apareceram ao conferir (nenhum dos relatórios os viu)
+
+- **A baseline de reconstrução não restaurava.** `docs/backup_schema.sql` criava `pg_trgm` e
+  `unaccent` `WITH SCHEMA public`, mas as duas estão em `extensions` no banco e `f_unaccent` chama
+  `extensions.unaccent` — num restore limpo a função quebra e o índice GIN não é criado.
+- **O laço anti-drift estava fechado só pela metade.** A auditoria anterior cobriu o
+  `pure.harness.js` e deixou o `harness.js` descoberto: **8 dos 9 exports sem guarda**, incluindo
+  `marcarTrunc`/`bannerTrunc`, com 28 testes rodando contra cópias que nada garantia estarem
+  atualizadas. Mesmo bug do `ilikeTerm`, um arquivo ao lado. A cobertura varre os dois agora.
+- **`backup_rest.mjs` prometia o que não fazia:** o cabeçalho dizia "pagina pela PRIMARY KEY" e o
+  código fazia `order=PK` + `offset`, que sob escrita concorrente pula ou duplica linha em
+  silêncio. Virou keyset de verdade (com comparação lexicográfica à mão para a PK composta,
+  porque o PostgREST não compara tupla), mais conferência contra `Content-Range` e SHA-256.
+- **`backup.yml` afirmava que o repositório é público.** É privado.
+
+### O que NÃO ficou encerrado
+
+**SEC-02** e **SEC-06** ficam **mitigados**. A memoização e o cancelamento de busca reduzem a
+carga que o *portal* gera, mas não são rate limiting — quem quiser abusar chama o PostgREST direto
+com a anon key, que é pública por design; um controle real exigiria Edge Function ou gateway. E o
+**restore nunca foi testado ponta a ponta**, apontado desde 16/07. Os dois estão em
+`docs/seguranca.md` §9 para não serem redescobertos como novidade na próxima auditoria.
+
+Carimbo: **build 27/07-A** (o Bloco 4 é o único que muda o que o usuário vê).
+
+### Adendo do mesmo dia — o gate achou algo na primeira rodada real
+
+Ao rodar o `check_grants.mjs` contra o payload de produção da RPC (e não contra fixtures), ele
+ficou **vermelho**: `anon` e `authenticated` tinham **MAINTAIN** nas 18 tabelas. O `REVOKE ALL`
+aplicado antes fechou os **defaults**, que valem só para objetos FUTUROS — as tabelas existentes
+nasceram sob o default antigo `anon=rm` e guardaram o privilégio. Corrigido com
+`REVOKE MAINTAIN ON ALL TABLES IN SCHEMA public FROM anon, authenticated`.
+
+Não havia caminho de abuso pela API pública (o PostgREST só faz CRUD, não `VACUUM`/`LOCK`), mas
+era privilégio indevido num portal declaradamente somente-leitura — e é exatamente o que a
+correção alegava ter removido. **Fechar o default não conserta o que já existe.**

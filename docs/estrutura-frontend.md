@@ -26,11 +26,21 @@ mudou junto, e o que continua valendo:
   **Não fatiar em `js/*.js`**: N arquivos = N chances de ordem errada + detector de versão tendo
   que vigiar N ETags, por ganho nenhum.
 - **CSS em `styles.css`** (extraído do `<style>` em 22/07/2026): cacheável separado do HTML e
-  editável com tooling. O `style-src` **mantém `'unsafe-inline'`** porque ainda há atributos
-  `style=""` *dinâmicos* legítimos (accent dos cards via custom properties, larguras de `<th>`);
-  os estilos inline *repetidos* viraram classes (`.doc-h3`, `.doc-note`, `.fd-*`, `.qh-*` etc. —
-  bloco "CLASSES DE DOCUMENTO" no fim do `styles.css`). Estilo novo: **classe no `styles.css`**,
-  não `style=""` no template.
+  editável com tooling. Desde **27/07/2026** o `style-src` é `'self'` com **`style-src-attr
+  'none'`** — **nenhum `unsafe-inline`** (achado SEC-08). Os 10 atributos `style=` que restavam
+  saíram: os 4 de accent eram sempre a MESMA constante e viraram `--accent`/`--accent-soft`
+  estáticos no `:root`; as larguras de `<th>` viraram classes `.w-*` (conjunto fechado, porque
+  `c.w` é sempre constante do código); e os 3 `display:none` do `index.html` viraram `.is-hidden`,
+  o que obrigou os 8 sites de `.style.display` a virarem `classList`.
+  **Regra:** estilo novo é **classe no `styles.css`**. Atributo `style=` em markup é ignorado pelo
+  navegador **em silêncio** — o sintoma é a regra simplesmente não acontecer. Só o ATRIBUTO é
+  proibido: `el.style.x = …` e `setProperty` continuam válidos e são o caminho para o que é
+  genuinamente dinâmico (o dropdown se posiciona assim, com `getBoundingClientRect`).
+  Guardas: `tests/check.js` §[1] (offline, cobre `index.html` e os templates do `app.js`, e ainda
+  exige classe `.w-*` para toda largura declarada) e a regra Semgrep `divat-style-attr-quebra-csp`.
+  Os gates de navegador (`check_views.mjs`/`check_abas.mjs`) passaram a servir **a CSP de
+  produção, lida do `vercel.json`** — antes rodavam sem cabeçalho nenhum, num mundo mais
+  permissivo que o real, e uma regressão de CSP passaria verde.
 - **IIFE**: o `app.js` inteiro roda dentro de `(() => { … })();` — nada vaza para `window`
   (o vendor `supabase-js` continua global e é lido normalmente). O escopo interno é único, então
   as regras de hoisting/TDZ da seção 3 continuam valendo sem mudança.

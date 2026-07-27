@@ -1,9 +1,12 @@
 # Backup automático (dados) — roda scripts/backup_rest.mjs em MODO PÚBLICO.
 #
-# Usa a ANON KEY (a mesma pública do index.html): baixa só as 14 tabelas que a API
-# pública já expõe — nada de service key neste repo (é público; segredo em artifact
-# de repo público exporia as tabelas de staging). O dump completo (staging + schema)
-# continua sendo a rotina manual do dono — ver docs/backup.md.
+# Usa a ANON KEY (a mesma pública que o site serve a todo visitante): baixa só as 14
+# tabelas que a API pública já expõe. Nada de service key aqui — não porque o repo seja
+# público (ele é PRIVADO; este comentário afirmava o contrário até 27/07/2026, sobra de
+# antes da mudança de visibilidade), mas porque service key em variável de workflow amplia
+# a superfície sem necessidade: quem obtiver acesso ao Actions passaria a ler as tabelas de
+# staging. O dump completo (staging + schema) continua sendo a rotina manual do dono — ver
+# docs/backup.md.
 #
 # O dump fica como artifact do Actions por 90 dias (aba Actions → run → Artifacts).
 #
@@ -16,11 +19,19 @@ on:
     - cron: '0 6 * * 1' # toda segunda 06:00 UTC (03:00 em Brasília)
   workflow_dispatch:
 
+# GITHUB_TOKEN no mínimo: nenhum destes workflows faz push, abre PR ou comenta.
+# Sem este bloco o token herda o default do repo/organização, que pode ser contents: write
+# (achado SEC-07 da auditoria de 27/07/2026).
+permissions:
+  contents: read
+
 jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false   # nenhum job faz push; token fora do .git/config do runner
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'

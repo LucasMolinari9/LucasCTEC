@@ -87,6 +87,16 @@ bloco `SET ROLE anon` + tentativas de INSERT/UPDATE/DELETE/SELECT em transação
    merge; confirmar que *secret scanning / push protection* está ativo.
 
 ## 6. Checklist trimestral (5 min numa sessão do Claude)
+
+> **Os itens 2 e 3 viraram automáticos em 27/07/2026.** O gate `scripts/check_grants.mjs` roda no
+> workflow `db-checks.yml` e falha sozinho se RLS cair, aparecer grant/policy de escrita, ou surgir
+> função executável por `PUBLIC`/`anon` fora da baseline. Era o achado SEC-04: um checklist
+> trimestral manual deixava uma alteração perigosa feita no painel viva por meses. O que sobrou
+> aqui é conferência de olho — se o gate estiver verde, os itens 2 e 3 são redundância barata.
+>
+> **Frequência: DIÁRIA**, não semanal, enquanto existir o default de `supabase_admin` descrito na
+> seção 9. Quando ele deixar de existir, pode voltar a semanal.
+
 1. Rodar os **advisors de segurança** do Supabase → esperado: só os 4 INFO de staging, zero WARN.
 2. Reexecutar a **query de grants/policies** (esperado: vazio = sem caminho de escrita):
    ```sql
@@ -119,3 +129,33 @@ bloco `SET ROLE anon` + tentativas de INSERT/UPDATE/DELETE/SELECT em transação
 - Toda mudança de estrutura do banco passa pela skill `db-change`.
 - Nada destrutivo (DROP/DELETE/TRUNCATE/REVOKE/migração) sem backup fresco.
 - `service_role` só no painel — jamais em código, site ou Git.
+- **Tabela nova precisa de `GRANT SELECT` + policy explícitos; RPC nova precisa de `GRANT EXECUTE`
+  explícito.** Desde 27/07/2026 nada nasce acessível sozinho.
+
+## 9. Riscos residuais conhecidos e ACEITOS
+
+Três coisas não estão fechadas. Estão aqui para não serem redescobertas como "achado novo" a cada
+auditoria — e para que a decisão de conviver com elas seja explícita, não esquecimento.
+
+**9.1 — Defaults do role `supabase_admin` (SEC-01, parcial).** Existe um segundo conjunto de
+default privileges, dono `supabase_admin`, concedendo `arwdDxtm` (inclui INSERT/UPDATE/DELETE/
+TRUNCATE) a `anon` e `authenticated` em tabelas de `public`. Só atinge objetos criados **por esse
+role**; o painel do Supabase cria como `postgres`, que já está fechado. **Não é fechável:**
+`postgres` não é superusuário no Supabase e o `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin`
+responde `42501: permission denied to change default privileges`. **Mitigação:** o gate
+`check_grants.mjs` roda diariamente e pega qualquer tabela que apareça com grant de escrita.
+
+**9.2 — Abuso da API pública (SEC-02).** A chave `anon` é pública por design e o navegador fala
+**direto** com o Supabase — a Vercel não está no caminho da requisição, então não há onde aplicar
+rate limit sem mudar a arquitetura (Edge Function, gateway ou RPC agregadora com quota). Um
+atacante pode ignorar o `app.js` e enumerar o PostgREST até os tetos do servidor. **Risco de
+integridade permanece baixo** (o banco é só-leitura para `anon`); o risco é de disponibilidade e
+custo. **Controles que existem hoje:** `statement_timeout=3s` no role `anon`,
+`pgrst.db_max_rows=30000` no `authenticator`, e os limites do plano. As otimizações do `app.js`
+(memoização e cancelamento de busca obsoleta) reduzem a carga que o **portal legítimo** gera —
+não são rate limiting e não devem ser contadas como tal.
+
+**9.3 — Restore nunca testado ponta a ponta (SEC-06).** Plano Free, sem PITR. Há backup semanal
+automático, checksum e conferência de contagem, mas **nenhuma restauração real foi executada** —
+apontado pela revisão de 16/07/2026 e ainda aberto. Nenhum agente fecha isso: é rodar o runbook de
+`docs/backup.md` contra um projeto Supabase descartável, na máquina do dono, e anotar RTO/RPO.

@@ -47,13 +47,30 @@ const MIME = {
   '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json', '.json': 'application/json',
 };
 
+// A CSP de PRODUÇÃO, lida do vercel.json — não uma cópia. Até 27/07/2026 a bancada servia os
+// arquivos sem cabeçalho nenhum, então os dois gates de navegador rodavam num mundo mais
+// permissivo que o real: uma regressão de CSP (um `style=` inline voltando, um script de
+// terceiro) passaria verde aqui e quebraria só no navegador do usuário. Lendo do vercel.json,
+// apertar a CSP de verdade aperta a bancada junto, sem ninguém precisar lembrar.
+// O `connect-src` ganha o servidor local, senão o próprio stub do PostgREST seria bloqueado.
+function cspDeProducao(port) {
+  const vercel = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
+  const csp = vercel.headers?.[0]?.headers?.find(h => h.key === 'Content-Security-Policy')?.value;
+  if (!csp) throw new Error('não achei a Content-Security-Policy no vercel.json — a bancada não pode fingir que testou.');
+  return csp.replace(/connect-src ([^;]+)/, `connect-src $1 http://127.0.0.1:${port}`);
+}
+
 export async function startServer(port) {
+  const csp = cspDeProducao(port);
   const server = http.createServer((req, res) => {
     const url = decodeURIComponent(req.url.split('?')[0].split('#')[0]);
     const file = path.join(ROOT, url === '/' ? 'index.html' : url);
     fs.readFile(file, (err, buf) => {
       if (err) { res.writeHead(404); res.end('404'); return; }
-      res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+      res.writeHead(200, {
+        'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
+        'Content-Security-Policy': csp,
+      });
       res.end(buf);
     });
   });

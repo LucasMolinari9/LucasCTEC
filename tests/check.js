@@ -15,6 +15,7 @@ const { spawnSync } = require('child_process');
 const TESTS_DIR = __dirname;
 const INDEX = path.join(__dirname, '..', 'index.html');
 const APPJS = path.join(__dirname, '..', 'app.js');
+const CSS   = path.join(__dirname, '..', 'styles.css');
 
 let problems = 0;
 const fail   = msg => { console.log('  ✗', msg); problems++; };
@@ -22,6 +23,7 @@ const okline = msg => console.log('  ✓', msg);
 
 const html = fs.readFileSync(INDEX, 'utf8');
 const js   = fs.readFileSync(APPJS, 'utf8');
+const css  = fs.readFileSync(CSS, 'utf8');
 
 // ---------- [1] sintaxe do app.js + nenhum <script> inline no index.html ----------
 console.log('\n[1] Sintaxe do app.js + index.html sem <script> inline');
@@ -39,6 +41,36 @@ if (/<script(?![^>]*\bsrc=)[^>]*>/.test(html)) {
   fail('<script> inline no index.html — a CSP (script-src \'self\') bloqueia; mova o código para o app.js.');
 } else {
   okline('index.html sem <script> inline (compatível com a CSP)');
+}
+
+// Irmã da guarda acima, para o outro eixo da CSP: desde 27/07/2026 o style-src é 'self' com
+// `style-src-attr 'none'`, então atributo `style=` em markup é IGNORADO pelo navegador (medido
+// em Chromium headless — markup e setAttribute bloqueados, CSSOM liberado). O sintoma de uma
+// recaída é mudo: a largura/o esconder simplesmente não acontece, sem erro no console.
+// Só o ATRIBUTO é proibido; `el.style.x = …` continua legítimo (é como o dropdown se posiciona).
+// A varredura cobre index.html E os templates do app.js — foi lá que estavam 7 dos 10 casos.
+const styleAttr = /(?<!\/\/[^\n]{0,200})<[a-z][^>]*\sstyle\s*=\s*["'`]/i;
+const semComentarios = src => src.replace(/^\s*(\/\/|--).*$/gm, '');
+let styleInline = 0;
+for (const [nome, src] of [['index.html', html], ['app.js', semComentarios(js)]]){
+  if (styleAttr.test(src)){
+    const linha = src.split('\n').findIndex(l => /<[a-z][^>]*\sstyle\s*=\s*["'`]/i.test(l)) + 1;
+    fail(`[${nome}:${linha}] atributo style= em markup — a CSP (style-src-attr 'none') ignora; use classe no styles.css (ou el.style.x via JS, que é permitido).`);
+    styleInline++;
+  }
+}
+if (!styleInline) okline("index.html e app.js sem atributo style= (compatível com style-src-attr 'none')");
+
+// Largura de coluna: todo `w:'…'` do app.js precisa de classe correspondente no styles.css.
+// Sem isto, uma largura nova vira `class="w-999"` que não existe e a coluna sai torta EM
+// SILÊNCIO — o modo de falha exato que a troca de style= por classe introduziu.
+{
+  const larguras = [...js.matchAll(/\bw:\s*'(\d+(?:px|%))'/g)].map(m => m[1]);
+  const faltando = [...new Set(larguras)]
+    .map(w => `w-${w.replace('px','').replace('%','p')}`)
+    .filter(cls => !new RegExp(`\\.${cls}\\{`).test(css));
+  if (faltando.length) fail(`larguras de coluna sem classe em styles.css: ${faltando.join(', ')}`);
+  else okline(`larguras de coluna com classe (${new Set(larguras).size} distintas)`);
 }
 
 // ---------- [1b] nenhuma chave service_role nos arquivos servidos ----------
@@ -99,7 +131,23 @@ const canon = [
   ['commitViewResult',      "if (!isCurrentGen(view, gen)) return false;"],
   ['pushDetail',            "view._detail = { pdfHTML: view.pdfHTML };"],
   ['popDetail',             "view.pdfHTML = view._detail.pdfHTML;"],
-  ['sbFetch',              "async function sbFetch(table, qs = '') {"],
+  // --- cópias do harness.js (seção SUPABASE CONFIG) ---
+  // Estavam SEM guarda até 27/07/2026: a auditoria anterior fechou o laço para o
+  // pure.harness.js e o harness.js ficou de fora — 8 dos 9 exports descobertos, incluindo
+  // marcarTrunc/bannerTrunc, com 28 testes rodando contra cópias que nada garantia estarem
+  // atualizadas. Mesmo bug do `ilikeTerm`, um arquivo ao lado.
+  ['sbFetch',              "async function sbFetch(table, qs = '', sinal) {"],
+  ['SB_RETRIES',           'const SB_RETRIES    = 2;'],
+  ['esperar',              'const esperar = ms => new Promise'],
+  ['fetchComTimeout',      'async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal){'],
+  ['SB_TIMEOUT_MS',        'const SB_TIMEOUT_MS = 20000;'],
+  ['marcarTrunc',          'function marcarTrunc(data, qs){'],
+  ['bannerTrunc',          'function bannerTrunc(rows){'],
+  // CANCELADO/ehCancelamento sustentam o cancelamento de busca obsoleta (SEC-02): se a
+  // distinção entre "cancelei" e "deu timeout" sumir do app.js, os testes que a provam
+  // continuariam verdes contra a cópia.
+  ['CANCELADO',            "const CANCELADO = 'RequisicaoCancelada';"],
+  ['ehCancelamento',       'const ehCancelamento = e => e && e.name === CANCELADO;'],
   ['resumoRelatorio',      'function resumoRelatorio(rows){'],
   ['resumoFrota',          'function resumoFrota(rows){'],
   ['pageBounds',           'const p = Math.min(Math.max(1, (page|0) || 1), totalPages);'],
@@ -116,19 +164,31 @@ for (const [name, snippet] of canon){
 // A guarda acima só vale para quem está no `canon`. Uma cópia exportada pelo harness SEM
 // entrada aqui passa batido — foi o que aconteceu com `ilikeTerm` e `MAX_TABS` (37 cópias
 // exportadas × 36 guardas; descoberto na auditoria externa de 27/07/2026, contando à mão).
-// Esta checagem fecha o laço: cada símbolo exportado pelo pure.harness.js tem de ter guarda.
+// Esta checagem fecha o laço: cada símbolo exportado por um harness tem de ter guarda.
+//
+// Varre os DOIS harness. Na primeira versão varria só o pure.harness.js, e o harness.js ficou
+// descoberto — 8 dos 9 exports sem guarda, achado em 27/07/2026 ao mexer no sbFetch. Fechar o
+// laço num arquivo e deixar o irmão aberto é o mesmo bug, adiado. Harness NOVO entra aqui.
 {
-  const src = fs.readFileSync(path.join(TESTS_DIR, 'pure.harness.js'), 'utf8');
-  const m = src.match(/module\.exports\s*=\s*\{([\s\S]*?)\}\s*;/);
-  if (!m) fail('não achei o module.exports do pure.harness.js (a cobertura do canon não pôde ser conferida)');
-  else {
+  const HARNESSES = ['pure.harness.js', 'harness.js'];
+  const guardados = new Set(canon.map(([n]) => n));
+  let totalExportados = 0, falhou = false;
+  for (const arquivo of HARNESSES){
+    const src = fs.readFileSync(path.join(TESTS_DIR, arquivo), 'utf8');
+    const m = src.match(/module\.exports\s*=\s*\{([\s\S]*?)\}\s*;/);
+    if (!m){ fail(`não achei o module.exports do ${arquivo} (a cobertura do canon não pôde ser conferida)`); falhou = true; continue; }
     const exportados = m[1].split(',').map(s => s.trim()).filter(Boolean)
-      .map(s => s.split(':')[0].trim());
-    const guardados = new Set(canon.map(([n]) => n));
-    const semGuarda = exportados.filter(n => !guardados.has(n));
-    if (semGuarda.length) fail(`cópia exportada sem guarda anti-drift: ${semGuarda.join(', ')} — adicione ao \`canon\` do check.js`);
-    else okline(`cobertura do canon (${exportados.length} cópias exportadas, todas com guarda)`);
+      // `get X(){…}` / `set X(v){…}`: o nome é o 2º token, não o 1º.
+      .map(s => s.replace(/^(?:get|set)\s+/, '').split(/[:(]/)[0].trim())
+      .filter(Boolean);
+    totalExportados += new Set(exportados).size;
+    const semGuarda = [...new Set(exportados)].filter(n => !guardados.has(n));
+    if (semGuarda.length){
+      fail(`[${arquivo}] cópia exportada sem guarda anti-drift: ${semGuarda.join(', ')} — adicione ao \`canon\` do check.js`);
+      falhou = true;
+    }
   }
+  if (!falhou) okline(`cobertura do canon (${totalExportados} cópias exportadas nos ${HARNESSES.length} harness, todas com guarda)`);
 }
 
 // ---------- [2b] guarda docs × código ----------
@@ -259,6 +319,22 @@ console.log('\n[2b] Deriva docs × código');
       okline(`baseline de qualidade dos dados válido (${b.achados.length} achado(s) de dívida registrada)`);
     } catch (e){
       fail(`scripts/data_quality_baseline.json inválido: ${e.message}`);
+    }
+  }
+
+  // --- o baseline de segurança é legível offline ---
+  // Mesma razão do de cima, com um agravante: este baseline registra EXCEÇÕES de segurança
+  // aceitas. Se ele ficar ilegível, o check_grants.mjs aborta e o gate diário some — e um gate
+  // que some não avisa que sumiu.
+  if (existe('scripts/security_baseline.json')){
+    try {
+      const b = JSON.parse(ler('scripts/security_baseline.json'));
+      if (!Array.isArray(b.achados)) throw new Error('campo "achados" não é um array');
+      const ruim = b.achados.filter(a => !a.tipo || !a.alvo || !a.detalhe);
+      if (ruim.length) throw new Error(`${ruim.length} entrada(s) sem tipo/alvo/detalhe`);
+      okline(`baseline de segurança válido (${b.achados.length} exceção(ões) aceita(s))`);
+    } catch (e){
+      fail(`scripts/security_baseline.json inválido: ${e.message}`);
     }
   }
 
