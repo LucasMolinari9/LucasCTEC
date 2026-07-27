@@ -38,9 +38,20 @@ exibe e **atualiza ao vivo** (Realtime).
   design; a segurança vem do **RLS + privilégio mínimo** (anon só lê).
 - **RLS / segurança (LER COM ATENÇÃO):**
   - Todas as tabelas têm RLS ligado; cada tabela de consulta tem policy `anon_read_*` (SELECT).
-  - O portal é **read-only de verdade**: `anon` e `authenticated` têm **apenas SELECT** — toda
-    escrita foi revogada e um `ALTER DEFAULT PRIVILEGES` garante que tabelas novas não voltem a
-    conceder. **Não há caminho de escrita pela API pública.**
+  - O portal é **read-only de verdade**: `anon` e `authenticated` têm **apenas SELECT** nas 14
+    tabelas de consulta, e toda escrita foi revogada. **Não há caminho de escrita pela API pública**
+    (conferido contra o banco vivo em 27/07/2026, não só contra o SQL versionado).
+  - **Objeto novo nasce FECHADO (default deny), desde 27/07/2026.** Os `ALTER DEFAULT PRIVILEGES`
+    do schema `public` **revogam** de `anon`/`authenticated`: tabelas, sequências e `EXECUTE` de
+    funções. Antes eles faziam o oposto — `GRANT SELECT ON TABLES` — e a prosa daqui afirmava que
+    "garantiam que tabelas novas não voltassem a conceder", o que estava invertido (era o achado
+    SEC-01). **Consequência prática: tabela nova exige `GRANT SELECT` + policy explícitos, e RPC
+    nova exige `GRANT EXECUTE` explícito** — sem isso o portal recebe 401/404 e parece bug de
+    front. A skill `db-change` cobra isso.
+  - **Limitação aceita:** há um segundo conjunto de defaults, do role `supabase_admin`, que concede
+    escrita a `anon` em tabelas de `public`. Só atinge objetos criados **por esse role** (o painel
+    cria como `postgres`), e não é fechável — `postgres` não é superusuário no Supabase. Mitigação:
+    o gate `scripts/check_grants.mjs` roda **diariamente** enquanto esse default existir.
   - **NUNCA conceda escrita (GRANT nem policy de INSERT/UPDATE/DELETE) a `anon`/`authenticated`.**
     Se um dia precisar de edição logada legítima, crie policy **restrita por tabela/coluna** —
     nunca `ALL USING(true)`.

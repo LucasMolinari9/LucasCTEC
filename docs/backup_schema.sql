@@ -23,8 +23,13 @@
 -- ============================================================
 -- 1) EXTENSIONS (das quais o app depende de verdade)
 -- ============================================================
-CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
-CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA public;
+-- SCHEMA extensions, não public: é onde o Supabase realmente as instala, e é o que f_unaccent
+-- (seção 5) chama — `extensions.unaccent(...)`. Enquanto isto dizia `WITH SCHEMA public`, um
+-- restore limpo criava a extensão no lugar errado, f_unaccent quebrava e o índice GIN que depende
+-- dela (seção 5) não era criado — ou seja, esta baseline NÃO restaurava. Achado da revisão externa
+-- de 27/07/2026, confirmado contra o banco vivo (as duas extensões estão em `extensions`).
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA extensions;
 
 -- ============================================================
 -- 2) TABELAS
@@ -297,6 +302,11 @@ CREATE OR REPLACE FUNCTION public.f_unaccent(text)
 AS $function$
   select extensions.unaccent('extensions.unaccent', $1)
 $function$;
+-- Sem EXECUTE para PUBLIC (SEC-05 da auditoria de 27/07/2026 — esta e as duas funções abaixo
+-- ficaram de fora do ticket 06 de 26/07 e continuavam com o `=X/postgres` herdado do default do
+-- PostgreSQL). Assinatura completa de propósito: sem ela o REVOKE erra a sobrecarga.
+REVOKE ALL ON FUNCTION public.f_unaccent(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.f_unaccent(text) TO anon, authenticated;
 
 -- índice que depende de f_unaccent — criar só agora que a função existe
 -- casa TIPO + NOME do logradouro (ex. "Rua Acre") — nome_logradouro sozinho não tem o tipo
@@ -320,6 +330,8 @@ AS $function$
         ilike '%' || lower(public.f_unaccent(termo)) || '%'
     and (p_ibge is null or i.cod_municipio_origem = p_ibge)
 $function$;
+REVOKE ALL ON FUNCTION public.divat_busca_logradouro(text, integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.divat_busca_logradouro(text, integer) TO anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.divat_linhas_regiao(p_regiao text, p_modo text)
  RETURNS TABLE(codlinha character varying)
@@ -341,6 +353,8 @@ AS $function$
   where (p_modo = 'dentro' and a.all_in)
      or (p_modo = 'origem' and a.origem_ibge in (select cod_ibge from muns))
 $function$;
+REVOKE ALL ON FUNCTION public.divat_linhas_regiao(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.divat_linhas_regiao(text, text) TO anon, authenticated;
 
 -- Zera "vigor" automaticamente quando uma portaria é marcada como REVOGADA
 -- (não estava documentado no CLAUDE.md — achado ao gerar este backup).
@@ -551,10 +565,43 @@ GRANT SELECT ON
   public.localidades_teste, public.origem_teste
 TO anon, authenticated;
 
--- Garante que TABELAS NOVAS no schema public também nasçam só-leitura
--- para anon/authenticated (não repita GRANT de escrita a esses papéis).
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT ON TABLES TO anon, authenticated;
+-- ------------------------------------------------------------
+-- 7b) DEFAULT PRIVILEGES — objeto NOVO nasce fechado (default deny).
+--
+-- Até 27/07/2026 esta seção fazia o OPOSTO: `GRANT SELECT ON TABLES TO anon, authenticated`,
+-- com um comentário afirmando que aquilo "garantia que tabelas novas não voltassem a conceder".
+-- Não garantia nada — CONCEDIA. Tabela nova nascia legível por anon antes mesmo de alguém ligar
+-- RLS nela. Achado SEC-01 da auditoria externa de 27/07/2026.
+--
+-- Por que REVOKE ALL e não REVOKE SELECT: o ACL era `anon=rm`, e `m` é MAINTAIN — permite VACUUM,
+-- ANALYZE, CLUSTER, REINDEX e LOCK TABLE. Não é escrita DML pelo PostgREST, mas não é leitura.
+--
+-- Por que anon/authenticated também aparecem no revoke de FUNCTIONS: uma probe em transação
+-- (27/07/2026) mostrou que o default do Supabase JÁ excluía PUBLIC das funções novas — quem estava
+-- aberto era `anon`. Revogar só de PUBLIC, como pediam os relatórios, não fecharia nada: função
+-- administrativa criada aqui nasceria chamável pelo PostgREST. O revoke global (sem IN SCHEMA)
+-- vai junto por segurança, já que os dois escopos são mesclados na criação do objeto.
+--
+-- CONSEQUÊNCIA OPERACIONAL: tabela nova agora exige GRANT SELECT + policy EXPLÍCITOS, e RPC nova
+-- exige GRANT EXECUTE explícito. Sem isso o portal recebe 401/404 e parece bug do front.
+-- Ver a skill db-change.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL ON TABLES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL ON SEQUENCES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
+
+-- LIMITAÇÃO CONHECIDA E ACEITA: existe um SEGUNDO conjunto de defaults, do role `supabase_admin`,
+-- que concede `arwdDxtm` (INSERT/UPDATE/DELETE/TRUNCATE) a anon/authenticated em tabelas de public.
+-- Vale só para objetos criados POR esse role — o painel do Supabase cria como `postgres`, então na
+-- prática não é atingido. Não dá para fechar: `postgres` não é superusuário no Supabase e o comando
+-- abaixo responde `42501: permission denied to change default privileges`.
+--   ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+--     REVOKE ALL ON TABLES FROM anon, authenticated;
+-- Mitigação: o gate scripts/check_grants.mjs roda DIARIAMENTE enquanto esse default existir.
 
 -- ============================================================
 -- 8) REALTIME
