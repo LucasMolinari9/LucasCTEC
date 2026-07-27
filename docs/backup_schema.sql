@@ -674,6 +674,12 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
 
+-- Os comandos acima valem só para objetos FUTUROS. As tabelas que já existiam nasceram sob o
+-- default antigo (`anon=rm`) e ficaram com MAINTAIN — achado do próprio gate check_grants.mjs na
+-- primeira vez que rodou contra o banco de verdade, depois de a migração de defaults ter passado.
+-- Serve de lembrete: fechar o default NÃO conserta o que já foi criado.
+REVOKE MAINTAIN ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+
 -- LIMITAÇÃO CONHECIDA E ACEITA: existe um SEGUNDO conjunto de defaults, do role `supabase_admin`,
 -- que concede `arwdDxtm` (INSERT/UPDATE/DELETE/TRUNCATE) a anon/authenticated em tabelas de public.
 -- Vale só para objetos criados POR esse role — o painel do Supabase cria como `postgres`, então na

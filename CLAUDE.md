@@ -54,7 +54,9 @@ exibe e **atualiza ao vivo** (Realtime).
     "garantiam que tabelas novas não voltassem a conceder", o que estava invertido (era o achado
     SEC-01). **Consequência prática: tabela nova exige `GRANT SELECT` + policy explícitos, e RPC
     nova exige `GRANT EXECUTE` explícito** — sem isso o portal recebe 401/404 e parece bug de
-    front. A skill `db-change` cobra isso.
+    front. A skill `db-change` cobra isso. **Fechar o default não conserta o que já existe:** as
+    18 tabelas atuais nasceram sob o default antigo e ficaram com `MAINTAIN` até um `REVOKE
+    MAINTAIN ON ALL TABLES` explícito — achado do próprio gate na 1ª rodada contra o banco.
   - **Limitação aceita:** há um segundo conjunto de defaults, do role `supabase_admin`, que concede
     escrita a `anon` em tabelas de `public`. Só atinge objetos criados **por esse role** (o painel
     cria como `postgres`), e não é fechável — `postgres` não é superusuário no Supabase. Mitigação:

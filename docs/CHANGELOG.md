@@ -506,3 +506,15 @@ com a anon key, que é pública por design; um controle real exigiria Edge Funct
 `docs/seguranca.md` §9 para não serem redescobertos como novidade na próxima auditoria.
 
 Carimbo: **build 27/07-A** (o Bloco 4 é o único que muda o que o usuário vê).
+
+### Adendo do mesmo dia — o gate achou algo na primeira rodada real
+
+Ao rodar o `check_grants.mjs` contra o payload de produção da RPC (e não contra fixtures), ele
+ficou **vermelho**: `anon` e `authenticated` tinham **MAINTAIN** nas 18 tabelas. O `REVOKE ALL`
+aplicado antes fechou os **defaults**, que valem só para objetos FUTUROS — as tabelas existentes
+nasceram sob o default antigo `anon=rm` e guardaram o privilégio. Corrigido com
+`REVOKE MAINTAIN ON ALL TABLES IN SCHEMA public FROM anon, authenticated`.
+
+Não havia caminho de abuso pela API pública (o PostgREST só faz CRUD, não `VACUUM`/`LOCK`), mas
+era privilégio indevido num portal declaradamente somente-leitura — e é exatamente o que a
+correção alegava ter removido. **Fechar o default não conserta o que já existe.**
