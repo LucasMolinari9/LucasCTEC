@@ -37,9 +37,15 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
    Enquanto SB_TESTE_URL/SB_TESTE_KEY estiverem vazias, ou HOSTS_PROD vazia, não existe
    ambiente de teste e TUDO cai em produção — este bloco é inerte de propósito até a Tarefa B. */
-const HOSTS_PROD   = [];   // TAREFA B: hostnames de produção, ex. 'exemplo.com.br'
-const SB_TESTE_URL = '';   // TAREFA B: https://<ref-do-projeto-de-teste>.supabase.co
-const SB_TESTE_KEY = '';   // TAREFA B: anon key do projeto de teste (pública por desenho)
+// Os 3 domínios que o projeto Vercel `divatdetro` serve como produção. Só eles leem o banco de
+// produção; todo o resto (previews de branch, localhost, bancada headless) lê o de teste. Ao
+// adicionar domínio novo no Vercel, ADICIONE AQUI TAMBÉM — senão a produção nova nasce lendo o
+// banco de teste, e o sintoma é dado errado na tela, não erro.
+const HOSTS_PROD   = ['divatdetro.vercel.app',
+                      'divatdetro-lucas-molinari-s-projects.vercel.app',
+                      'divatdetro-git-main-lucas-molinari-s-projects.vercel.app'];
+const SB_TESTE_URL = 'https://gontnlfmothfglssbyyk.supabase.co';   // projeto `divat - TESTE`
+const SB_TESTE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdvbnRubGZtb3RoZmdsc3NieXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNTU0OTAsImV4cCI6MjEwMDgzMTQ5MH0.NMEaXXeWxI6A50KuA1euHpSH3Mi53CXU71N16zrjhH4';
 
 const SB_TESTE_ATIVO = !!(SB_TESTE_URL && SB_TESTE_KEY) && HOSTS_PROD.length > 0 &&
                        !HOSTS_PROD.includes(location.hostname);
