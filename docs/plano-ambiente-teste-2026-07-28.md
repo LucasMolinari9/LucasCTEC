@@ -98,6 +98,19 @@ Confirmar com `grep -n 'SB_URL\|SB_KEY' app.js` que sobraram **exatamente** as d
 originais, as três novas constantes e as duas referências dentro do ternário `SB`. Qualquer
 `SB_URL`/`SB_KEY` remanescente em código executável é um ponto de uso esquecido.
 
+### A.2b — `tests/harness.js`: atualizar a cópia do `sbFetch`
+
+O `sbFetch` tem **cópia verbatim** em `tests/harness.js` (linha ~40), e o `tests/check.js`
+cobra que a cópia bata com o `app.js` — sem este passo, o gate da A.3 fica vermelho com erro
+de anti-drift. Duas edições no harness:
+
+1. Atualizar o corpo do `sbFetch` copiado para usar `SB.url`/`SB.key`, idêntico ao novo
+   `app.js`.
+2. O harness define `SB_URL`/`SB_KEY` falsos no topo (`https://example.invalid`); acrescentar
+   logo abaixo deles um `const SB = { url: SB_URL, key: SB_KEY };` para a cópia compilar e o
+   `sbFetch.test.js` continuar passando. **Não** copiar o ternário real (ele lê
+   `location.hostname`, que não existe no Node).
+
 ### A.3 — verificação (o que dá para rodar sem rede)
 
 ```bash
