@@ -57,10 +57,15 @@ exibe e **atualiza ao vivo** (Realtime).
     front. A skill `db-change` cobra isso. **Fechar o default não conserta o que já existe:** as
     18 tabelas atuais nasceram sob o default antigo e ficaram com `MAINTAIN` até um `REVOKE
     MAINTAIN ON ALL TABLES` explícito — achado do próprio gate na 1ª rodada contra o banco.
-  - **Limitação aceita:** há um segundo conjunto de defaults, do role `supabase_admin`, que concede
-    escrita a `anon` em tabelas de `public`. Só atinge objetos criados **por esse role** (o painel
-    cria como `postgres`), e não é fechável — `postgres` não é superusuário no Supabase. Mitigação:
-    o gate `scripts/check_grants.mjs` roda **diariamente** enquanto esse default existir.
+  - **Limitação ATIVA:** há um segundo conjunto de defaults, do role `supabase_admin`, que concede
+    escrita a `anon` em tabelas de `public`, e não é fechável — `postgres` não é superusuário no
+    Supabase. Até 28/07/2026 esta linha dizia que ele "só atinge objetos criados por esse role (o
+    painel cria como `postgres`)", ou seja, que na prática não pegava. **Medição desmentiu:** ao
+    rodar o `backup_schema.sql` num projeto novo pelo SQL Editor (portanto como `postgres`), as 18
+    tabelas nasceram com TRUNCATE/REFERENCES/TRIGGER para `anon` e `authenticated` — 108 grants.
+    **RLS não bloqueia TRUNCATE**, e a anon key é pública, então era caminho aberto para esvaziar o
+    banco. Por isso o `backup_schema.sql` agora revoga tudo que não é SELECT, não só `MAINTAIN`.
+    Mitigação: o gate `scripts/check_grants.mjs` roda **diariamente** enquanto esse default existir.
   - **NUNCA conceda escrita (GRANT nem policy de INSERT/UPDATE/DELETE) a `anon`/`authenticated`.**
     Se um dia precisar de edição logada legítima, crie policy **restrita por tabela/coluna** —
     nunca `ALL USING(true)`.
