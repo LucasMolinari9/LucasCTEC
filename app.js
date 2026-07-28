@@ -24,6 +24,28 @@
 const SB_URL = 'https://lwzsxuaqqeoamukduhev.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3enN4dWFxcWVvYW11a2R1aGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTk4NjYsImV4cCI6MjA5NTQ5NTg2Nn0.90R-n9pu_gpDfmRr7O4DMAdjtIUkIDGyEKfG9zXXV1s';
 
+/* --- Seleção de ambiente (produção × teste) ---
+   As duas constantes ACIMA são de produção e devem permanecer literais, uma por linha, com
+   `const` e aspas simples: check_deriva.mjs, check_realtime.mjs, check_data_quality.mjs e
+   check_grants.mjs extraem as duas por regex (/const SB_URL\s*=\s*'([^']+)'/) para saber qual
+   banco auditar. Virar `let`, quebrar em linhas ou virar ternário cega os quatro de uma vez.
+
+   Produção é ALLOWLIST, não o contrário: URL de preview do Vercel carrega hash gerado por
+   deploy e é impossível de listar. Todo host fora de HOSTS_PROD cai no banco de teste, então
+   uma branch nova nasce apontando para teste — nunca para produção. Mesma doutrina do
+   .vercelignore e do default-deny do banco: o objeto novo nasce fechado.
+
+   Enquanto SB_TESTE_URL/SB_TESTE_KEY estiverem vazias, ou HOSTS_PROD vazia, não existe
+   ambiente de teste e TUDO cai em produção — este bloco é inerte de propósito até a Tarefa B. */
+const HOSTS_PROD   = [];   // TAREFA B: hostnames de produção, ex. 'exemplo.com.br'
+const SB_TESTE_URL = '';   // TAREFA B: https://<ref-do-projeto-de-teste>.supabase.co
+const SB_TESTE_KEY = '';   // TAREFA B: anon key do projeto de teste (pública por desenho)
+
+const SB_TESTE_ATIVO = !!(SB_TESTE_URL && SB_TESTE_KEY) && HOSTS_PROD.length > 0 &&
+                       !HOSTS_PROD.includes(location.hostname);
+const SB = SB_TESTE_ATIVO ? { url: SB_TESTE_URL, key: SB_TESTE_KEY }
+                          : { url: SB_URL,       key: SB_KEY       };
+
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 
 const SB_TIMEOUT_MS = 20000;   // teto por requisição: evita a tela presa em "Carregando…" pra sempre
@@ -58,12 +80,12 @@ async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal)
 }
 
 async function sbFetch(table, qs = '', sinal) {
-  const url = `${SB_URL}/rest/v1/${table}?${qs}`;
+  const url = `${SB.url}/rest/v1/${table}?${qs}`;
   let ultimoErro;
   for (let tentativa = 0; tentativa <= SB_RETRIES; tentativa++) {
     try {
       const res = await fetchComTimeout(url, {
-        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+        headers: { apikey: SB.key, Authorization: `Bearer ${SB.key}` }
       }, SB_TIMEOUT_MS, sinal);
       if (!res.ok) {
         // 5xx/429 são transitórios → vale repetir; demais 4xx são definitivos
@@ -3127,7 +3149,7 @@ function onRealtime(table, payload){
 }
 function initRealtime(){
   try {
-    const sbClient = supabase.createClient(SB_URL, SB_KEY, { realtime:{ params:{ eventsPerSecond:5 } } });
+    const sbClient = supabase.createClient(SB.url, SB.key, { realtime:{ params:{ eventsPerSecond:5 } } });
     const channel = sbClient.channel('divat-rt');
     RT_TABLES.forEach(t => channel.on('postgres_changes', { event:'*', schema:'public', table:t }, p => onRealtime(t, p)));
     channel.subscribe(status => {
