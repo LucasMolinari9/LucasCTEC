@@ -185,18 +185,31 @@ Desde 27/07/2026 (achado SEC-06 da auditoria externa), o `backup_rest.mjs`:
 dump presta?". Um dump internamente incoerente tem hash tão válido quanto um bom. E nenhuma dessas
 verificações substitui o item abaixo.
 
-> ### ✅ Pendência fechada: restore testado ponta a ponta
+> ### 🟡 Pendência PARCIAL: restore exercitado pela primeira vez, não concluído
 >
-> Em 28/07/2026, o roteiro foi executado contra um projeto Supabase novo e descartável. O teste
-> encontrou dois defeitos reais: grants mais abertos que os da produção e a recusa dos valores de
-> `row_id` trazidos pelos CSVs. Ambos foram corrigidos. Os dois só apareceriam durante uma perda
-> real de dados — o pior momento possível.
+> Em 28/07/2026 o roteiro foi executado contra um projeto Supabase novo e descartável
+> (`divat - TESTE`). O exercício encontrou **dois defeitos reais**, ambos já corrigidos: grants
+> mais abertos que os da produção (`anon` com TRUNCATE nas 18 tabelas, e **RLS não bloqueia
+> TRUNCATE**) e a recusa dos valores de `row_id` trazidos pelos CSVs, que travava o passo 4 em 5
+> das 18 tabelas. Os dois só apareceriam durante uma perda real de dados — o pior momento
+> possível — e em silêncio, porque estrutura, policies e portal continuam parecendo corretos.
 >
-> A etapa de **importação dos dados** foi validada. O RTO (tempo total) e o RPO não foram
-> cronometrados; portanto, ambos continuam desconhecidos.
+> **O que ficou provado:** os passos 1-3 (projeto novo + `backup_schema.sql`) reconstroem a
+> estrutura inteira — 18 tabelas, 14 policies, RLS, 44 índices, Realtime, extensões — e o passo 4
+> passa a funcionar depois da correção do `row_id`.
 >
-> Lição: nenhum gate do repositório detecta esse tipo de defeito. Todos conferem um banco que já
-> está de pé; nenhum tenta restaurar o ambiente do zero.
+> **O que NÃO ficou provado — e por isso a pendência não está encerrada:**
+> - a restauração não foi levada até o fim: na medição, `tabela_vista_teste` seguia **vazia** e
+>   `itinerario_teste` tinha **5.298 das 52.146** linhas — exportação parcial do CSV, exatamente o
+>   caso que a seção "Exportar os dados" acima manda conferir;
+> - o portal **nunca foi apontado para o banco restaurado**, então não se sabe se ele funciona
+>   contra o resultado do restore;
+> - **RTO e RPO seguem sem medição.**
+>
+> Enquanto esses três itens não forem cumpridos, **SEC-06 continua "mitigado", não "encerrado"**.
+>
+> Lição que já vale: nenhum gate do repositório detecta esse tipo de defeito. Todos conferem um
+> banco que já está de pé; nenhum tenta reconstruir um do zero.
 
 ## O que este backup NÃO cobre
 
