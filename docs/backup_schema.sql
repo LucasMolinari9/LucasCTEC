@@ -678,15 +678,33 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 -- default antigo (`anon=rm`) e ficaram com MAINTAIN — achado do próprio gate check_grants.mjs na
 -- primeira vez que rodou contra o banco de verdade, depois de a migração de defaults ter passado.
 -- Serve de lembrete: fechar o default NÃO conserta o que já foi criado.
-REVOKE MAINTAIN ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+--
+-- O revoke abaixo cobre TUDO que não é SELECT, e não só MAINTAIN como fazia até 28/07/2026.
+-- Motivo, medido e não suposto: este arquivo foi rodado num projeto Supabase NOVO e vazio
+-- (`divat - TESTE`, ref gontnlfmothfglssbyyk), pelo SQL Editor do painel — portanto como
+-- `postgres` — e as 18 tabelas nasceram com TRUNCATE, REFERENCES e TRIGGER concedidos a anon E
+-- authenticated: 108 grants que a produção não tem. Revogar só MAINTAIN deixava o TRUNCATE de pé,
+-- e **RLS não bloqueia TRUNCATE**. Como a anon key é pública por desenho (está no app.js, servida
+-- a todo visitante), o banco restaurado ficaria a um comando de distância de ser esvaziado.
+--
+-- O agravante é ONDE isso aparecia: este arquivo é a baseline de recuperação de desastre. A falha
+-- só se manifestaria ao restaurar o banco depois de uma perda — o pior momento possível — e em
+-- silêncio, porque RLS, policies e o portal continuam todos parecendo corretos.
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN
+  ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 
--- LIMITAÇÃO CONHECIDA E ACEITA: existe um SEGUNDO conjunto de defaults, do role `supabase_admin`,
--- que concede `arwdDxtm` (INSERT/UPDATE/DELETE/TRUNCATE) a anon/authenticated em tabelas de public.
--- Vale só para objetos criados POR esse role — o painel do Supabase cria como `postgres`, então na
--- prática não é atingido. Não dá para fechar: `postgres` não é superusuário no Supabase e o comando
--- abaixo responde `42501: permission denied to change default privileges`.
+-- LIMITAÇÃO CONHECIDA: existe um SEGUNDO conjunto de defaults, do role `supabase_admin`, que
+-- concede `arwdDxtm` (INSERT/UPDATE/DELETE/TRUNCATE) a anon/authenticated em tabelas de public.
+-- Não dá para fechar: `postgres` não é superusuário no Supabase e o comando abaixo responde
+-- `42501: permission denied to change default privileges`.
 --   ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
 --     REVOKE ALL ON TABLES FROM anon, authenticated;
+--
+-- ATENÇÃO: até 28/07/2026 a prosa aqui dizia que isso "vale só para objetos criados POR esse role
+-- — o painel cria como `postgres`, então na prática não é atingido", e o REVOKE acima se limitava a
+-- MAINTAIN por confiar nessa frase. A medição no projeto novo DESMENTE a frase: tabelas criadas
+-- como `postgres` receberam os grants assim mesmo. Trate a limitação como ATIVA, não teórica — é
+-- por isso que o REVOKE acima é obrigatório, e não redundante.
 -- Mitigação: o gate scripts/check_grants.mjs roda DIARIAMENTE enquanto esse default existir.
 
 -- ============================================================
