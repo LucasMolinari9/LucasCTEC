@@ -155,7 +155,10 @@ custo. **Controles que existem hoje:** `statement_timeout=3s` no role `anon`,
 (memoização e cancelamento de busca obsoleta) reduzem a carga que o **portal legítimo** gera —
 não são rate limiting e não devem ser contadas como tal.
 
-**9.3 — Restore nunca testado ponta a ponta (SEC-06).** Plano Free, sem PITR. Há backup semanal
-automático, checksum e conferência de contagem, mas **nenhuma restauração real foi executada** —
-apontado pela revisão de 16/07/2026 e ainda aberto. Nenhum agente fecha isso: é rodar o runbook de
-`docs/backup.md` contra um projeto Supabase descartável, na máquina do dono, e anotar RTO/RPO.
+**9.3 — Restore exercitado, não concluído (SEC-06).** Plano Free, sem PITR. Há backup semanal
+automático, checksum e conferência de contagem. Em 28/07/2026 o runbook de `docs/backup.md` foi
+executado pela primeira vez contra um projeto Supabase descartável e **achou dois defeitos reais**,
+ambos corrigidos: grants mais abertos que os da produção (`anon` com TRUNCATE) e `row_id` recusando
+os valores dos CSVs. Mas a restauração **não foi levada até o fim**, o portal **nunca foi apontado
+para o banco restaurado** e **RTO/RPO seguem sem medição** — por isso SEC-06 continua **mitigado**,
+não encerrado. O que falta está listado em `docs/backup.md`.
