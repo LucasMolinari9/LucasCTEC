@@ -5,6 +5,7 @@
 
 const SB_URL = 'https://example.invalid';
 const SB_KEY = 'fake-anon-key';
+const SB = { url: SB_URL, key: SB_KEY };
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 
@@ -38,12 +39,12 @@ async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal)
 }
 
 async function sbFetch(table, qs = '', sinal) {
-  const url = `${SB_URL}/rest/v1/${table}?${qs}`;
+  const url = `${SB.url}/rest/v1/${table}?${qs}`;
   let ultimoErro;
   for (let tentativa = 0; tentativa <= SB_RETRIES; tentativa++) {
     try {
       const res = await fetchComTimeout(url, {
-        headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` }
+        headers: { apikey: SB.key, Authorization: `Bearer ${SB.key}` }
       }, SB_TIMEOUT_MS, sinal);
       if (!res.ok) {
         // 5xx/429 são transitórios → vale repetir; demais 4xx são definitivos
