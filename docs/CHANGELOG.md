@@ -4,6 +4,19 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 29/07/2026 — Fase 4: módulos compartilhados e hotspot medido
+
+- Funções puras extraídas para `shared/environment.js`, `shared/domain.js` e
+  `shared/view-state.js`, mantendo o frontend zero-build.
+- Harness puro passou a importar a implementação real; 208/208 testes de paridade passaram.
+- Deduplicação por RJ consolidada em uma única função compartilhada.
+- Métricas test-only registradas para quatro cenários; `Rio → São` caiu de 18 para 13
+  requisições e de 457,8 ms para 327,6 ms na mediana fria.
+- Nenhum índice, schema, RPC, RLS, grant, Auth ou dado de produção foi alterado.
+- PR permanece bloqueada até os gates de banco serem exclusivamente test-only (issue #74);
+  payload alto do caso exato foi adiado para a issue #75.
+
+
 ## 26/06/2026 — Auditoria de segurança (escrita fechada de verdade)
 
 - **Escrita revogada** de `anon` e `authenticated` em todas as tabelas (INSERT/UPDATE/DELETE/
