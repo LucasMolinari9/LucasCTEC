@@ -18,8 +18,6 @@ const APPJS = path.join(__dirname, '..', 'app.js');
 const CSS   = path.join(__dirname, '..', 'styles.css');
 const SHARED_FILES = ['shared/environment.js', 'shared/domain.js', 'shared/view-state.js'];
 const sharedSources = SHARED_FILES.map(p => ({ p, src:fs.readFileSync(path.join(__dirname, '..', p), 'utf8') }));
-const canonicalJs = [js, ...sharedSources.map(x=>x.src)].join('\n');
-
 let problems = 0;
 const fail   = msg => { console.log('  ✗', msg); problems++; };
 const okline = msg => console.log('  ✓', msg);
@@ -27,6 +25,7 @@ const okline = msg => console.log('  ✓', msg);
 const html = fs.readFileSync(INDEX, 'utf8');
 const js   = fs.readFileSync(APPJS, 'utf8');
 const css  = fs.readFileSync(CSS, 'utf8');
+const canonicalJs = [js, ...sharedSources.map(x=>x.src)].join('\n');
 
 // ---------- [1] sintaxe do app.js + nenhum <script> inline no index.html ----------
 console.log('\n[1] Sintaxe do app.js + index.html sem <script> inline');
