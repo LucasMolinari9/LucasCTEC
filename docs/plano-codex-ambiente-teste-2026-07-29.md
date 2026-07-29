@@ -223,18 +223,39 @@ depois desta auditoria, e o push deixou de ser fast-forward. Não force.
 
 ## T5 — apagar branches mortas
 
-Só as de diff vazio contra a `main`. Confirme uma a uma antes de apagar:
+**Correção de método: `git diff origin/main origin/<branch>` NÃO serve para decidir isto.** Uma
+branch já mergeada mas atrasada mostra diff enorme — o diff é a `main` que andou, não trabalho
+dela. Foi o erro da primeira versão desta tarefa, e ele teria mandado você preservar cinco branches
+mortas e, pior, teria escondido o achado dos dois domínios de produção. Use ancestralidade:
 
 ```bash
-for b in agent/fase-1-isolamento-preview claude/cleanup-branches-main-g3e57n \
-         codex/execute-tarefa-a-e-tarefa-c codex/criar-arquivo-.mcp.json \
-         codex/configurar-supabase-mcp-codex codex/alterar-row_id-para-by-default-em-tabelas; do
-  echo "$b -> $(git diff --stat origin/main origin/$b | wc -l)"
-done
+git merge-base --is-ancestor origin/<branch> origin/main   # sucesso = totalmente contida na main
 ```
 
-`git push origin --delete <branch>` **apenas** nas que derem `0`. Se alguma der diferente de zero,
-deixe viva e me diga qual.
+Para as que **não** forem ancestrais, o commit exclusivo pode ainda assim ter sido aplicado na
+`main` por outro SHA (squash/rebase). Aí a pergunta certa é se as árvores coincidem:
+
+```bash
+git diff origin/main origin/<branch> | wc -l    # 0 = conteúdo idêntico, nada se perde
+```
+
+E se **nem isso** for zero, leia o commit antes de apagar — pode haver trabalho que a `main` nunca
+recebeu. Foi exatamente o caso de `claude/cleanup-branches-main-g3e57n`, cuja versão de
+`HOSTS_PROD` tinha três domínios enquanto a `main` tinha um.
+
+Estado em 29/07/2026, já apurado — todas estas são seguras:
+
+| Branch | Por quê |
+|---|---|
+| `codex/execute-tarefa-a-e-tarefa-c` | ancestral da `main` |
+| `codex/alterar-row_id-para-by-default-em-tabelas` | ancestral da `main` |
+| `agent/fase-1-isolamento-preview` | árvore idêntica à `main` |
+| `codex/criar-arquivo-.mcp.json` | conteúdo (`.mcp.json`) já na `main` |
+| `codex/configurar-supabase-mcp-codex` | conteúdo (`.codex/config.toml`) já na `main` |
+| `claude/cleanup-branches-main-g3e57n` | o que ela tinha a mais foi portado para a `main` |
+
+**Nota:** `git push origin --delete` é recusado com HTTP 403 pelo proxy do ambiente do Claude.
+A deleção precisa sair do Codex ou da UI do GitHub.
 
 ## T6 — MCP também enxergar o projeto de teste
 
