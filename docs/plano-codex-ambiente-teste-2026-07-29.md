@@ -5,29 +5,47 @@ agente com **acesso ao repositório e nada mais** — sem painel da Vercel, sem 
 
 ## A descoberta que reorganiza a lista
 
-**Nada verifica o banco de teste. Nem um gate, nem um script, nem uma linha.**
-
 Os quatro verificadores vivos (`check_deriva.mjs`, `check_realtime.mjs`,
 `check_data_quality.mjs`, `check_grants.mjs`) extraem `SB_URL`/`SB_KEY` do `app.js` por regex e
 **não têm nenhuma forma de apontar para outro projeto** — não leem variável de ambiente, não
 aceitam argumento. Isso é deliberado e está certo para o que eles foram feitos: auditar produção
-por construção. O efeito colateral é que o projeto `gontnlfmothfglssbyyk` nunca foi conferido por
-nada. Que ele tenha schema, RLS, `db_max_rows` e as 14 tabelas no Realtime é **suposição**.
+por construção. O efeito colateral é que **nenhum deles consegue olhar o projeto de teste**.
+
+Essa lacuna já está catalogada: é a **issue #74**, aberta em 29/07/2026, e é ela que mantém a
+Fase 4 bloqueada. A issue pede mais do que "poder apontar para teste" — pede que os gates de PR
+sejam **test-only e fail-closed contra produção**. Ver a seção T1, que segue a issue, não uma
+versão minha dela.
 
 E o MCP do Supabase — tanto o do Claude (`.mcp.json`) quanto o do Codex (`.codex/config.toml`) —
 está fixado em `project_ref=lwzsxuaqqeoamukduhev&read_only=true`. Nenhum agente enxerga o projeto
 de teste nem por aí.
 
-**A alavanca:** o CI tem rede que nem o Claude nem o Codex têm. Um workflow que rode os
-verificadores existentes contra o projeto de teste responde a pergunta com evidência, e é uma
-mudança **só de repositório** — nenhum painel envolvido. É por isso que a Tarefa 1 vem primeiro:
-o relatório dela é o que diz ao dono o que exatamente falta provisionar, em vez de mandá-lo
-conferir seis itens no escuro.
+### Correção: o banco de teste está provisionado, e já divergiu de produção
 
-Bônus de desenho: `check_deriva.mjs` apontado para teste **é** o gate teste × produção que o
-ADR-0002 declara inexistente. Ele compara a forma da API contra o que os docs afirmam; os docs
-descrevem o schema que produção tem. Rodá-lo contra teste responde "o banco de teste é mesmo uma
-cópia fiel?" — a dívida registrada como não-vigiada, fechada de graça.
+Uma versão anterior deste documento dizia que o provisionamento do banco de teste era suposição.
+**Está errado, e a evidência estava nas branches de fase, que eu ainda não tinha lido.** O
+projeto `gontnlfmothfglssbyyk` está provisionado e foi **endurecido** pela migração
+`20260729034018_phase3_moderate_hardening` (PR #73, em rascunho), aplicada **só nele**. Produção
+não recebeu DDL nenhuma.
+
+Isso tem uma consequência que muda o desenho da verificação: a Fase 3 moveu os diagnósticos para
+o schema `audit` e os helpers para `private`, deixando **apenas duas RPCs de produto** acessíveis
+a `anon` (`divat_busca_logradouro`, `divat_linhas_regiao`). Ou seja, `divat_api_shape()`,
+`realtime_tables()`, `divat_security_shape()` e `divat_data_quality()` **não são mais chamáveis
+por `anon` no projeto de teste**. Um workflow que apontasse os verificadores atuais para teste via
+anon key responderia 404 em quase tudo — e o erro pareceria banco vazio, não postura de segurança.
+
+É exatamente por isso que a Fase 3 criou o `check_phase3_audit.mjs`, que entra por um **login
+PostgreSQL** (`divat_auditor_ci`) em vez da anon key. **A chave de tudo é o secret
+`SUPABASE_TEST_AUDIT_DATABASE_URL`** — sem ele, nada consegue auditar o banco de teste, e nenhum
+agente pode criá-lo. É a única dependência realmente bloqueante do ambiente.
+
+Segunda consequência, que vale registrar sem maquiagem: **teste e produção divergiram de
+propósito, e teste hoje é mais restrito que produção.** Isso inverte parcialmente o valor do
+ambiente — ele deixa de ser cópia fiel. A direção é a segura (o que passa no teste passa em
+produção), mas o inverso não vale: um card que funciona em produção pode falhar no preview por
+falta de RPC, e o sintoma será tela vazia sem erro. Enquanto a Fase 3 não for promovida a
+produção, esse é o modo de falha a suspeitar primeiro quando um preview parecer quebrado.
 
 ## Situação por item
 
@@ -85,60 +103,65 @@ numa branch por tarefa, com os gates verdes antes de cada push.
    não colidir, seu código novo vai em **`scripts/lib/`** (que já existe, com o `rig.mjs`), nunca
    em `shared/`.
 
-## T1 — dar aos verificadores um alvo escolhível
+## T1 — resolver a issue #74 (gates de banco com alvo explícito)
 
-Branch: `fix/verificadores-aceitam-ambiente`.
+Branch: `fix/74-gates-test-only`. **Leia a issue #74 inteira antes de escrever código** — ela é o
+contrato, este texto é só apoio. Ela é a dependência que bloqueia a Fase 4, e a issue pede
+explicitamente que seja resolvida em **PR separada da Fase 4**, sem misturar escopos.
 
-Crie `scripts/lib/ambiente.mjs`, único lugar que passa a extrair a config do `app.js`. Ele
-exporta algo como `resolverAmbiente(argv)` devolvendo `{ ambiente, url, key }`:
+Crie `scripts/lib/ambiente.mjs`, único lugar que passa a resolver a config. Ele recebe o alvo de
+forma **explícita** — variável de ambiente e/ou `--ambiente=` — e devolve `{ ambiente, url, key }`.
+Regras que a issue impõe:
 
-- sem `--ambiente` (ou com `--ambiente=producao`): extrai `SB_URL`/`SB_KEY` — comportamento atual,
-  bit a bit;
-- com `--ambiente=teste`: extrai `SB_TESTE_URL`/`SB_TESTE_KEY`;
-- qualquer outro valor: erro claro, sem cair em produção por omissão (mesma doutrina fail-closed
-  do `selecionarSupabase` no `app.js`).
+- **Nenhum gate de PR deriva o alvo do `app.js`.** Em PR, o alvo é configuração explícita do
+  projeto de teste.
+- **Fail-closed** se a configuração estiver ausente **ou** se o alvo resolvido for o ref de
+  produção `lwzsxuaqqeoamukduhev`. Recusar produção é requisito, não zelo extra.
+- O log precisa mostrar **contra qual project ref** rodou, e evidenciar a rejeição de produção
+  quando ela ocorrer — **sem imprimir credencial**.
 
-Migre os quatro scripts (`check_deriva.mjs`, `check_realtime.mjs`, `check_data_quality.mjs`,
-`check_grants.mjs`) para usá-lo, apagando as quatro cópias do `extrair(...)`. Cada um deve
-imprimir no cabeçalho da saída **contra qual projeto está rodando** — hoje é impossível saber
-olhando o log, e depois desta mudança fica ambíguo se não for dito.
+O que **não** muda: os jobs **agendados** do `db-checks.yml` e do `deriva.yml` continuam auditando
+produção derivando do `app.js`. Esse acoplamento é o que mantém produção vigiada de graça e o
+`CLAUDE.md` o trata como recurso. A separação é por gatilho: **cron → produção; PR → teste.**
+Deixe isso escrito no cabeçalho de `ambiente.mjs`, porque é a parte que alguém vai "simplificar"
+por engano depois.
 
-Cuidados por script, que não são simétricos:
+Migre os quatro scripts para o helper, apagando as quatro cópias do `extrair(...)`.
 
+Cuidados que não são simétricos:
+
+- **Contra o projeto de teste, os verificadores por anon key não servem mais.** A Fase 3 (PR #73)
+  moveu `divat_api_shape`, `realtime_tables`, `divat_security_shape` e `divat_data_quality` para o
+  schema `audit`; `anon` só chama as duas RPCs de produto. O caminho de auditoria do teste é o
+  `check_phase3_audit.mjs`, por login PostgreSQL (`SUPABASE_TEST_AUDIT_DATABASE_URL`). **Não tente
+  contornar isso** reexpondo RPC a `anon` no teste — seria desfazer a Fase 3 para fazer o gate
+  passar, que é o pior conserto possível.
 - **`check_data_quality.mjs`:** o `data_quality_baseline.json` descreve a dívida do dado de
-  PRODUÇÃO (17 codlinhas órfãs etc.). Aplicá-lo ao banco de teste é comparar coisas diferentes.
-  Contra `--ambiente=teste`, rode **sem baseline** e trate o resultado como **informativo**: ele
-  reporta, não reprova. Deixe isso explícito no comentário do arquivo e na saída.
-- **`check_grants.mjs`:** as exceções do `security_baseline.json` são os defaults do role
-  `supabase_admin`, que existem em qualquer projeto Supabase — a expectativa é que transfiram.
-  Se não transferirem, **relate; não edite o baseline** para o teste passar.
-- **`check_deriva.mjs` e `check_realtime.mjs`:** contra teste, estes são o que interessa. Podem
-  reprovar de verdade — é o ponto.
+  PRODUÇÃO (17 codlinhas órfãs etc.). Contra teste ele não se aplica: rode sem baseline e trate
+  como **informativo**, e diga isso na saída.
+- **`check_grants.mjs`:** contém **bytes NUL literais** (ver restrição 4). As exceções do
+  `security_baseline.json` são os defaults do `supabase_admin`. Se não transferirem para o teste,
+  **relate; não edite o baseline** para passar.
 
-Verificação: `node tests/check.js` e `./scripts/semgrep.sh` (sem `--full`, que exige rede) verdes.
-Você não consegue rodar os quatro verificadores localmente; isso é esperado.
+Verificação: `node tests/check.js` e `./scripts/semgrep.sh` (sem `--full`) verdes. Você não
+consegue rodar os verificadores localmente — sem rede até o Supabase. Isso é esperado; diga no PR.
 
-## T2 — workflow que audita o banco de teste
+## T2 — workflow do ambiente de teste
 
-Mesma branch da T1.
+Mesma branch da T1. Crie `.github/workflows/ambiente-teste.yml`, espelhando o desenho do
+`db-checks.yml` — leia-o antes: jobs **separados** e paralelos, para que um vermelho não esconda o
+outro; `permissions: contents: read`; `uses:` presos ao SHA; `persist-credentials: false`.
 
-Crie `.github/workflows/ambiente-teste.yml`, espelhando o desenho do `db-checks.yml` — leia-o
-antes: jobs **separados** e paralelos, de propósito, para que um vermelho não esconda o outro;
-`permissions: contents: read`; `uses:` presos ao SHA; `persist-credentials: false`.
+- Gatilhos: `workflow_dispatch` + `schedule` semanal + `pull_request` nos paths envolvidos.
+- Alvo: sempre o projeto de teste, explícito, nunca derivado do `app.js`.
+- O job que depende de `SUPABASE_TEST_AUDIT_DATABASE_URL` deve **falhar com mensagem clara**
+  quando o secret não existir — não pular em silêncio. Enquanto o dono não criar a credencial,
+  esse job fica vermelho, e é assim que se sabe que ele está pendente.
+- Escreva no cabeçalho **por que existe**: até aqui nenhum gate olhava o projeto de teste, e a
+  Fase 3 tornou o caminho por anon key insuficiente.
 
-- Gatilhos: `workflow_dispatch` + `schedule` semanal + `push`/`pull_request` nos paths dos
-  scripts envolvidos.
-- Jobs: `estrutura` (`check_deriva.mjs --ambiente=teste`), `realtime`
-  (`check_realtime.mjs --ambiente=teste`), `seguranca` (`check_grants.mjs --ambiente=teste`) e
-  `dados` (`check_data_quality.mjs --ambiente=teste`, **`continue-on-error: true`** — informativo,
-  pelo motivo da T1).
-- Sem segredos. A anon key de teste é pública por desenho e já está no `app.js`.
-- Escreva no cabeçalho do arquivo **por que ele existe**: o banco de teste nunca foi conferido por
-  nada, e este workflow é o que transforma "achamos que está provisionado" em evidência.
-
-Depois do merge, **dispare o workflow à mão** (`workflow_dispatch`) e me relate a saída dos quatro
-jobs. Esse relatório é o entregável mais importante desta tarefa: ele é a lista de compras do dono
-para o painel do Supabase. Não conserte o banco — você não tem acesso, e não é para ter.
+Depois do merge, **dispare à mão** e relate a saída job a job. Esse relatório é o entregável mais
+importante desta tarefa. Não conserte o banco — você não tem acesso, e não é para ter.
 
 ## T3 — consertar o `deploy-smoke.yml`
 
@@ -236,16 +259,41 @@ você **não** conseguiu rodar e por quê (rede). Não abra PR que você não co
 
 ---
 
-## Depois do Codex — o que fica para o dono
+## Decisões do dono — recomendação, em ordem
 
-1. **Vercel → projeto `divatdetro` → Settings → Deployment Protection → Protection Bypass for
-   Automation:** gerar o segredo; salvar o mesmo valor no secret GitHub
-   `VERCEL_AUTOMATION_BYPASS_SECRET`. Valor diferente falha igual a valor ausente.
-2. **Banco de teste:** provisionar o que o relatório da T2 apontar. O checklist completo está em
-   `docs/plano-ambiente-teste-2026-07-28.md` (schema, default-deny + `REVOKE MAINTAIN`,
-   `pgrst.db_max_rows = 30000`, 14 tabelas no `supabase_realtime`, dados).
-3. **Olho humano, que nenhum gate substitui:** abrir o preview da `teste` já ressincronizada e
-   confirmar no DevTools que as requisições vão para `gontnlfmothfglssbyyk`; abrir
-   `divatdetro.vercel.app` e confirmar que vão para `lwzsxuaqqeoamukduhev`.
-4. **Decidir** o destino de `agent/fase-3-hardening-moderado` e
-   `agent/fase-4-manutencao-incremental` — duas revisões grandes, independentes deste conserto.
+**1. Criar a credencial auditora e o secret `SUPABASE_TEST_AUDIT_DATABASE_URL`. É a peça que
+destrava tudo.** Depois da Fase 3, é o único caminho de auditoria do banco de teste; sem ele, o
+ambiente continua sem verificação nenhuma e a T2 nasce vermelha. Rodar
+`scripts/bootstrap_phase3_auditor.sql` com senha de gerenciador e validade curta, gravar a URL de
+conexão (`divat_auditor_ci`, ref de teste) no secret de Actions.
+
+**2. Criar o `VERCEL_AUTOMATION_BYPASS_SECRET` na mesma sessão.** Vercel → projeto `divatdetro` →
+Settings → Deployment Protection → Protection Bypass for Automation; o **mesmo** valor no secret
+do GitHub. Valor diferente falha igual a valor ausente. É de dez minutos e destrava o job de
+preview do smoke.
+
+**3. PR #73 (Fase 3): não mergear ainda — mergear logo depois do item 1.** A migração está
+testada, com rollback exercitado, e a PR é boa. Mas ela já está aplicada no banco de teste
+enquanto o código que a descreve segue em rascunho, e o gate que prova essa postura
+(`check_phase3_audit.mjs`) não roda sem a credencial do item 1. Ordem recomendada: criar a
+credencial → disparar o `Phase 3 database security` à mão → verde → sair do rascunho e mergear.
+Assim a Fase 3 entra com evidência viva, não com evidência narrada no corpo da PR.
+
+**4. Fase 4: segurar.** É a maior e a mais arriscada — muda a arquitetura zero-build ao publicar
+`shared/*.js`, mexe na allowlist do `.vercelignore` e no detector de versão, e está empilhada
+sobre a Fase 3 ainda não mergeada. Ela própria se declara bloqueada pela #74. Ordem: #74 (T1)
+entra sozinha → Fase 3 entra → rebase da Fase 4 → revisão dela como mudança de arquitetura, não
+como manutenção. Mergear as três juntas mistura três escopos numa revisão só.
+
+**5. Não tornar o `Deploy smoke` check obrigatório antes de ele estar verde.** Hoje ele falha em
+100% dos runs; promovê-lo a obrigatório agora tranca todos os merges. Ordem: T3 + item 2 →
+confirmar verde na `main` → então exigir.
+
+**6. Promover a Fase 3 a produção — decidir, mas não agora.** Endurecimento que vive só no teste
+não protege nada, e enquanto a divergência existir o preview pode falhar por falta de RPC que
+produção tem. Mas é DDL no banco vivo: exige backup fresco (`docs/backup.md`) e revisão própria.
+Sugestão: depois de a Fase 3 rodar verde no teste por algumas semanas, com o gate da T2 ativo.
+
+**7. Olho humano, que nenhum gate substitui:** abrir o preview da `teste` já ressincronizada e
+confirmar no DevTools que as requisições vão para `gontnlfmothfglssbyyk`; abrir
+`divatdetro.vercel.app` e confirmar que vão para `lwzsxuaqqeoamukduhev`.
