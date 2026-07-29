@@ -3,8 +3,7 @@
    Faz, em sequência, e agrega o resultado:
      [1] valida a SINTAXE do app.js (sem executar o código) e garante que o
          index.html NÃO tem <script> inline (a CSP publica script-src 'self');
-     [2] guarda anti-drift: confere que as funções copiadas nos *.harness.js ainda
-         existem iguais no app.js (avisa se a original mudou e a cópia ficou velha);
+     [2] guarda anti-drift: confere módulos reais e as poucas cópias de I/O do harness;
      [3] roda todos os *.test.js desta pasta.
    Sai com código != 0 se QUALQUER etapa falhar. Node puro, sem dependências. */
 const fs = require('fs');
