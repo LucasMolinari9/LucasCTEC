@@ -12,6 +12,13 @@
    aqui dentro normalmente).
    ================================================================ */
 (() => {
+const sharedModules = globalThis.DIVAT;
+if (!sharedModules?.environment || !sharedModules?.domain || !sharedModules?.viewState) {
+  throw new Error('Módulos compartilhados DIVAT não foram carregados.');
+}
+const { selecionarSupabase } = sharedModules.environment;
+const { fmtCode, fmtTime, fmtDate, matchEvent, classifyMunLines, localidadesQueCasam, municipiosExatos, resumoRelatorio, resumoFrota, groupBy, countBy, fmtMoney, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, situacaoHTML, isLinhaAtiva, isVigente, norm, yearOf, orIlike, dedupEmpresasPorRJ } = sharedModules.domain;
+const { MAX_TABS, makeTab, openTabState, closeTabState, beginGen, isCurrentGen, commitViewResult, pushDetail, popDetail, pageBounds, tabMatchesEvent, dispatchRealtime } = sharedModules.viewState;
 /* ================================================================
    SUPABASE CONFIG
    ================================================================ */
@@ -39,18 +46,7 @@ const HOSTS_PROD   = ['divatdetro.vercel.app'];
 const SB_TESTE_URL = 'https://gontnlfmothfglssbyyk.supabase.co';
 const SB_TESTE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdvbnRubGZtb3RoZmdsc3NieXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNTU0OTAsImV4cCI6MjEwMDgzMTQ5MH0.NMEaXXeWxI6A50KuA1euHpSH3Mi53CXU71N16zrjhH4';
 
-function selecionarSupabase(hostname, config){
-  const host = String(hostname || '').trim().toLowerCase().replace(/\.$/, '');
-  const hostsProd = (config.hostsProd || []).map(h => String(h).trim().toLowerCase().replace(/\.$/, ''));
-  const producao = hostsProd.includes(host);
-  const alvo = producao
-    ? { url: config.prodUrl,  key: config.prodKey,  ambiente: 'producao' }
-    : { url: config.testeUrl, key: config.testeKey, ambiente: 'teste' };
-  if (!alvo.url || !alvo.key) {
-    throw new Error(`Configuração Supabase ausente para o ambiente de ${alvo.ambiente}.`);
-  }
-  return Object.freeze({ ...alvo, hostname: host });
-}
+
 
 const SB = selecionarSupabase(location.hostname, {
   hostsProd: HOSTS_PROD,
@@ -162,41 +158,35 @@ function bannerTrunc(rows){
    a REGRA DE NEGÓCIO central do portal (o que conta como linha ativa/vigente)
    — mudar esse critério é editar só aqui, nunca nos `render*`. --- */
 // 101001001 → 101-001-001 (formato do código da ligação no PDF oficial)
-function fmtCode(code) {
-  if (!code) return '';
-  const s = String(code);
-  return s.length === 9 ? `${s.slice(0,3)}-${s.slice(3,6)}-${s.slice(6)}` : s;
-}
+
 // HH:MM:SS → HH:MM
-function fmtTime(t){ if(!t) return '—'; const m=String(t).match(/^(\d{2}):(\d{2})/); return m?`${m[1]}:${m[2]}`:t; }
+
 // data ISO (YYYY-MM-DD) → DD/MM/YYYY
-function fmtDate(d){ if(!d) return '—'; const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:d; }
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-const enc = s => encodeURIComponent(s);
+
+
+
 // Sanitiza um termo do usuário para uso DENTRO de um padrão ilike do PostgREST.
 // encodeURIComponent não escapa ( ) * — que delimitam o grupo or=(...) e são curinga;
 // neutralizá-los impede que o termo quebre o filtro ou injete curingas. Depois codifica.
-const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));
-const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
+
+
 // Nome de ligação "Origem - Destino": só permite quebra de linha no separador " - ",
 // mantendo cada lado inteiro (não pica "Rio de Janeiro" palavra a palavra). Escapa e
 // devolve HTML pronto (&nbsp; nos espaços internos) — NÃO re-escapar quem usa.
-const fmtLineName = nome => nome ? esc(nome).split(' - ').map(p => p.replace(/ /g, '&nbsp;')).join(' - ') : '—';
-const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
+
+
 // Situação da linha (busca e documentos): Cancelada, Paralisada ou Ativa. "Ativa" (verde) só
 // quando a linha está operando (não cancelada e não paralisada) — igual ao critério isLinhaAtiva.
 // Transferida/Sub judice contam como Ativa (a linha segue operando).
-const situacaoHTML = r => r.cancelado ? '<span class="chip chip-on">Cancelada</span>'
-  : r.paralisado ? '<span class="chip chip-on">Paralisada</span>'
-  : '<span class="chip chip-off">Ativa</span>';
+
 // Uma linha está ATIVA quando está operando: não cancelada e não paralisada.
 // Sub judice (pendência só na Justiça) e transferida (mudou de operadora) seguem
 // operando → contam como ativas. Critério único usado por Empresas e Relatórios.
-const isLinhaAtiva = r => !r.cancelado && !r.paralisado;
+
 // VIGENTE (seção/tarifa) é o critério ESTRITO: além de ativa, exclui sub judice e transferida.
 // Repare que sub_judice/transferido têm efeito OPOSTO aqui vs. em isLinhaAtiva — por isso as
 // duas noções são explícitas e derivam de um ponto só (não confundir "ativa" com "vigente").
-const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;
+
 
 /* ================================================================
    ÍCONES
@@ -440,9 +430,9 @@ let activeLine = null;   // { codlinha, numero_ligacao, nome_ligacao, codempresa
    LEITURA usados pelos loaders — não se espalha acesso "por aba" pelos call sites existentes.
    Eles só são reatribuídos nos pontos de abrir/selecionar/fechar aba (setActiveLine aqui;
    setCurrentView e activateTab na seção MODAL), sempre em sincronia com `activeTab()`. */
-const MAX_TABS = 5;
+
 let tabIdSeq = 1;
-function makeTab(id){ return { id, line: null, view: null, navStack: [], stale: false }; }
+
 let tabs = [makeTab(tabIdSeq)];
 let activeTabId = tabs[0].id;
 function activeTab(){ return tabs.find(t => t.id === activeTabId); }
@@ -450,22 +440,11 @@ function setActiveLine(row){ activeLine = row; activeTab().line = row; }
 
 // abre uma aba em branco (linha/view null); nunca ultrapassa MAX_TABS — nesse caso devolve
 // blocked:true com `tabs`/`activeTabId` originais intactos (quem chama decide o toast).
-function openTabState(tabs, tabIdSeq){
-  if (tabs.length >= MAX_TABS) return { blocked:true, tabs, activeTabId:null, tabIdSeq };
-  const id = tabIdSeq + 1;
-  return { blocked:false, tabs:[...tabs, makeTab(id)], activeTabId:id, tabIdSeq:id };
-}
+
 // fecha a aba `id`. Se ela era a ativa, ativa a vizinha (prioriza a da direita, senão a da
 // esquerda — convenção comum de abas de navegador). Fechar a última aba devolve closedModal:true
 // (tabs fica vazio; quem chama decide fechar o modal e recriar a aba inicial em branco).
-function closeTabState(tabs, activeTabId, id){
-  const idx = tabs.findIndex(t => t.id === id);
-  if (idx === -1) return { tabs, activeTabId, closedModal:false };
-  const next = tabs.slice(0, idx).concat(tabs.slice(idx + 1));
-  if (!next.length) return { tabs: next, activeTabId:null, closedModal:true };
-  const nextActiveId = activeTabId !== id ? activeTabId : (next[idx] || next[idx - 1]).id;
-  return { tabs: next, activeTabId: nextActiveId, closedModal:false };
-}
+
 
 let ibgeMap   = null;    // { [codibge]: {nome,regiao,regiaoPrograma} }
 let origemMap = null;    // { [cod_origem]: nome_origem }
@@ -475,7 +454,7 @@ const evLookups = { emp:null, lin:null };  // lookups de evento: emp={[id]:event
 const empresas  = { map:null, list:null }; // cadastro (nome↔RJ): map={[codempresa]:nome_empresa}, list=linhas cruas p/ busca client-side
 
 // função pura (domínio), só mora aqui perto de quem a usa primeiro — não acessa o cache acima
-const norm = s => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+
 
 async function getIbge() {
   if (ibgeMap) return ibgeMap;
@@ -504,15 +483,10 @@ async function getEmpresas() {
   if (empresas.map) return empresas.map;
   const rows = await sbFetch('codempresa_teste', 'select=codempresa,nome_empresa,situacao,cassada,sob_intervencao&limit=2000');
   empresas.list = rows;
-  empresas.map = {};
-  // alguns RJ aparecem duplicados (ex.: 103) → prioriza a entrada REGULAR/não cassada
-  const melhor = r => (r && !r.cassada && String(r.situacao||'').toUpperCase()==='REGULAR') ? 2 : (r && !r.cassada ? 1 : 0);
-  const best = {};
-  rows.forEach(r => {
-    const k = r.codempresa;
-    if (k==null) return;
-    if (!(k in empresas.map) || melhor(r) > best[k]) { empresas.map[k] = r.nome_empresa; best[k] = melhor(r); }
-  });
+  // alguns RJ aparecem duplicados (ex.: 103): usa a regra compartilhada e testada.
+  empresas.map = Object.fromEntries(
+    dedupEmpresasPorRJ(rows).map(r => [r.codempresa, r.nome_empresa])
+  );
   return empresas.map;
 }
 // nome da empresa (síncrono; cai no próprio código se o cache ainda não carregou)
@@ -1073,33 +1047,15 @@ const btnBack = document.getElementById('btnBack');
 // Helpers que escrevem pdfHTML DEPOIS do await de quem os chama (paginateTable,
 // paginateLines, lineResults) recebem `gen` como opção em vez de capturar a própria —
 // capturar ali seria tarde demais pra distinguir qual tentativa é a mais recente.
-function beginGen(view){
-  if (!view) return null;   // modal já pode ter fechado (currentView virou null) — no-op seguro
-  view._gen = (view._gen || 0) + 1;
-  return view._gen;
-}
+
 // `gen` ainda é a tentativa mais recente para essa view? Usada por commitViewResult e por todo
 // ponto que pinta resultado NA TELA (paginate/paginateEvents) — a mesma pergunta protege os dois.
-function isCurrentGen(view, gen){
-  return !!view && gen === view._gen;
-}
-function commitViewResult(view, gen, patch){
-  if (!isCurrentGen(view, gen)) return false;
-  if ('pdfHTML' in patch) view.pdfHTML = patch.pdfHTML;
-  return true;
-}
+
+
 // pushDetail/popDetail: entra/sai de um "detalhe" dentro de um painel de lista (hoje só
 // Portarias) sem perder o pdfHTML/pesquisa da lista por baixo.
-function pushDetail(view, patch){
-  if (!view) return;
-  view._detail = { pdfHTML: view.pdfHTML };
-  if ('pdfHTML' in patch) view.pdfHTML = patch.pdfHTML;
-}
-function popDetail(view){
-  if (!view || !view._detail) return;
-  view.pdfHTML = view._detail.pdfHTML;
-  view._detail = null;
-}
+
+
 
 // Pilha de navegação do modal (voltar). Estado que muda junto — pilha, flag de "indo p/ trás"
 // e o botão Voltar — encapsulado aqui em vez de três variáveis soltas espalhadas por
@@ -1328,18 +1284,8 @@ function eventFilterBarHTML(){
     <button type="button" class="evf-clear">Limpar filtros</button>
   </div>`;
 }
-const yearOf = d => d ? parseInt(String(d).slice(0,4),10) : null;
-function matchEvent(r, c){
-  if (c.text && !norm((r.descricao||'')+' '+(r.observacao||'')).includes(c.text)) return false;
-  if (c.proc && !norm(r.numero_processo||'').includes(c.proc)) return false;
-  if (c.ano!=null){
-    // usa o ano do Registro (campo que ordena); sem registro, cai p/ a publicação
-    const reg = yearOf(r.data_registro);
-    const y = reg!=null ? reg : yearOf(r.data_publicacao);
-    if (y !== c.ano) return false;
-  }
-  return true;
-}
+
+
 // Paginador (um evento por vez) com filtros, "ir para a página N" e callback de filtro p/ PDF.
 // `opts.view`/`opts.gen` guardam a escrita inicial em `container.innerHTML` (ver `isCurrentGen`
 // junto a `paginate`) — filtros digitados depois só alternam `.hid` em nós já commitados, sem
@@ -1848,12 +1794,10 @@ LOADERS.empresasRegulares = async () => {
   ]);
   const cnt = {};
   lineRows.forEach(r=>{ const k=r.codempresa||'—'; cnt[k]=cnt[k]||{total:0,ativas:0}; cnt[k].total++; if(isLinhaAtiva(r))cnt[k].ativas++; });
-  // dedup do cadastro por RJ (prioriza a entrada REGULAR/não cassada — resolve o RJ 103)
-  const best = {};
-  (empresas.list||[]).forEach(e=>{ const k=e.codempresa; if(k==null) return;
-    const sc = (!e.cassada && String(e.situacao||'').toUpperCase()==='REGULAR')?2:(!e.cassada?1:0);
-    if(!(k in best) || sc>best[k]._s) best[k] = {...e, _s:sc}; });
-  const list = Object.values(best).map(e=>({ ...e, total:(cnt[e.codempresa]?.total)||0, ativas:(cnt[e.codempresa]?.ativas)||0 }));
+  // mesma regra compartilhada usada pelo cache nome ↔ RJ.
+  const list = dedupEmpresasPorRJ(empresas.list).map(e=>({
+    ...e, total:(cnt[e.codempresa]?.total)||0, ativas:(cnt[e.codempresa]?.ativas)||0
+  }));
   list.sort((a,b)=> b.total-a.total || String(a.nome_empresa||'').localeCompare(String(b.nome_empresa||'')));
   const semLinha = list.filter(e=>!e.total).length;
   const statusCol = e => [boolChip(e.cassada,'Cassada'), boolChip(e.sob_intervencao,'Interv.')].filter(Boolean).join(' ') || `<span class="chip chip-off">${esc(orDash(e.situacao))}</span>`;
@@ -2139,24 +2083,7 @@ function openLinhasPorIbge(codibge, nome){
 // classifica linhas por município (dentro × intermunicipal) a partir das linhas de
 // itinerário (codlinha, cod_municipio_origem). "dentro" = todos os trechos no próprio município (M);
 // "inter" = tem ao menos um trecho em OUTRO município (cod_municipio_origem não-vazio e != M).
-function classifyMunLines(itRows, codibge){
-  const M = String(codibge);
-  const bySet = new Map();                       // codlinha(String) → Set de cod_municipio_origem (não vazios)
-  for(const r of itRows){
-    if(r.codlinha==null || r.codlinha==='') continue;
-    const cl = String(r.codlinha);
-    let s = bySet.get(cl); if(!s){ s = new Set(); bySet.set(cl, s); }
-    const co = r.cod_municipio_origem==null ? '' : String(r.cod_municipio_origem);
-    if(co) s.add(co);
-  }
-  const dentro = new Set(), inter = new Set();
-  for(const [cl, s] of bySet){
-    let outro = false;
-    for(const co of s){ if(co !== M){ outro = true; break; } }
-    (outro ? inter : dentro).add(cl);
-  }
-  return { dentro, inter };
-}
+
 // linhas (codlinha distintos) cujo itinerário passa por um município (codibge)
 //
 // `memo` (opcional): Map de UMA execução, para não repetir a mesma consulta dentro da mesma
@@ -2215,11 +2142,7 @@ async function mostrarLinhasEntreMunicipios(host, aTerm, bTerm, directional){
   try{
     const all = new Set();    // direcional: A→B, nessa ordem
     const inter = new Set();  // trafega pelos dois, qualquer ordem
-    // Memo de UMA execução. O laço é 5×5, e sem ele o mesmo `ca` era rebuscado nas 5 iterações
-    // internas e cada `cb` reaparecia a cada volta externa: 50 consultas de município para no
-    // máximo 10 municípios distintos. Com o memo, no pior caso 75 requisições viram ~35.
-    // Isso reduz a carga que o PORTAL gera — NÃO é rate limiting: quem quiser abusar chama o
-    // PostgREST direto com a chave anon, que é pública por design (ver docs/seguranca.md §9.2).
+    const pares = [];         // pares e linhas candidatas; itinerários são baixados em lote abaixo
     const memoMun = new Map();
     for(const ca of codsA.slice(0,5)){
       for(const cb of codsB.slice(0,5)){
@@ -2228,12 +2151,34 @@ async function mostrarLinhasEntreMunicipios(host, aTerm, bTerm, directional){
         const sB = new Set(await linhasNoMunicipio(cb, memoMun));
         const interPar = lA.filter(c=>sB.has(c));
         interPar.forEach(c=>inter.add(c));
-        if(!directional || !interPar.length) continue;
-        const it = await sbFetch('itinerario_teste', `codlinha=in.(${interPar.slice(0,200).map(enc).join(',')})&select=codlinha,cod_municipio_origem,sentido&order=id&limit=30000`);
-        for(const [k,seq] of groupBy(it, r=>r.codlinha+'¦'+(r.sentido||''))){
-          const iA=seq.findIndex(r=>String(r.cod_municipio_origem)===String(ca));
-          const iB=seq.findIndex(r=>String(r.cod_municipio_origem)===String(cb));
-          if(iA>=0&&iB>=0&&iA<iB) all.add(k.split('¦')[0]);
+        if(directional && interPar.length) pares.push({ ca, cb, cods:interPar.slice(0,200) });
+      }
+    }
+    if(directional && pares.length){
+      // Hotspot medido: os pares ambíguos repetiam consultas de itinerário. Une os códigos e
+      // baixa lotes de até 200 uma vez; a decisão A→B continua local e separada por sentido.
+      const necessarios = [...new Set(pares.flatMap(p=>p.cods))];
+      const porLinha = new Map();
+      for(let i=0; i<necessarios.length; i+=200){
+        const lote = necessarios.slice(i, i+200);
+        const it = await sbFetch('itinerario_teste', `codlinha=in.(${lote.map(enc).join(',')})&select=codlinha,cod_municipio_origem,sentido&order=id&limit=30000`);
+        for(const r of it){
+          const cl = String(r.codlinha), sentido = r.sentido || '';
+          if(!porLinha.has(cl)) porLinha.set(cl, new Map());
+          const sentidos = porLinha.get(cl);
+          if(!sentidos.has(sentido)) sentidos.set(sentido, []);
+          sentidos.get(sentido).push(r);
+        }
+      }
+      for(const par of pares){
+        for(const cod of par.cods){
+          const sentidos = porLinha.get(String(cod));
+          if(!sentidos) continue;
+          for(const seq of sentidos.values()){
+            const iA=seq.findIndex(r=>String(r.cod_municipio_origem)===String(par.ca));
+            const iB=seq.findIndex(r=>String(r.cod_municipio_origem)===String(par.cb));
+            if(iA>=0&&iB>=0&&iA<iB){ all.add(String(cod)); break; }
+          }
         }
       }
     }
@@ -2304,17 +2249,7 @@ LOADERS.secoesPorLigacao = async () => {
 // Agregação PURA do Relatório Gerencial (testável em tests/) — separa o cálculo do render.
 // ativa = isLinhaAtiva (não cancelada nem paralisada); porEmp = top 15 empresas por nº de linhas.
 /* --- Relatórios --------------------------------------------------- */
-function resumoRelatorio(rows){
-  return {
-    total: rows.length,
-    ativas: rows.filter(isLinhaAtiva).length,
-    canc:  rows.filter(r=>r.cancelado).length,
-    paral: rows.filter(r=>r.paralisado).length,
-    sj:    rows.filter(r=>r.sub_judice).length,
-    empCount: new Set(rows.map(r=>r.codempresa)).size,
-    porEmp: [...countBy(rows, r=>r.codempresa||'—')].sort((a,b)=>b[1]-a[1]).slice(0,15),
-  };
-}
+
 LOADERS.relatoriosGerenciais = async () => {
   const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
   const [rows] = await Promise.all([
@@ -2337,20 +2272,7 @@ LOADERS.relatoriosGerenciais = async () => {
 };
 // Agregação PURA da Frota por Empresa (testável em tests/): total geral + quebra por empresa e
 // por hierarquia. num() trata vazio/inválido como 0; ordena por frota operacional desc.
-function resumoFrota(rows){
-  const num = v => { const n = Number(v); return isNaN(n) ? 0 : n; };
-  const sum = (arr,f) => arr.reduce((s,r)=>s+num(r[f]),0);
-  return {
-    totOp: sum(rows,'frota_operacional'),
-    totRes: sum(rows,'reserva'),
-    porEmp: [...groupBy(rows, r=>r.codempresa||'—')]
-      .map(([cod,rs])=>({cod, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
-      .sort((a,b)=>b.op-a.op),
-    porHier: [...groupBy(rows, r=>r.hierarquia||'—')]
-      .map(([h,rs])=>({h, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
-      .sort((a,b)=>b.op-a.op),
-  };
-}
+
 // Frota consolidada por empresa (total geral + quebra por hierarquia) — item 16
 LOADERS.frotaPorEmpresa = async () => {
   const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
@@ -2492,10 +2414,7 @@ async function getLocalidades(){
 // nomes canônicos da lista de localidades que casam o termo (insensível a acento/caixa) —
 // permite digitar "sao goncalo" e buscar no servidor por "SÃO GONÇALO" (o ilike do PostgREST
 // NÃO ignora acento)
-function localidadesQueCasam(lista, term){
-  const nt = norm(term);
-  return nt ? lista.filter(n => norm(n).includes(nt)).slice(0, 5) : [];
-}
+
 // termos p/ o ilike de localidade: nomes canônicos (com acento) + o termo digitado (texto
 // livre, cobre grafias sem acento na base), sem duplicatas
 async function termosLocalidade(term){
@@ -2507,13 +2426,10 @@ async function termosLocalidade(term){
   return out;
 }
 // filtro or=() do PostgREST: cada coluna ilike cada termo
-const orIlike = (cols, termos) => 'or=(' + termos.map(t => { const e = ilikeTerm(t); return cols.map(c => `${c}.ilike.*${e}*`).join(','); }).join(',') + ')';
+
 // cod_ibge cujo nome de município é EXATAMENTE um dos termos (insens. a acento/caixa) —
 // exato de propósito: "rio" não pode puxar Rio de Janeiro/Rio Bonito/Rio Claro inteiros
-function municipiosExatos(ibge, termos){
-  const nts = new Set(termos.map(norm).filter(Boolean));
-  return Object.entries(ibge).filter(([,v])=>nts.has(norm(v.nome))).map(([c])=>c);
-}
+
 // codlinha que casam uma localidade pelo NOME/VIA da linha (tabela_vista), por uma SEÇÃO de
 // tarifa OU por um LOGRADOURO do itinerário — MESMA semântica usada na busca do campo A.
 // Usado p/ cruzar duas localidades de forma simétrica (independe da ordem dos campos).
@@ -2720,12 +2636,7 @@ function rjOrder(a, b){
 }
 // bordas de paginação: clampa `page` no intervalo válido e devolve os índices da fatia.
 // total=0 → 1 página (start=end=0). PURA (cópia em tests/pure.harness.js; testada).
-function pageBounds(total, pageSize, page){
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const p = Math.min(Math.max(1, (page|0) || 1), totalPages);
-  const start = (p - 1) * pageSize;
-  return { page:p, totalPages, start, end:Math.min(start + pageSize, total) };
-}
+
 // Núcleo de paginação POR FATIA, agnóstico de conteúdo. Reusa o visual do paginador de eventos
 // (.doc-pager/.pg-*) e o `pageBounds` (testado). `renderSlice(start,end)` devolve o HTML da
 // página; `afterPaint(slot)` (opcional) religa cliques; `unit` rotula o .pg-info. Sem barra
@@ -2834,7 +2745,7 @@ function lineResults(host, rows, { prefixHTML='', pdf=true, view, gen } = {}){
 }
 // ordenação padrão de qualquer listagem de linhas: pelo código da ligação (codlinha),
 // natural/numérico (108-003 antes de 108-029). Usado em toda exibição de várias linhas.
-const byCodlinha = (a, b) => String(a.codlinha||'').localeCompare(String(b.codlinha||''), undefined, { numeric:true });
+
 function linhasTable(rows){
   if(!rows.length) return emptyBox('Nenhuma ligação.');
   const body = [...rows].sort(byCodlinha).map(r=>`<tr class="clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r))}'>
@@ -3050,9 +2961,9 @@ app.addEventListener('auxclick', e => {
    UTILITÁRIOS
    ================================================================ */
 function debounce(fn, ms=150){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
-function groupBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); if(!m.has(k))m.set(k,[]); m.get(k).push(x); } return m; }
-function countBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); m.set(k,(m.get(k)||0)+1); } return m; }
-function fmtMoney(v){ if(v===null||v===undefined||v==='') return '—'; const n=Number(v); return isNaN(n)?String(v):n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+
+
 
 /* ================================================================
    TOAST
@@ -3138,23 +3049,10 @@ function markStale(ids){
 // a aba `tab` se importa com este evento? (view dela lê a tabela alterada E, se o documento
 // depende de linha, a mudança é da linha DAQUELA aba — cada aba tem a sua). Generalização do
 // antigo rowMatchesActiveLine, que perguntava isso do par global currentView/activeLine.
-function tabMatchesEvent(tab, table, payload){
-  const view = tab && tab.view;
-  if(!view || !(view.tables||[]).includes(table)) return false;
-  if(!view.lineFilter || !tab.line) return true;      // documento não filtrado por linha → sempre casa
-  const cod = payload?.new?.codlinha ?? payload?.old?.codlinha;
-  if(cod===undefined || cod===null) return true;      // sem como filtrar → recarrega
-  return String(cod) === String(tab.line.codlinha);
-}
+
 // dispatch por aba: quem recarrega AGORA (só a ativa, ao vivo como sempre) e quem só fica
 // marcada como desatualizada (as de segundo plano — recarregam ao serem reativadas).
-function dispatchRealtime(tabs, activeTabId, table, payload){
-  const casam = (tabs||[]).filter(t => tabMatchesEvent(t, table, payload));
-  return {
-    reload: casam.some(t => t.id === activeTabId) ? activeTabId : null,
-    stale:  casam.filter(t => t.id !== activeTabId).map(t => t.id),
-  };
-}
+
 function onRealtime(table, payload){
   invalidateCaches(table);
   const { reload, stale } = dispatchRealtime(tabs, activeTabId, table, payload);
@@ -3193,13 +3091,13 @@ getEmpresas().catch(()=>{});
 /* ================================================================
    AUTO-ATUALIZAÇÃO — detecta novo deploy e recarrega sozinho,
    sem ninguém precisar limpar cache. Compara os ETags do index.html,
-   do app.js E do styles.css (deploy que muda só um deles também
+   dos módulos compartilhados, do app.js E do styles.css (deploy que muda só um deles também
    precisa recarregar todo mundo).
    ================================================================ */
 let _verTag = null;
 async function checarNovaVersao(){
   try {
-    const heads = await Promise.all(['/index.html', '/app.js', '/styles.css'].map(p =>
+    const heads = await Promise.all(['/index.html', '/shared/environment.js', '/shared/domain.js', '/shared/view-state.js', '/app.js', '/styles.css'].map(p =>
       fetch(p + '?_=' + Date.now(), { method: 'HEAD', cache: 'no-store' })));
     const tags = heads.map(r => r.headers.get('etag') || r.headers.get('last-modified'));
     if (tags.some(t => !t)) return;    // sem como comparar → não faz nada
