@@ -10,13 +10,11 @@ empresas, relatórios). Os dados são **alimentados pelo dono direto no Supabase
 exibe e **atualiza ao vivo** (Realtime).
 
 ## Arquitetura (importante)
-- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (todo o JS, ~3,2k
-  linhas, num IIFE)** — zero-build: sem framework, sem `package.json`, `<script src>` clássico no
-  fim do `<body>`. Todo JS novo vai no `app.js` (o `tests/check.js` **falha** se aparecer
-  `<script>` inline no `index.html` — a CSP publica `script-src 'self'` e bloquearia) e todo CSS
-  novo vai em **classe no `styles.css`** (não em `style=""` no template). Há **rotas por hash**
-  (`#/linha/<cod>`, `#/consulta/<view>`) — deep link e Voltar do navegador fecham o modal.
-  Racional e regras de navegação: **`docs/estrutura-frontend.md`**.
+- **Frontend estático zero-build:** `index.html` + `styles.css` + três módulos UMD/CommonJS em
+  `shared/` + `app.js` (~3,2k linhas, num IIFE). A ordem obrigatória é `environment.js`,
+  `domain.js`, `view-state.js`, `app.js`; `tests/check.js` verifica essa ordem e proíbe script
+  inline. Funções puras/reutilizáveis vão ao módulo adequado; orquestração de DOM e rede fica no
+  `app.js`. Não há bundler, framework ou `package.json`. Racional: `docs/estrutura-frontend.md`.
 - As consultas usam **REST do Supabase via `fetch`** (PostgREST). O **supabase-js** é usado **só**
   para o canal **Realtime** — é **vendorado** em `vendor/supabase-js-2.110.7.min.js` (versão
   fixa, mesma origem, sem CDN em runtime; ver Armadilhas para atualizar) e **injetado
@@ -307,7 +305,8 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   com faixa verde inferior. Manter esse idioma visual ao criar telas novas.
 - **PKs e índices (escalabilidade):** todas as tabelas têm PRIMARY KEY (as 3 grandes com `id`
   repetido têm surrogate `row_id`, não selecionado pelo front). Ao criar telas que filtram
-  **novas** colunas de tabelas grandes, **criar o índice** (btree; `pg_trgm`+GIN para `ilike`).
+  **novas** colunas de tabelas grandes, primeiro medir no projeto de teste; só considerar índice
+  após evidência representativa e `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`.
 - **`cod_origem` × `cod_municipio_origem`:** `cod_origem` = **terminal/origem** (`origem_teste`,
   `qh_intervalo_teste`, `qh_predeterminado_teste`); `cod_municipio_origem` = **código IBGE de
   município** (`itinerario_teste`). Detalhe + diagrama em `docs/schema.md`. **Atenção ETL:** o
@@ -330,8 +329,8 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   rico passa **`pdf:false`** (Quadro "por empresa"; Município). Detalhes: `docs/estrutura-frontend.md`
   §4. Em tela nova que lista muita coisa, **use esses helpers** em vez de `tableHTML` cru.
 - **NUNCA atribua `currentView.pdfHTML` direto — use o seam do ciclo de vida da view:**
-  `beginGen`/`commitViewResult`/`pushDetail`/`popDetail` (declarados logo após `let currentView`,
-  seção `MODAL / SISTEMA DE VIEWS`). Todo loader/run/render que faz `await` e depois escreve um
+  `beginGen`/`commitViewResult`/`pushDetail`/`popDetail` (exportados por
+  `shared/view-state.js`). Todo loader/run/render que faz `await` e depois escreve um
   resultado captura `const view = currentView, gen = beginGen(view);` **antes** do seu próprio
   `await`, e troca a atribuição por `commitViewResult(view, gen, { pdfHTML: fn ou null })` — usando
   o `view` CAPTURADO, nunca `currentView` de novo (se reler `currentView` no fim, uma escrita
