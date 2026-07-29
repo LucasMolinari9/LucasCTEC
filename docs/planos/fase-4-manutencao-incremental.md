@@ -54,12 +54,17 @@ Concluído nesta branch:
 - ordem dos scripts e allowlist de publicação;
 - 208/208 testes puros;
 - coleta anterior/posterior no Supabase de teste, sem erros;
-- rejeição explícita do project ref de produção no script de métricas.
+- rejeição explícita do project ref de produção no script de métricas;
+- smoke em preview local com hostname fail-closed: 8 cards renderizados, busca `NITERÓI`
+  retornando dados, Empresas Regulares com 132 empresas e nenhum erro/warning da aplicação;
+- advisors test-only: somente 4 INFO conhecidos de staging sem policy e 7 INFO de índices ainda
+  não usados; nenhuma alteração aplicada.
 
 Pendentes antes da PR em rascunho:
 
 - gates test-only da issue #74;
-- suíte completa `tests/check.js`;
+- suíte completa `tests/check.js` no runner oficial (a execução estrutural local ficou verde e
+  detectou/corrigiu uma ordem de inicialização no próprio gate);
 - views e abas em Chromium;
 - DB checks, Deriva, Realtime, qualidade e grants;
 - Semgrep e demais workflows aplicáveis.
