@@ -275,9 +275,27 @@ preview do smoke.
 **3. PR #73 (Fase 3): não mergear ainda — mergear logo depois do item 1.** A migração está
 testada, com rollback exercitado, e a PR é boa. Mas ela já está aplicada no banco de teste
 enquanto o código que a descreve segue em rascunho, e o gate que prova essa postura
-(`check_phase3_audit.mjs`) não roda sem a credencial do item 1. Ordem recomendada: criar a
-credencial → disparar o `Phase 3 database security` à mão → verde → sair do rascunho e mergear.
+(`check_phase3_audit.mjs`) não roda sem a credencial do item 1.
+
+**Atenção ao laço:** o `workflow_dispatch` do `Phase 3 database security` **não está disponível**
+— o GitHub só oferece despacho manual de workflow presente na branch padrão, e o
+`phase3-security.yml` só existe na `agent/fase-3-hardening-moderado`. Não dá para disparar antes
+de mergear, nem faz sentido mergear antes de ver verde. A saída é rodar o auditor **localmente**,
+que é onde a credencial já está nesse momento:
+
+```bash
+SUPABASE_TEST_AUDIT_DATABASE_URL='postgresql://divat_auditor_ci:…' \
+  node scripts/check_phase3_audit.mjs
+```
+
+Ordem recomendada: criar a credencial → rodar o auditor local → verde → gravar o secret → sair do
+rascunho e mergear. O workflow chega na `main` junto e passa a ser despachável dali em diante.
 Assim a Fase 3 entra com evidência viva, não com evidência narrada no corpo da PR.
+
+Duas armadilhas práticas do bootstrap: ele **exige `psql`** (usa `\set`, `\if` e `\gexec`, que o
+SQL Editor do painel não interpreta), e o `check_phase3_audit.mjs` só aceita host direto
+`db.gontnlfmothfglssbyyk.supabase.co` ou pooler com usuário `divat_auditor_ci.<ref>` — qualquer
+outra forma, inclusive produção, é recusada de propósito.
 
 **4. Fase 4: segurar.** É a maior e a mais arriscada — muda a arquitetura zero-build ao publicar
 `shared/*.js`, mexe na allowlist do `.vercelignore` e no detector de versão, e está empilhada
