@@ -1,9 +1,9 @@
 # Testes — lógica pura do `app.js` (sem navegador, sem rede)
 
-Testes unitários isolados (Node, **sem dependências**) da lógica do `app.js`.
-Não precisam de navegador nem de rede: o `fetch` é mockado, o `AbortController` é o
-nativo do Node, e as funções puras (formatação, busca, filtros) são copiadas
-**verbatim** dos respectivos blocos do `app.js`.
+Testes unitários isolados (Node, **sem dependências**) da lógica compartilhada e do `app.js`.
+Não precisam de navegador nem de rede: o `fetch` é mockado, o `AbortController` é nativo do
+Node e `pure.harness.js` importa diretamente `shared/domain.js` e `shared/view-state.js`.
+Não há cópia verbatim sujeita a deriva.
 
 ## Como rodar
 
