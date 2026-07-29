@@ -153,27 +153,37 @@ e sem grant para `anon`/`authenticated` → invisíveis pela API pública, de pr
 | `evento_dados` | `evento_textos` | `id` | → `evento_teste` |
 | `portaria_data` | `portaria_texto_teste` | `id` | → `portaria_teste` |
 
-## Funções e trigger (schema `public`)
+## Funções e trigger (schemas `public`, `private` e `audit`)
 
-O schema tem **0 views**, **8 funções** e **1 trigger** (snapshot vivo 27/07/2026; DDL
-completo em `docs/backup_schema.sql`, seção "FUNÇÕES + TRIGGER"). Todas as funções são
-`SECURITY INVOKER` e fixam `search_path` — as duas coisas são cobradas pelo gate
-`scripts/check_grants.mjs`. Duas são **RPCs chamadas pelo front** (`app.js`, via
-`rest/v1/rpc/…`); o resto é interno/diagnóstico.
+A migração `20260729034018_phase3_moderate_hardening.sql`, aplicada primeiro no projeto de teste,
+separa produto, implementação e diagnóstico:
 
-| Função | Papel | Quem chama |
+- `public`: duas RPCs de produto anônimas e a função de plataforma `rls_auto_enable()`;
+- `private`: `f_unaccent(text)` e `fn_vigor_auto()`, fora da Data API;
+- `audit`: quatro diagnósticos executáveis somente por `divat_auditor`.
+
+As funções de `audit` são `SECURITY DEFINER`, com `search_path` fixo e owner
+`divat_audit_owner` (`NOLOGIN`, sem bypass RLS e herdando só a leitura de `anon`). Isso permite
+ao auditor produzir o mesmo retrato público sem receber `SELECT` direto nas tabelas.
+
+| Função | Schema | Quem chama |
 |---|---|---|
-| `divat_busca_logradouro(termo, p_ibge?)` | busca linhas por logradouro (tipo+nome, sem acento, trigram; `p_ibge` filtra por município) | **front via RPC** — Ligações por Logradouro |
-| `divat_linhas_regiao(p_regiao, p_modo)` | linhas por região do município de origem (`dentro`/`origem`) | **front via RPC** — Linhas por Região e Município |
-| `divat_data_quality()` | diagnóstico de qualidade pós-ETL (órfãos referenciais, U+FFFD) | `scripts/check_data_quality.mjs` (como `anon`), diário no workflow `db-checks.yml` |
-| `divat_api_shape()` | o que a API pública enxerga (tabelas/colunas/RPCs, na visão de quem chama) | `scripts/check_deriva.mjs` (como `anon`) |
-| `divat_security_shape()` | postura de segurança em fatos **derivados**: RLS/grants/policies por tabela, `SECURITY DEFINER`/`search_path`/`EXECUTE` por função, e os default privileges. Usa `has_*_privilege` e `coalesce(proacl, acldefault(…))` — ACL nula é o *default* do PostgreSQL, não ausência de acesso, e um gate que lesse ACL crua nasceria fail-open | `scripts/check_grants.mjs` (como `anon`), diário no workflow `db-checks.yml` |
-| `f_unaccent(text)` | wrapper IMMUTABLE do `unaccent` | `divat_busca_logradouro` + índice de expressão `trgm_itin_logr_tipo_nome_norm` |
-| `fn_vigor_auto()` | zera `vigor` quando a portaria vira `REVOGADA` | trigger `trg_vigor_auto` |
-| `realtime_tables()` | lista as tabelas da publicação `supabase_realtime` | `scripts/check_realtime.mjs` (como `anon`) |
+| `divat_busca_logradouro(termo, p_ibge?)` | `public` | front anônimo — Ligações por Logradouro |
+| `divat_linhas_regiao(p_regiao, p_modo)` | `public` | front anônimo — Linhas por Região e Município |
+| `divat_data_quality()` | `audit` | credencial PostgreSQL auditora |
+| `divat_api_shape()` | `audit` | credencial PostgreSQL auditora |
+| `divat_security_shape()` | `audit` | credencial PostgreSQL auditora |
+| `realtime_tables()` | `audit` | credencial PostgreSQL auditora |
+| `f_unaccent(text)` | `private` | implementação de `divat_busca_logradouro` |
+| `fn_vigor_auto()` | `private` | trigger `trg_vigor_auto` |
+| `rls_auto_enable()` | `public` | event trigger gerenciado que liga RLS em tabela pública nova |
 
 **Trigger:** `trg_vigor_auto` em `portaria_teste` — `BEFORE INSERT OR UPDATE`, executa
-`fn_vigor_auto()`.
+`private.fn_vigor_auto()`.
+
+Produção permanece no layout anterior até uma promoção separadamente autorizada. O DDL de
+recuperação em `docs/backup_schema.sql` continua sendo a baseline pré-Fase 3; numa reconstrução,
+aplique as migrações versionadas depois dele. A reconciliação integral pertence à Fase 2.
 
 ## Contagem de linhas (referência — snapshot 15/07/2026)
 
