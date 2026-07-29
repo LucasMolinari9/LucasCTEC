@@ -55,7 +55,7 @@ for (const file of files) {
     fail(file, 'função public é criada sem REVOKE EXECUTE de PUBLIC na mesma migração');
   }
 
-  for (const match of sql.matchAll(/grant\s+execute\s+on\s+function\s+([\s\S]*?)\s+to\s+anon\s*;/gi)) {
+  for (const match of sql.matchAll(/grant\s+execute\s+on\s+function\s+([^;]*?)\s+to\s+anon\s*;/gi)) {
     const targets = [...match[1].matchAll(/((?:public|audit|private)\.[a-z0-9_]+)\s*\(/gi)]
       .map(target => target[1].toLowerCase());
     if (!targets.length) fail(file, 'GRANT EXECUTE TO anon não pôde ser interpretado de forma segura');
@@ -64,7 +64,7 @@ for (const file of files) {
     }
   }
 
-  if (/grant\s+execute\s+on\s+function[\s\S]*?to\s+(?:anon\s*,\s*authenticated|authenticated\s*,\s*anon)/i.test(sql)) {
+  if (/grant\s+execute\s+on\s+function[^;]*?to\s+(?:anon\s*,\s*authenticated|authenticated\s*,\s*anon)/i.test(sql)) {
     fail(file, 'authenticated não pode acompanhar anon em GRANT EXECUTE');
   }
 }
