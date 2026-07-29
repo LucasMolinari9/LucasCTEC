@@ -258,12 +258,40 @@ console.log('resumoFrota');
      'resumoFrota porEmp empresa 10 consolidada');
   ok(r.porEmp[1].cod==='20' && r.porEmp[1].op===0 && r.porEmp[1].res===4 && r.porEmp[1].n===2,
      'resumoFrota porEmp empresa 20 consolidada');
-  ok(r.porEmp[0].op >= r.porEmp[1].op, 'resumoFrota porEmp ordenado por operacional desc');
+  eq(r.porEmp.map(e=>e.cod).join(','), '10,20', 'resumoFrota porEmp ordenado por RJ crescente');
   {
     const hA = r.porHier.find(x=>x.h==='A');
     ok(hA.n===3 && hA.op===5 && hA.res===5, 'resumoFrota porHier hierarquia A consolidada');
   }
   ok(P.resumoFrota([]).totOp===0 && P.resumoFrota([]).porEmp.length===0, 'resumoFrota vazio');
+}
+
+// --- rjOrder / filtrarFrotaEmpresas ---
+console.log('rjOrder / filtrarFrotaEmpresas');
+{
+  const cods = ['10','SEM RJ','2','101'].sort(P.rjOrder);
+  eq(cods.join(','), '2,10,101,SEM RJ', 'rjOrder numérico crescente e código inválido no fim');
+
+  const items = [
+    { cod:'2',  nome_empresa:'Viação Águia', situacao:'REGULAR', op:10 },
+    { cod:'10', nome_empresa:'Expresso Beta', situacao:'CANCELADO', op:20 },
+    { cod:'20', nome_empresa:'Empresa Gama', situacao:'SOB INTERVENÇÃO', op:30 },
+    { cod:'30', nome_empresa:'Sem Situação', situacao:null, op:40 },
+  ];
+  eq(P.filtrarFrotaEmpresas(items).map(e=>e.cod).join(','), '2',
+     'filtro padrão mostra somente REGULAR');
+  eq(P.filtrarFrotaEmpresas(items,'canceladas').map(e=>e.cod).join(','), '10',
+     'filtro canceladas mostra somente CANCELADO');
+  eq(P.filtrarFrotaEmpresas(items,'todas').length, 4,
+     'filtro todas inclui intervenção e situação ausente');
+  eq(P.filtrarFrotaEmpresas(items,'todas','viacao agu').map(e=>e.cod).join(','), '2',
+     'busca por nome ignora acento e caixa');
+  eq(P.filtrarFrotaEmpresas(items,'todas','0').map(e=>e.cod).join(','), '10,20,30',
+     'busca por RJ aceita correspondência parcial');
+  eq(P.filtrarFrotaEmpresas(items,'ativas','beta').length, 0,
+     'situação e pesquisa são combinadas');
+  eq(P.filtrarFrotaEmpresas(items,'todas','inexistente').length, 0,
+     'busca sem correspondência devolve lista vazia');
 }
 
 // --- classifyMunLines ---
