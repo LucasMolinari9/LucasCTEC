@@ -213,8 +213,13 @@ if (appResponse?.ok) {
   verifyAnonKey(prodKey, 'lwzsxuaqqeoamukduhev', 'produção');
   verifyAnonKey(testKey, 'gontnlfmothfglssbyyk', 'teste');
 
-  if (/preview jamais pode usar produção como fallback/.test(source)) ok('guarda fail-closed publicada');
-  else fail('app.js publicado não contém a guarda fail-closed esperada');
+  // Asserção sobre CÓDIGO, não sobre prosa. Até 29/07/2026 esta checagem procurava uma frase do
+  // comentário ("preview jamais pode usar produção como fallback"); reescrever o comentário
+  // derrubava o gate sem que nada de fato tivesse regredido — foi o que aconteceu no PR #76, onde
+  // trocar um verbo pintou de vermelho um deploy correto. A mensagem do `throw` é o próprio
+  // mecanismo fail-closed: se ela sumir do bundle publicado, a guarda sumiu de verdade.
+  if (/Configuração Supabase ausente para o ambiente de/.test(source)) ok('guarda fail-closed publicada');
+  else fail('app.js publicado não contém o throw fail-closed de selecionarSupabase');
 } else {
   fail('não foi possível validar a matriz porque /app.js não respondeu 200');
 }

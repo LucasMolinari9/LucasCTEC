@@ -34,7 +34,7 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
    deploy e é impossível de listar. Todo host fora de HOSTS_PROD cai no banco de teste, então
    uma branch nova nasce apontando para teste — nunca para produção. Mesma doutrina do
    .vercelignore e do default-deny do banco: o objeto novo nasce fechado. Configuração ausente
-   lança erro; preview jamais pede produção como fallback.
+   lança erro; preview jamais pode usar produção como fallback.
 
    HOSTS_PROD precisa listar TODOS os domínios que o projeto Vercel `divatdetro` serve como
    produção — hoje três: o canônico, o alias do time e o alias da branch `main`. Até 29/07/2026
