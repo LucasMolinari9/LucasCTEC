@@ -51,7 +51,8 @@ produção, esse é o modo de falha a suspeitar primeiro quando um preview parec
 
 | # | Item | Quem resolve |
 |---|---|---|
-| 1 | Banco de teste nunca verificado | **Codex** (T1+T2) → relatório → dono provisiona o que faltar |
+| 1 | Gates não conseguem apontar para o teste (issue #74) | **Codex** (T1) — pronto para começar |
+| 1b | Auditoria profunda do banco de teste | **bloqueado**: precisa do merge do #73 **e** do secret do auditor. T2 entra reduzida |
 | 2 | `deploy-smoke.yml` testa produção pela URL por-deploy e reprova | **Codex** (T3) |
 | 3 | Branch `teste` 13 commits atrás, lê **produção** | **Codex** (T4) |
 | 4 | 6 branches mortas acumuladas | **Codex** (T5) |
