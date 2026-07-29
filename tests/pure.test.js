@@ -524,5 +524,24 @@ console.log('dispatchRealtime (#54 — recarrega a aba ativa, marca as de 2º pl
   }
 }
 
+
+// --- dedupEmpresasPorRJ (paridade dos dois call sites antes da extração) ---
+console.log('dedupEmpresasPorRJ');
+{
+  const rows = [
+    {codempresa:103,nome_empresa:'Cassada',cassada:true,situacao:'REGULAR'},
+    {codempresa:103,nome_empresa:'Não cassada',cassada:false,situacao:'OUTRA'},
+    {codempresa:'103',nome_empresa:'Regular',cassada:false,situacao:'regular'},
+    {codempresa:200,nome_empresa:'Primeira',cassada:false,situacao:'REGULAR'},
+    {codempresa:200,nome_empresa:'Empate posterior',cassada:false,situacao:'REGULAR'},
+    {codempresa:null,nome_empresa:'Sem RJ',cassada:false,situacao:'REGULAR'},
+  ];
+  const got = P.dedupEmpresasPorRJ(rows);
+  eq(got.length, 2, 'dedup remove RJ duplicado e ignora RJ nulo');
+  eq(got.find(r=>String(r.codempresa)==='103').nome_empresa, 'Regular', 'dedup prioriza REGULAR não cassada');
+  eq(got.find(r=>String(r.codempresa)==='200').nome_empresa, 'Primeira', 'dedup preserva primeiro item em empate');
+  eq(rows.length, 6, 'dedup não altera o array de entrada');
+}
+
 console.log('\n==== PLACAR:', pass + '/' + (pass + fail), '====');
 if (fail){ console.log('FALHAS:'); fails.forEach(f => console.log('  -', f)); process.exit(1); }
