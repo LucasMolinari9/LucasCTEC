@@ -1,3 +1,11 @@
 [mcp_servers.supabase]
 url = "https://mcp.supabase.com/mcp?project_ref=lwzsxuaqqeoamukduhev&read_only=true&features=docs,database,debugging,development"
 auth = "oauth"
+
+# Projeto `divat - TESTE`. Até 29/07/2026 os dois agentes só enxergavam produção, então nenhum
+# conseguia inspecionar o ambiente de teste nem para diagnosticar. Continua `read_only=true`: a
+# escrita no banco de teste é da migração versionada em supabase/migrations/, não de agente.
+# O OAuth de cada servidor é feito pelo dono; a configuração aqui não autoriza nada sozinha.
+[mcp_servers.supabase-teste]
+url = "https://mcp.supabase.com/mcp?project_ref=gontnlfmothfglssbyyk&read_only=true&features=docs,database,debugging,development"
+auth = "oauth"
