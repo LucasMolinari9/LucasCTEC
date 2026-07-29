@@ -73,7 +73,7 @@ achar por `grep` do texto da marca, nunca por linha.
   `COMPONENTES AUXILIARES` · `CLIQUE NOS CARDS` · `UTILITÁRIOS` · `TOAST` · `REALTIME` ·
   `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~62% do JS (~2,0k linhas, ~90 funções).
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~60,4% do JS (~2,0k linhas, ~90 funções).
 
 ### Sub-marcas do bloco `MODAL / SISTEMA DE VIEWS`
 

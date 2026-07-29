@@ -1,5 +1,12 @@
 # Plano — ambiente de teste isolado (handoff para agente com acesso ao git)
 
+> **Status em 28/07/2026: executado.** O projeto `divat - TESTE`
+> (`gontnlfmothfglssbyyk`) está ativo, `divatdetro.vercel.app` é a allowlist de produção e
+> hostnames de preview usam teste. O fallback inerte descrito abaixo foi substituído por
+> fail-closed: configuração ausente interrompe a aplicação e nunca redireciona preview para
+> produção. Este documento permanece como histórico do desenho; a decisão vigente está em
+> `docs/adr/0002-ambiente-de-teste-isolado.md`.
+
 Objetivo: um **segundo banco Supabase** para experimentar sem tocar em produção, e o `app.js`
 escolhendo entre os dois pelo hostname. Escrito para ser executado por um agente que tem
 **acesso ao repositório e nada mais** — sem painel do Supabase, sem painel do Vercel.

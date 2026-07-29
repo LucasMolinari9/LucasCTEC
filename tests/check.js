@@ -137,6 +137,7 @@ const canon = [
   // marcarTrunc/bannerTrunc, com 28 testes rodando contra cópias que nada garantia estarem
   // atualizadas. Mesmo bug do `ilikeTerm`, um arquivo ao lado.
   ['sbFetch',              "async function sbFetch(table, qs = '', sinal) {"],
+  ['selecionarSupabase',   'function selecionarSupabase(hostname, config){'],
   ['SB_RETRIES',           'const SB_RETRIES    = 2;'],
   ['esperar',              'const esperar = ms => new Promise'],
   ['fetchComTimeout',      'async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal){'],

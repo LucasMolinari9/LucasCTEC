@@ -7,6 +7,19 @@ const SB_URL = 'https://example.invalid';
 const SB_KEY = 'fake-anon-key';
 const SB = { url: SB_URL, key: SB_KEY };
 
+function selecionarSupabase(hostname, config){
+  const host = String(hostname || '').trim().toLowerCase().replace(/\.$/, '');
+  const hostsProd = (config.hostsProd || []).map(h => String(h).trim().toLowerCase().replace(/\.$/, ''));
+  const producao = hostsProd.includes(host);
+  const alvo = producao
+    ? { url: config.prodUrl,  key: config.prodKey,  ambiente: 'producao' }
+    : { url: config.testeUrl, key: config.testeKey, ambiente: 'teste' };
+  if (!alvo.url || !alvo.key) {
+    throw new Error(`Configuração Supabase ausente para o ambiente de ${alvo.ambiente}.`);
+  }
+  return Object.freeze({ ...alvo, hostname: host });
+}
+
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 
 let SB_TIMEOUT_MS = 20000;   // copied; made `let` to allow shrinking in timeout test
@@ -98,6 +111,6 @@ function bannerTrunc(rows){
 module.exports = {
   get SB_TIMEOUT_MS(){ return SB_TIMEOUT_MS; },
   set SB_TIMEOUT_MS(v){ SB_TIMEOUT_MS = v; },
-  SB_RETRIES, esperar, fetchComTimeout, sbFetch, marcarTrunc, bannerTrunc,
+  SB_RETRIES, selecionarSupabase, esperar, fetchComTimeout, sbFetch, marcarTrunc, bannerTrunc,
   CANCELADO, ehCancelamento,
 };

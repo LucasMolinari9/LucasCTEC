@@ -148,8 +148,11 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
 - **Host: Vercel** (único host em uso). A ligação com o Supabase é toda **client-side**; o host
   só serve arquivos estáticos.
 - **Config:** `vercel.json` (raiz) carrega os cabeçalhos de segurança — em especial a **CSP**,
-  cujo `connect-src` autoriza `lwzsxuaqqeoamukduhev.supabase.co` (REST) e `wss://…` (Realtime).
-  Ao mexer na CSP, edite o `vercel.json`.
+  cujo `connect-src` autoriza os projetos Supabase de produção
+  (`lwzsxuaqqeoamukduhev`) e teste (`gontnlfmothfglssbyyk`) em REST e Realtime.
+  `app.js` mantém produção em allowlist: somente `divatdetro.vercel.app` usa produção; preview,
+  localhost e hostname desconhecido usam teste. Configuração ausente falha fechado, sem fallback
+  para produção. Ao mexer na CSP ou nessa matriz, rode também `tests/environment.test.js`.
 - **Auto-deploy:** conectar o repo GitHub `LucasMolinari9/LucasCTEC` ao projeto Vercel pelo
   **dashboard** (OAuth, ação única) → **push na `main` = deploy** (e **push em branch = preview
   deploy**, use-o). Sem essa conexão, publica-se rodando o MCP `deploy_to_vercel` após o push.
@@ -170,9 +173,13 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    armadilhas antes de escrever SQL/JS. Ajuste isolado de CSS/texto/UI pula direto pro passo 1.
 1. Edite `app.js` (JS) e/ou `index.html` (HTML/CSS). **Trabalhe numa branch**, não direto na
    `main`: push na branch → o Vercel gera **preview deploy** → confira no preview → merge na
-   `main` (que é a publicada). O CI roda **três workflows** em todo push/PR, separados de
+   `main` (que é a publicada). O CI roda **quatro workflows**, separados de
    propósito (um vermelho não esconde o outro): `ci.yml` (gate leve — `tests/check.js`),
-   `views.yml` (navegador — `check_views.mjs` + `check_abas.mjs`) e `semgrep.yml` (estático).
+   `views.yml` (navegador — `check_views.mjs` + `check_abas.mjs`), `semgrep.yml` (estático) e
+   `deploy-smoke.yml` depois que a Vercel publica (headers, allowlist e isolamento do Supabase).
+   Se previews estiverem protegidos pela Vercel, configure um **Protection Bypass for
+   Automation** e grave o mesmo valor no secret GitHub `VERCEL_AUTOMATION_BYPASS_SECRET`;
+   sem isso o smoke recebe a tela de login em vez do portal e falha de propósito.
 2. **Antes de publicar, rode `node tests/check.js`** — valida a sintaxe do `app.js`, garante que
    não voltou `<script>` inline no `index.html`, confere as cópias de teste (anti-drift), cobra a
    **deriva docs×código** (seção `[2b]`, ver abaixo) e roda todos os testes. Só publique tudo
@@ -186,7 +193,7 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
 2a. **Ao mexer em qualquer render/loader, rode `node scripts/check_views.mjs`** — abre as **23
    views** num navegador headless e falha se alguma explodir (`errorBox`), ficar presa no
    spinner, pintar só a moldura ou não achar nada com um termo que casa as fixtures. É a rede
-   sob a seção `MODAL / SISTEMA DE VIEWS` (~62% do `app.js`), que o `check.js` **não** cobre —
+   sob a seção `MODAL / SISTEMA DE VIEWS` (~60,4% do `app.js`), que o `check.js` **não** cobre —
    ele só testa a lógica pura copiada nos `*.harness.js`. Aceita filtro: `check_views.mjs frota`.
    Ele **não** confere se o conteúdo está certo (isso é asserção por view, ainda não existe).
    **View nova = uma entrada em `VIEWS` no script** — a checagem anti-drift do final compara a
