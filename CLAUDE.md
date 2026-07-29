@@ -394,3 +394,12 @@ Vocabulário padrão (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-fo
 ### Domain docs
 
 Single-context — `CONTEXT.md` + `docs/adr/` na raiz do repo. Ver `docs/agents/domain.md`.
+
+
+### Mudanças de banco
+
+Toda alteração de schema deve ser uma migração em `supabase/migrations/` e passar por
+`node scripts/check_migrations.mjs`. Tabela pública nova liga RLS e revoga anon/authenticated na
+mesma migração. RPC anônima nova é proibida por padrão; a allowlist contém somente
+`divat_busca_logradouro` e `divat_linhas_regiao`. Diagnósticos pertencem a `audit` e usam a
+credencial PostgreSQL mínima descrita em `docs/planos/fase-3-hardening-moderado.md`.
