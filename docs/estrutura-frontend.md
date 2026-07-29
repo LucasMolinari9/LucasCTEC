@@ -1,60 +1,36 @@
-# Estrutura e navegação do frontend (`index.html` + `styles.css` + `app.js`) — Portal DIVAT
+# Estrutura e navegação do frontend estático — Portal DIVAT
 
-> **Por que este arquivo existe:** o frontend são **três arquivos**: `index.html` (HTML),
-> `styles.css` (todo o CSS — extraído do HTML em 22/07/2026) e **`app.js`** (todo o JS,
-> ~3,2k linhas — extraído do HTML em 21/07/2026, envolto num IIFE desde 22/07/2026). Continua
-> **zero-build**: nada de bundler, framework ou `package.json`. Este doc registra (1) *por que*
-> essa forma, (2) *como navegar* no `app.js` sem se perder, e (3) as **regras de segurança** para
-> reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do `CLAUDE.md` (que lista as
-> seções e funções-chave) e os relatórios `analise-separacao.md` / `analise-duplicacao.md` (que são
-> diagnósticos de acoplamento/reuso, não guias de navegação).
+> O frontend continua zero-build e sem `package.json`: `index.html`, `styles.css`, três módulos
+> compartilhados em `shared/` e `app.js` (~3,2k linhas — extraído do HTML em 21/07/2026,
+> envolto num IIFE desde 22/07/2026). A Fase 4 substituiu cópias do harness por módulos reais.
 
-## 1. Por que `index.html` + `styles.css` + `app.js` (e por que **não** fatiar mais)
+## 1. Arquitetura zero-build com módulos compartilhados
 
-Até 21/07/2026 o JS era embutido no `index.html`. Foi extraído para um único `app.js` por **um**
-motivo: derrubar o `'unsafe-inline'` do `script-src` da CSP — com JS inline, a CSP não segura um
-XSS que escape do `esc()`; com `script-src 'self'` (estado atual do `vercel.json`), segura. O que
-mudou junto, e o que continua valendo:
+A CSP continua com `script-src 'self'`; todos os arquivos são scripts clássicos da mesma origem,
+sem `import`, bundler ou CDN. A ordem no fim do `index.html` é contrato:
 
-- **Auto-update por ETag** vigia os **três** arquivos: `checarNovaVersao` (seção
-  `AUTO-ATUALIZAÇÃO`) faz `HEAD` de `/index.html`, `/app.js` **e** `/styles.css` e compara os
-  ETags — deploy que muda só um deles também recarrega todo mundo. Não há cache-busting `?v=`: o
-  `Cache-Control: max-age=0, must-revalidate` do `vercel.json` já faz o navegador revalidar os
-  três a cada carga. **Ao criar um novo arquivo estático de primeira ordem, inclua-o na lista.**
-- **Zero-build continua.** É **um** `app.js` inteiro (mesmo conteúdo, mesma ordem), carregado por
-  `<script src>` clássico no fim do `<body>` — **não** são ES modules, não há cadeia de `import`.
-  **Não fatiar em `js/*.js`**: N arquivos = N chances de ordem errada + detector de versão tendo
-  que vigiar N ETags, por ganho nenhum.
-- **CSS em `styles.css`** (extraído do `<style>` em 22/07/2026): cacheável separado do HTML e
-  editável com tooling. Desde **27/07/2026** o `style-src` é `'self'` com **`style-src-attr
-  'none'`** — **nenhum `unsafe-inline`** (achado SEC-08). Os 10 atributos `style=` que restavam
-  saíram: os 4 de accent eram sempre a MESMA constante e viraram `--accent`/`--accent-soft`
-  estáticos no `:root`; as larguras de `<th>` viraram classes `.w-*` (conjunto fechado, porque
-  `c.w` é sempre constante do código); e os 3 `display:none` do `index.html` viraram `.is-hidden`,
-  o que obrigou os 8 sites de `.style.display` a virarem `classList`.
-  **Regra:** estilo novo é **classe no `styles.css`**. Atributo `style=` em markup é ignorado pelo
-  navegador **em silêncio** — o sintoma é a regra simplesmente não acontecer. Só o ATRIBUTO é
-  proibido: `el.style.x = …` e `setProperty` continuam válidos e são o caminho para o que é
-  genuinamente dinâmico (o dropdown se posiciona assim, com `getBoundingClientRect`).
-  Guardas: `tests/check.js` §[1] (offline, cobre `index.html` e os templates do `app.js`, e ainda
-  exige classe `.w-*` para toda largura declarada) e a regra Semgrep `divat-style-attr-quebra-csp`.
-  Os gates de navegador (`check_views.mjs`/`check_abas.mjs`) passaram a servir **a CSP de
-  produção, lida do `vercel.json`** — antes rodavam sem cabeçalho nenhum, num mundo mais
-  permissivo que o real, e uma regressão de CSP passaria verde.
-- **IIFE**: o `app.js` inteiro roda dentro de `(() => { … })();` — nada vaza para `window`
-  (o vendor `supabase-js` continua global e é lido normalmente). O escopo interno é único, então
-  as regras de hoisting/TDZ da seção 3 continuam valendo sem mudança.
-- **supabase-js é injetado dinamicamente** pelo `app.js` (seção `REALTIME`) — script dinâmico é
-  async, não bloqueia a primeira pintura. Não há mais `<script>` dele no `index.html`; ao
-  atualizar a versão vendorada, troque o `s.src` no `initRealtime`.
-- **Rotas por hash** (seção `ROTAS (hash)`, fim do `app.js`): `#/linha/<codlinha>`,
-  `#/consulta/<view>` e a combinação — deep link compartilhável, e o Voltar do navegador fecha o
-  modal (a abertura cria UMA entrada de histórico; trocas de view usam `replaceState`).
-- **Guarda no gate:** `tests/check.js` **falha** se aparecer `<script>` inline no `index.html` —
-  a CSP bloquearia no navegador; todo JS novo vai no `app.js`.
+1. `shared/environment.js` — seleção fail-closed de Supabase;
+2. `shared/domain.js` — funções puras de formatação e regras de domínio;
+3. `shared/view-state.js` — estado reutilizável de abas/views/paginação/Realtime;
+4. `app.js` — rede, DOM e orquestração da aplicação.
 
-A real dor — "achar as coisas" — continua resolvida com **organização interna** (seções 2 e 3
-abaixo), que agora vivem no `app.js`.
+Cada módulo publica uma API congelada em `globalThis.DIVAT` e também em `module.exports`. Assim o
+navegador e os testes Node executam a mesma implementação. `tests/pure.harness.js` apenas importa
+essas APIs; não copia funções.
+
+Regras:
+
+- função pura usada por mais de um fluxo pertence ao módulo compartilhado adequado;
+- I/O, caches mutáveis da aplicação e DOM permanecem no `app.js`;
+- arquivo público novo deve entrar na allowlist `.vercelignore`;
+- `tests/check.js` compila os quatro arquivos e verifica a ordem de carga;
+- `checarNovaVersao` faz HEAD do HTML, CSS, app e três módulos;
+- estilo novo continua em classe de `styles.css`; script inline continua proibido;
+- otimização exige baseline test-only e comparação posterior reproduzível.
+
+A decisão e suas consequências estão em
+[ADR 0001](adr/0001-modulos-compartilhados-e-otimizacao-medida.md). As métricas da extração estão
+no [relatório da Fase 4](planos/fase-4-manutencao-incremental.md).
 
 ## 2. Como navegar — índice, marcas e sub-marcas (navegue por `grep`)
 
