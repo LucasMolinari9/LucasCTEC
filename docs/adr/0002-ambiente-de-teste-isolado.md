@@ -5,11 +5,12 @@ branch apontar para o mesmo projeto Supabase da produção, qualquer experimento
 mesmo banco e pode afetar o ambiente real. A aparência de isolamento sem isolamento de dados é
 especialmente arriscada porque induz quem testa a acreditar que produção está protegida.
 
-**Decisão:** o Portal DIVAT terá um segundo projeto Supabase para teste. O `app.js` escolhe o
-projeto pelo hostname: somente os hosts explicitamente registrados em `HOSTS_PROD` usam
-produção; qualquer outro host usa teste quando a configuração de teste estiver completa. A
-seleção permanece inerte e aponta tudo para produção enquanto a allowlist ou as credenciais de
-teste estiverem vazias.
+**Decisão:** o Portal DIVAT usa o projeto Supabase `divat - TESTE`
+(`gontnlfmothfglssbyyk`) para previews e desenvolvimento. O `app.js` escolhe o projeto pelo
+hostname: somente `divatdetro.vercel.app`, explicitamente registrado em `HOSTS_PROD`, usa
+produção; qualquer outro host usa teste. A seleção é fail-closed: se a configuração do ambiente
+escolhido estiver incompleta, a aplicação interrompe a inicialização em vez de recorrer ao banco
+de produção.
 
 **Por quê:** produção é uma allowlist porque os endereços de preview do Vercel incluem valores
 gerados a cada deploy e não podem ser enumerados antecipadamente. Tratar como produção somente
@@ -27,10 +28,12 @@ substituí-las por uma expressão impediria os quatro gates de localizar a confi
 Os projetos de teste e produção mantêm duas cópias do schema manualmente. Não existe hoje um
 gate que detecte divergência entre elas. Mudanças de schema precisam ser aplicadas em produção
 antes ou junto do merge do código que depende delas, e o projeto Supabase Free de teste pode
-pausar após um período de inatividade.
+pausar após um período de inatividade. Como o `vercel.json` é comum a todos os deploys, a CSP de
+produção permite conexão com os dois projetos; a seleção de hostname impede que o código de
+produção escolha o projeto de teste.
 
 ## Status
 
-Accepted — o encanamento pode entrar de forma inerte antes da criação do projeto de teste. Os
-hosts de produção, a URL e a anon key de teste só serão preenchidos quando esse projeto existir;
-até lá, todos os hosts continuam usando produção.
+Accepted e ativado em 28/07/2026. Produção permanece em
+`lwzsxuaqqeoamukduhev`; previews, `localhost` e hostnames não reconhecidos usam
+`gontnlfmothfglssbyyk`.

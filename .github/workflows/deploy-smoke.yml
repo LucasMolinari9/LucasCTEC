@@ -1,0 +1,59 @@
+# Verifica o deploy real depois que a Vercel publica uma revisão.
+# Cobre a fronteira que os testes locais não enxergam: headers efetivamente servidos,
+# allowlist de arquivos e hostname de preview apontando para o Supabase de teste.
+name: Deploy smoke
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: URL HTTPS do deploy a verificar
+        required: true
+        type: string
+      environment:
+        description: Ambiente esperado
+        required: true
+        default: auto
+        type: choice
+        options:
+          - auto
+          - preview
+          - production
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       (github.event.deployment_status.environment_url != '' ||
+        github.event.deployment_status.target_url != ''))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      # Para previews com Deployment Protection, crie um Protection Bypass for Automation na
+      # Vercel e salve o MESMO valor como secret do repositório com este nome. Sem ele, o script
+      # falha com diagnóstico explícito em vez de testar por engano a tela de login da Vercel.
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      DEPLOY_URL: >-
+        ${{ github.event_name == 'workflow_dispatch' &&
+            inputs.url ||
+            github.event.deployment_status.environment_url ||
+            github.event.deployment_status.target_url }}
+      DEPLOY_ENVIRONMENT: >-
+        ${{ github.event_name == 'workflow_dispatch' &&
+            inputs.environment ||
+            github.event.deployment.environment ||
+            'auto' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+      - name: Headers, allowlist e isolamento do Supabase
+        run: node scripts/check_deploy.mjs "$DEPLOY_URL" "$DEPLOY_ENVIRONMENT"

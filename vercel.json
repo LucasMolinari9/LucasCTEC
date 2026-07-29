@@ -9,7 +9,7 @@
         { "key": "Permissions-Policy", "value": "geolocation=(), microphone=(), camera=()" },
         { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'none'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://lwzsxuaqqeoamukduhev.supabase.co wss://lwzsxuaqqeoamukduhev.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'" }
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'none'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://lwzsxuaqqeoamukduhev.supabase.co wss://lwzsxuaqqeoamukduhev.supabase.co https://gontnlfmothfglssbyyk.supabase.co wss://gontnlfmothfglssbyyk.supabase.co; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'" }
       ]
     }
   ]
