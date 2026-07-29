@@ -37,7 +37,8 @@ Dados: [baseline e comparação](../metricas/fase-4-baseline-e-comparacao.json).
 | Centro × Niterói | 9 / 197,1 / 181.390 | sem mudança | cache já reduz para 6 req quente |
 
 No hotspot otimizado, o cenário frio reduziu 27,8% das requisições, 28,4% da duração e 19,7% do
-payload; o quente reduziu 29,4%, 25,6% e 20,3%. O caso exato não regrediu.
+payload; o quente reduziu 29,4%, 25,6% e 20,3%. A comparação dos conjuntos ordenados comprovou
+paridade: 197/197 linhas em `Rio de Janeiro → Niterói` e 29/29 em `Rio → São`.
 
 ## Índices
 
