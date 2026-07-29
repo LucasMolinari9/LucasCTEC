@@ -20,6 +20,7 @@
 /*
 !/index.html
 !/app.js
+!/shared
 !/styles.css
 !/manifest.webmanifest
 !/vercel.json
