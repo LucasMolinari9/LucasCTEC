@@ -131,7 +131,14 @@ function resumoRelatorio(rows){
     porEmp: [...countBy(rows, r=>r.codempresa||'—')].sort((a,b)=>b[1]-a[1]).slice(0,15),
   };
 }
-// app.js:2327 — agregação da Frota por Empresa (depende de groupBy)
+// app.js:2715 — ordenação numérica do RJ usada nas listagens por empresa
+function rjOrder(a, b){
+  const na=parseInt(a,10), nb=parseInt(b,10);
+  if(isNaN(na)&&isNaN(nb)) return String(a).localeCompare(String(b));
+  if(isNaN(na)) return 1; if(isNaN(nb)) return -1;
+  return na-nb;
+}
+// app.js:2344 — agregação da Frota por Empresa (depende de groupBy/rjOrder)
 function resumoFrota(rows){
   const num = v => { const n = Number(v); return isNaN(n) ? 0 : n; };
   const sum = (arr,f) => arr.reduce((s,r)=>s+num(r[f]),0);
@@ -140,11 +147,22 @@ function resumoFrota(rows){
     totRes: sum(rows,'reserva'),
     porEmp: [...groupBy(rows, r=>r.codempresa||'—')]
       .map(([cod,rs])=>({cod, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
-      .sort((a,b)=>b.op-a.op),
+      .sort((a,b)=>rjOrder(a.cod,b.cod)),
     porHier: [...groupBy(rows, r=>r.hierarquia||'—')]
       .map(([h,rs])=>({h, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
       .sort((a,b)=>b.op-a.op),
   };
+}
+// app.js:2359 — filtro da tabela Frota por Empresa
+function filtrarFrotaEmpresas(items, status='ativas', termo=''){
+  const raw = String(termo||'').trim(), q = norm(raw);
+  return (items||[]).filter(e=>{
+    const situacao = norm(e.situacao||'');
+    if(status==='ativas' && situacao!=='regular') return false;
+    if(status==='canceladas' && situacao!=='cancelado') return false;
+    if(q && !(norm(e.nome_empresa||'').includes(q) || String(e.cod||'').includes(raw))) return false;
+    return true;
+  });
 }
 
 // app.js:726 — inicia uma nova tentativa de escrever um resultado nesta view; retorna o
@@ -218,7 +236,7 @@ module.exports = {
   fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, situacaoHTML, isLinhaAtiva, isVigente, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike, municipiosExatos,
   tabMatchesEvent, dispatchRealtime,
-  resumoRelatorio, resumoFrota, pageBounds,
+  resumoRelatorio, rjOrder, resumoFrota, filtrarFrotaEmpresas, pageBounds,
   beginGen, isCurrentGen, commitViewResult, pushDetail, popDetail,
   MAX_TABS, makeTab, openTabState, closeTabState,
 };

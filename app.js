@@ -481,7 +481,7 @@ let origemMap = null;    // { [cod_origem]: nome_origem }
 let terminalRows = null; // itinerario_teste com tipo_logradouro='Terminal': [{nome_logradouro,codlinha,cod_municipio_origem}]
 // caches carregados e invalidados JUNTOS → cada grupo num objeto só (ver CACHE_INVALIDATORS)
 const evLookups = { emp:null, lin:null };  // lookups de evento: emp={[id]:evento_empresa}, lin={[id]:evento_linha}
-const empresas  = { map:null, list:null }; // cadastro (nome↔RJ): map={[codempresa]:nome_empresa}, list=linhas cruas p/ busca client-side
+const empresas  = { map:null, list:null, byCod:null }; // cadastro: map nome↔RJ, byCod registro deduplicado, list crua p/ busca
 
 // função pura (domínio), só mora aqui perto de quem a usa primeiro — não acessa o cache acima
 const norm = s => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
@@ -514,13 +514,18 @@ async function getEmpresas() {
   const rows = await sbFetch('codempresa_teste', 'select=codempresa,nome_empresa,situacao,cassada,sob_intervencao&limit=2000');
   empresas.list = rows;
   empresas.map = {};
+  empresas.byCod = {};
   // alguns RJ aparecem duplicados (ex.: 103) → prioriza a entrada REGULAR/não cassada
   const melhor = r => (r && !r.cassada && String(r.situacao||'').toUpperCase()==='REGULAR') ? 2 : (r && !r.cassada ? 1 : 0);
   const best = {};
   rows.forEach(r => {
     const k = r.codempresa;
     if (k==null) return;
-    if (!(k in empresas.map) || melhor(r) > best[k]) { empresas.map[k] = r.nome_empresa; best[k] = melhor(r); }
+    if (!(k in empresas.map) || melhor(r) > best[k]) {
+      empresas.map[k] = r.nome_empresa;
+      empresas.byCod[k] = r;
+      best[k] = melhor(r);
+    }
   });
   return empresas.map;
 }
@@ -2345,7 +2350,7 @@ LOADERS.relatoriosGerenciais = async () => {
     <div class="doc-foot">Consolidado sobre ${total} linhas · cadastro DETRO-RJ · DIVAT</div></div>`;
 };
 // Agregação PURA da Frota por Empresa (testável em tests/): total geral + quebra por empresa e
-// por hierarquia. num() trata vazio/inválido como 0; ordena por frota operacional desc.
+// por hierarquia. num() trata vazio/inválido como 0; empresas ficam em RJ numérico crescente.
 function resumoFrota(rows){
   const num = v => { const n = Number(v); return isNaN(n) ? 0 : n; };
   const sum = (arr,f) => arr.reduce((s,r)=>s+num(r[f]),0);
@@ -2354,40 +2359,86 @@ function resumoFrota(rows){
     totRes: sum(rows,'reserva'),
     porEmp: [...groupBy(rows, r=>r.codempresa||'—')]
       .map(([cod,rs])=>({cod, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
-      .sort((a,b)=>b.op-a.op),
+      .sort((a,b)=>rjOrder(a.cod,b.cod)),
     porHier: [...groupBy(rows, r=>r.hierarquia||'—')]
       .map(([h,rs])=>({h, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
       .sort((a,b)=>b.op-a.op),
   };
 }
+// Filtro PURO da tabela de frota. REGULAR = ativa; CANCELADO = cancelada; os demais estados
+// aparecem apenas em "Todas". A busca única casa nome normalizado ou trecho do RJ.
+function filtrarFrotaEmpresas(items, status='ativas', termo=''){
+  const raw = String(termo||'').trim(), q = norm(raw);
+  return (items||[]).filter(e=>{
+    const situacao = norm(e.situacao||'');
+    if(status==='ativas' && situacao!=='regular') return false;
+    if(status==='canceladas' && situacao!=='cancelado') return false;
+    if(q && !(norm(e.nome_empresa||'').includes(q) || String(e.cod||'').includes(raw))) return false;
+    return true;
+  });
+}
 // Frota consolidada por empresa (total geral + quebra por hierarquia) — item 16
 LOADERS.frotaPorEmpresa = async () => {
-  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
+  const view = currentView, gen = beginGen(view), pane = view._pane;
   const [rows] = await Promise.all([
     sbFetch('qh_teste', `select=codempresa,hierarquia,frota_operacional,reserva&limit=10000`),
     getEmpresas()
   ]);
-  if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}${emptyBox('Nenhuma frota cadastrada.')}</div>`; return; }
+  if(!isCurrentGen(view, gen)) return;
+  if(!rows.length){
+    pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}${emptyBox('Nenhuma frota cadastrada.')}</div>`;
+    commitViewResult(view, gen, { pdfHTML:null });
+    return;
+  }
   const fmtN = n => n.toLocaleString('pt-BR');
   const { totOp, totRes, porEmp, porHier } = resumoFrota(rows);
+  const frotaEmpresas = porEmp.map(e=>{
+    const cadastro = empresas.byCod?.[e.cod];
+    return { ...e, nome_empresa:cadastro?.nome_empresa || empNome(e.cod), situacao:cadastro?.situacao || '' };
+  });
   const h3 = t => `<h3 class="doc-h3">${t}</h3>`;
-  pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}
-    ${bannerTrunc(rows)}
-    <div class="kpi-grid">
+  const kpisHTML = `<div class="kpi-grid">
       <div class="kpi"><b>${fmtN(totOp)}</b><span>Frota operacional</span></div>
       <div class="kpi"><b>${fmtN(totRes)}</b><span>Reserva</span></div>
       <div class="kpi"><b>${rows.length}</b><span>Linhas</span></div>
       <div class="kpi"><b>${porEmp.length}</b><span>Empresas</span></div>
       <div class="kpi"><b>${porHier.length}</b><span>Hierarquias</span></div>
-    </div>
+    </div>`;
+  const empCols = [{t:'RJ',w:'62px'},{t:'Empresa'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}];
+  const empRowHTML = e=>`<tr><td class="td-num">${esc(e.cod)}</td><td class="td-logr">${esc(e.nome_empresa)}</td><td class="td-num">${e.n}</td><td class="td-sentido">${fmtN(e.op)}</td><td class="td-num">${fmtN(e.res)}</td></tr>`;
+  const empTableHTML = items=>tableHTML(empCols, items.map(empRowHTML).join(''), `${items.length} empresa(s)`);
+  const hierHTML = tableHTML([{t:'Hierarquia'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}],
+    porHier.map(x=>`<tr><td class="td-logr">${esc(orDash(x.h))}</td><td class="td-num">${x.n}</td><td class="td-sentido">${fmtN(x.op)}</td><td class="td-num">${fmtN(x.res)}</td></tr>`).join(''));
+  const footHTML = `<div class="doc-foot">Consolidado sobre ${rows.length} linhas · cadastro DETRO-RJ · DIVAT</div>`;
+  const pdfHTML = items=>`<div class="doc">${docHead('Frota por Empresa')}${bannerTrunc(rows)}${kpisHTML}
+    ${h3('Frota por empresa')}${items.length ? empTableHTML(items) : emptyBox('Nenhuma empresa com esse filtro.')}
+    ${h3('Frota por hierarquia')}${hierHTML}${footHTML}</div>`;
+  pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}
+    ${bannerTrunc(rows)}${kpisHTML}
     ${h3('Frota por empresa')}
-    ${tableHTML([{t:'RJ',w:'62px'},{t:'Empresa'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}],
-      porEmp.map(e=>`<tr><td class="td-num">${esc(e.cod)}</td><td class="td-logr">${esc(empNome(e.cod))}</td><td class="td-num">${e.n}</td><td class="td-sentido">${fmtN(e.op)}</td><td class="td-num">${fmtN(e.res)}</td></tr>`).join(''),
-      `${porEmp.length} empresa(s) · total operacional ${fmtN(totOp)} · reserva ${fmtN(totRes)}`)}
-    ${h3('Frota por hierarquia')}
-    ${tableHTML([{t:'Hierarquia'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}],
-      porHier.map(x=>`<tr><td class="td-logr">${esc(orDash(x.h))}</td><td class="td-num">${x.n}</td><td class="td-sentido">${fmtN(x.op)}</td><td class="td-num">${fmtN(x.res)}</td></tr>`).join(''))}
-    <div class="doc-foot">Consolidado sobre ${rows.length} linhas · cadastro DETRO-RJ · DIVAT</div></div>`;
+    <div class="loc-tools">
+      <label>Situação <select id="frotaEmpSit"><option value="todas">Todas</option><option value="ativas" selected>Ativas</option><option value="canceladas">Canceladas</option></select></label>
+      <label>Buscar <input type="text" id="frotaEmpBusca" placeholder="nome ou RJ" autocomplete="off"></label>
+    </div>
+    <div id="frotaEmpResult"></div>
+    ${h3('Frota por hierarquia')}${hierHTML}${footHTML}</div>`;
+  const result = pane.querySelector('#frotaEmpResult');
+  const sel = pane.querySelector('#frotaEmpSit'), inp = pane.querySelector('#frotaEmpBusca');
+  const paint = ()=>{
+    const filtradas = filtrarFrotaEmpresas(frotaEmpresas, sel.value, inp.value);
+    if(!filtradas.length){
+      result.innerHTML = emptyBox('Nenhuma empresa com esse filtro.');
+    } else {
+      paginateTable(result, filtradas, {
+        cols:empCols, rowHTML:empRowHTML, foot:t=>t+' empresa(s)', unit:'empresas',
+        pageSize:25, pdf:false, view, gen,
+      });
+    }
+    commitViewResult(view, gen, { pdfHTML:()=>pdfHTML(filtradas) });
+  };
+  sel.addEventListener('change', paint);
+  inp.addEventListener('input', debounce(paint));
+  paint();
 };
 LOADERS.pesquisaEvento = async () => {
   searchPanel({ title:'Pesquisa de Evento', placeholder:'Termo livre (processo, descrição, observação)', onRun: async(term, host)=>{
@@ -3095,7 +3146,7 @@ const CACHE_INVALIDATORS = {
   itinerario_teste:     () => { terminalRows = null; },
   evento_empresa_teste: () => { evLookups.emp = null; },
   evento_linha_teste:   () => { evLookups.lin = null; },
-  codempresa_teste:     () => { empresas.map = null; empresas.list = null; getEmpresas().catch(()=>{}); },
+  codempresa_teste:     () => { empresas.map = null; empresas.list = null; empresas.byCod = null; getEmpresas().catch(()=>{}); },
   portaria_teste:       () => { _portariaAnos = null; },
   localidades_teste:    () => { _localidadesList = null; },
 };
