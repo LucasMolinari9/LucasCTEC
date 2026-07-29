@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-07-29T04:30:00-03:00",
+  "target": {
+    "projectRef": "gontnlfmothfglssbyyk",
+    "environment": "teste",
+    "productionRefRejected": "lwzsxuaqqeoamukduhev"
+  },
+  "methodology": {
+    "runsPerTemperature": 5,
+    "cold": "cache de lookups recriado a cada execução",
+    "warm": "uma execução de aquecimento e cinco execuções com cache de lookups",
+    "metrics": ["requests", "uniqueRequests", "redundantRequests", "durationMs", "payloadBytes", "maxConcurrency", "errors"]
+  },
+  "before": {
+    "hero": {
+      "cold": {"requests": 1, "durationMedianMs": 49.1, "payloadMedianBytes": 15265, "redundantMedian": 0, "maxConcurrency": 1, "errors": 0},
+      "warm": {"requests": 1, "durationMedianMs": 35.6, "payloadMedianBytes": 15265, "redundantMedian": 0, "maxConcurrency": 1, "errors": 0}
+    },
+    "rioNiteroi": {
+      "cold": {"requests": 5, "durationMedianMs": 243.9, "payloadMedianBytes": 1232598, "redundantMedian": 0, "maxConcurrency": 1, "errors": 0},
+      "warm": {"requests": 4, "durationMedianMs": 206.2, "payloadMedianBytes": 1221021, "redundantMedian": 0, "maxConcurrency": 1, "errors": 0}
+    },
+    "rioSao": {
+      "cold": {"requests": 18, "durationMedianMs": 457.8, "payloadMedianBytes": 381002, "redundantMedian": 1, "maxConcurrency": 1, "errors": 0},
+      "warm": {"requests": 17, "durationMedianMs": 414.4, "payloadMedianBytes": 369425, "redundantMedian": 1, "maxConcurrency": 1, "errors": 0}
+    },
+    "centroNiteroi": {
+      "cold": {"requests": 9, "durationMedianMs": 197.1, "payloadMedianBytes": 181390, "redundantMedian": 0, "maxConcurrency": 4, "errors": 0},
+      "warm": {"requests": 6, "durationMedianMs": 117.2, "payloadMedianBytes": 106832, "redundantMedian": 0, "maxConcurrency": 3, "errors": 0}
+    }
+  },
+  "after": {
+    "rioNiteroi": {
+      "cold": {"requests": 5, "durationMedianMs": 229.5, "payloadMedianBytes": 1232598, "redundantMedian": 0, "maxConcurrency": 1, "errors": 0},
+      "warm": {"requests": 4, "durationMedianMs": 185.0, "payloadMedianBytes": 1221021, "redundantMedian": 0, "maxConcurrency": 1, "errors": 0}
+    },
+    "rioSao": {
+      "cold": {"requests": 13, "durationMedianMs": 327.6, "payloadMedianBytes": 306102, "redundantMedian": 0, "maxConcurrency": 1, "errors": 0},
+      "warm": {"requests": 12, "durationMedianMs": 308.5, "payloadMedianBytes": 294525, "redundantMedian": 0, "maxConcurrency": 1, "errors": 0}
+    }
+  },
+  "comparisonPercent": {
+    "rioNiteroi": {
+      "cold": {"requests": 0.0, "duration": -5.9, "payload": 0.0},
+      "warm": {"requests": 0.0, "duration": -10.3, "payload": 0.0}
+    },
+    "rioSao": {
+      "cold": {"requests": -27.8, "duration": -28.4, "payload": -19.7},
+      "warm": {"requests": -29.4, "duration": -25.6, "payload": -20.3}
+    }
+  }
+}
