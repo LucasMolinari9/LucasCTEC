@@ -1,24 +1,13 @@
 'use strict';
-/* Harness reproducing the SUPABASE CONFIG functions from app.js (lines 618-684).
-   SB_TIMEOUT_MS is made mutable (let) so the timeout test can shrink it.
-   Everything else is copied verbatim. */
+/* Harness de I/O da configuração Supabase.
+   A seleção de ambiente vem do módulo real; somente fetch/timeout/retry continuam isolados,
+   com SB_TIMEOUT_MS mutável para o teste de timeout. */
 
 const SB_URL = 'https://example.invalid';
 const SB_KEY = 'fake-anon-key';
 const SB = { url: SB_URL, key: SB_KEY };
 
-function selecionarSupabase(hostname, config){
-  const host = String(hostname || '').trim().toLowerCase().replace(/\.$/, '');
-  const hostsProd = (config.hostsProd || []).map(h => String(h).trim().toLowerCase().replace(/\.$/, ''));
-  const producao = hostsProd.includes(host);
-  const alvo = producao
-    ? { url: config.prodUrl,  key: config.prodKey,  ambiente: 'producao' }
-    : { url: config.testeUrl, key: config.testeKey, ambiente: 'teste' };
-  if (!alvo.url || !alvo.key) {
-    throw new Error(`Configuração Supabase ausente para o ambiente de ${alvo.ambiente}.`);
-  }
-  return Object.freeze({ ...alvo, hostname: host });
-}
+const { selecionarSupabase } = require('../shared/environment.js');
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 
