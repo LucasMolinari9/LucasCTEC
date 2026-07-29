@@ -16,6 +16,9 @@ const TESTS_DIR = __dirname;
 const INDEX = path.join(__dirname, '..', 'index.html');
 const APPJS = path.join(__dirname, '..', 'app.js');
 const CSS   = path.join(__dirname, '..', 'styles.css');
+const SHARED_FILES = ['shared/environment.js', 'shared/domain.js', 'shared/view-state.js'];
+const sharedSources = SHARED_FILES.map(p => ({ p, src:fs.readFileSync(path.join(__dirname, '..', p), 'utf8') }));
+const canonicalJs = [js, ...sharedSources.map(x=>x.src)].join('\n');
 
 let problems = 0;
 const fail   = msg => { console.log('  ✗', msg); problems++; };
@@ -29,7 +32,8 @@ const css  = fs.readFileSync(CSS, 'utf8');
 console.log('\n[1] Sintaxe do app.js + index.html sem <script> inline');
 try {
   new vm.Script(js, { filename: 'app.js' });                    // só COMPILA — não roda
-  okline(`sintaxe OK (${js.split('\n').length} linhas em app.js)`);
+  for (const item of sharedSources) new vm.Script(item.src, { filename:item.p });
+  okline(`sintaxe OK (${js.split('\n').length} linhas em app.js + ${sharedSources.length} módulos compartilhados)`);
 } catch (e){
   const first = String(e.stack || '').split('\n')[0];
   const mm = /:(\d+)\s*$/.exec(first);
@@ -41,6 +45,13 @@ if (/<script(?![^>]*\bsrc=)[^>]*>/.test(html)) {
   fail('<script> inline no index.html — a CSP (script-src \'self\') bloqueia; mova o código para o app.js.');
 } else {
   okline('index.html sem <script> inline (compatível com a CSP)');
+}
+const scriptOrder = ['shared/environment.js', 'shared/domain.js', 'shared/view-state.js', 'app.js']
+  .map(src => html.indexOf(`<script src="${src}"></script>`));
+if (scriptOrder.some(i => i < 0) || scriptOrder.some((v,i,a) => i && v <= a[i-1])) {
+  fail('módulos compartilhados ausentes ou carregados depois do app.js');
+} else {
+  okline('módulos compartilhados carregam antes do app.js');
 }
 
 // Irmã da guarda acima, para o outro eixo da CSP: desde 27/07/2026 o style-src é 'self' com
@@ -94,7 +105,7 @@ console.log('\n[1b] Segredo: nenhuma JWT service_role no index.html/app.js');
 }
 
 // ---------- [2] guarda anti-drift ----------
-console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
+console.log('\n[2] Guarda anti-drift (harness importa os módulos reais; snippets canônicos presentes)');
 // trecho distintivo de cada função copiada nos harness; se sumir do app.js,
 // a cópia no harness provavelmente ficou desatualizada.
 const canon = [
@@ -151,6 +162,7 @@ const canon = [
   ['ehCancelamento',       'const ehCancelamento = e => e && e.name === CANCELADO;'],
   ['resumoRelatorio',      'function resumoRelatorio(rows){'],
   ['resumoFrota',          'function resumoFrota(rows){'],
+  ['dedupEmpresasPorRJ',   'function dedupEmpresasPorRJ(rows){'],
   ['pageBounds',           'const p = Math.min(Math.max(1, (page|0) || 1), totalPages);'],
   ['MAX_TABS',             'const MAX_TABS = 5;'],
   ['makeTab',              'function makeTab(id){ return { id, line: null, view: null, navStack: [], stale: false }; }'],
@@ -158,8 +170,8 @@ const canon = [
   ['closeTabState',        'function closeTabState(tabs, activeTabId, id){'],
 ];
 for (const [name, snippet] of canon){
-  if (js.includes(snippet)) okline(`${name}`);
-  else fail(`harness DESATUALIZADO p/ "${name}": não achei no app.js → ${snippet}`);
+  if (canonicalJs.includes(snippet)) okline(`${name}`);
+  else fail(`harness DESATUALIZADO p/ "${name}": não achei no app.js nem nos módulos compartilhados → ${snippet}`);
 }
 
 // A guarda acima só vale para quem está no `canon`. Uma cópia exportada pelo harness SEM
