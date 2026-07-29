@@ -51,6 +51,12 @@ grant execute on function
   public.divat_data_quality(),
   public.realtime_tables()
 to anon, authenticated;
+revoke execute on function
+  public.divat_api_shape(),
+  public.divat_security_shape(),
+  public.divat_data_quality(),
+  public.realtime_tables()
+from divat_auditor;
 
 grant select on
   public.tabela_vista_teste, public.codempresa_teste, public.tarifa_atual_teste,
