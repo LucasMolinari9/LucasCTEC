@@ -123,8 +123,9 @@
     const best = new Map();
     const score = r => (r && !r.cassada && String(r.situacao||'').toUpperCase()==='REGULAR') ? 2 : (r && !r.cassada ? 1 : 0);
     for (const row of rows || []){
-      const key = row && row.codempresa;
-      if (key==null) continue;
+      const rawKey = row && row.codempresa;
+      if (rawKey==null) continue;
+      const key = String(rawKey);
       const atual = best.get(key);
       if (!atual || score(row) > atual.score) best.set(key, { row, score:score(row) });
     }
