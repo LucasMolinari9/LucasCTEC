@@ -7,11 +7,11 @@ histórico/eventos, empresas e relatórios. Os dados são mantidos pelo dono dir
 
 ## Como funciona (resumo)
 
-- **Frontend = três arquivos estáticos:** [`index.html`](index.html) (HTML),
-  [`styles.css`](styles.css) (todo o CSS) e [`app.js`](app.js) (todo o JS, ~3,2k linhas num
-  IIFE). Não há build, framework nem `package.json`: é só servir a pasta. O JS entra por
-  `<script src>` clássico no fim do `<body>` — **nada de `<script>` inline**, porque a CSP
-  publica `script-src 'self'` e bloquearia.
+- **Frontend estático zero-build:** [`index.html`](index.html), [`styles.css`](styles.css),
+  três módulos em [`shared/`](shared/) e [`app.js`](app.js) (~3,2k linhas num IIFE).
+  Os scripts clássicos carregam na ordem environment → domain → view-state → app. Não há
+  framework nem `package.json`; nada de `<script>` inline, pois a CSP publica
+  `script-src 'self'`.
 - As consultas vão direto ao **Supabase via REST** (PostgREST) com `fetch`. O `supabase-js`
   entra **só** para o canal **Realtime**, é **vendorado** em
   [`vendor/`](vendor/) (versão fixa, mesma origem) e é injetado dinamicamente pelo `app.js`.
@@ -30,15 +30,15 @@ python3 -m http.server 8000   # depois abra http://localhost:8000
 
 ## Testes (gate de pré-publicação)
 
-A lógica pura do `app.js` tem testes em [`tests/`](tests/) (Node puro, sem dependências).
+A lógica pura dos módulos compartilhados e do `app.js` tem testes em [`tests/`](tests/) (Node puro, sem dependências).
 **Antes de publicar, rode:**
 
 ```bash
 node tests/check.js
 ```
 
-Ele valida a sintaxe do `app.js`, garante que **não** voltou `<script>` inline no `index.html`,
-confere as cópias de teste (guarda anti-drift) e roda todos os testes. Só publique se sair
+Ele valida a sintaxe do `app.js` e dos módulos, a ordem de carga, garante que **não** voltou
+`<script>` inline no `index.html` e roda os testes contra os módulos reais. Só publique se sair
 **tudo verde**.
 
 Esse gate é **offline e sem dependências** de propósito. As checagens que precisam de navegador
