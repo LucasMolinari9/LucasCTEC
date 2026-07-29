@@ -31,7 +31,8 @@ Validações já concluídas no teste:
 - allowlist anônima: exatamente duas RPCs de produto;
 - `authenticated`: zero funções executáveis e zero privilégios de tabela;
 - 14 tabelas continuam legíveis por `anon`, sem escrita;
-- quatro diagnósticos em `audit`, executáveis apenas por `divat_auditor`;
+- smoke das duas RPCs de produto e da leitura pública: passou;
+- quatro diagnósticos em `audit`: todos executaram como `divat_auditor`, sem `SELECT` direto;
 - papéis de auditoria sem login, superuser, bypass RLS, criação de DB/role ou replicação;
 - rollback completo executado dentro de transação e revertido: passou;
 - advisors de segurança: somente os quatro avisos `INFO` já esperados para staging com RLS e sem
