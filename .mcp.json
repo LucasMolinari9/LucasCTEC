@@ -3,6 +3,10 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=lwzsxuaqqeoamukduhev&read_only=true&features=docs,database,debugging,development"
+    },
+    "supabase-teste": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=gontnlfmothfglssbyyk&read_only=true&features=docs,database,debugging,development"
     }
   }
 }

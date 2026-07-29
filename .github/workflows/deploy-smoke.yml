@@ -38,6 +38,14 @@ jobs:
       # Vercel e salve o MESMO valor como secret do repositório com este nome. Sem ele, o script
       # falha com diagnóstico explícito em vez de testar por engano a tela de login da Vercel.
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      # O deployment_status entrega a URL POR-DEPLOY (divatdetro-<hash>-….vercel.app), que não
+      # está em HOSTS_PROD — e não deve estar: a allowlist existe justamente porque esses
+      # hostnames são gerados a cada deploy e não dá para enumerá-los. Verificar produção por ela
+      # fazia o gate exigir que a URL efêmera fosse produção, o oposto do isolamento que ele
+      # deveria provar — e era metade da razão de o smoke nunca ter passado. Produção é sempre
+      # verificada pelo alias estável. Este valor precisa continuar batendo com HOSTS_PROD no
+      # app.js; se divergir, o check_deploy.mjs reprova dizendo qual allowlist encontrou.
+      PRODUCTION_URL: https://divatdetro.vercel.app
       DEPLOY_URL: >-
         ${{ github.event_name == 'workflow_dispatch' &&
             inputs.url ||
@@ -55,5 +63,19 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
+      - name: Resolve a URL a verificar
+        id: alvo
+        shell: bash
+        run: |
+          url="$DEPLOY_URL"
+          # Num despacho manual a URL foi escolhida a dedo — respeitá-la como veio. Só a URL
+          # vinda do deployment_status precisa ser trocada pelo alias canônico.
+          if [ "$GITHUB_EVENT_NAME" != 'workflow_dispatch' ]; then
+            case "$(echo "$DEPLOY_ENVIRONMENT" | tr '[:upper:]' '[:lower:]')" in
+              *prod*) url="$PRODUCTION_URL" ;;
+            esac
+          fi
+          echo "Verificando: $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
       - name: Headers, allowlist e isolamento do Supabase
-        run: node scripts/check_deploy.mjs "$DEPLOY_URL" "$DEPLOY_ENVIRONMENT"
+        run: node scripts/check_deploy.mjs "${{ steps.alvo.outputs.url }}" "$DEPLOY_ENVIRONMENT"
