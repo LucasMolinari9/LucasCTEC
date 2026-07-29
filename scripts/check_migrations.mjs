@@ -5,9 +5,11 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = join(ROOT, 'supabase', 'migrations');
-const ALLOWED_ANON_RPCS = new Set([
+const ALLOWED_ANON_EXECUTE = new Set([
   'public.divat_busca_logradouro',
   'public.divat_linhas_regiao',
+  // Helper necessário à função INVOKER, mas invisível na Data API porque private não é exposto.
+  'private.f_unaccent',
 ]);
 
 const failures = [];
@@ -58,7 +60,7 @@ for (const file of files) {
       .map(target => target[1].toLowerCase());
     if (!targets.length) fail(file, 'GRANT EXECUTE TO anon não pôde ser interpretado de forma segura');
     for (const target of targets) {
-      if (!ALLOWED_ANON_RPCS.has(target)) fail(file, `${target} não está na allowlist anônima de produto`);
+      if (!ALLOWED_ANON_EXECUTE.has(target)) fail(file, `${target} não está na allowlist anônima de execução`);
     }
   }
 
