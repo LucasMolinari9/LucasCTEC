@@ -139,11 +139,13 @@ auditoria — e para que a decisão de conviver com elas seja explícita, não e
 
 **9.1 — Defaults do role `supabase_admin` (SEC-01, parcial).** Existe um segundo conjunto de
 default privileges, dono `supabase_admin`, concedendo `arwdDxtm` (inclui INSERT/UPDATE/DELETE/
-TRUNCATE) a `anon` e `authenticated` em tabelas de `public`. Só atinge objetos criados **por esse
-role**; o painel do Supabase cria como `postgres`, que já está fechado. **Não é fechável:**
-`postgres` não é superusuário no Supabase e o `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin`
-responde `42501: permission denied to change default privileges`. **Mitigação:** o gate
-`check_grants.mjs` roda diariamente e pega qualquer tabela que apareça com grant de escrita.
+TRUNCATE) a `anon` e `authenticated` em tabelas de `public`. A restauração no projeto novo
+mostrou que tratar isso como teórico é incorreto: objetos criados pelo fluxo gerenciado podem
+receber esses grants. **Não é fechável pelo `postgres` gerenciado:** o
+`ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin` responde
+`42501: permission denied to change default privileges`. **Mitigações:** toda migração que cria
+tabela pública precisa revogar anon/authenticated e ligar RLS na mesma transação; o gate
+`check_migrations.mjs` cobra isso no diff; `check_grants.mjs` continua detectando drift vivo.
 
 **9.2 — Abuso da API pública (SEC-02).** A chave `anon` é pública por design e o navegador fala
 **direto** com o Supabase — a Vercel não está no caminho da requisição, então não há onde aplicar
@@ -162,3 +164,20 @@ ambos corrigidos: grants mais abertos que os da produção (`anon` com TRUNCATE)
 os valores dos CSVs. Mas a restauração **não foi levada até o fim**, o portal **nunca foi apontado
 para o banco restaurado** e **RTO/RPO seguem sem medição** — por isso SEC-06 continua **mitigado**,
 não encerrado. O que falta está listado em `docs/backup.md`.
+
+
+## 10. Fase 3 — RPCs diagnósticas e auditor mínimo
+
+No projeto de teste, a migração `20260729034018_phase3_moderate_hardening.sql` removeu as quatro
+RPCs diagnósticas da Data API e as colocou em `audit`. Somente
+`divat_busca_logradouro(text,integer)` e `divat_linhas_regiao(text,text)` seguem executáveis por
+`anon`; `authenticated` ficou sem grants porque o produto não usa Auth nem sessões.
+
+O owner `divat_audit_owner` é `NOLOGIN`, sem privilégios administrativos e herda somente
+`anon`. As funções diagnósticas são `SECURITY DEFINER` sob esse owner limitado e só
+`divat_auditor` pode executá-las. O login externo `divat_auditor_ci`, quando criado pelo runbook,
+é apenas membro desse papel e não tem `SELECT` direto nas tabelas.
+
+A aplicação em produção exige autorização separada. Até lá, os gates vivos existentes continuam
+consultando produção pelo caminho anterior, e o novo workflow de auditoria PostgreSQL é exclusivo
+do projeto de teste. Decisões, evidências e rollback: `docs/planos/fase-3-hardening-moderado.md`.
