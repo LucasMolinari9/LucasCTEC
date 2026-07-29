@@ -60,11 +60,19 @@ grant select on
   public.localidades_teste, public.origem_teste
 to authenticated;
 
+alter default privileges for role divat_audit_owner in schema audit
+  grant execute on functions to public;
+
 drop schema audit;
 drop schema private;
 
-revoke divat_auditor from divat_auditor_ci;
-drop role if exists divat_auditor_ci;
+do $
+begin
+  if exists (select 1 from pg_roles where rolname='divat_auditor_ci') then
+    revoke divat_auditor from divat_auditor_ci;
+    drop role divat_auditor_ci;
+  end if;
+end $;
 revoke anon from divat_audit_owner;
 revoke divat_audit_owner, divat_auditor from postgres;
 drop role divat_auditor;
