@@ -210,7 +210,7 @@
   .side-search-btn .t-ico svg{width:17px;height:17px}
   .side-search-btn:hover{background:rgba(255,255,255,.055);color:#fff}
   /* clicar em "Buscar" fica com o mesmo preenchimento sólido de `.topic-btn.active`.
-     Enquanto a busca estiver aberta, o tópico "Itinerários" por baixo NÃO recebe
+     Enquanto a busca estiver aberta, o tópico "Linhas" por baixo NÃO recebe
      `.active` (ver renderSideNav) — fica igual a qualquer outro item não selecionado,
      pra não ter dois itens com destaque ao mesmo tempo. */
   .side-search-btn.open{background:var(--blue);color:#fff}

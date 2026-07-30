@@ -1,5 +1,22 @@
 # Renomear os tópicos da sidebar — plano para o Codex (30/07/2026)
 
+> **EXECUTADO E CORRIGIDO — leia isto antes do resto.** O plano abaixo foi cumprido pelo PR #80,
+> mas com o **mapeamento errado**: ele pôs `Itinerários` no tópico `doc` e `Ligações` no `lig`,
+> invertendo os dois. O dono corrigiu no PR #81. **Os nomes finais são:**
+>
+> | `key` | `name` final |
+> |---|---|
+> | `doc` | **Linhas** |
+> | `emp` | **Empresa** |
+> | `lig` | **Itinerários** |
+> | `ger` | **Portarias** |
+> | (botão de busca) | **Buscar** |
+>
+> A seção "O mapeamento — e a única ambiguidade real" abaixo está **superada**: com `doc` =
+> "Linhas", a colisão que ela previa (tópico e card com o mesmo nome) deixou de existir. O resto
+> do documento — onde os rótulos vivem no código, o que não pode mudar, quais gates cobrem o quê
+> — continua correto e é o motivo de ele ficar no repo.
+
 Pedido do dono: trocar os rótulos dos tópicos do painel lateral para **Buscar, Ligações,
 Empresa, Portarias, Itinerários**.
 
