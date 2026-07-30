@@ -239,7 +239,13 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    `revisao-externa-*.md` ficam fora de propósito: são snapshots datados): (1) **fatos numéricos**
    declarados na prosa batem com o código — linhas do `app.js`, tamanho/percentual da seção
    `MODAL`, nº de views do `check_views.mjs`, `RT_TABLES`, tabelas do `backup_rest.mjs` (tolerância
-   de 8% nos "~Nk" e 1,5 ponto nos "~N%", para arredondamento não virar alarme); (2) todo **link
+   de 8% nos "~Nk" e 1,5 ponto nos "~N%", para arredondamento não virar alarme). **Desde
+   30/07/2026 essa conferência varre também os comentários de `.github/workflows/*.yml`** — só
+   ela, não as outras três: comentário de workflow é prosa viva que ninguém relê (não abre em
+   leitor de markdown), e foi por isso que o `views.yml` pôde afirmar "23 views" e "~62% do
+   app.js" com o gate verde (achado D da auditoria de 30/07). **Toda ocorrência é conferida, não
+   só a primeira** — a frase das views aparecia em três linhas do mesmo arquivo, e consertar uma
+   delas não pode bastar para o gate passar; (2) todo **link
    markdown** resolve; (3) `SB_URL`/`SB_KEY` **nunca** aparecem na mesma linha que `index.html` <!-- deriva-ok: enuncia a regra -->;
    (4) nenhum arquivo termina com **tag de ferramenta de IA vazada**. Se você mudar uma frase que
    carrega número, o gate cobra o número — **atualize o número, não apague a guarda** (se a frase

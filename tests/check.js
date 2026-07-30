@@ -215,6 +215,16 @@ console.log('\n[2b] Deriva docs × código');
     'docs/agents/domain.md', 'docs/agents/issue-tracker.md', 'docs/agents/triage-labels.md',
     'tests/README.md'].filter(existe);
 
+  // Comentário de workflow é prosa viva como qualquer outra — e prosa que ninguém relê, porque
+  // não abre em leitor de markdown. A 1ª versão desta guarda varria só `.md`, e por isso o
+  // `views.yml` pôde afirmar "23 views" e "~62% do app.js" (medido: 17 e ~58,8%) por dias, com o
+  // gate verde. Achado da auditoria preliminar de 30/07/2026. Os `.yml` entram SÓ na conferência
+  // de fatos numéricos: link markdown e `SB_URL` não são a linguagem deles.
+  const WORKFLOWS = existe('.github/workflows')
+    ? fs.readdirSync(path.join(RAIZ, '.github/workflows')).filter(f => /\.ya?ml$/.test(f)).sort()
+        .map(f => `.github/workflows/${f}`)
+    : [];
+
   // --- fatos computados do CÓDIGO (a fonte da verdade) ---
   const linhasApp = js.split('\n').length;
   const linhasArr = js.split('\n');
@@ -237,6 +247,11 @@ console.log('\n[2b] Deriva docs × código');
 
   // --- fatos que os docs AFIRMAM (regex contra o texto com espaços normalizados,
   //     para que quebra de linha do markdown não escape da checagem) ---
+  // Em `.yml` o marcador `#` do comentário é removido ANTES de normalizar o espaço: um comentário
+  // longo quebra em várias linhas, cada uma recomeçando com `#`, e sem tirá-lo a frase "Abre as 23
+  // \n#  views" nunca casa o regex — a guarda passaria cega, que é pior que não existir.
+  const normalizar = (arq, txt) =>
+    (/\.ya?ml$/.test(arq) ? txt.replace(/^[ \t]*#[ \t]?/gm, ' ') : txt).replace(/\s+/g, ' ');
   const num = s => parseFloat(String(s).replace(',', '.'));
   const FATOS = [
     { doc:'docs/estrutura-frontend.md', o:'linhas do app.js',      re:/~([\d,.]+)k linhas — extraído do HTML/, real:linhasApp,   esc:'k' },
@@ -250,23 +265,40 @@ console.log('\n[2b] Deriva docs × código');
     { doc:'CLAUDE.md',                  o:'tabelas do RT_TABLES',  re:/as ([\d]+) tabelas lidas pelo portal/,  real:rtTables,    esc:'exato' },
     { doc:'docs/backup.md',             o:'tabelas do backup',     re:/as \*\*([\d]+) tabelas\*\*, inclusive staging/, real:bkTodas,   esc:'exato' },
     { doc:'docs/backup.md',             o:'tabelas públicas',      re:/as \*\*([\d]+) tabelas públicas\*\*/,   real:bkPublicas,  esc:'exato' },
+    // `doc` pode ser uma LISTA de arquivos: o fato tem de aparecer em pelo menos um deles, e toda
+    // ocorrência em qualquer um é conferida. Nos workflows a lista é o diretório inteiro, de
+    // propósito — se a frase migrar do `views.yml` para outro workflow, continua coberta.
+    { doc:WORKFLOWS, o:'views do check_views (workflows)', re:/([\d]+)\s*views\b/, real:views,   esc:'exato' },
+    { doc:WORKFLOWS, o:'% da seção MODAL (workflows)',     re:/~([\d,.]+)% do app\.js/, real:modalPct, esc:'pct' },
   ];
-  let fatosOk = 0, fatosPulados = 0;
+  // TODA ocorrência é conferida, não só a primeira. A 1ª versão parava no primeiro casamento, e
+  // o `views.yml` afirma "23 views" em TRÊS linhas (1, 11 e 71): consertar uma e esquecer as
+  // outras deixaria o gate verde com a deriva ainda no arquivo — o mesmo bug, adiado.
+  let fatosOk = 0, fatosPulados = 0, ocorrencias = 0;
   for (const f of FATOS){
-    if (!existe(f.doc)) { fatosPulados++; continue; }
-    if (f.real == null) { fail(`[${f.doc}] não consegui computar "${f.o}" no código — a guarda ficou cega, conserte o extrator`); continue; }
-    const txt = ler(f.doc).replace(/\s+/g, ' ');
-    const dito = bloco(txt, f.re);
-    if (dito == null) { fail(`[${f.doc}] não achei a afirmação sobre "${f.o}" — se a frase mudou, atualize o regex em check.js (não apague a guarda)`); continue; }
-    const d = num(dito);
-    let ok, esperado;
-    if (f.esc === 'k'){ ok = Math.abs(d * 1000 - f.real) / f.real <= 0.08; esperado = `~${(Math.round(f.real / 100) / 10).toFixed(1).replace('.', ',')}k`; }
-    else if (f.esc === 'pct'){ ok = Math.abs(d - f.real) <= 1.5; esperado = `~${String(f.real).replace('.', ',')}%`; }
-    else { ok = d === f.real; esperado = String(f.real); }
-    if (ok) fatosOk++;
-    else fail(`[${f.doc}] "${f.o}": doc diz ${dito}${f.esc === 'pct' ? '%' : f.esc === 'k' ? 'k' : ''}, código diz ${f.real} (escreva ${esperado})`);
+    const alvos = (Array.isArray(f.doc) ? f.doc : [f.doc]).filter(existe);
+    if (!alvos.length) { fatosPulados++; continue; }
+    if (f.real == null) { fail(`[${alvos.join(', ')}] não consegui computar "${f.o}" no código — a guarda ficou cega, conserte o extrator`); continue; }
+    const gre = new RegExp(f.re.source, f.re.flags.includes('g') ? f.re.flags : f.re.flags + 'g');
+    let achou = 0, divergiu = 0;
+    for (const alvo of alvos){
+      for (const m of normalizar(alvo, ler(alvo)).matchAll(gre)){
+        achou++;
+        const dito = m[1], d = num(dito);
+        let ok, esperado;
+        if (f.esc === 'k'){ ok = Math.abs(d * 1000 - f.real) / f.real <= 0.08; esperado = `~${(Math.round(f.real / 100) / 10).toFixed(1).replace('.', ',')}k`; }
+        else if (f.esc === 'pct'){ ok = Math.abs(d - f.real) <= 1.5; esperado = `~${String(f.real).replace('.', ',')}%`; }
+        else { ok = d === f.real; esperado = String(f.real); }
+        if (!ok){
+          fail(`[${alvo}] "${f.o}": doc diz ${dito}${f.esc === 'pct' ? '%' : f.esc === 'k' ? 'k' : ''}, código diz ${f.real} (escreva ${esperado})`);
+          divergiu++;
+        }
+      }
+    }
+    if (!achou) fail(`[${alvos.join(', ')}] não achei a afirmação sobre "${f.o}" — se a frase mudou, atualize o regex em check.js (não apague a guarda)`);
+    else { ocorrencias += achou; if (!divergiu) fatosOk++; }
   }
-  okline(`fatos numéricos conferidos (${fatosOk}/${FATOS.length - fatosPulados})`);
+  okline(`fatos numéricos conferidos (${fatosOk}/${FATOS.length - fatosPulados} afirmações, ${ocorrencias} ocorrências)`);
 
   // --- todo LINK markdown aponta para algo que existe ---
   // Deliberadamente só links `[texto](caminho)`, não qualquer token em backtick: a primeira
