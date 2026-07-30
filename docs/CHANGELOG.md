@@ -18,18 +18,18 @@ de auditoria em `docs/`).
 - Nenhum gate do repo casa esses rótulos por texto (navegam por `data-view` e por `key`), então a
   renomeação não exigiu ajuste em `tests/` nem em `scripts/`.
 
-## 30/07/2026 — Card "Itinerários" removido (16 views)
+## 30/07/2026 — Card "Itinerários" movido para o tópico Itinerários
 
-- Apagados a entrada em `SECTIONS`, `renderItinerarios`, `LOADERS.itinerarios`, a entrada em
-  `VIEW_TABLES` e o ícone `route`, que ficou sem uso. O deep link `#/consulta/itinerarios` deixa
-  de resolver — mesmo comportamento dos 6 cards removidos mais cedo no dia.
-- **`itinerarioTableHTML` (+ `SENTIDO_ORDER`/`normSentido`) FICA:** é o corpo da seção
-  "Itinerário" da **Estrutura Operacional**, que continua lendo `itinerario_teste`. Apagar o
-  bloco inteiro teria esvaziado aquela seção em silêncio. O que sobrou ganhou comentário
-  dizendo por que não é órfão.
-- Contagem de views do `check_views.mjs`: **17 → 16**. A guarda `[2b]` do `tests/check.js` cobrou
-  os números no `CLAUDE.md` e no `README.md`, e o `realtime.test.js` cobrou o `EXPECTED` — os
-  três foram acertados junto, não depois.
+- Removido do tópico **Linhas** (PR #82) e **restaurado dentro do tópico Itinerários** (`lig`),
+  como primeiro card. Loader, render, ícone `route`, `VIEW_TABLES` e a entrada no
+  `check_views.mjs` voltaram intactos — o deep link `#/consulta/itinerarios` volta a resolver, e
+  `VIEW_TOPIC.itinerarios` agora aponta para `lig`, então o card é destacado no tópico certo pela
+  busca do topo. Views do `check_views.mjs`: **16 → 17** de novo.
+- `desc` dos dois tópicos acertadas junto: a de `doc` não anuncia mais "Itinerário" (o card saiu
+  de lá) e a de `lig` passou a anunciar o percurso além das buscas.
+- O tópico e seu primeiro card passam a ter o **mesmo nome** — decisão consciente do dono, não
+  descuido: o card é o documento do percurso de UMA linha, os outros são buscas que partem de
+  logradouro/terminal/localidade.
 
 ## 26/06/2026 — Auditoria de segurança (escrita fechada de verdade)
 

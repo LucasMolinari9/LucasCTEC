@@ -81,7 +81,7 @@ O próprio marcador do bloco traz um **sub-índice**. A ordem das sub-marcas:
 
 `Chrome do modal` · `Dispatcher — runView` · `Helpers de documento e busca de linha` ·
 `Eventos — helpers compartilhados` · `DOC · Histórico (linha)` ·
-`Itinerário — tabela compartilhada` · `DOC · Quadro de Horários` · `DOC · Tarifas` · `DOC · Frota` ·
+`DOC · Itinerários` · `DOC · Quadro de Horários` · `DOC · Tarifas` · `DOC · Frota` ·
 `DOC · Estrutura Operacional` · `DOC · Empresas` · `DOC · Municípios / entre-municípios` ·
 `DOC · Portaria` · `DOC · Localidades`.
 
@@ -155,7 +155,8 @@ paginação vive na seção `COMPONENTES AUXILIARES` (exceto `paginateEvents`, q
 - **Paginado (tela):** listas de linha (via `lineResults`), **Portarias**, **Seções por Empresa**,
   **Empresas Regulares**, **Quadro "por empresa"** (`renderEmpresaQuadros`).
 - **NÃO paginado — documento de 1 linha (leitura corrida + alimenta o PDF inteiro):**
-  Quadro de Horários (modo linha), Tarifas, Frota, Estrutura, Seções por Ligação.
+  Itinerários, Quadro de Horários (modo linha), Tarifas, Frota, Estrutura,
+  Seções por Ligação.
 - **NÃO paginado — relatório agregado (lido/impresso inteiro):** Frota por Empresa.
 - **Deixado para depois:** `munTable` (lista de municípios de uma região, ≤~92, pick-list curto) e
   `localidades`/`renderLocalidadeSecoes` (estrutura **compósita** agrupada com sub-tabelas — paginar
