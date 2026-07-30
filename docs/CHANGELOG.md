@@ -6,11 +6,17 @@ de auditoria em `docs/`).
 
 ## 30/07/2026 — Rótulos dos tópicos do painel lateral
 
-- Os rótulos visíveis passaram de **Documentos da Linha** para **Itinerários**, de **Empresas**
-  para **Empresa** e de **Consultas de Ligações** para **Ligações**; o botão **Buscar Linha**
-  passou a **Buscar**. As `key` (`doc`, `emp`, `lig`, `ger`) e as rotas permaneceram intactas.
-- A mudança cria a colisão solicitada entre o tópico **Itinerários** e seu primeiro card, também
-  chamado **Itinerários**; a decisão entre manter ou desambiguar um dos nomes ficou pendente.
+- Os rótulos visíveis passaram de **Documentos da Linha** para **Linhas**, de **Empresas** para
+  **Empresa** e de **Consultas de Ligações** para **Itinerários**; o botão **Buscar Linha** passou
+  a **Buscar**. As `key` (`doc`, `emp`, `lig`, `ger`) e as rotas `#/topico/<key>` permaneceram
+  intactas — só o campo `name` de `SECTIONS` e o rótulo literal do botão em `renderSideNav`.
+- Correção no mesmo dia (PR #81 sobre o #80): a primeira leitura do pedido pôs **Itinerários** no
+  tópico `doc` e **Ligações** no `lig`, invertendo os dois. Além de errado, criava colisão com o
+  card **Itinerários** que vive dentro do `doc`. Os nomes acima são os corretos: **Linhas** é o
+  tópico dos documentos de UMA linha; **Itinerários** é o das consultas por logradouro, terminal,
+  localidade e município.
+- Nenhum gate do repo casa esses rótulos por texto (navegam por `data-view` e por `key`), então a
+  renomeação não exigiu ajuste em `tests/` nem em `scripts/`.
 
 ## 26/06/2026 — Auditoria de segurança (escrita fechada de verdade)
 

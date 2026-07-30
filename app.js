@@ -240,8 +240,8 @@ const I = {
 const SECTIONS = [
   // Documentos: os mais consultados primeiro; cada descrição diz o que o DOCUMENTO contém
   // (a instrução "busque a linha…" repetida virava ruído — a busca fica dentro do card).
-  { key:'doc', name:'Itinerários',
-    icon:'file', desc:'Percurso, quadro de horários, tarifas, frota e histórico de cada linha regular.',
+  { key:'doc', name:'Linhas',
+    icon:'file', desc:'Itinerário, quadro de horários, tarifas, frota e histórico de cada linha regular.',
     items:[
       ['route','Itinerários','Percurso por sentido: logradouros e municípios','itinerarios',false],
       ['clock','Quadro de Horários','Partidas por sentido e dia — por linha ou empresa','quadroHorarios',false],
@@ -259,8 +259,8 @@ const SECTIONS = [
       ['segments','Seções por Empresa','Seções atendidas por operadora','secoesPorEmpresa',false],
       ['fleet','Frota por Empresa','Frota consolidada por operadora e hierarquia','frotaPorEmpresa',false],
     ]},
-  { key:'lig', name:'Ligações',
-    icon:'hub', desc:'Busque linhas por nome, número, logradouro, terminal ou município.',
+  { key:'lig', name:'Itinerários',
+    icon:'hub', desc:'Busque linhas por logradouro, terminal, localidade ou município.',
     items:[
       ['signpost','Ligações por Logradouro','Linhas que passam por uma via','ligacoesPorLogradouro',false],
       ['map','Município e Região','Linhas por origem e destino','municipioRegiao',false],
@@ -283,7 +283,7 @@ const SECTIONS = [
 const app = document.getElementById('app');
 const svg = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 
-// cor única (mesmo azul de "Itinerários") pra todos os cards e pro destaque do
+// cor única (mesmo azul de "Linhas") pra todos os cards e pro destaque do
 // tópico ativo na sidebar — parou de variar por família de tópico.
 // (ACCENT/ACCENT_SOFT viviam aqui. Eram injetados como `style="--accent:…"` em 4 templates e
 //  valiam SEMPRE a mesma constante — nunca foram dinâmicos. Viraram `--accent`/`--accent-soft`
@@ -348,7 +348,7 @@ let currentTopicKey;      // key do tópico ativo no painel de conteúdo — und
 let expandedTopicKey = null; // key do tópico com a sub-lista aberta na sidebar — só muda por CLIQUE explícito
                               // no botão do tópico (nunca abre sozinha por virar o tópico atual)
 let searchOpen = false;      // barra de busca de linha visível no painel? só existe no tópico
-                              // "Itinerários" (único cujos cards exigem linha selecionada)
+                              // "Linhas" (único cujos cards exigem linha selecionada)
                               // — some com valor padrão fechado; só abre por clique no card "Buscar"
 
 function renderSideNav(activeKey){
@@ -391,7 +391,7 @@ function renderSideContent(key){
     <div class="grid">${topicGridHTML(sec)}</div>`;
 }
 // clique no card "Buscar" da sidebar: abre/fecha a barra de busca dentro do
-// painel; se o tópico ativo não for "Itinerários", muda pra ele já aberta.
+// painel; se o tópico ativo não for "Linhas", muda pra ele já aberta.
 function toggleSearchCard(){
   searchOpen = !(currentTopicKey === 'doc' && searchOpen);
   if (currentTopicKey === 'doc'){ renderSideContent('doc'); renderSideNav('doc'); updateNeedChips(); }
@@ -403,7 +403,7 @@ function toggleSearchCard(){
 function selectTopic(key, opts = {}){
   const sec = SECTIONS.find(s => s.key === key);
   if (!sec) return;
-  // sai de "Itinerários" sem fechar a busca por outro caminho (ex.: clicar direto
+  // sai de "Linhas" sem fechar a busca por outro caminho (ex.: clicar direto
   // em outro tópico) deixava `searchOpen` preso em true — ao voltar pro "doc" depois, a
   // busca reabria sozinha em vez do grid, e a sidebar mostrava "Buscar" com destaque
   // no lugar do tópico realmente clicado.
@@ -993,7 +993,7 @@ function resetTabsToSingle(){
    pelo mesmo motivo não dava pra abrir dois assuntos diferentes (Quadro + Portaria) em abas
    distintas — o único caminho pra isso, o ícone "abrir em nova aba" do card
    (openViewInNewTab), também está atrás do overlay.
-   O seletor mostra TODOS os tópicos (não só "Itinerários") justamente pra alcançar
+   O seletor mostra TODOS os tópicos (não só "Linhas") justamente pra alcançar
    os cards que não exigem linha — Portarias, Empresas Regulares — e reusa `topicGridHTML`,
    o mesmo markup/CSS dos cards do painel (nada de segunda cópia que diverge depois).
    Escolher um documento SUBSTITUI a view desta aba (o `openView` de sempre, que roda na aba
@@ -1221,7 +1221,7 @@ function tableHTML(cols, bodyRows, foot, cls=''){
    ---------------------------------------------------------------- */
 const LOADERS = {};
 
-/* ---- Itinerários — busca embutida no card (nome, número ou código) ----
+/* ---- Linhas — busca embutida no card (nome, número ou código) ----
    Cada documento abre com um campo de busca de linha dentro do próprio card. Havendo
    linha já selecionada no topo, mostra o documento dela de imediato; pode-se trocar de
    linha pesquisando ali mesmo. `render(host, line)` desenha o documento de UMA linha
@@ -1956,7 +1956,7 @@ LOADERS.historicoEmpresa = async () => {
     } });
 };
 
-/* ---- Ligações ---- */
+/* ---- Itinerários (consultas por logradouro, terminal, localidade, município) ---- */
 LOADERS.ligacoesPorLogradouro = async () => {
   const ibge = await getIbge();
   const munOpts = Object.entries(ibge).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>[cod, v.nome]);
@@ -3016,7 +3016,7 @@ app.addEventListener('click', e => {
     // clique no tópico é o ÚNICO jeito de abrir/fechar a sub-lista (nunca abre sozinha)
     expandedTopicKey = (expandedTopicKey === key) ? null : key;
     if (currentTopicKey === key){
-      // clicar em "Itinerários" enquanto a busca está aberta em cima dele fecha a
+      // clicar em "Linhas" enquanto a busca está aberta em cima dele fecha a
       // busca e volta pro grid — senão o clique parecia não fazer nada (a sub-lista abria/
       // fechava, mas "Buscar" continuava com o destaque em vez do tópico clicado).
       if (key === 'doc' && searchOpen){ searchOpen = false; renderSideContent('doc'); }
