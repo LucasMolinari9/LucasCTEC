@@ -510,7 +510,7 @@ async function getOrigem() {
 // nome de município). Ver Ligações por Terminais.
 async function getTerminais() {
   if (terminalRows) return terminalRows;
-  terminalRows = await sbFetch('itinerario_teste', `tipo_logradouro=eq.Terminal&select=nome_logradouro,codlinha,cod_municipio_origem&limit=6000`);
+  terminalRows = await sbFetch('itinerario_teste', `tipo_logradouro=eq.Terminal&select=nome_logradouro,codlinha,cod_municipio_origem&limit=30000`);
   return terminalRows;
 }
 async function getEmpresas() {
@@ -2106,6 +2106,26 @@ function classifyMunLines(itRows, codibge){
   }
   return { dentro, inter };
 }
+function terminaisDoMunicipio(itRows, codibge){
+  const grupos = new Map();
+  for(const r of itRows){
+    if(String(r.cod_municipio_origem) !== String(codibge)) continue;
+    const nome = r.nome_logradouro==null ? '' : String(r.nome_logradouro).trim();
+    if(!nome) continue;
+    const chave = norm(nome);
+    let grupo = grupos.get(chave);
+    if(!grupo){ grupo = { grafias:new Map(), linhas:new Set() }; grupos.set(chave, grupo); }
+    grupo.grafias.set(nome, (grupo.grafias.get(nome)||0)+1);
+    if(r.codlinha!=null && r.codlinha!=='') grupo.linhas.add(String(r.codlinha));
+  }
+  return [...grupos.values()].map(grupo=>{
+    let nome = '', maior = 0;
+    for(const [grafia, total] of grupo.grafias){
+      if(total>maior){ nome=grafia; maior=total; }
+    }
+    return { nome, nLinhas:grupo.linhas.size };
+  }).sort((a,b)=>a.nome.localeCompare(b.nome));
+}
 // linhas (codlinha distintos) cujo itinerário passa por um município (codibge)
 //
 // `memo` (opcional): Map de UMA execução, para não repetir a mesma consulta dentro da mesma
@@ -2201,14 +2221,40 @@ LOADERS.ligacoesPorTerminal = async () => {
   const suggest = q => { const nq=norm(q); return nomesTodos.filter(n=>norm(n).includes(nq)); };
   searchPanel({ title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', selectOpts:[['','Todos os municípios'],...munOpts], suggest, onRun: async(term, host, ibgeCod)=>{
     const view = currentView, gen = beginGen(view);
-    if(!term){ host.innerHTML=emptyBox('Digite o nome do terminal/origem.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+    if(!term && !ibgeCod){ host.innerHTML=emptyBox('Digite o nome do terminal/origem, ou escolha um município para ver seus terminais.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+    if(!term){
+      const itRows = await getTerminais();
+      const terminaisMun = terminaisDoMunicipio(itRows, ibgeCod);
+      const nomeMun = ibge[ibgeCod]?.nome || ibgeCod;
+      const chips = terminaisMun.length
+        ? `<div class="mun-chips"><span class="mun-chips-lbl">Filtrar por terminal:</span>${terminaisMun.map(t=>{
+            const titulo = `${t.nLinhas} linha(s)`;
+            return `<button type="button" class="mun-chip" data-term="${esc(t.nome)}" title="${esc(titulo)}">${esc(t.nome)}</button>`;
+          }).join('')}</div>`
+        : emptyBox('Nenhum terminal cadastrado em '+nomeMun+'.');
+      const todosCods = await linhasNoMunicipio(ibgeCod);
+      const lineCods = todosCods.slice(0,500);
+      const rows = await fetchLinesByCods(lineCods,{limit:500});
+      const aviso = todosCods.length>lineCods.length
+        ? `<div class="trunc-aviso"><b>Lista parcial:</b> ${todosCods.length} linhas no total; mostrando as primeiras ${lineCods.length}.</div>` : '';
+      const prefix = bannerTrunc(itRows) + chips
+        + `<p class="doc-count">${terminaisMun.length} terminal(is) em ${esc(nomeMun)}</p>` + aviso;
+      lineResults(host, rows, { prefixHTML:prefix, view, gen });
+      host.querySelectorAll('.mun-chip').forEach(b => b.addEventListener('click', () => {
+        const i = modalBody.querySelector('#spInput');
+        if(i) i.value = b.dataset.term;
+        if(currentView && currentView._panelRun) currentView._panelRun();
+      }));
+      return;
+    }
     const nTerm = norm(term);
     // duas fontes distintas de "terminal": origem_teste (ponto de origem do quadro de horários,
     // quase sempre nome de município) e itinerario_teste tipo "Terminal" (terminal físico, ex.
     // "Rodoviário Menezes Côrtes") — busca casa qualquer uma das duas.
     const cods = Object.entries(orig).filter(([,n])=>norm(n).includes(nTerm)).map(([c])=>c);
-    const termRows = (await getTerminais()).filter(r=>norm(r.nome_logradouro).includes(nTerm));
-    if(!cods.length && !termRows.length){ host.innerHTML=emptyBox('Nenhum terminal/origem com esse nome.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+    const rawTermRows = await getTerminais();
+    const termRows = rawTermRows.filter(r=>norm(r.nome_logradouro).includes(nTerm));
+    if(!cods.length && !termRows.length){ host.innerHTML=bannerTrunc(rawTermRows)+emptyBox('Nenhum terminal/origem com esse nome.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     let qi=[], qp=[];
     if(cods.length){
       const inList = cods.slice(0,50).map(enc).join(',');
@@ -2217,15 +2263,26 @@ LOADERS.ligacoesPorTerminal = async () => {
         sbFetch('qh_predeterminado_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`)
       ]);
     }
-    let lineCods=distinctCods([...qi, ...qp, ...termRows],120);
+    const todosCods = distinctCods([...qi, ...qp, ...termRows]);
+    let filtrados = todosCods;
     const munTxt = ibgeCod? ` em ${esc(ibge[ibgeCod]?.nome||'')}` : '';
     if(ibgeCod){
-      const munSet = new Set(await linhasNoMunicipio(ibgeCod));
-      lineCods = lineCods.filter(c=>munSet.has(c));
+      const munSet = new Set((await linhasNoMunicipio(ibgeCod)).map(String));
+      filtrados = filtrados.filter(c=>munSet.has(String(c)));
     }
-    if(!lineCods.length){ host.innerHTML=emptyBox(`Nenhuma linha vinculada a esse terminal${munTxt}.`); commitViewResult(view, gen, { pdfHTML:null }); return; }
+    const lineCods = filtrados.slice(0,120);
+    if(!lineCods.length){
+      const msg = ibgeCod && todosCods.length
+        ? `Esse terminal/origem existe, mas não serve o município ${ibge[ibgeCod]?.nome||ibgeCod}.`
+        : 'Nenhuma linha vinculada a esse terminal/origem.';
+      host.innerHTML=bannerTrunc(qi)+bannerTrunc(qp)+bannerTrunc(rawTermRows)+emptyBox(msg);
+      commitViewResult(view, gen, { pdfHTML:null }); return;
+    }
     const rows = await fetchLinesByCods(lineCods,{limit:200});
-    const prefix = `<p class="doc-note">${lineCods.length} linha(s) a partir de "${esc(term)}"${munTxt}</p>`;
+    const aviso = filtrados.length>lineCods.length
+      ? `<div class="trunc-aviso"><b>Lista parcial:</b> ${filtrados.length} linhas no total; mostrando as primeiras ${lineCods.length}.</div>` : '';
+    const prefix = bannerTrunc(qi)+bannerTrunc(qp)+bannerTrunc(rawTermRows)+aviso
+      + `<p class="doc-note">${lineCods.length} linha(s) a partir de "${esc(term)}"${munTxt}</p>`;
     lineResults(host, rows, { prefixHTML: prefix, view, gen });
   }});
 };
