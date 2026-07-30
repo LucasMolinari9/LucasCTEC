@@ -98,6 +98,26 @@ function classifyMunLines(itRows, codibge){
   }
   return { dentro, inter };
 }
+function terminaisDoMunicipio(itRows, codibge){
+  const grupos = new Map();
+  for(const r of itRows){
+    if(String(r.cod_municipio_origem) !== String(codibge)) continue;
+    const nome = r.nome_logradouro==null ? '' : String(r.nome_logradouro).trim();
+    if(!nome) continue;
+    const chave = norm(nome);
+    let grupo = grupos.get(chave);
+    if(!grupo){ grupo = { grafias:new Map(), linhas:new Set() }; grupos.set(chave, grupo); }
+    grupo.grafias.set(nome, (grupo.grafias.get(nome)||0)+1);
+    if(r.codlinha!=null && r.codlinha!=='') grupo.linhas.add(String(r.codlinha));
+  }
+  return [...grupos.values()].map(grupo=>{
+    let nome = '', maior = 0;
+    for(const [grafia, total] of grupo.grafias){
+      if(total>maior){ nome=grafia; maior=total; }
+    }
+    return { nome, nLinhas:grupo.linhas.size };
+  }).sort((a,b)=>a.nome.localeCompare(b.nome));
+}
 
 /* app.js:2966 — filtro do Realtime, por ABA (#54). Puro: recebe a aba (com sua própria
    `view` e sua própria `line`) em vez de ler `currentView`/`activeLine` do módulo. */
@@ -222,7 +242,7 @@ function closeTabState(tabs, activeTabId, id){
 
 module.exports = {
   fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, situacaoHTML, isLinhaAtiva, isVigente, norm,
-  yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike, municipiosExatos,
+  yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, terminaisDoMunicipio, localidadesQueCasam, orIlike, municipiosExatos,
   tabMatchesEvent, dispatchRealtime,
   rjOrder, resumoFrota, filtrarFrotaEmpresas, pageBounds,
   beginGen, isCurrentGen, commitViewResult, pushDetail, popDetail,

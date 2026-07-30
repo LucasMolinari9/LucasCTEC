@@ -121,6 +121,7 @@ const canon = [
   ['countBy',              '(m.get(k)||0)+1'],
   ['fmtMoney',             'minimumFractionDigits:2,maximumFractionDigits:2'],
   ['classifyMunLines',     'function classifyMunLines('],
+  ['terminaisDoMunicipio', 'function terminaisDoMunicipio(itRows, codibge){'],
   ['localidadesQueCasam',  'function localidadesQueCasam('],
   ['orIlike',              "const orIlike = (cols, termos) => 'or=('"],
   ['municipiosExatos',     'function municipiosExatos(ibge, termos){'],

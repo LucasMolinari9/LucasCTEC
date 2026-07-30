@@ -11,6 +11,24 @@ function ok(cond, name, detail){
 }
 const eq = (got, want, name) => ok(Object.is(got, want), name, `got ${JSON.stringify(got)} want ${JSON.stringify(want)}`);
 
+// --- terminaisDoMunicipio ---
+console.log('terminaisDoMunicipio');
+{
+  const rows = [
+    {cod_municipio_origem:3304557, nome_logradouro:'Terminal João', codlinha:'1'},
+    {cod_municipio_origem:'3304557', nome_logradouro:'TERMINAL JOAO', codlinha:'1'},
+    {cod_municipio_origem:'3304557', nome_logradouro:'TERMINAL JOAO', codlinha:2},
+    {cod_municipio_origem:'3304557', nome_logradouro:'Terminal Alfa', codlinha:null},
+    {cod_municipio_origem:'3304557', nome_logradouro:'', codlinha:'3'},
+    {cod_municipio_origem:'3303302', nome_logradouro:'Terminal Niterói', codlinha:'4'},
+  ];
+  const got = P.terminaisDoMunicipio(rows, '3304557');
+  eq(JSON.stringify(got), JSON.stringify([{nome:'Terminal Alfa',nLinhas:0},{nome:'TERMINAL JOAO',nLinhas:2}]),
+     'agrupa acento/caixa, escolhe grafia frequente e conta codlinha distinto');
+  eq(P.terminaisDoMunicipio(rows, 3303302)[0].nome, 'Terminal Niterói', 'aceita município numérico contra código string');
+  eq(P.terminaisDoMunicipio(rows, '9999999').length, 0, 'município sem terminal → []');
+}
+
 // --- fmtCode ---
 console.log('fmtCode');
 eq(P.fmtCode('101001001'), '101-001-001', 'fmtCode 9 dígitos');
