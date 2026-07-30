@@ -1,0 +1,74 @@
+# CodeQL — análise semântica do JavaScript, com os achados no Code Scanning do GitHub.
+#
+# POR QUE SÓ AGORA: o `semgrep.yml` dizia, com razão, que não dava para subir SARIF porque
+# Code Scanning exigia Advanced Security, "que este repo (privado, plano free) não tem". Isso
+# deixou de valer no instante em que o repositório virou **público** — em repositório público o
+# Code Scanning é gratuito. Este workflow é o ganho direto da mudança de visibilidade, e o
+# contrapeso ao custo dela (o código agora é lido por qualquer um, inclusive por quem procura
+# defeito).
+#
+# NÃO SUBSTITUI o semgrep.yml, e a diferença não é de força, é de pergunta:
+#   - Semgrep, regras locais: "contém padrão que este portal proibiu?" (`style=` em markup,
+#     CDN em runtime, escrita direta em `currentView.pdfHTML`). Conhece o projeto.
+#   - CodeQL: "existe caminho de DADO de uma fonte não confiável até um sink perigoso?" Segue
+#     fluxo entre funções — que é justamente o que uma regra por padrão textual não vê. Num
+#     `app.js` de um arquivo só que monta HTML com `innerHTML`, esse é o eixo que faltava.
+#
+# Os achados vão para a aba **Security → Code scanning** (não para o log do job). O job só
+# fica vermelho se a análise em si falhar. Achado NOVO em PR aparece como anotação no diff.
+#
+# CRON além de push/PR: o valor do CodeQL cresce com o banco de queries, que é atualizado pela
+# GitHub. Código parado + query nova = achado que só aparece se algo reexecutar. Mesma razão
+# dos crons do backup.yml e do deriva.yml.
+#
+# Os `uses:` estão presos ao SHA (o `# v3`/`# v4` ao lado é só legenda) — ver docs/semgrep.md
+# § "Actions presas ao SHA".
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 9 * * 1' # toda segunda 09:00 UTC (depois do Backup 06:00 e do Deriva 07:00)
+  workflow_dispatch:
+
+# `security-events: write` é a ÚNICA exceção ao `contents: read` que todos os outros workflows
+# usam — sem ela o resultado não entra no Code Scanning. Não é um afrouxamento: esse escopo
+# publica alerta, não altera código. `contents: read` continua sendo o resto.
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false   # nenhum job faz push; token fora do .git/config do runner
+
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@dfbc6164313353db46c80e2fcfd38820bd2c3c46 # v3
+        with:
+          languages: javascript-typescript
+          # `security-extended` sobre o default: o portal é pequeno o bastante para o volume
+          # extra ser revisável, e o default sozinho não cobre parte das queries de XSS.
+          queries: security-extended
+          # `vendor/` é código de TERCEIRO servido na mesma origem (supabase-js minificado e as
+          # fontes). Analisá-lo enche o Code Scanning de achados sobre um bundle que este repo
+          # não edita — a disciplina dele é outra: versão fixa, integridade conferida contra o
+          # registro na hora de atualizar (ver CLAUDE.md § Armadilhas). Um gate que grita à toa
+          # é um gate que alguém desliga.
+          # `.semgrep/tests/` são fixtures RUINS DE PROPÓSITO: existem para provar que as regras
+          # locais pegam o caso ruim. Alertar sobre elas seria alertar sobre o teste.
+          config: |
+            paths-ignore:
+              - vendor
+              - .semgrep/tests
+
+      - name: Analisar
+        uses: github/codeql-action/analyze@dfbc6164313353db46c80e2fcfd38820bd2c3c46 # v3
+        with:
+          category: /language:javascript-typescript

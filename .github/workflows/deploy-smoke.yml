@@ -1,6 +1,17 @@
 # Verifica o deploy real depois que a Vercel publica uma revisão.
 # Cobre a fronteira que os testes locais não enxergam: headers efetivamente servidos,
 # allowlist de arquivos e hostname de preview apontando para o Supabase de teste.
+#
+# ESTE É O ÚNICO WORKFLOW DO REPO QUE TOCA NUM SECRET, e o único cuja entrada vem de
+# TERCEIRO: o evento `deployment_status` carrega uma URL escolhida pela Vercel, não por nós.
+# Desde que o repositório virou público isso deixou de ser detalhe — a URL que chega aqui pode
+# ser a de um preview construído a partir de um PR de fork. Duas defesas, abaixo:
+#   [a] a URL passa por uma allowlist de host antes de qualquer uso (passo "Resolve a URL");
+#   [b] o bypass secret é exportado SÓ no passo que precisa dele, depois da validação — não no
+#       `env:` do job, onde ficaria visível a todos os passos, inclusive aos que rodam antes
+#       de a URL ter sido conferida.
+# Valor de terceiro também nunca é interpolado com `${{ … }}` dentro de um `run:` — entra por
+# variável de ambiente, senão a URL vira comando de shell.
 name: Deploy smoke
 
 on:
@@ -34,10 +45,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      # Para previews com Deployment Protection, crie um Protection Bypass for Automation na
-      # Vercel e salve o MESMO valor como secret do repositório com este nome. Sem ele, o script
-      # falha com diagnóstico explícito em vez de testar por engano a tela de login da Vercel.
-      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       # O deployment_status entrega a URL POR-DEPLOY (divatdetro-<hash>-….vercel.app), que não
       # está em HOSTS_PROD — e não deve estar: a allowlist existe justamente porque esses
       # hostnames são gerados a cada deploy e não dá para enumerá-los. Verificar produção por ela
@@ -67,6 +74,7 @@ jobs:
         id: alvo
         shell: bash
         run: |
+          set -euo pipefail
           url="$DEPLOY_URL"
           # Num despacho manual a URL foi escolhida a dedo — respeitá-la como veio. Só a URL
           # vinda do deployment_status precisa ser trocada pelo alias canônico.
@@ -75,7 +83,53 @@ jobs:
               *prod*) url="$PRODUCTION_URL" ;;
             esac
           fi
+
+          # [1] Conjunto de caracteres. Quem escreve a URL num run de `deployment_status` é a
+          # Vercel, não este repositório — e o valor segue daqui para um `$GITHUB_OUTPUT` e
+          # para a linha de comando do Node. Um `"`, um `$`, uma crase ou uma quebra de linha
+          # aqui viram, respectivamente, comando de shell e output extra forjado no
+          # $GITHUB_OUTPUT. Rejeitar o que não for estritamente um caractere de URL é mais
+          # barato do que escapar cada uso adiante.
+          case "$url" in
+            '') echo "::error::URL do deploy chegou vazia"; exit 1 ;;
+            *[!A-Za-z0-9:/._~-]*)
+              echo "::error::URL do deploy tem caractere fora do conjunto permitido — recusada"
+              exit 1 ;;
+          esac
+
+          # [2] Allowlist de HOST. A defesa que passou a valer quando o repositório virou
+          # público: um preview construído a partir de um PR de FORK também gera
+          # `deployment_status`, e o passo seguinte manda o bypass secret no cabeçalho para o
+          # host que estiver aqui. Fora de `*.vercel.app` não existe deploy legítimo deste
+          # projeto — e sem esta trava o secret sairia para onde a carga do evento mandasse.
+          #
+          # O host é RECORTADO antes de ser comparado, em vez de casar o padrão contra a URL
+          # inteira. Não é preciosismo: `case "$url" in https://*.vercel.app/*)` aceita
+          # `https://evil.com/x.vercel.app`, porque o `*` do shell casa `/` também. Foi o que
+          # a bancada de casos abaixo pegou na primeira versão desta guarda.
+          case "$url" in
+            https://*) : ;;
+            *) echo "::error::URL do deploy não é https://: $url"; exit 1 ;;
+          esac
+          resto="${url#https://}"
+          host="${resto%%/*}"
+          case "$host" in
+            ?*.vercel.app) : ;;
+            *) echo "::error::Host fora da allowlist (*.vercel.app): host=[$host] url=$url"; exit 1 ;;
+          esac
+
           echo "Verificando: $url"
           echo "url=$url" >> "$GITHUB_OUTPUT"
+
       - name: Headers, allowlist e isolamento do Supabase
-        run: node scripts/check_deploy.mjs "${{ steps.alvo.outputs.url }}" "$DEPLOY_ENVIRONMENT"
+        env:
+          # Entram por ambiente, não por `${{ … }}` dentro do `run:`: interpolado, o valor é
+          # colado no script ANTES de o shell existir, e uma URL hostil vira comando.
+          ALVO_URL: ${{ steps.alvo.outputs.url }}
+          # Para previews com Deployment Protection, crie um Protection Bypass for Automation na
+          # Vercel e salve o MESMO valor como secret do repositório com este nome. Sem ele, o
+          # script falha com diagnóstico explícito em vez de testar por engano a tela de login da
+          # Vercel. Fica NESTE passo, não no `env:` do job: assim só é exportado depois de a URL
+          # ter passado pela allowlist acima.
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: node scripts/check_deploy.mjs "$ALVO_URL" "$DEPLOY_ENVIRONMENT"

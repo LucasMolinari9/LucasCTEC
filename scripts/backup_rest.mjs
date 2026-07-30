@@ -44,6 +44,33 @@ if (!URL || !KEY) {
   process.exit(1);
 }
 
+// Trava de ambiente: modo COMPLETO nunca roda no GitHub Actions.
+//
+// Por quê, em uma frase: o `backup.yml` publica o resultado como ARTIFACT, e num repositório
+// PÚBLICO (o caso deste repo desde 30/07/2026) o artifact de um workflow é baixável por
+// qualquer pessoa da internet.
+//
+// No modo público isso é inofensivo — o dump traz exatamente as 14 tabelas que a API já serve
+// a todo visitante com a anon key, nada que já não fosse público. O que a trava impede é a
+// mudança de UMA LINHA que transforma isso em vazamento: basta alguém acrescentar
+// `SUPABASE_SERVICE_KEY` ao `env:` do workflow — para "melhorar o backup" — e o script passa,
+// em silêncio, a incluir as 4 tabelas de staging do ETL, que são fechadas de propósito. Não há
+// erro, não há aviso: o artifact simplesmente fica maior, e público.
+//
+// O comentário do `backup.yml` já dizia "se um dia precisar de service key, ela NÃO vem para
+// cá". Comentário não é executável; isto é. A trava fica AQUI, no script, e não no workflow,
+// para valer para qualquer workflow que um dia chame este arquivo.
+//
+// O modo completo continua sendo o que é: rotina MANUAL do dono, na máquina dele (ver
+// docs/backup.md). Nada a fazer para "liberar" no CI — se for mesmo necessário, o caminho é
+// não publicar o dump como artifact, não desligar esta trava.
+if (SERVICE_KEY && process.env.GITHUB_ACTIONS === 'true') {
+  console.error('RECUSADO: modo COMPLETO (service key) dentro do GitHub Actions.');
+  console.error('O artifact do Actions é público neste repositório, e o modo completo inclui as');
+  console.error('tabelas de staging do ETL. Backup completo é rotina manual — ver docs/backup.md.');
+  process.exit(1);
+}
+
 // Staging do ETL: sem grant para anon (invisíveis pela API pública) → só entram no modo completo.
 const STAGING = new Set(['evento_dados', 'evento_textos', 'portaria_data', 'portaria_texto_teste']);
 

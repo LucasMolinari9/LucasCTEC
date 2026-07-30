@@ -1,12 +1,16 @@
 # Backup automático (dados) — roda scripts/backup_rest.mjs em MODO PÚBLICO.
 #
 # Usa a ANON KEY (a mesma pública que o site serve a todo visitante): baixa só as 14
-# tabelas que a API pública já expõe. Nada de service key aqui — não porque o repo seja
-# público (ele é PRIVADO; este comentário afirmava o contrário até 27/07/2026, sobra de
-# antes da mudança de visibilidade), mas porque service key em variável de workflow amplia
-# a superfície sem necessidade: quem obtiver acesso ao Actions passaria a ler as tabelas de
-# staging. O dump completo (staging + schema) continua sendo a rotina manual do dono — ver
-# docs/backup.md.
+# tabelas que a API pública já expõe. Nada de service key aqui, por DUAS razões independentes
+# — e é bom que sejam duas, porque uma delas já mudou de valor duas vezes:
+#   [1] service key em variável de workflow amplia a superfície sem necessidade: quem obtiver
+#       acesso ao Actions passaria a ler as tabelas de staging. Vale com o repo público ou
+#       privado, e é a razão que sustenta a decisão sozinha.
+#   [2] o repositório é PÚBLICO (desde 30/07/2026 — antes disso este comentário dizia
+#       "privado", e antes de 27/07/2026 dizia "público": o texto já errou nos dois sentidos,
+#       motivo pelo qual a decisão não se apoia neste item). Em repo público, qualquer um lê
+#       este arquivo e sabe exatamente o que o workflow tem no ambiente.
+# O dump completo (staging + schema) continua sendo a rotina manual do dono — ver docs/backup.md.
 #
 # O dump fica como artifact do Actions por 90 dias (aba Actions → run → Artifacts).
 #

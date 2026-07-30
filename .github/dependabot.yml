@@ -1,0 +1,39 @@
+# Dependabot — só GitHub Actions.
+#
+# Por que só isso: o portal é ZERO-BUILD. Não há `package.json`, não há `node_modules` em
+# runtime, e as duas dependências de terceiros (supabase-js e as fontes) são **vendoradas**
+# em `vendor/` de propósito, com atualização manual documentada no CLAUDE.md. Não existe
+# ecossistema npm para o Dependabot vigiar aqui.
+#
+# Por que EXISTE, então: os `uses:` dos workflows estão presos ao SHA de 40 caracteres (ver
+# docs/semgrep.md § "Actions presas ao SHA"). Pinar é a decisão certa — impede que a tag `v4`
+# seja movida para código hostil — mas tem um preço: o SHA **congela**, inclusive quando a
+# versão congelada ganha um CVE. Sem este arquivo, "preso ao SHA" viraria "preso numa versão
+# vulnerável para sempre", e ninguém perceberia. O Dependabot abre PR trocando o SHA e
+# atualizando a legenda `# v4` ao lado.
+#
+# Isso passou a importar mais desde que o repositório virou público: um workflow que roda em
+# `pull_request` executa código de PR de fork, então a superfície das actions deixou de ser
+# só do dono.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(ci)'
+    labels:
+      - dependencies
+      - ready-for-human
+    # Um PR por semana com todas as actions juntas, em vez de um por action: o repo tem 8
+    # workflows usando as MESMAS 3 actions, e o CI inteiro (ci/views/semgrep/deriva) roda em
+    # cada PR. Agrupar troca 3 rodadas de CI por uma.
+    groups:
+      actions:
+        patterns:
+          - '*'

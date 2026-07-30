@@ -58,9 +58,22 @@ O CI roda esses em workflows **separados de propósito**, para que um vermelho n
 outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 [`views.yml`](.github/workflows/views.yml) (navegador),
 [`semgrep.yml`](.github/workflows/semgrep.yml) (estático),
+[`codeql.yml`](.github/workflows/codeql.yml) (fluxo de dados — achados na aba Security),
 [`deriva.yml`](.github/workflows/deriva.yml) (semanal + sob demanda),
-[`db-checks.yml`](.github/workflows/db-checks.yml) (semanal — Realtime e qualidade dos dados) e
-[`backup.yml`](.github/workflows/backup.yml) (backup semanal).
+[`db-checks.yml`](.github/workflows/db-checks.yml) (semanal — Realtime e qualidade dos dados),
+[`backup.yml`](.github/workflows/backup.yml) (backup semanal) e
+[`deploy-smoke.yml`](.github/workflows/deploy-smoke.yml) (depois que a Vercel publica).
+
+## Segurança
+
+O repositório é **público**; o banco nunca dependeu disso para ser seguro — a proteção é **RLS +
+privilégio mínimo**, e a chave `anon` que aparece no código é pública por design (é servida a
+todo visitante do site). A `service_role` nunca entrou neste repositório.
+
+- **Achou uma falha?** Não abra issue pública — o canal privado e as regras do teste estão em
+  [`SECURITY.md`](SECURITY.md).
+- **Modelo de ameaça, auditorias, riscos residuais aceitos e o que a visibilidade pública
+  exige:** [`docs/seguranca.md`](docs/seguranca.md) (a seção 10 trata do repo público).
 
 ## Publicação
 
@@ -84,7 +97,8 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 | `docs/` | Documentação técnica (abaixo). |
 | `CLAUDE.md` | Contexto detalhado do projeto para sessões de IA (mapa do código, banco, armadilhas). |
 | `CONTEXT.md` | Glossário do domínio (termos do cadastro de linhas). |
-| `.github/workflows/` | Os 6 workflows de CI (ver a tabela de testes acima). |
+| `.github/workflows/` | Os 8 workflows de CI (ver a tabela de testes acima). |
+| `SECURITY.md` | Como relatar vulnerabilidade e o que está dentro/fora do escopo. |
 
 ### Documentação (`docs/`)
 

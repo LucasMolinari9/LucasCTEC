@@ -1,0 +1,33 @@
+# CODEOWNERS — quem precisa aprovar o quê.
+#
+# Só tem efeito de VERDADE com a regra "Require review from Code Owners" ligada na proteção
+# da branch `main` (Settings → Branches, ou Rulesets). Sem isso é documentação. O passo a
+# passo está em docs/seguranca.md § "10. O repositório é público".
+#
+# Hoje o repo tem um único mantenedor, então isto não distribui revisão: serve para que um PR
+# vindo de fora (o repositório é público) não possa tocar na cadeia de publicação, nos gates
+# de segurança ou no schema do banco sem passar pelo dono explicitamente.
+
+* @LucasMolinari9
+
+# --- Cadeia de publicação e gates: mexer aqui é mexer na segurança de todo o resto ---
+/.github/                 @LucasMolinari9
+/.semgrep/                @LucasMolinari9
+/scripts/                 @LucasMolinari9
+/tests/                   @LucasMolinari9
+/vercel.json              @LucasMolinari9
+/.vercelignore            @LucasMolinari9
+
+# --- Configuração de agente: um PR que edite isto reescreve as regras que o agente segue ---
+/CLAUDE.md                @LucasMolinari9
+/.mcp.json                @LucasMolinari9
+/.codex/                  @LucasMolinari9
+/.claude/                 @LucasMolinari9
+/.agents/                 @LucasMolinari9
+
+# --- Banco, segurança e o código vendorado (terceiro servido na mesma origem) ---
+/supabase/                @LucasMolinari9
+/docs/backup_schema.sql   @LucasMolinari9
+/docs/seguranca.md        @LucasMolinari9
+/SECURITY.md              @LucasMolinari9
+/vendor/                  @LucasMolinari9

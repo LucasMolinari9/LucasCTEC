@@ -74,6 +74,17 @@ exibe e **atualiza ao vivo** (Realtime).
   - **Manual de segurança do dono + auditoria/pentest** (linguagem direta, modelo de ameaça,
     checklist trimestral e resposta a incidente): **`docs/seguranca.md`**. Auditoria completa +
     teste de invasão ao vivo em 23/07/2026 (sem achados de segredo; sem caminho de escrita).
+  - **O REPOSITÓRIO É PÚBLICO desde 30/07/2026** (antes era privado, e vários textos se apoiavam
+    nisso — ver `docs/seguranca.md` §10, que é a referência). Consequências práticas ao escrever
+    código ou prosa aqui: (1) **o histórico do git é público e eterno** — segredo que entrar num
+    commit está publicado, e apagar depois não desfaz; a única chave que pode aparecer no repo é
+    a **`anon`**, nunca a `service_role`; (2) **logs e artifacts do Actions são públicos** — por
+    isso o `backup_rest.mjs` **recusa** o modo completo (service key) dentro do GitHub Actions;
+    (3) os workflows de `pull_request` **executam código de PR de fork** — nunca troque
+    `pull_request` por `pull_request_target`, nunca acrescente secret a `ci.yml`/`views.yml`/
+    `semgrep.yml`/`codeql.yml`, e nunca interpole `${{ … }}` de valor de terceiro dentro de um
+    `run:`; (4) **doc desatualizado que subestima risco agora é lido por quem procura o risco**.
+    Relato de vulnerabilidade tem canal próprio: **`SECURITY.md`**.
   - **Como o dono alimenta:** direto pelo **painel do Supabase** (service role, ignora RLS).
   - **Teto do PostgREST:** `pgrst.db_max_rows = 30000` no role `authenticator` (igual ao maior
     `limit` do front). **Ao criar query com `limit` > 30000, suba o teto junto**
@@ -172,9 +183,10 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    armadilhas antes de escrever SQL/JS. Ajuste isolado de CSS/texto/UI pula direto pro passo 1.
 1. Edite `app.js` (JS) e/ou `index.html` (HTML/CSS). **Trabalhe numa branch**, não direto na
    `main`: push na branch → o Vercel gera **preview deploy** → confira no preview → merge na
-   `main` (que é a publicada). O CI roda **quatro workflows**, separados de
+   `main` (que é a publicada). O CI roda **cinco workflows**, separados de
    propósito (um vermelho não esconde o outro): `ci.yml` (gate leve — `tests/check.js`),
-   `views.yml` (navegador — `check_views.mjs` + `check_abas.mjs`), `semgrep.yml` (estático) e
+   `views.yml` (navegador — `check_views.mjs` + `check_abas.mjs`), `semgrep.yml` (estático),
+   `codeql.yml` (fluxo de dados; achados vão para a aba Security, não para o log) e
    `deploy-smoke.yml` depois que a Vercel publica (headers, allowlist e isolamento do Supabase).
    Se previews estiverem protegidos pela Vercel, configure um **Protection Bypass for
    Automation** e grave o mesmo valor no secret GitHub `VERCEL_AUTOMATION_BYPASS_SECRET`;

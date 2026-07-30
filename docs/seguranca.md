@@ -78,13 +78,15 @@ bloco `SET ROLE anon` + tentativas de INSERT/UPDATE/DELETE/SELECT em transação
 2. **Ligar Leaked Password Protection:** Supabase Dashboard → Authentication → Passwords → ativar.
    (Fecha o único WARN dos advisors.)
 3. **Manter signup fechado:** Dashboard → Authentication → "Allow new users to sign up" = OFF.
-4. **Repositório GitHub privado:** Settings → Danger Zone → Change visibility → Private. Não
-   afeta o site na Vercel (deploy segue por OAuth) nem o backup semanal. Remove o "mapa" de
-   arquitetura que um repo público entrega a um atacante.
+4. **Repositório GitHub — ele é PÚBLICO desde 30/07/2026.** Até essa data este item mandava o
+   contrário ("Change visibility → Private", pelo mapa de arquitetura que um repo público
+   entrega). A decisão mudou; o que ela exige está inteiro na **seção 10**, que é o item de
+   maior impacto pendente hoje. Não deixe este item como "feito" sem ter percorrido aquela
+   lista.
 5. **Rotacionar a `service_role`** se ela já foi colada fora do painel (chat, e-mail, arquivo):
    Dashboard → Settings → API.
 6. **GitHub — branch protection na `main`:** bloquear force-push e exigir o CI verde antes de
-   merge; confirmar que *secret scanning / push protection* está ativo.
+   merge; confirmar que *secret scanning / push protection* está ativo. Detalhado na seção 10.
 
 ## 6. Checklist trimestral (5 min numa sessão do Claude)
 
@@ -139,11 +141,25 @@ auditoria — e para que a decisão de conviver com elas seja explícita, não e
 
 **9.1 — Defaults do role `supabase_admin` (SEC-01, parcial).** Existe um segundo conjunto de
 default privileges, dono `supabase_admin`, concedendo `arwdDxtm` (inclui INSERT/UPDATE/DELETE/
-TRUNCATE) a `anon` e `authenticated` em tabelas de `public`. Só atinge objetos criados **por esse
-role**; o painel do Supabase cria como `postgres`, que já está fechado. **Não é fechável:**
-`postgres` não é superusuário no Supabase e o `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin`
-responde `42501: permission denied to change default privileges`. **Mitigação:** o gate
-`check_grants.mjs` roda diariamente e pega qualquer tabela que apareça com grant de escrita.
+TRUNCATE) a `anon` e `authenticated` em tabelas de `public`. **Não é fechável:** `postgres` não é
+superusuário no Supabase e o `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin` responde
+`42501: permission denied to change default privileges`.
+
+> **Correção de 28/07/2026 — este parágrafo dizia menos do que o risco real, e a versão errada
+> ficou aqui até 30/07.** O texto afirmava que o default "só atinge objetos criados **por esse
+> role**; o painel do Supabase cria como `postgres`, que já está fechado" — ou seja, que na
+> prática não pegava. **A medição desmentiu:** rodar o `backup_schema.sql` num projeto novo pelo
+> SQL Editor (portanto **como `postgres`**) fez as 18 tabelas nascerem com TRUNCATE/REFERENCES/
+> TRIGGER para `anon` e `authenticated` — **108 grants**. Como **RLS não bloqueia TRUNCATE** e a
+> anon key é pública, isso era caminho aberto para esvaziar o banco. O `CLAUDE.md` já registrava
+> a versão corrigida desde 28/07; este documento continuou com a antiga — exatamente o tipo de
+> deriva que o gate `[2b]` do `tests/check.js` existe para pegar, e que ele não pega porque é
+> prosa, não número. **Num repositório público, um parágrafo que subestima um risco vivo é lido
+> por quem procura o risco.**
+
+**Mitigações, hoje:** o `docs/backup_schema.sql` revoga tudo que não é SELECT (não só `MAINTAIN`)
+na reconstrução, e o gate `check_grants.mjs` roda **diariamente** enquanto esse default existir,
+pegando qualquer tabela que apareça com grant de escrita.
 
 **9.2 — Abuso da API pública (SEC-02).** A chave `anon` é pública por design e o navegador fala
 **direto** com o Supabase — a Vercel não está no caminho da requisição, então não há onde aplicar
@@ -162,3 +178,100 @@ ambos corrigidos: grants mais abertos que os da produção (`anon` com TRUNCATE)
 os valores dos CSVs. Mas a restauração **não foi levada até o fim**, o portal **nunca foi apontado
 para o banco restaurado** e **RTO/RPO seguem sem medição** — por isso SEC-06 continua **mitigado**,
 não encerrado. O que falta está listado em `docs/backup.md`.
+
+## 10. O repositório é público (desde 30/07/2026)
+
+Até esta data o repo era privado, e boa parte das decisões registradas neste documento se
+apoiava nisso — inclusive a seção 5, que **mandava mantê-lo privado**. A visibilidade mudou;
+esta seção é o que a mudança custa, o que ela paga, e o que ainda falta o dono fazer no
+navegador (o que não dá para fazer por commit).
+
+### 10.1 O que muda no modelo de ameaça
+
+O que **não** muda: a segurança do banco nunca dependeu do sigilo do código. Ela vem de **RLS +
+privilégio mínimo**, e a chave `anon` sempre foi pública — está no `app.js` servido a todo
+visitante. Um atacante decidido já podia ler o portal inteiro pelo *view-source*.
+
+O que **muda de verdade** são quatro coisas:
+
+1. **O histórico do git virou público, inteiro e para sempre.** Não só o `HEAD`: todo commit,
+   toda branch, todo arquivo já apagado. Segredo que passou por aqui um dia está publicado —
+   apagar depois não desfaz.
+2. **Os workflows executam código de estranho.** `ci.yml`, `views.yml`, `semgrep.yml` e
+   `codeql.yml` rodam em `pull_request`; um PR de fork faz o runner executar o que veio no PR.
+   A configuração certa já estava no lugar (`pull_request`, **nunca** `pull_request_target`;
+   `permissions: contents: read`; `persist-credentials: false`; nenhum secret nesses jobs), e é
+   por isso que a superfície aqui é pequena. A exceção é o `deploy-smoke.yml` — o único com
+   secret — endurecido junto com esta seção (allowlist de host e secret escopado ao passo).
+3. **Logs e artifacts do Actions são públicos.** O `backup.yml` publica um dump como artifact:
+   hoje ele traz só as 14 tabelas que a API pública já serve, então não vaza nada — mas passou
+   a existir a trava do `scripts/backup_rest.mjs` que **recusa o modo completo dentro do
+   Actions**, porque bastaria acrescentar a service key ao `env:` para o artifact público
+   passar a incluir as tabelas de staging, em silêncio.
+4. **Esta documentação virou leitura do atacante.** O `CLAUDE.md` e este arquivo descrevem o
+   schema, os `project_ref`, os gates e — na seção 9 — as fraquezas ainda abertas. É uma troca
+   consciente: documentar risco residual continua valendo mais do que escondê-lo (segurança por
+   obscuridade não sobrevive a um *view-source*). Mas o preço é real, e cobra uma coisa:
+   **parágrafo desatualizado que subestima risco vivo agora é um convite.** Foi por isso que a
+   §9.1 foi corrigida na mesma leva.
+
+### 10.2 O que foi conferido antes (30/07/2026)
+
+- **Varredura de segredo em TODO o histórico** (`git log --all -p`), procurando JWT do Supabase,
+  `ghp_`/`gho_`/`github_pat_`, `AKIA…` (AWS), `sk-…`, `nvapi-…`, tokens do Slack e blocos
+  `BEGIN … PRIVATE KEY`. **Resultado: nenhum achado.** Os únicos JWTs no repositório são as duas
+  chaves **`anon`** (produção e teste) — públicas por design. **Nenhuma `service_role` jamais
+  entrou no git.** É o motivo de não haver rotação de chave pendente nesta seção.
+- **Nenhum arquivo de dado versionado.** Nada de `.csv`, `.env`, `.dump` ou chave em nenhum
+  commit do histórico — o `.gitignore` segurou desde o começo.
+
+### 10.3 O que passou a existir no repositório
+
+| Arquivo | Para quê |
+|---|---|
+| [`SECURITY.md`](../SECURITY.md) | Canal privado de relato, regras do teste, e a lista do que **não** é vulnerabilidade (a chave `anon` no código encabeça). Sem isso, quem achar algo abre issue pública — ou não avisa. |
+| [`.github/workflows/codeql.yml`](../.github/workflows/codeql.yml) | Code Scanning, **gratuito em repo público**. É o ganho direto da mudança: análise de fluxo de dados, que nenhuma regra por padrão textual enxerga. |
+| [`.github/dependabot.yml`](../.github/dependabot.yml) | As actions estão presas ao SHA — sem isso, "preso ao SHA" vira "preso numa versão vulnerável para sempre". |
+| [`.github/CODEOWNERS`](../.github/CODEOWNERS) | PR de fora não toca em `.github/`, `scripts/`, `tests/`, `vercel.json` nem na config de agente sem revisão explícita. **Só vale com a proteção da branch ligada** (10.4). |
+
+E três endurecimentos em código já existente: a allowlist de host + escopo do secret no
+`deploy-smoke.yml`, a trava de CI no `backup_rest.mjs`, e a §9.1 deste documento.
+
+### 10.4 O que SÓ O DONO pode fazer — checklist (nada disto sai por commit)
+
+São ajustes de painel. Enquanto não forem feitos, os arquivos acima são intenção, não controle.
+
+**GitHub → Settings → Code security**
+1. **Private vulnerability reporting: ON.** É o canal que o `SECURITY.md` promete — desligado,
+   o botão "Report a vulnerability" não existe e a promessa é falsa.
+2. **Secret scanning: ON** e **Push protection: ON.** Grátis em repo público. A push protection
+   é a que importa: barra o commit **antes** de ele existir. Dado o que a 10.1 diz sobre o
+   histórico ser eterno, é o controle de maior valor desta lista.
+3. **Dependabot alerts** e **security updates: ON.**
+
+**GitHub → Settings → Actions → General**
+4. **"Fork pull request workflows from outside collaborators" → *Require approval for all
+   outside collaborators*.** O padrão só exige aprovação de quem contribui pela primeira vez;
+   em repo público, isso significa que a segunda tentativa roda sozinha.
+5. **Workflow permissions → *Read repository contents and packages permissions*.** Os workflows
+   já declaram `permissions:` cada um, mas o default do repo é a rede embaixo.
+6. **Desmarcar "Allow GitHub Actions to create and approve pull requests".** Nenhum workflow
+   daqui faz isso; ligado, é só superfície.
+
+**GitHub → Settings → Rules/Branches → proteger a `main`**
+7. Exigir **PR antes do merge** e **revisão de Code Owner** (é o que liga o `CODEOWNERS`).
+8. Exigir verdes: **CI**, **Views**, **Semgrep**, **CodeQL**.
+9. **Bloquear force-push e exclusão da branch.** Mesmo com um só mantenedor: protege contra o
+   próprio erro, e é o que impede reescrever o histórico depois de um vazamento.
+
+**Vercel**
+10. Confirmar que **preview de PR de fork exige autorização** (o padrão da Vercel para repo
+    público). Sem isso, um PR de estranho vira um deploy no domínio do projeto — e o
+    `deployment_status` dele chega ao `deploy-smoke.yml`. A allowlist de host limita o estrago;
+    a autorização é que evita a situação.
+
+**Higiene**
+11. **Apagar as branches já mergeadas.** Num repo público cada branch parada é código antigo —
+    com workflows antigos, sem os endurecimentos desta seção — publicado e navegável.
+12. Continua valendo, e agora com mais peso: **MFA nas três contas** (GitHub, Supabase, Vercel),
+    itens 1 a 3 da seção 5.

@@ -4,6 +4,66 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 30/07/2026 — O repositório virou público: endurecimento
+
+Até esta data o repo era **privado**, e várias decisões registradas se apoiavam nisso — inclusive
+a seção 5 do `docs/seguranca.md`, que **mandava mantê-lo privado**, e o cabeçalho do `semgrep.yml`,
+que dispensava o Code Scanning por "exigir Advanced Security, que este repo (privado, plano free)
+não tem". A visibilidade mudou; esta entrada é o que se fez a respeito. A referência viva é a
+**seção 10 do `docs/seguranca.md`**.
+
+**Conferido primeiro (o que decide se há incêndio):** varredura de segredo em **todo o histórico**
+(`git log --all -p`) — JWT do Supabase, `ghp_`/`gho_`/`github_pat_`, `AKIA…`, `sk-…`, `nvapi-…`,
+tokens do Slack, blocos `BEGIN … PRIVATE KEY`. **Nenhum achado.** Os únicos JWTs do repositório são
+as duas chaves **`anon`** (produção e teste), públicas por design; **nenhuma `service_role` jamais
+entrou no git**, e nenhum `.csv`/`.env`/`.dump` foi versionado em commit algum. Por isso não há
+rotação de chave nesta leva — o histórico eterno que a visibilidade pública cria não pegou nada.
+
+**Passou a existir:**
+- **`SECURITY.md`** — canal privado de relato (Private vulnerability reporting), regras do teste
+  (leitura sim; `TRUNCATE`/DoS/engenharia social não) e, principalmente, a lista do que **não** é
+  vulnerabilidade: a chave `anon` no código encabeça, senão o canal enche de relato sobre uma
+  decisão de arquitetura.
+- **`.github/workflows/codeql.yml`** — Code Scanning, **gratuito em repo público**. É o ganho
+  direto da mudança e o contrapeso ao custo dela. Não substitui o Semgrep: aquele pergunta
+  "contém padrão proibido?", este segue **fluxo de dados** entre funções — o eixo que faltava num
+  `app.js` que monta HTML com `innerHTML`. `vendor/` e `.semgrep/tests/` ficam de fora (código de
+  terceiro e fixtures ruins de propósito).
+- **`.github/dependabot.yml`** — só `github-actions`, porque o portal é zero-build. Existe porque
+  pinar action ao SHA (a disciplina do repo) tem preço: sem alguém trocando o pin, "preso ao SHA"
+  vira "preso numa versão vulnerável para sempre".
+- **`.github/CODEOWNERS`** — PR de fora não toca `.github/`, `scripts/`, `tests/`, `vercel.json`
+  nem a config de agente sem revisão. **Só vale com a proteção de branch ligada** (§10.4).
+
+**Endurecido no que já existia:**
+- **`deploy-smoke.yml`** — é o único workflow com secret e o único cuja entrada vem de terceiro (a
+  URL do `deployment_status` é escrita pela Vercel, e um preview de **PR de fork** também dispara o
+  evento). Três correções: a URL passa por validação de conjunto de caracteres e **allowlist de
+  host** (`*.vercel.app`) antes de qualquer uso; o `VERCEL_AUTOMATION_BYPASS_SECRET` saiu do `env:`
+  do job e agora só existe no passo que roda **depois** dessa validação; e a URL deixou de ser
+  interpolada com `${{ … }}` dentro do `run:` — interpolado, o valor é colado no script antes de o
+  shell existir, e uma URL hostil viraria comando.
+- **`scripts/backup_rest.mjs`** — passa a **recusar** o modo completo (service key) quando
+  `GITHUB_ACTIONS=true`. Motivo: em repo público o **artifact do Actions é baixável por qualquer
+  um**. Hoje o dump traz só as 14 tabelas que a API já serve, então nada vaza; a trava impede a
+  mudança de uma linha (`SUPABASE_SERVICE_KEY` no `env:` do workflow, "para melhorar o backup")
+  que faria o artifact público passar a incluir as 4 tabelas de staging — em silêncio, sem erro.
+  O comentário do `backup.yml` já pedia isso; comentário não é executável, a trava é.
+- **`docs/seguranca.md` §9.1** — o parágrafo ainda afirmava que o default de `supabase_admin` "só
+  atinge objetos criados por esse role; o painel cria como `postgres`, que já está fechado", ou
+  seja, que na prática não pegava. A medição de 28/07 desmentiu (18 tabelas nascidas com
+  TRUNCATE/REFERENCES/TRIGGER para `anon`, **108 grants**, e RLS não bloqueia TRUNCATE); o
+  `CLAUDE.md` foi corrigido na época, este doc não. Num repo público, parágrafo que subestima
+  risco vivo é lido por quem procura o risco.
+- Prosa que afirmava "o repo é privado" no `backup.yml` (que já havia errado no sentido oposto
+  antes de 27/07) e no `semgrep.yml`, mais os itens 4 e 6 da seção 5 do `docs/seguranca.md`.
+
+**O que ficou pendente e não sai por commit:** os 12 itens do checklist da **§10.4** —
+push protection, private vulnerability reporting, aprovação obrigatória para workflow de fork,
+proteção da `main` com os checks obrigatórios, e a confirmação na Vercel de que preview de fork
+exige autorização. Enquanto não forem feitos no painel, os arquivos acima são intenção, não
+controle.
+
 ## 30/07/2026 — Rótulos dos tópicos do painel lateral
 
 - Os rótulos visíveis passaram de **Documentos da Linha** para **Linhas**, de **Empresas** para

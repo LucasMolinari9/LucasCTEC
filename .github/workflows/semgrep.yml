@@ -12,8 +12,14 @@
 #       semgrep.dev. Precisam de rede; por isso não dá pra rodar essa metade no ambiente do
 #       agente Claude (saída bloqueada), só aqui e na máquina do dono.
 #
-# Sem upload SARIF / Code Scanning: exige GitHub Advanced Security, que este repo (privado,
-# plano free) não tem. O resultado fica no log do job — e o job falha se houver achado.
+# Sem upload SARIF: os achados ficam no log do job, e o job falha se houver algum. Até
+# 30/07/2026 a razão escrita aqui era que Code Scanning "exige GitHub Advanced Security, que
+# este repo (privado, plano free) não tem" — isso caducou quando o repositório virou PÚBLICO
+# (em repositório público o Code Scanning é gratuito). A razão hoje é outra e é deliberada:
+# o `--error` faz este gate REPROVAR o push, que é o comportamento que se quer de uma regra
+# escrita para este portal; SARIF publica alerta, não bloqueia. Quem ocupa a aba Security é o
+# `codeql.yml`, criado junto com esta correção. Se um dia os dois convergirem, o caminho é
+# somar o `--sarif` aqui com um passo de upload, não trocar o `--error` por ele.
 #
 # Os `uses:` estão presos ao SHA (o `# v4` ao lado é só legenda) — ver docs/semgrep.md
 # § "Actions presas ao SHA". Foi a regra `github-actions-mutable-action-tag` deste próprio
@@ -48,7 +54,10 @@ jobs:
       - name: Instalar Semgrep (versão fixa)
         run: pip install semgrep==1.171.0
 
-      # --metrics=off em ambas: o repo é privado, nada de telemetria pra semgrep.dev.
+      # --metrics=off em ambas. A razão antiga ("o repo é privado") caiu com a mudança de
+      # visibilidade; a atual é mais simples e não depende disso: o gate roda em todo push, e
+      # nada aqui precisa sair para semgrep.dev além do download das regras. Telemetria que
+      # não serve a ninguém deste lado é superfície de graça.
       # --error faz o job falhar quando há achado (sem isso o Semgrep sai 0 e o gate é decorativo).
       - name: '[1] Regras locais do portal (offline)'
         run: semgrep scan --config=.semgrep/rules --metrics=off --error .
