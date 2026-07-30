@@ -21,7 +21,11 @@ on:
   schedule:
     - cron: '0 7 * * 1' # toda segunda 07:00 UTC (1 h depois do backup semanal)
   workflow_dispatch:
+  # `branches: [main]` para não rodar duas vezes por push em branch com PR aberto — o porquê
+  # completo, e o custo aceito, estão no cabeçalho do ci.yml. O filtro de `paths` abaixo continua
+  # valendo por cima: na `main`, só roda se um destes arquivos mudou.
   push:
+    branches: [main]
     paths:
       - CLAUDE.md
       - docs/schema.md

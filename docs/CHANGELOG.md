@@ -4,6 +4,26 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 30/07/2026 — Cada gate parou de rodar duas vezes por push
+
+PR 1 do plano da auditoria preliminar de 30/07/2026 (achado **C**). `ci`, `views`, `semgrep`,
+`deriva` e `db-checks` rodavam em `push` (qualquer branch) **e** em `pull_request`: com PR aberto,
+todo push disparava cada gate **duas vezes**. Medido ao vivo no PR #85 — **8 execuções onde 4
+bastavam**. Agora o `push` é `branches: [main]` nos cinco; `pull_request`, os crons e os filtros de
+`paths` ficaram intactos. `backup.yml` e `deploy-smoke.yml` não rodam em push e não foram tocados.
+
+- **A cobertura não muda:** toda mudança segue verificada antes do merge (pelo `pull_request`) e
+  push direto na `main` segue coberto (pelo `push`).
+- **Custo aceito, registrado onde dói:** push numa branch **sem PR aberto** não dispara mais nada.
+  Antes disparava, e era um sinal que se usava — nesta própria sessão o veredito do CI foi lido no
+  push, antes de o PR existir. Mitigação no mesmo commit: `workflow_dispatch` acrescentado a `ci`,
+  `views` e `semgrep` (o `deriva` e o `db-checks` já tinham), então dá para disparar à mão pela aba
+  Actions. Para o gate leve, `node tests/check.js` local continua sendo a resposta mais rápida.
+- Em repo **público** o ganho é tempo e ruído, não dinheiro (minutos ilimitados). O valor de
+  dinheiro só volta se o repositório voltar a ser privado — ver o PR 4.
+- `CLAUDE.md` passo 1 acertado junto: diz onde cada gate dispara, e que "quatro workflows" é o
+  que entra num diff comum — os outros três são de cron.
+
 ## 30/07/2026 — A guarda `[2b]` passou a varrer os comentários dos workflows
 
 PRs 3 e 2 do plano acordado na auditoria preliminar de 30/07/2026

@@ -33,7 +33,12 @@ on:
   schedule:
     - cron: '0 8 * * *' # todo dia 08:00 UTC (1 h depois do Deriva, 2 h depois do Backup)
   workflow_dispatch:
+  # `branches: [main]` para não rodar duas vezes por push em branch com PR aberto — o porquê
+  # completo, e o custo aceito, estão no cabeçalho do ci.yml. O filtro de `paths` abaixo continua
+  # valendo por cima: na `main`, só roda se um destes arquivos mudou. Este é o gate que fala com
+  # o banco vivo; o cron diário é a cobertura que não depende de push nenhum.
   push:
+    branches: [main]
     paths:
       - app.js
       - scripts/check_realtime.mjs
