@@ -172,13 +172,20 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    armadilhas antes de escrever SQL/JS. Ajuste isolado de CSS/texto/UI pula direto pro passo 1.
 1. Edite `app.js` (JS) e/ou `index.html` (HTML/CSS). **Trabalhe numa branch**, não direto na
    `main`: push na branch → o Vercel gera **preview deploy** → confira no preview → merge na
-   `main` (que é a publicada). O CI roda **quatro workflows**, separados de
+   `main` (que é a publicada). O CI roda **quatro workflows** no seu diff, separados de
    propósito (um vermelho não esconde o outro): `ci.yml` (gate leve — `tests/check.js`),
    `views.yml` (navegador — `check_views.mjs` + `check_abas.mjs`), `semgrep.yml` (estático) e
    `deploy-smoke.yml` depois que a Vercel publica (headers, allowlist e isolamento do Supabase).
+   Os outros três (`deriva.yml`, `db-checks.yml`, `backup.yml`) são de cron, e só entram no seu
+   diff se ele tocar os arquivos que eles vigiam.
    Se previews estiverem protegidos pela Vercel, configure um **Protection Bypass for
    Automation** e grave o mesmo valor no secret GitHub `VERCEL_AUTOMATION_BYPASS_SECRET`;
    sem isso o smoke recebe a tela de login em vez do portal e falha de propósito.
+   **Onde os gates disparam (desde 30/07/2026):** `ci`, `views`, `semgrep`, `deriva` e
+   `db-checks` rodam em **`pull_request`** e em **push na `main`** — não mais em push de branch
+   qualquer, que fazia cada um rodar **duas vezes** quando havia PR aberto. Consequência prática:
+   **push numa branch sem PR aberto não dispara gate nenhum.** Rode `node tests/check.js` local,
+   ou dispare pela aba Actions → Run workflow (`workflow_dispatch`, que os cinco têm).
 2. **Antes de publicar, rode `node tests/check.js`** — valida a sintaxe do `app.js`, garante que
    não voltou `<script>` inline no `index.html`, confere as cópias de teste (anti-drift), cobra a
    **deriva docs×código** (seção `[2b]`, ver abaixo) e roda todos os testes. Só publique tudo

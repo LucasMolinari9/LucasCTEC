@@ -7,9 +7,25 @@
 # § "Actions presas ao SHA".
 name: CI
 
+# `push` restrito à `main` desde 30/07/2026 (PR 1 do plano da auditoria preliminar de 30/07).
+# Antes era `push:` sem filtro, e como este workflow também roda em `pull_request`, TODO push numa
+# branch com PR aberto disparava o gate DUAS vezes. Medido no PR #85: 8 execuções onde 4 bastavam.
+#
+# A cobertura não muda: toda mudança continua verificada antes do merge (pelo `pull_request`), e
+# push direto na `main` segue coberto (pelo `push`). O que muda é só o gasto e o ruído.
+#
+# CUSTO ACEITO, para quem for mexer nisso: push numa branch SEM PR aberto não dispara mais nada.
+# Quem quiser o veredito antes de abrir o PR tem duas saídas — `node tests/check.js` local (que é
+# o gate deste arquivo, em segundos) ou a aba Actions → Run workflow, que é o `workflow_dispatch`
+# abaixo, acrescentado junto com esta mudança justamente por causa dela.
+#
+# Os outros quatro gates (views, semgrep, deriva, db-checks) receberam o mesmo tratamento no mesmo
+# commit — se um dia voltar `push:` sem filtro em algum, a duplicação volta só naquele, em silêncio.
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 # GITHUB_TOKEN no mínimo: nenhum destes workflows faz push, abre PR ou comenta.
 # Sem este bloco o token herda o default do repo/organização, que pode ser contents: write
