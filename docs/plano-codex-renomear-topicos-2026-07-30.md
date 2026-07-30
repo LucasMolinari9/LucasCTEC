@@ -178,6 +178,31 @@ que ninguém documentou: **relate no PR em vez de contornar**.
 Confira também, visualmente ou pelo HTML gerado, que a sidebar não ganhou quebra de linha nova
 — os nomes novos são mais curtos que os antigos, então não deveria acontecer.
 
+## O que vai ficar vermelho e NÃO é culpa sua
+
+**Você não tem acesso à Vercel.** No PR, o workflow **`deploy-smoke.yml`** vai falhar ou nem
+chegar a rodar, e isso é esperado — ele dispara no evento `deployment_status` da Vercel e
+verifica headers, allowlist de arquivos e o isolamento do Supabase **na URL publicada**.
+Depende de coisas que só o dono controla: a conexão do repo com o projeto Vercel e o secret
+`VERCEL_AUTOMATION_BYPASS_SECRET` (hoje ausente — sem ele o smoke recebe a tela de login em vez
+do portal e reprova de propósito).
+
+**Não tente consertar esse vermelho.** Não mexa em `vercel.json`, não mexa no
+`.github/workflows/deploy-smoke.yml`, não desabilite gate nenhum, não invente workaround. Nada
+neste trabalho toca deploy, headers ou CSP — é troca de rótulo de UI. Se o `deploy-smoke` ficar
+vermelho, escreva no corpo do PR uma linha dizendo que ele reprovou por falta de acesso/secret
+da Vercel, sem relação com o diff, e siga.
+
+Os quatro gates que **são seus** e precisam ficar verdes são os da seção acima: `check.js`,
+`check_views.mjs`, `check_abas.mjs` e `semgrep.sh` (sem `--full`). Dois avisos sobre eles:
+
+- `check_views.mjs` e `check_abas.mjs` precisam de **Chromium via Playwright** (versão fixa no
+  repo). Se sua máquina não conseguir baixá-lo, diga isso no PR e deixe que o workflow
+  `views.yml` rode por você no CI — mas **não** troque a versão do Playwright para contornar.
+- `semgrep.sh --full` e os verificadores de banco (`check_deriva.mjs`, `check_realtime.mjs`,
+  `check_data_quality.mjs`, `check_grants.mjs`) precisam de **rede até o Supabase**. Não são
+  parte desta tarefa e você não deve rodá-los.
+
 ## Entrega
 
 Commit descritivo, push com `git push -u origin <branch>`, e abra o PR **só se o dono pedir**.
