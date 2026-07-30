@@ -47,7 +47,7 @@ ou de rede ficam de fora dele e rodam no CI:
 | Comando | O que cobre | Precisa de |
 |---|---|---|
 | `node tests/check.js` | sintaxe, anti-drift, lógica pura | nada |
-| `node scripts/check_views.mjs` | abre as 17 views num navegador headless | Chromium |
+| `node scripts/check_views.mjs` | abre as 16 views num navegador headless | Chromium |
 | `node scripts/check_abas.mjs` | regressão das abas do modal | Chromium |
 | `./scripts/semgrep.sh` | padrões proibidos (`eval`, CDN em runtime, `pdfHTML` fora do seam) | Semgrep |
 | `node scripts/check_realtime.mjs` | publicação Realtime × `RT_TABLES` | rede |

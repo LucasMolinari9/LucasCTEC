@@ -42,7 +42,6 @@ const RT_TABLES   = extrai(/const RT_TABLES = (\[[\s\S]*?\]);/,   'RT_TABLES');
 //     é a guarda que impede a divergência de voltar sem ninguém perceber. ---
 const EXPECTED = {
   historicoLinha:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste','tabela_vista_teste'],
-  itinerarios:['itinerario_teste','municipio_teste','codempresa_teste'],
   quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste','qh_teste','tarifa_atual_teste','origem_teste','codempresa_teste','tabela_vista_teste'],
   tarifas:['tarifa_atual_teste','codempresa_teste'],
   frota:['qh_teste','codempresa_teste'],
