@@ -139,11 +139,23 @@ auditoria — e para que a decisão de conviver com elas seja explícita, não e
 
 **9.1 — Defaults do role `supabase_admin` (SEC-01, parcial).** Existe um segundo conjunto de
 default privileges, dono `supabase_admin`, concedendo `arwdDxtm` (inclui INSERT/UPDATE/DELETE/
-TRUNCATE) a `anon` e `authenticated` em tabelas de `public`. Só atinge objetos criados **por esse
-role**; o painel do Supabase cria como `postgres`, que já está fechado. **Não é fechável:**
-`postgres` não é superusuário no Supabase e o `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin`
-responde `42501: permission denied to change default privileges`. **Mitigação:** o gate
-`check_grants.mjs` roda diariamente e pega qualquer tabela que apareça com grant de escrita.
+TRUNCATE) a `anon` e `authenticated` em tabelas de `public`. **Não é fechável:** `postgres` não é
+superusuário no Supabase e o `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin` responde
+`42501: permission denied to change default privileges`.
+
+⚠️ **Até 30/07/2026 este parágrafo dizia que o default "só atinge objetos criados por esse role;
+o painel cria como `postgres`, que já está fechado"** — ou seja, que na prática não pegava. **A
+medição desmentiu isso em 28/07/2026** e o texto ficou para trás quando o §9.3 foi atualizado
+(commit `ead1d67`): ao rodar o `backup_schema.sql` num projeto novo **pelo SQL Editor, portanto
+como `postgres`**, as 18 tabelas nasceram com TRUNCATE/REFERENCES/TRIGGER para `anon` e
+`authenticated` — **108 grants**. **RLS não bloqueia TRUNCATE** e a chave `anon` é pública: era
+caminho aberto para esvaziar o banco. Quem lia só este documento **subestimava** exatamente o
+risco que justifica o gate diário.
+
+**Por isso:** o `docs/backup_schema.sql` revoga tudo que não é SELECT (não só `MAINTAIN`), e o
+gate `check_grants.mjs` roda **diariamente** enquanto esse default existir, pegando qualquer
+tabela que apareça com grant de escrita. Fonte da verdade sobre o assunto: o `CLAUDE.md`, seção
+**Supabase → RLS / segurança**.
 
 **9.2 — Abuso da API pública (SEC-02).** A chave `anon` é pública por design e o navegador fala
 **direto** com o Supabase — a Vercel não está no caminho da requisição, então não há onde aplicar

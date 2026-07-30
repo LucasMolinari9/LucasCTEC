@@ -4,6 +4,34 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 30/07/2026 — A guarda `[2b]` passou a varrer os comentários dos workflows
+
+PRs 3 e 2 do plano acordado na auditoria preliminar de 30/07/2026
+(`docs/handoff-2026-07-30-auditoria-verificacao.md`, achado **D**). Feitos **nesta ordem** de
+propósito: primeiro a guarda, para provar contra o caso real que ela pega; depois a correção.
+
+- **A guarda (PR 3).** A seção `[2b]` do `tests/check.js` varria só `.md`. Comentário de workflow
+  é prosa viva que ninguém relê — não abre em leitor de markdown —, e por isso o `views.yml` pôde
+  afirmar "23 views" e "~62% do app.js" com o gate verde. Agora os `.github/workflows/*.yml`
+  entram na conferência de **fatos numéricos** (só nela: link markdown e `SB_URL` não são a
+  linguagem deles). Três mudanças de mecanismo: `doc` do `FATOS` aceita **lista** de arquivos (nos
+  workflows, o diretório inteiro — se a frase migrar de arquivo, continua coberta); em `.yml` o
+  marcador `#` sai **antes** de normalizar o espaço, senão frase quebrada em duas linhas nunca
+  casa o regex e a guarda passa **cega**, que é pior que não existir; e **toda ocorrência** é
+  conferida, não só a primeira.
+- **A correção (PR 2).** `views.yml`: **23 → 17 views** (nas três linhas que afirmavam isso) e
+  **~62% → ~59,5%** da seção MODAL. `docs/seguranca.md` §9.1: dizia que os defaults do
+  `supabase_admin` "só atingem objetos criados por esse role; o painel cria como `postgres`, que
+  já está fechado" — a medição de 28/07 desmentiu (18 tabelas nasceram com TRUNCATE/REFERENCES/
+  TRIGGER para `anon`, **108 grants**), o `CLAUDE.md` foi atualizado e o §9.1 ficou para trás no
+  commit `ead1d67`. O documento que o dono lê **subestimava** o risco que justifica o gate diário.
+- **Medido, não presumido:** o gate ficou **vermelho** nas 4 divergências antes do PR 2 e **verde**
+  depois (13/13 afirmações, 15 ocorrências). Conserto parcial (uma das três linhas) segue vermelho;
+  apagar a frase inteira dá "não achei a afirmação", não silêncio.
+- O percentual **~59,5%** é o medido hoje, não os ~58,8% que o handoff registrou: o `app.js` mudou
+  entre a auditoria e esta sessão. As menções a ~58,8% em `CLAUDE.md` e `estrutura-frontend.md`
+  seguem dentro da tolerância de 1,5 ponto e não foram tocadas.
+
 ## 30/07/2026 — Rótulos dos tópicos do painel lateral
 
 - Os rótulos visíveis passaram de **Documentos da Linha** para **Linhas**, de **Empresas** para
