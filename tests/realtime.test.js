@@ -41,8 +41,6 @@ const RT_TABLES   = extrai(/const RT_TABLES = (\[[\s\S]*?\]);/,   'RT_TABLES');
 //     incluindo lookups. Se você alterar VIEW_TABLES no app.js, atualize aqui também —
 //     é a guarda que impede a divergência de voltar sem ninguém perceber. ---
 const EXPECTED = {
-  folhaRosto:['tabela_vista_teste','codempresa_teste','tarifa_atual_teste'],
-  folhaDivisoria:['tabela_vista_teste','codempresa_teste'],
   historicoLinha:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste','tabela_vista_teste'],
   itinerarios:['itinerario_teste','municipio_teste','codempresa_teste'],
   quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste','qh_teste','tarifa_atual_teste','origem_teste','codempresa_teste','tabela_vista_teste'],
@@ -53,15 +51,11 @@ const EXPECTED = {
   historicoEmpresa:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste'],
   ligacoesPorEmpresa:['tabela_vista_teste','codempresa_teste'],
   secoesPorEmpresa:['tarifa_atual_teste'],
-  ligacoesPorNome:['tabela_vista_teste','codempresa_teste'],
-  ligacoesPorNumero:['tabela_vista_teste','codempresa_teste'],
   ligacoesPorLogradouro:['itinerario_teste','tabela_vista_teste','codempresa_teste','municipio_teste'],
   municipioRegiao:['municipio_teste','itinerario_teste','tabela_vista_teste','codempresa_teste'],
   ligacoesPorTerminal:['qh_intervalo_teste','qh_predeterminado_teste','origem_teste','tabela_vista_teste','codempresa_teste','municipio_teste','itinerario_teste'],
   secoesPorLigacao:['tarifa_atual_teste'],
-  relatoriosGerenciais:['tabela_vista_teste','codempresa_teste'],
   frotaPorEmpresa:['qh_teste','codempresa_teste'],
-  pesquisaEvento:['evento_teste','codempresa_teste'],
   portarias:['portaria_teste'],
   localidades:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','municipio_teste','localidades_teste','codempresa_teste'],
 };

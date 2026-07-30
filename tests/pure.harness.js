@@ -119,18 +119,6 @@ function dispatchRealtime(tabs, activeTabId, table, payload){
   };
 }
 
-// app.js:2303 — agregação do Relatório Gerencial (depende de isLinhaAtiva e countBy)
-function resumoRelatorio(rows){
-  return {
-    total: rows.length,
-    ativas: rows.filter(isLinhaAtiva).length,
-    canc:  rows.filter(r=>r.cancelado).length,
-    paral: rows.filter(r=>r.paralisado).length,
-    sj:    rows.filter(r=>r.sub_judice).length,
-    empCount: new Set(rows.map(r=>r.codempresa)).size,
-    porEmp: [...countBy(rows, r=>r.codempresa||'—')].sort((a,b)=>b[1]-a[1]).slice(0,15),
-  };
-}
 // app.js:2715 — ordenação numérica do RJ usada nas listagens por empresa
 function rjOrder(a, b){
   const na=parseInt(a,10), nb=parseInt(b,10);
@@ -236,7 +224,7 @@ module.exports = {
   fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, situacaoHTML, isLinhaAtiva, isVigente, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, localidadesQueCasam, orIlike, municipiosExatos,
   tabMatchesEvent, dispatchRealtime,
-  resumoRelatorio, rjOrder, resumoFrota, filtrarFrotaEmpresas, pageBounds,
+  rjOrder, resumoFrota, filtrarFrotaEmpresas, pageBounds,
   beginGen, isCurrentGen, commitViewResult, pushDetail, popDetail,
   MAX_TABS, makeTab, openTabState, closeTabState,
 };

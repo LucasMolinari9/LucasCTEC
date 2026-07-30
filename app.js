@@ -212,7 +212,6 @@ const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;
    ================================================================ */
 const I = {
   file:'<path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/>',
-  divider:'<path d="M4 5h16M4 12h10M4 19h16"/><path d="M16 9l3 3-3 3"/>',
   history:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/>',
   route:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h6.5"/>',
   clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
@@ -222,13 +221,10 @@ const I = {
   building:'<path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16"/><path d="M15 9h3a2 2 0 0 1 2 2v10"/><path d="M8 7h2M8 11h2M8 15h2M3 21h18"/>',
   link:'<path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8"/>',
   segments:'<path d="M3 12h4M10 12h4M17 12h4"/><circle cx="8.5" cy="12" r="1.2"/><circle cx="15.5" cy="12" r="1.2"/>',
-  alpha:'<path d="M4 18 7 9l3 9M5 15h4"/><path d="M14 9h5l-5 9h5"/>',
-  hash:'<path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16"/>',
   signpost:'<path d="M12 3v18"/><path d="M5 6h11l3 2.5L16 11H5z"/>',
   map:'<path d="m9 4 6 2 6-2v14l-6 2-6-2-6 2V6z"/><path d="M9 4v14M15 6v14"/>',
   pin:'<path d="M12 21s7-6.5 7-11a7 7 0 1 0-14 0c0 4.5 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/>',
   hub:'<circle cx="12" cy="12" r="2.5"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3M6.5 6.5 8.6 8.6M15.4 15.4l2.1 2.1M17.5 6.5 15.4 8.6M8.6 15.4l-2.1 2.1"/>',
-  chart:'<path d="M4 20V4M4 20h16"/><rect x="7" y="12" width="3" height="5"/><rect x="12" y="8" width="3" height="9"/><rect x="17" y="5" width="3" height="12"/>',
   search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   law:'<path d="M12 3v18M5 21h14M7 7l-3 6h6zM17 7l-3 6h6z"/><path d="M5 7h14"/><circle cx="12" cy="4" r="1"/>',
   // ícones exclusivos (evitam repetição entre famílias — o ícone é o elemento mais escaneável)
@@ -247,14 +243,12 @@ const SECTIONS = [
   { key:'doc', name:'Documentos da Linha',
     icon:'file', desc:'Itinerário, quadro de horários, tarifas, frota e histórico de cada linha regular.',
     items:[
-      ['file','Folha de Rosto','Resumo cadastral: empresa, código, tarifa e situação','folhaRosto',false],
       ['route','Itinerários','Percurso por sentido: logradouros e municípios','itinerarios',false],
       ['clock','Quadro de Horários','Partidas por sentido e dia — por linha ou empresa','quadroHorarios',false],
       ['ticket','Tarifas','Seções e valores vigentes — por linha ou empresa','tarifas',false],
       ['history','Histórico da Linha','Alterações e eventos registrados','historicoLinha',false],
       ['bus','Frota','Frota operacional e reserva por tipo de veículo','frota',false],
       ['structure','Estrutura Operacional','Consolidado: cadastro, seções, itinerário, horários e frota','estrutura',false],
-      ['divider','Folha Divisória','Capa de separação para processos e arquivos','folhaDivisoria',false],
     ]},
   { key:'emp', name:'Empresas',
     icon:'building', desc:'Operadoras regulares, frota consolidada, seções atendidas e histórico de eventos por empresa.',
@@ -268,21 +262,19 @@ const SECTIONS = [
   { key:'lig', name:'Consultas de Ligações',
     icon:'hub', desc:'Busque linhas por nome, número, logradouro, terminal ou município.',
     items:[
-      ['alpha','Ligações pelo Nome','Buscar em ordem alfabética crescente','ligacoesPorNome',false],
-      ['hash','Identificar pelo Número','Localizar uma linha pelo código','ligacoesPorNumero',false],
       ['signpost','Ligações por Logradouro','Linhas que passam por uma via','ligacoesPorLogradouro',false],
       ['map','Município e Região','Linhas por origem e destino','municipioRegiao',false],
       ['pin','Linhas por Localidade e Município','Busque por seção, "via" ou cruze localidades/municípios','localidades',false],
       ['hub','Ligações por Terminais','Linhas que atendem um terminal','ligacoesPorTerminal',false],
       ['ruler','Seções por Ligação','Seções que compõem uma linha','secoesPorLigacao',true],
     ]},
-  { key:'ger', name:'Portarias',
-    icon:'law', desc:'Relatórios consolidados, pesquisa de eventos e legislação.',
-    items:[
-      ['chart','Relatórios Gerenciais','Indicadores e consolidados da DIVAT','relatoriosGerenciais',false],
-      ['search','Pesquisa de Evento','Buscar eventos por termo livre','pesquisaEvento',false],
-      ['law','Portarias / Legislação','Buscar portarias por número, assunto ou texto','portarias',false],
-    ]},
+  { key:'ger', name:'Portarias', direct:'portarias',
+    icon:'law', desc:'Portarias e legislação — busca por número, assunto ou texto.',
+    items:[],
+    // metadados do card único do tópico — não entra na grade (o tópico abre o modal direto),
+    // mas precisa alimentar VIEW_META/VIEW_TOPIC (deep link, busca do topo) como se entrasse.
+    directMeta:['law','Portarias / Legislação','Buscar portarias por número, assunto ou texto','portarias',false],
+  },
 ];
 
 /* ================================================================
@@ -309,6 +301,14 @@ SECTIONS.forEach(sec => {
     VIEW_META[view] = { title, icon:ic, needsLine:!!needsLine };
     VIEW_TOPIC[view] = sec.key;
   });
+  // tópico-ação (`direct`): o card não entra na grade, mas o deep link (#/consulta/<view>) e a
+  // busca do topo precisam achar VIEW_META/VIEW_TOPIC do mesmo jeito que achariam se ele
+  // estivesse em `items` normalmente.
+  if (sec.directMeta){
+    const [ic, title, desc, view, needsLine] = sec.directMeta;
+    VIEW_META[view] = { title, icon:ic, needsLine:!!needsLine };
+    VIEW_TOPIC[view] = sec.key;
+  }
 });
 
 const DEFAULT_TOPIC = 'doc';   // tópico mostrado ao abrir o site sem hash (o mais consultado)
@@ -319,7 +319,11 @@ const DEFAULT_TOPIC = 'doc';   // tópico mostrado ao abrir o site sem hash (o m
 // outro <button> é fechado implicitamente pelo parser HTML (regra do "stack de botões"),
 // quebrando o layout; o `.card-slot` com position:relative é quem posiciona o ícone por cima.
 function topicGridHTML(sec){
-  return sec.items.map(([ic, title, desc, view, needsLine]) => `
+  // tópico-ação (`direct`): não tem grade própria no painel lateral (o clique no tópico abre o
+  // modal direto), mas o seletor de documentos da aba ("+", `tabChooserHTML`) varre TODOS os
+  // tópicos por este mesmo helper — sem isso o card do tópico-ação some de lá também.
+  const items = (sec.direct && sec.directMeta) ? [sec.directMeta] : sec.items;
+  return items.map(([ic, title, desc, view, needsLine]) => `
     <div class="card-slot">
       <button class="card${needsLine?' needs-line':''}" type="button"
         data-view="${view}" data-needs-line="${needsLine?1:0}" data-title="${esc(title)}">
@@ -360,9 +364,9 @@ function renderSideNav(activeKey){
     SECTIONS.map(sec => `
     <button type="button" class="topic-btn${(sec.key===activeKey&&!(activeKey==='doc'&&searchOpen))?' active':''}${sec.key===expandedTopicKey?' expanded':''}" data-topic="${sec.key}">
       <span class="t-ico">${svg(I[sec.icon])}</span>${sec.name}
-      <span class="chev">${svg('<path d="m9 6 6 6-6 6"/>')}</span>
+      ${sec.direct ? '' : `<span class="chev">${svg('<path d="m9 6 6 6-6 6"/>')}</span>`}
     </button>
-    ${sec.key===expandedTopicKey ? `<div class="sub-list">${sec.items.map(([ic,title,desc,view]) => `<button type="button" data-view="${view}">${title}</button>`).join('')}</div>` : ''}
+    ${(sec.key===expandedTopicKey && !sec.direct) ? `<div class="sub-list">${sec.items.map(([ic,title,desc,view]) => `<button type="button" data-view="${view}">${title}</button>`).join('')}</div>` : ''}
   `).join('');
   // no mobile a sidebar vira faixa horizontal (ver @media em styles.css); sem isso, um
   // tópico ativo fora da 1ª "dobra" da faixa (deep link, busca) fica sem destaque visível
@@ -588,6 +592,10 @@ const viewResultsHTML = views => views.map(([view, m]) => `
 function openViewFromSearch(view){
   const topic = VIEW_TOPIC[view];
   if (!topic) return;
+  const sec = SECTIONS.find(s => s.key === topic);
+  // tópico-ação (`direct`): não há grade pra destacar um card dentro — abre o modal direto,
+  // senão a busca levaria a um grid vazio.
+  if (sec && sec.direct){ openView(view); return; }
   searchOpen = false;
   selectTopic(topic, { highlight: view });
 }
@@ -752,12 +760,12 @@ async function refreshActiveLine(){
    ----------------------------------------------------------------
    SUB-ÍNDICE (grep `--- ` para pular). Na ordem atual do arquivo:
      Chrome do modal · Faixa de abas · Dispatcher — runView ·
-     Helpers de documento e busca de linha · DOC · Folha de Rosto ·
+     Helpers de documento e busca de linha ·
      Eventos — helpers compartilhados · DOC · Histórico (linha) ·
      DOC · Itinerários · DOC · Quadro de Horários · DOC · Tarifas ·
      DOC · Frota · DOC · Estrutura Operacional ·
      DOC · Empresas · DOC · Municípios / entre-municípios ·
-     Relatórios · DOC · Portaria · DOC · Localidades
+     DOC · Portaria · DOC · Localidades
    ================================================================ */
 /* --- Chrome do modal --------------------------------------------- */
 const overlay       = document.getElementById('modalOverlay');
@@ -1258,56 +1266,6 @@ async function lineSearchRun(term, host, { render, emptyMsg, prompt, useActive =
 // resolve o termo → 1 linha (renderiza o documento) ou várias (lista p/ escolher)
 function lineDocRun(term, host, render){
   return lineSearchRun(term, host, { render, emptyMsg:'Busque a linha pelo nome, número ou código.', prompt:'clique para abrir o documento' });
-}
-
-LOADERS.folhaRosto = () => lineDocView({ subtitle:'Cadastro de Linhas: Folha de Rosto', render:renderFolhaRosto });
-/* --- DOC · Folha de Rosto ----------------------------------------- */
-async function renderFolhaRosto(host, line){
-  const view = currentView, gen = beginGen(view);
-  host.innerHTML = loading();
-  const [rows, , tarifas] = await Promise.all([
-    sbFetch('tabela_vista_teste', `codlinha=eq.${enc(line.codlinha)}&select=${LINE_FIELDS}&limit=1`),
-    getEmpresas(),
-    sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=tarifa,secao&order=secao&limit=1`)
-  ]);
-  const L = rows[0] || line;
-  const tv = tarifas[0]?.tarifa;
-  const tarifa = tv != null ? 'R$ '+Number(tv).toFixed(2).replace('.',',') : '—';
-  const status = situacaoHTML(L);
-  const inner = `${metaRows([
-      ['Empresa', esc(empNome(L.codempresa)), true],
-      ['Registro', 'RJ-'+esc(orDash(L.codempresa))],
-      ['Código da Ligação', esc(fmtCode(L.codlinha))],
-      ['Número da Ligação', esc(orDash(L.numero_ligacao))],
-      ['Ligação', esc(L.nome_ligacao||'—'), true],
-      ['Nome (ordem crescente)', esc(orDash(L.nome_lig_cresc)), true],
-      ['Via', esc(orDash(L.via))],
-      ['Característica', esc(orDash(L.caracteristica))],
-      ['Tipo', esc(orDash(L.tipo))],
-      ['Tarifa', tarifa],
-      ['Licitada', L.licitado?'Sim':'Não'],
-      ['Data de criação', fmtDate(L.data_criacao)],
-      ['Processo de criação', esc(orDash(L.processo_criacao))],
-      ['Situação', status, true],
-    ])}
-    <div class="doc-foot">Fonte: cadastro DETRO-RJ · DIVAT</div>`;
-  host.innerHTML = inner;
-  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Cadastro de Linhas: Folha de Rosto')}${inner}</div>` });
-}
-
-LOADERS.folhaDivisoria = () => lineDocView({ subtitle:'Folha Divisória', render:renderFolhaDivisoria });
-async function renderFolhaDivisoria(host, line){
-  const view = currentView, gen = beginGen(view);
-  host.innerHTML = loading();
-  await getEmpresas();
-  const corpo = `<div class="fd-body">
-      <div class="fd-title">${esc(line.nome_ligacao||'—')}</div>
-      <div class="mono fd-code">${esc(fmtCode(line.codlinha))} · ${esc(empNome(line.codempresa))} · RJ-${esc(line.codempresa||'—')}</div>
-      <div class="fd-chip">${situacaoHTML(line)}</div>
-      <div class="fd-note">Página de separação do processo da linha</div>
-    </div>`;
-  host.innerHTML = `<div class="fd-wrap">${corpo}</div>`;
-  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc fd-wrap-pdf">${docHead('Folha Divisória')}<div class="fd-body-pdf">${corpo}</div></div>` });
 }
 
 /* Histórico (linha e empresa): um evento por página, descrição/observação por extenso.
@@ -1999,29 +1957,6 @@ LOADERS.historicoEmpresa = async () => {
 };
 
 /* ---- Consultas de Ligações ---- */
-LOADERS.ligacoesPorNome = async () => {
-  searchPanel({ title:'Ligações pelo Nome', placeholder:'Parte do nome da ligação', note:'Esta consulta casa apenas o NOME da ligação (ordem alfabética). Para localizar por número ou código, use a busca do topo da página.', onRun: async(term, host)=>{
-    const view = currentView, gen = beginGen(view);
-    const qs = term? `nome_ligacao=ilike.*${ilikeTerm(term)}*&` : '';
-    const [rows] = await Promise.all([
-      sbFetch('tabela_vista_teste', `${qs}select=${LINE_FIELDS}&order=nome_ligacao&limit=80`),
-      getEmpresas()
-    ]);
-    lineResults(host, rows, { view, gen });
-  }, auto:true});
-};
-LOADERS.ligacoesPorNumero = async () => {
-  searchPanel({ title:'Identificar pelo Número', placeholder:'Número ou código da linha', onRun: async(term, host)=>{
-    const view = currentView, gen = beginGen(view);
-    if(!term){ host.innerHTML=emptyBox('Digite o número ou código.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    const e1=ilikeTerm(term), code=ilikeTerm(term.replace(/[-.\s]/g,''));
-    const [rows] = await Promise.all([
-      sbFetch('tabela_vista_teste', `or=(numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=codlinha&limit=80`),
-      getEmpresas()
-    ]);
-    lineResults(host, rows, { view, gen });
-  }});
-};
 LOADERS.ligacoesPorLogradouro = async () => {
   const ibge = await getIbge();
   const munOpts = Object.entries(ibge).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>[cod, v.nome]);
@@ -2314,41 +2249,6 @@ LOADERS.secoesPorLigacao = async () => {
   paint();
 };
 
-/* ---- Gerenciais ---- */
-// Agregação PURA do Relatório Gerencial (testável em tests/) — separa o cálculo do render.
-// ativa = isLinhaAtiva (não cancelada nem paralisada); porEmp = top 15 empresas por nº de linhas.
-/* --- Relatórios --------------------------------------------------- */
-function resumoRelatorio(rows){
-  return {
-    total: rows.length,
-    ativas: rows.filter(isLinhaAtiva).length,
-    canc:  rows.filter(r=>r.cancelado).length,
-    paral: rows.filter(r=>r.paralisado).length,
-    sj:    rows.filter(r=>r.sub_judice).length,
-    empCount: new Set(rows.map(r=>r.codempresa)).size,
-    porEmp: [...countBy(rows, r=>r.codempresa||'—')].sort((a,b)=>b[1]-a[1]).slice(0,15),
-  };
-}
-LOADERS.relatoriosGerenciais = async () => {
-  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
-  const [rows] = await Promise.all([
-    sbFetch('tabela_vista_teste', `select=codempresa,tipo,cancelado,paralisado,sub_judice,transferido&limit=5000`),
-    getEmpresas()
-  ]);
-  const { total, ativas, canc, paral, sj, empCount, porEmp } = resumoRelatorio(rows);
-  pane.innerHTML = `<div class="doc">${docHead('Relatórios Gerenciais')}
-    <div class="kpi-grid">
-      <div class="kpi"><b>${total}</b><span>Linhas cadastradas</span></div>
-      <div class="kpi"><b>${ativas}</b><span>Ativas</span></div>
-      <div class="kpi"><b>${canc}</b><span>Canceladas</span></div>
-      <div class="kpi"><b>${paral}</b><span>Paralisadas</span></div>
-      <div class="kpi"><b>${sj}</b><span>Sub judice</span></div>
-      <div class="kpi"><b>${empCount}</b><span>Empresas</span></div>
-    </div>
-    <h3 class="doc-h3">Top empresas por nº de linhas</h3>
-    ${tableHTML([{t:'RJ',w:'70px'},{t:'Empresa'},{t:'Linhas',w:'90px'}], porEmp.map(([c,n])=>`<tr><td class="td-num">${esc(c)}</td><td class="td-logr">${esc(empNome(c))}</td><td class="td-sentido">${n}</td></tr>`).join(''))}
-    <div class="doc-foot">Consolidado sobre ${total} linhas · cadastro DETRO-RJ · DIVAT</div></div>`;
-};
 // Agregação PURA da Frota por Empresa (testável em tests/): total geral + quebra por empresa e
 // por hierarquia. num() trata vazio/inválido como 0; empresas ficam em RJ numérico crescente.
 function resumoFrota(rows){
@@ -2439,25 +2339,6 @@ LOADERS.frotaPorEmpresa = async () => {
   sel.addEventListener('change', paint);
   inp.addEventListener('input', debounce(paint));
   paint();
-};
-LOADERS.pesquisaEvento = async () => {
-  searchPanel({ title:'Pesquisa de Evento', placeholder:'Termo livre (processo, descrição, observação)', onRun: async(term, host)=>{
-    const view = currentView, gen = beginGen(view);
-    if(!term){ host.innerHTML=emptyBox('Digite um termo para pesquisar eventos.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    const t=ilikeTerm(term);
-    const [rows] = await Promise.all([
-      sbFetch('evento_teste', `or=(descricao.ilike.*${t}*,observacao.ilike.*${t}*,numero_processo.ilike.*${t}*)&select=data_registro,codlinha,codempresa,numero_processo,descricao,observacao&order=data_registro.desc&limit=200`),
-      getEmpresas()
-    ]);
-    if(!rows.length){ host.innerHTML = emptyBox('Nenhum evento encontrado para "'+esc(term)+'".'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    paginateTable(host, rows, {
-      cols:[{t:'Data',w:'82px'},{t:'Linha',w:'100px'},{t:'Empresa'},{t:'RJ',w:'60px'},{t:'Processo',w:'100px'},{t:'Descrição'},{t:'Observação'}],
-      rowHTML:r=>`<tr><td class="td-num">${esc(fmtDate(r.data_registro))}</td><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-logr">${esc(empNome(r.codempresa))}</td><td class="td-num">${esc(orDash(r.codempresa))}</td>
-        <td class="td-num">${esc(orDash(r.numero_processo))}</td><td class="td-logr">${esc(orDash(r.descricao))}</td><td class="td-logr">${esc(orDash(r.observacao))}</td></tr>`,
-      foot:t=>t+' evento(s)', unit:'eventos',
-      view, gen,
-    });
-  }});
 };
 let _portariaAnos = null;
 /* --- DOC · Portaria ----------------------------------------------- */
@@ -3021,18 +2902,16 @@ function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=fal
 // atualização ao vivo). Toda tabela citada aqui também precisa estar em RT_TABLES (assinada) e
 // na publicação supabase_realtime do banco. O teste tests/realtime.test.js guarda essa regra.
 const VIEW_TABLES = {
-  folhaRosto:['tabela_vista_teste','codempresa_teste','tarifa_atual_teste'], folhaDivisoria:['tabela_vista_teste','codempresa_teste'],
   historicoLinha:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste','tabela_vista_teste'], itinerarios:['itinerario_teste','municipio_teste','codempresa_teste'],
   quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste','qh_teste','tarifa_atual_teste','origem_teste','codempresa_teste','tabela_vista_teste'], tarifas:['tarifa_atual_teste','codempresa_teste'],
   frota:['qh_teste','codempresa_teste'], estrutura:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','qh_intervalo_teste','qh_predeterminado_teste','qh_teste','origem_teste','municipio_teste','codempresa_teste'],
   empresasRegulares:['tabela_vista_teste','codempresa_teste'], historicoEmpresa:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste'],
   ligacoesPorEmpresa:['tabela_vista_teste','codempresa_teste'], secoesPorEmpresa:['tarifa_atual_teste'],
-  ligacoesPorNome:['tabela_vista_teste','codempresa_teste'], ligacoesPorNumero:['tabela_vista_teste','codempresa_teste'],
   ligacoesPorLogradouro:['itinerario_teste','tabela_vista_teste','codempresa_teste','municipio_teste'], municipioRegiao:['municipio_teste','itinerario_teste','tabela_vista_teste','codempresa_teste'],
   ligacoesPorTerminal:['qh_intervalo_teste','qh_predeterminado_teste','origem_teste','tabela_vista_teste','codempresa_teste','municipio_teste','itinerario_teste'],
-  secoesPorLigacao:['tarifa_atual_teste'], relatoriosGerenciais:['tabela_vista_teste','codempresa_teste'],
+  secoesPorLigacao:['tarifa_atual_teste'],
   frotaPorEmpresa:['qh_teste','codempresa_teste'],
-  pesquisaEvento:['evento_teste','codempresa_teste'], portarias:['portaria_teste'],
+  portarias:['portaria_teste'],
   localidades:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','municipio_teste','localidades_teste','codempresa_teste'],
 };
 
@@ -3073,6 +2952,10 @@ app.addEventListener('click', e => {
   const topicBtn = e.target.closest('.topic-btn');
   if (topicBtn){
     const key = topicBtn.dataset.topic;
+    const sec = SECTIONS.find(s => s.key === key);
+    // tópico-ação (`direct`): abre o modal direto, sem tocar no painel de fundo — o usuário
+    // continua exatamente no tópico onde estava, e o modal reaparece sobre ele ao fechar.
+    if (sec && sec.direct){ openView(sec.direct); return; }
     // clique no tópico é o ÚNICO jeito de abrir/fechar a sub-lista (nunca abre sozinha)
     expandedTopicKey = (expandedTopicKey === key) ? null : key;
     if (currentTopicKey === key){
@@ -3331,7 +3214,14 @@ async function applyRoute(){
     }
     if (!cod && activeLine){ setActiveLine(null); banner.classList.add('is-hidden'); updateNeedChips(); }
     // tópico ativo no painel: dono do view (se houver), senão o segmento topico/, senão o padrão
-    const topicoAlvo = (view && VIEW_TOPIC[view]) || topico || DEFAULT_TOPIC;
+    // — tópico-ação (`direct`) nunca vira "tópico ativo" (não tem grade pra pintar atrás do
+    // modal): ignora tanto o dono do view quanto um `#/topico/<key>` antigo apontando pra ele,
+    // caindo no segmento seguinte ou no padrão.
+    const isDirectTopic = key => !!SECTIONS.find(s => s.key === key)?.direct;
+    const viewTopic = view && VIEW_TOPIC[view];
+    const topicoAlvo = (viewTopic && !isDirectTopic(viewTopic) && viewTopic)
+      || (topico && !isDirectTopic(topico) && topico)
+      || DEFAULT_TOPIC;
     if (currentTopicKey !== topicoAlvo) selectTopic(topicoAlvo);
     if (view && VIEW_META[view]){
       if (!(overlay.classList.contains('open') && currentView && currentView.key === view)) openView(view);

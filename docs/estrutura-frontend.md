@@ -73,17 +73,17 @@ achar por `grep` do texto da marca, nunca por linha.
   `COMPONENTES AUXILIARES` · `CLIQUE NOS CARDS` · `UTILITÁRIOS` · `TOAST` · `REALTIME` ·
   `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~60,4% do JS (~2,0k linhas, ~90 funções).
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~58,8% do JS (~2,0k linhas, ~90 funções).
 
 ### Sub-marcas do bloco `MODAL / SISTEMA DE VIEWS`
 
 O próprio marcador do bloco traz um **sub-índice**. A ordem das sub-marcas:
 
 `Chrome do modal` · `Dispatcher — runView` · `Helpers de documento e busca de linha` ·
-`DOC · Folha de Rosto` · `Eventos — helpers compartilhados` · `DOC · Histórico (linha)` ·
+`Eventos — helpers compartilhados` · `DOC · Histórico (linha)` ·
 `DOC · Itinerários` · `DOC · Quadro de Horários` · `DOC · Tarifas` · `DOC · Frota` ·
 `DOC · Estrutura Operacional` · `DOC · Empresas` · `DOC · Municípios / entre-municípios` ·
-`Relatórios` · `DOC · Portaria` · `DOC · Localidades`.
+`DOC · Portaria` · `DOC · Localidades`.
 
 Cada bloco `DOC · X` reúne, **juntos**, tudo daquele documento: helper(s) HTML (`xxxHTML`), o
 render (`renderX`), eventuais runners e o registro `LOADERS.x = …`.
@@ -153,12 +153,11 @@ paginação vive na seção `COMPONENTES AUXILIARES` (exceto `paginateEvents`, q
 ### O que é paginado e o que NÃO é
 
 - **Paginado (tela):** listas de linha (via `lineResults`), **Portarias**, **Seções por Empresa**,
-  **Pesquisa de Evento**, **Empresas Regulares**, **Quadro "por empresa"** (`renderEmpresaQuadros`).
-- **NÃO paginado — documento de 1 linha (leitura corrida + alimenta o PDF inteiro):** Folha de
-  Rosto, Folha Divisória, Itinerários, Quadro de Horários (modo linha), Tarifas, Frota, Estrutura,
+  **Empresas Regulares**, **Quadro "por empresa"** (`renderEmpresaQuadros`).
+- **NÃO paginado — documento de 1 linha (leitura corrida + alimenta o PDF inteiro):**
+  Itinerários, Quadro de Horários (modo linha), Tarifas, Frota, Estrutura,
   Seções por Ligação.
-- **NÃO paginado — relatório agregado (lido/impresso inteiro):** Relatórios Gerenciais, Frota por
-  Empresa.
+- **NÃO paginado — relatório agregado (lido/impresso inteiro):** Frota por Empresa.
 - **Deixado para depois:** `munTable` (lista de municípios de uma região, ≤~92, pick-list curto) e
   `localidades`/`renderLocalidadeSecoes` (estrutura **compósita** agrupada com sub-tabelas — paginar
   exigiria achatar como o `grouped` das linhas).
@@ -191,7 +190,7 @@ dependa do fallback do `.doc` visível.
 - **Parte C (2026-07-18):** adicionada a **paginação de tela** (seção 4). Em três rodadas:
   (1) `pageBounds`/`paginateLines` + `lineResults` para as listas de linha (25/página, agrupado
   contando todas as linhas); (2) núcleo genérico `paginate`/`paginateTable` e aplicação a Portarias,
-  Seções por Empresa, Pesquisa de Evento, Empresas Regulares e Quadro "por empresa" (com o refactor
+  Seções por Empresa, Empresas Regulares e Quadro "por empresa" (com o refactor
   do `paginateLines` para usar o núcleo); (3) correção de completude do PDF — os wrappers passaram a
   definir `currentView.pdfHTML` com a lista inteira (`pdf:false` p/ Quadro-por-empresa e Município),
   fechando a regressão em que o fallback do `.doc` visível exportaria só a página atual. Verificado

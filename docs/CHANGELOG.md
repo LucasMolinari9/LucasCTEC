@@ -518,3 +518,29 @@ nasceram sob o default antigo `anon=rm` e guardaram o privilégio. Corrigido com
 Não havia caminho de abuso pela API pública (o PostgREST só faz CRUD, não `VACUUM`/`LOCK`), mas
 era privilégio indevido num portal declaradamente somente-leitura — e é exatamente o que a
 correção alegava ter removido. **Fechar o default não conserta o que já existe.**
+
+## 30/07/2026 — 6 cards apagados + Portarias vira tópico-ação
+
+- **6 cards removidos de vez** (loader, render, entrada em `SECTIONS`/`VIEW_TABLES` e ícone
+  exclusivo, quando ficava com 0 usos): `folhaRosto` (Folha de Rosto), `folhaDivisoria` (Folha
+  Divisória), `ligacoesPorNome` (Ligações pelo Nome), `ligacoesPorNumero` (Identificar pelo
+  Número), `relatoriosGerenciais` (Relatórios Gerenciais, com a função pura `resumoRelatorio`) e
+  `pesquisaEvento` (Pesquisa de Evento). Os ícones `divider`, `alpha`, `hash` e `chart` saíram do
+  objeto `I` por terem ficado sem nenhum uso; `file` e `search` foram conferidos por grep e
+  mantidos (servem outros lugares). `isLinhaAtiva` também foi conferido e mantido — `isVigente` e
+  o card Empresas dependem dele, mesmo com `resumoRelatorio` fora.
+- **Tópico "Portarias" virou tópico-ação**: continua com o mesmo nome na sidebar, mas perdeu a
+  grade (só tinha um card real depois da remoção dos outros dois) e ganhou `direct:'portarias'`
+  em `SECTIONS`. Clicar no tópico abre o modal de Portarias direto, sem pintar um grid vazio
+  atrás — e o painel de fundo fica exatamente onde o usuário estava (não mexe em
+  `currentTopicKey`/`expandedTopicKey`/hash). Os metadados do card (`VIEW_META.portarias`,
+  `VIEW_TOPIC.portarias`) continuam existindo via um `directMeta` novo no `SECTIONS`, então o
+  deep link `#/consulta/portarias` e a busca do topo continuam funcionando como antes.
+  `applyRoute` passou a ignorar tópico com `direct` ao calcular o "tópico ativo do painel" (senão
+  um `#/topico/ger` antigo, ou o dono do `view`, tentaria pintar uma grade vazia atrás do modal).
+  O seletor de documentos da aba nova ("+") também foi ajustado — sem isso o card de Portarias
+  teria sumido de lá junto com a grade do tópico.
+- **17 views** no lugar de 23 — `scripts/check_views.mjs`, `tests/realtime.test.js`,
+  `tests/pure.harness.js`/`pure.test.js` e o `canon` do `tests/check.js` atualizados junto; a
+  guarda `[2b]` do `check.js` cobrou os números na prosa (`~23 views` → `~17`, `~60,4%` →
+  `~58,8%` da seção `MODAL`, ambos deslocados pela remoção de código).

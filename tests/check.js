@@ -149,7 +149,6 @@ const canon = [
   // continuariam verdes contra a cópia.
   ['CANCELADO',            "const CANCELADO = 'RequisicaoCancelada';"],
   ['ehCancelamento',       'const ehCancelamento = e => e && e.name === CANCELADO;'],
-  ['resumoRelatorio',      'function resumoRelatorio(rows){'],
   ['rjOrder',              'function rjOrder(a, b){'],
   ['resumoFrota',          'function resumoFrota(rows){'],
   ['filtrarFrotaEmpresas', "function filtrarFrotaEmpresas(items, status='ativas', termo=''){"],

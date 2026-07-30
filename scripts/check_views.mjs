@@ -5,7 +5,7 @@
 // Por que existe: ~62% do app.js é a seção MODAL / SISTEMA DE VIEWS (render/DOM). O
 // tests/check.js é offline e sem dependências de propósito, então só cobre a lógica PURA
 // copiada nos *.harness.js — nada do render. Este script fecha esse buraco pela borda mais
-// barata: em vez de 23 testes escritos à mão, UM laço genérico que abre cada view e falha se
+// barata: em vez de 17 testes escritos à mão, UM laço genérico que abre cada view e falha se
 // ela lançar erro, ficar presa no spinner ou pintar nada.
 //
 // O que ele NÃO faz: conferir se o conteúdo está CERTO (a tabela tem as colunas certas, o
@@ -34,20 +34,16 @@ const LINHA = '549000001';   // 549M — a linha das fixtures com dado em todas 
    resultado, em vez de parar no "busque alguma coisa".
    ---------------------------------------------------------------- */
 const VIEWS = [
-  { key: 'folhaRosto' },
   { key: 'itinerarios' },
   { key: 'quadroHorarios' },
   { key: 'tarifas' },
   { key: 'historicoLinha' },
   { key: 'frota' },
   { key: 'estrutura' },
-  { key: 'folhaDivisoria' },
   { key: 'empresasRegulares' },
   { key: 'historicoEmpresa',      busca: 'alfa' },
   { key: 'ligacoesPorEmpresa',    busca: 'alfa' },
   { key: 'secoesPorEmpresa',      busca: '101' },   // este card pede CÓDIGO, não nome
-  { key: 'ligacoesPorNome',       busca: 'rio' },
-  { key: 'ligacoesPorNumero',     busca: '549' },
   { key: 'ligacoesPorLogradouro', busca: 'vargas' },
   { key: 'municipioRegiao',       busca: 'rio' },
   // Formulário próprio (#locA/#locGo), não o painel de busca padrão.
@@ -57,9 +53,7 @@ const VIEWS = [
     } },
   { key: 'ligacoesPorTerminal',   busca: 'terminal' },
   { key: 'secoesPorLigacao',      busca: '549' },
-  { key: 'relatoriosGerenciais' },
   { key: 'frotaPorEmpresa',       busca: 'alfa' },
-  { key: 'pesquisaEvento',        busca: 'itinerario' },
   { key: 'portarias',             busca: 'tarifa' },
 ];
 
