@@ -34,6 +34,7 @@ const LINHA = '549000001';   // 549M — a linha das fixtures com dado em todas 
    resultado, em vez de parar no "busque alguma coisa".
    ---------------------------------------------------------------- */
 const VIEWS = [
+  { key: 'itinerarios' },
   { key: 'quadroHorarios' },
   { key: 'tarifas' },
   { key: 'historicoLinha' },

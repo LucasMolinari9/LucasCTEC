@@ -90,7 +90,7 @@ exibe e **atualiza ao vivo** (Realtime).
 
 ## Tabelas → onde aparecem (cards)
 - `tabela_vista_teste` (cadastro de linhas) → busca, Ligações por Empresa, Empresas Regulares.
-- `itinerario_teste` (+ `municipio_teste`) → Ligações por Logradouro/Município, Estrutura.
+- `itinerario_teste` (+ `municipio_teste`) → Itinerários, Ligações por Logradouro/Município.
 - `qh_intervalo_teste` / `qh_predeterminado_teste` (+ `origem_teste`) → Quadro de
   Horários, Ligações por Terminais.
 - `qh_teste` (frota_*) → Frota, Estrutura.
@@ -189,7 +189,7 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    `node scripts/check_abas.mjs` — checagem de regressão em navegador headless (Playwright, com
    o PostgREST stubado); fica fora do `check.js` porque este é offline e sem dependências, mas
    **roda no CI** junto com o `check_views.mjs` (workflow `views.yml`).
-2a. **Ao mexer em qualquer render/loader, rode `node scripts/check_views.mjs`** — abre as **16
+2a. **Ao mexer em qualquer render/loader, rode `node scripts/check_views.mjs`** — abre as **17
    views** num navegador headless e falha se alguma explodir (`errorBox`), ficar presa no
    spinner, pintar só a moldura ou não achar nada com um termo que casa as fixtures. É a rede
    sob a seção `MODAL / SISTEMA DE VIEWS` (~58,8% do `app.js`), que o `check.js` **não** cobre —

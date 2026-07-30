@@ -213,6 +213,7 @@ const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;
 const I = {
   file:'<path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/>',
   history:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/>',
+  route:'<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h6.5"/>',
   clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
   ticket:'<path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2 2 2 0 0 0 0 6 2 2 0 0 1-2 2H5a2 2 0 0 1-2-2 2 2 0 0 0 0-6Z"/><path d="M13 7v10"/>',
   bus:'<rect x="4" y="4" width="16" height="13" rx="2"/><path d="M4 11h16"/><circle cx="8" cy="19" r="1.4"/><circle cx="16" cy="19" r="1.4"/><path d="M4 17v2M20 17v2"/>',
@@ -240,7 +241,7 @@ const SECTIONS = [
   // Documentos: os mais consultados primeiro; cada descrição diz o que o DOCUMENTO contém
   // (a instrução "busque a linha…" repetida virava ruído — a busca fica dentro do card).
   { key:'doc', name:'Linhas',
-    icon:'file', desc:'Itinerário, quadro de horários, tarifas, frota e histórico de cada linha regular.',
+    icon:'file', desc:'Quadro de horários, tarifas, frota, histórico e estrutura de cada linha regular.',
     items:[
       ['clock','Quadro de Horários','Partidas por sentido e dia — por linha ou empresa','quadroHorarios',false],
       ['ticket','Tarifas','Seções e valores vigentes — por linha ou empresa','tarifas',false],
@@ -257,9 +258,12 @@ const SECTIONS = [
       ['segments','Seções por Empresa','Seções atendidas por operadora','secoesPorEmpresa',false],
       ['fleet','Frota por Empresa','Frota consolidada por operadora e hierarquia','frotaPorEmpresa',false],
     ]},
-  { key:'lig', name:'Itinerários',
-    icon:'hub', desc:'Busque linhas por logradouro, terminal, localidade ou município.',
+  { key:'lig', name:'Consultas',
+    icon:'hub', desc:'Percurso das linhas e busca por logradouro, terminal, localidade ou município.',
     items:[
+      // Itinerários vem primeiro: é o único documento do tópico (percurso de UMA linha); os
+      // demais são buscas que partem de logradouro/terminal/localidade para chegar às linhas.
+      ['route','Itinerários','Percurso por sentido: logradouros e municípios','itinerarios',false],
       ['signpost','Ligações por Logradouro','Linhas que passam por uma via','ligacoesPorLogradouro',false],
       ['map','Município e Região','Linhas por origem e destino','municipioRegiao',false],
       ['pin','Linhas por Localidade e Município','Busque por seção, "via" ou cruze localidades/municípios','localidades',false],
@@ -760,7 +764,7 @@ async function refreshActiveLine(){
      Chrome do modal · Faixa de abas · Dispatcher — runView ·
      Helpers de documento e busca de linha ·
      Eventos — helpers compartilhados · DOC · Histórico (linha) ·
-     Itinerário — tabela compartilhada · DOC · Quadro de Horários · DOC · Tarifas ·
+     DOC · Itinerários · DOC · Quadro de Horários · DOC · Tarifas ·
      DOC · Frota · DOC · Estrutura Operacional ·
      DOC · Empresas · DOC · Municípios / entre-municípios ·
      DOC · Portaria · DOC · Localidades
@@ -1388,12 +1392,7 @@ LOADERS.historicoLinha = async () => {
       emptyMsg:'Busque pelo nome, número ou código da linha.', prompt:'clique para ver o histórico' }) });
 };
 
-/* --- Itinerário — tabela compartilhada -------------------------
-   O card "Itinerários" foi removido em 30/07/2026 (junto com `renderItinerarios` e
-   `LOADERS.itinerarios`). O que sobrou aqui NÃO é órfão: `itinerarioTableHTML` é o
-   corpo da seção "Itinerário" da Estrutura Operacional (`renderEstrutura`), e
-   `SENTIDO_ORDER`/`normSentido` existem para ele. Se um dia a Estrutura deixar de
-   usá-lo, este bloco inteiro sai. */
+/* --- DOC · Itinerários ---------------------------------------- */
 const SENTIDO_ORDER = { 'Ida':1, 'Volta':2, 'Circular':3 };
 const normSentido = s => { const t=String(s||'').trim().toLowerCase(); if(t.startsWith('ida'))return'Ida'; if(t.startsWith('volta'))return'Volta'; if(t.startsWith('circ'))return'Circular'; return s?String(s):'—'; };
 
@@ -1410,6 +1409,39 @@ function itinerarioTableHTML(rows, ibge){
   }).join('');
   return tableHTML([{t:'Sentido',w:'62px'},{t:'Tipo',w:'84px'},{t:'Nome do Logradouro'},{t:'Município',w:'110px'}], body, `${rows.length} logradouro(s) · cadastro DETRO-RJ`);
 }
+
+async function renderItinerarios(host, line){
+  const view = currentView, gen = beginGen(view);
+  host.innerHTML = loading();
+  const [rows, ibge] = await Promise.all([
+    sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_municipio_origem,codempresa&order=id`),
+    getIbge(), getEmpresas()
+  ]);
+  if (!rows.length) { host.innerHTML = emptyBox('Nenhum itinerário encontrado para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+  const codEmp = rows[0]?.codempresa || line.codempresa || '';
+  const meta = metaRows([['Empresa',esc(empNome(codEmp)),true],['Registro','RJ-'+esc(codEmp)],
+      ['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
+      ['Ligação',esc(line.nome_ligacao||'—'),true],['Via',esc(orDash(line.via))],
+      ['Característica',esc(orDash(line.caracteristica))],['Tipo da Ligação',esc(orDash(line.tipo))],
+      ['Situação',situacaoHTML(line),true]]);
+  const inner = `${meta}${itinerarioTableHTML(rows, ibge)}`;   // documento completo (p/ PDF)
+  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}${inner}</div>` });
+  // filtro por sentido — o PDF segue com os dois sentidos
+  rows.forEach(r=>r._sn=normSentido(r.sentido));
+  const sentidos = [...new Set(rows.map(r=>r._sn))].filter(Boolean).sort((a,b)=>(SENTIDO_ORDER[a]||9)-(SENTIDO_ORDER[b]||9));
+  const tools = sentidos.length>1 ? `<div class="loc-tools"><label>Sentido <select id="itiSent"><option value="">Todos</option>${sentidos.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select></label></div>` : '';
+  host.innerHTML = `${meta}${tools}<div id="itiResult"></div>`;
+  const result = host.querySelector('#itiResult'), sel = host.querySelector('#itiSent');
+  const paint = ()=>{
+    const s = sel?sel.value:'';
+    const f = s ? rows.filter(r=>r._sn===s) : rows;
+    result.innerHTML = itinerarioTableHTML(f, ibge);
+  };
+  if(sel) sel.addEventListener('change', paint);
+  paint();
+}
+
+LOADERS.itinerarios = () => lineDocView({ subtitle:'Cadastro de Linhas: Itinerários', render:renderItinerarios });
 
 /* --- DOC · Quadro de Horários --------------------------------- */
 function quadroHorariosBodyHTML(interv, predet, orig){
@@ -1926,7 +1958,7 @@ LOADERS.historicoEmpresa = async () => {
     } });
 };
 
-/* ---- Itinerários (consultas por logradouro, terminal, localidade, município) ---- */
+/* ---- Consultas (por logradouro, terminal, localidade, município) ---- */
 LOADERS.ligacoesPorLogradouro = async () => {
   const ibge = await getIbge();
   const munOpts = Object.entries(ibge).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>[cod, v.nome]);
@@ -2929,7 +2961,7 @@ function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=fal
 // atualização ao vivo). Toda tabela citada aqui também precisa estar em RT_TABLES (assinada) e
 // na publicação supabase_realtime do banco. O teste tests/realtime.test.js guarda essa regra.
 const VIEW_TABLES = {
-  historicoLinha:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste','tabela_vista_teste'],
+  historicoLinha:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste','tabela_vista_teste'], itinerarios:['itinerario_teste','municipio_teste','codempresa_teste'],
   quadroHorarios:['qh_intervalo_teste','qh_predeterminado_teste','qh_teste','tarifa_atual_teste','origem_teste','codempresa_teste','tabela_vista_teste'], tarifas:['tarifa_atual_teste','codempresa_teste'],
   frota:['qh_teste','codempresa_teste'], estrutura:['tabela_vista_teste','tarifa_atual_teste','itinerario_teste','qh_intervalo_teste','qh_predeterminado_teste','qh_teste','origem_teste','municipio_teste','codempresa_teste'],
   empresasRegulares:['tabela_vista_teste','codempresa_teste'], historicoEmpresa:['evento_teste','evento_empresa_teste','evento_linha_teste','codempresa_teste'],
