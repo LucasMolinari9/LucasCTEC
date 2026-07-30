@@ -196,7 +196,7 @@
   .side-brand-txt span{font-size:10.5px;color:#7d93ab}
   .side-eyebrow{font-family:'IBM Plex Mono';font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#7d93ab;padding:6px 12px 10px}
 
-  /* card "Buscar Linha" — abre/fecha a barra de busca dentro do painel (toggleSearchCard).
+  /* card "Buscar" — abre/fecha a barra de busca dentro do painel (toggleSearchCard).
      Não é `.topic-btn` de propósito: visualmente parecido, mas semanticamente uma AÇÃO, não
      um destino de navegação — teria clique ambíguo se dividisse a mesma classe/handler. */
   .side-search-btn{
@@ -209,8 +209,8 @@
   .side-search-btn .t-ico{width:32px;height:32px;border-radius:8px;flex:0 0 auto;display:grid;place-items:center;background:rgba(255,255,255,.06);color:#9db4cc;transition:background .15s,color .15s}
   .side-search-btn .t-ico svg{width:17px;height:17px}
   .side-search-btn:hover{background:rgba(255,255,255,.055);color:#fff}
-  /* clicar em "Buscar Linha" fica com o mesmo preenchimento sólido de `.topic-btn.active`.
-     Enquanto a busca estiver aberta, o tópico "Documentos da Linha" por baixo NÃO recebe
+  /* clicar em "Buscar" fica com o mesmo preenchimento sólido de `.topic-btn.active`.
+     Enquanto a busca estiver aberta, o tópico "Itinerários" por baixo NÃO recebe
      `.active` (ver renderSideNav) — fica igual a qualquer outro item não selecionado,
      pra não ter dois itens com destaque ao mesmo tempo. */
   .side-search-btn.open{background:var(--blue);color:#fff}
@@ -865,12 +865,12 @@
     .side-brand,.side-eyebrow{display:none}
     /* width:auto (não o width:100% herdado da base) — senão cada botão sozinho ocupa
        quase a largura inteira da faixa. Passava despercebido nos tópicos (transparentes
-       quando inativos, então "somem" visualmente) até o botão "Buscar Linha" entrar antes
+       quando inativos, então "somem" visualmente) até o botão "Buscar" entrar antes
        deles: aí o scrollIntoView do tópico ativo (renderSideNav) rolava ele pra fora da
        faixa antes do usuário reparar que existe. */
     .topic-btn,.side-search-btn{flex:0 0 auto;white-space:nowrap;width:auto}
     /* reserva espaço à esquerda quando o navegador rola até o tópico ativo (scrollIntoView
-       em renderSideNav) — sem isso ele encosta o ativo na borda e corta o "Buscar Linha". */
+       em renderSideNav) — sem isso ele encosta o ativo na borda e corta o "Buscar". */
     .topic-btn{scroll-margin-left:170px}
     .side-search-btn{margin-bottom:0}
     .side-search-btn::after{display:none}

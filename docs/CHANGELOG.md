@@ -4,6 +4,14 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 30/07/2026 — Rótulos dos tópicos do painel lateral
+
+- Os rótulos visíveis passaram de **Documentos da Linha** para **Itinerários**, de **Empresas**
+  para **Empresa** e de **Consultas de Ligações** para **Ligações**; o botão **Buscar Linha**
+  passou a **Buscar**. As `key` (`doc`, `emp`, `lig`, `ger`) e as rotas permaneceram intactas.
+- A mudança cria a colisão solicitada entre o tópico **Itinerários** e seu primeiro card, também
+  chamado **Itinerários**; a decisão entre manter ou desambiguar um dos nomes ficou pendente.
+
 ## 26/06/2026 — Auditoria de segurança (escrita fechada de verdade)
 
 - **Escrita revogada** de `anon` e `authenticated` em todas as tabelas (INSERT/UPDATE/DELETE/
