@@ -258,10 +258,10 @@ const SECTIONS = [
       ['segments','Seções por Empresa','Seções atendidas por operadora','secoesPorEmpresa',false],
       ['fleet','Frota por Empresa','Frota consolidada por operadora e hierarquia','frotaPorEmpresa',false],
     ]},
-  { key:'lig', name:'Itinerários',
+  { key:'lig', name:'Consultas',
     icon:'hub', desc:'Percurso das linhas e busca por logradouro, terminal, localidade ou município.',
     items:[
-      // o card homônimo do tópico vem primeiro: é o documento do percurso de UMA linha; os
+      // Itinerários vem primeiro: é o único documento do tópico (percurso de UMA linha); os
       // demais são buscas que partem de logradouro/terminal/localidade para chegar às linhas.
       ['route','Itinerários','Percurso por sentido: logradouros e municípios','itinerarios',false],
       ['signpost','Ligações por Logradouro','Linhas que passam por uma via','ligacoesPorLogradouro',false],
@@ -1958,7 +1958,7 @@ LOADERS.historicoEmpresa = async () => {
     } });
 };
 
-/* ---- Itinerários (consultas por logradouro, terminal, localidade, município) ---- */
+/* ---- Consultas (por logradouro, terminal, localidade, município) ---- */
 LOADERS.ligacoesPorLogradouro = async () => {
   const ibge = await getIbge();
   const munOpts = Object.entries(ibge).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>[cod, v.nome]);

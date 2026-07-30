@@ -18,7 +18,17 @@ de auditoria em `docs/`).
 - Nenhum gate do repo casa esses rótulos por texto (navegam por `data-view` e por `key`), então a
   renomeação não exigiu ajuste em `tests/` nem em `scripts/`.
 
-## 30/07/2026 — Card "Itinerários" movido para o tópico Itinerários
+## 30/07/2026 — Tópico `lig` renomeado para "Consultas"
+
+- O tópico passou de **Itinerários** para **Consultas**; o card **Itinerários** dentro dele fica.
+  Some a repetição do nome entre tópico e card. Só o `name` de `SECTIONS` mudou — a `key` `lig` e
+  a rota `#/topico/lig` seguem intactas.
+- **Atenção visual:** a sidebar já tem a etiqueta fixa **CONSULTAS** acima da lista de tópicos
+  (`side-eyebrow`, em `renderSideNav`). Agora ela e um dos tópicos têm o mesmo texto. Não é bug —
+  a etiqueta some no mobile (`display:none` no `@media`) —, mas se incomodar no desktop o
+  conserto é apagar a etiqueta ou trocar seu texto.
+
+## 30/07/2026 — Card "Itinerários" movido para o tópico Itinerários (depois renomeado)
 
 - Removido do tópico **Linhas** (PR #82) e **restaurado dentro do tópico Itinerários** (`lig`),
   como primeiro card. Loader, render, ícone `route`, `VIEW_TABLES` e a entrada no
