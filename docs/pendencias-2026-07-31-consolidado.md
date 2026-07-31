@@ -5,7 +5,8 @@ modelo) apontou, tudo que a **verificação contra o repositório real** apurou 
 apareceu nas sessões de 30 e 31/07. O objetivo é responder a uma pergunta: **o que ainda falta
 executar.**
 
-- **`main`:** `fda0152`. Gate verde.
+- **`main`:** `47de6ee` (merge do #90). Gate verde. *(Era `fda0152` quando este documento foi
+  escrito; o #89 trouxe os três docs de 31/07 para a `main`, e o #90 os atualizou.)*
 - **Fontes:** `docs/handoff-2026-07-30-auditoria-verificacao.md` (verificação do relatório),
   `docs/handoff-2026-07-31-prs-e-smoke.md`, `docs/handoff-2026-07-31-pr4-visibilidade.md`.
 - ⚠️ **Nada aqui foi medido contra os bancos vivos.** O ambiente do agente não alcança o Supabase
@@ -66,7 +67,8 @@ um atacante não consegue inferir de fora. Nenhuma redação de documento melhor
 
 ### 2.2 Desbloquear ou encerrar o PR #73
 
-Draft aberto desde 29/07, 722 adições em 10 arquivos. Três pendências operacionais, todas suas:
+Draft aberto desde 29/07, hoje 778 adições em 10 arquivos — rebaseado, promovido e com **CI todo
+verde** desde 31/07. Três pendências operacionais, todas suas:
 
 - criar/rotacionar `divat_auditor_ci` via `scripts/bootstrap_phase3_auditor.sql`;
 - configurar `SUPABASE_TEST_AUDIT_DATABASE_URL` nos Actions Secrets;
@@ -127,11 +129,14 @@ O `data_quality_baseline.json` **já traz** as 12 órfãs nominalmente classific
 use só contagem" já estava atendido do lado do dado. O que falta é o **gate comparar a lista**: uma
 órfã corrigida e outra criada mantêm o número e passam despercebidas.
 
-### 3.3 `phase3-security.yml` reintroduz a execução dupla
+### 3.3 ✅ FECHADO — `phase3-security.yml` reintroduzia a execução dupla
 
-O workflow novo do PR #73 declara `push:` com `paths:`, **sem `branches: [main]`** — exatamente o
-padrão que o PR 1 removeu dos outros cinco. Se entrar assim, desfaz parcialmente o #86 para os
-caminhos que ele vigia. **Correção de uma linha, antes do merge.**
+O workflow novo do PR #73 declarava `push:` com `paths:`, **sem `branches: [main]`** — exatamente o
+padrão que o PR 1 removeu dos outros cinco. Se entrasse assim, desfaria parcialmente o #86 para os
+caminhos que ele vigia.
+
+**Corrigido em 31/07**, já no head do #73 (`631d97e`), alinhado ao `deriva.yml`/`db-checks.yml`.
+Confirmado na prática: na primeira execução depois da promoção, **cada gate rodou uma vez só**.
 
 ### 3.4 Code Scanning / SARIF (opcional, custo zero)
 
@@ -143,23 +148,36 @@ Ativar é ergonomia (achado vira anotação na linha do diff), não cobertura no
 
 ## 4. Decisões pendentes
 
-### 4.1 Force-push do rebase do #73
+### 4.1 ✅ RESOLVIDO — force-push do rebase do #73
 
-A branch `agent/fase-3-hardening-moderado` foi rebaseada em `fda0152` **localmente**, não empurrada.
+**Promovido em 31/07**, com autorização do dono: `agent/fase-3-hardening-moderado` (o head do #73)
+passou de `13c897a` para `631d97e`, por `--force-with-lease` com o SHA esperado explícito. O head
+anterior ficou preservado na branch `pr73-antes-do-rebase`. **CI todo verde no PR** — foi a primeira
+vez que qualquer gate rodou contra este trabalho.
+
+> ⚠️ **Correção:** uma versão anterior desta seção dizia que a 1ª tentativa,
+> `claude/fase3-rebased-fda0152`, "se perdeu com o contêiner". **Falso** — ela está no remoto, em
+> `58903bb`. O rebase foi refeito à toa, por leitura de `git branch -a` (que só mostra refs já
+> buscados) em vez de `git ls-remote --heads origin`. As duas resoluções do conflito são
+> semanticamente idênticas.
+
 Um conflito, em `docs/seguranca.md` § 9 — a seção reescrita no #88 horas antes, que o #73 também
-tinha reescrito por conta própria em 29/07.
+tinha reescrito por conta própria em 29/07. Idêntico nas duas tentativas.
 
 **Resolução aplicada:** mantido o enquadramento do #88 (registro de decisão) e incorporado o
 controle novo que o #73 traz de fato — toda migração que cria tabela pública revoga
 `anon`/`authenticated` e liga RLS na mesma transação, com `check_migrations.mjs` cobrando no diff.
 O § 10 do #73 entrou inteiro. **Não** foi restaurado o roteiro detalhado do § 9.1.
 
-Falta decidir: empurrar (reescreve a história de um draft seu) ou revisar a resolução antes.
+O head novo traz também as duas correções que faltavam: `branches: [main]` no `push:` do
+`phase3-security.yml` e o registro do pré-requisito da promoção (seção 5) no plano da Fase 3.
 
-### 4.2 O handoff e este documento na `main`
+**Continua em rascunho de propósito** — o que falta são as pendências operacionais listadas no
+corpo do PR, todas do dono.
 
-Estão na branch `claude/handoff-audit-pr87-merge-5exd3g`, **sem PR aberto** — portanto sem gate
-disparado no GitHub.
+### 4.2 ✅ FECHADO — o handoff e este documento na `main`
+
+Entraram pelo **PR #89**, mergeado em 31/07 (`aac916c`), com os gates rodando no GitHub.
 
 ---
 
@@ -183,8 +201,10 @@ O problema é adiado. A migração move quatro RPCs de `public` para `audit`, re
 os quatro param — inclusive o diário, que o § 9.1 nomeia como o controle que compensa o default
 não-fechável do `supabase_admin`.
 
-**Pré-requisito da promoção, hoje não escrito em lugar nenhum:** migrar os quatro gates para a
-credencial de auditor **antes** de aplicar a migração em produção.
+**Pré-requisito da promoção:** migrar os quatro gates para a credencial de auditor **antes** de
+aplicar a migração em produção. ✅ **Já registrado** — quando este documento foi escrito não estava
+em lugar nenhum; agora tem seção própria em `docs/planos/fase-3-hardening-moderado.md` (mais o item
+7 dos critérios de promoção), já no head do #73, mais o corpo do próprio PR.
 
 ---
 

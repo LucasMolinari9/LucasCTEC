@@ -129,6 +129,43 @@ criar/alterar tabela, índice, policy ou função, atualize-o. As consultas-font
 
 ## Como RESTAURAR (em caso de perda total)
 
+> ### ⚠️ Escolha o caminho ANTES de começar
+>
+> Há dois, e **eles não são equivalentes**. O exercício de 28/07/2026 travou justamente por ter
+> seguido o de baixo:
+>
+> | Caminho | Quando usar | Risco conhecido |
+> |---|---|---|
+> | **A — `pg_restore`** (recomendado) | sempre que existir um `.dump` da Opção 1 | nenhum medido |
+> | **B — CSV pelo Table Editor** | só se não houver `.dump`, nem `pg_dump` instalado | **exportação parcial silenciosa** — foi o que deixou `tabela_vista_teste` vazia e `itinerario_teste` com 5.298 de 52.146 linhas |
+>
+> O caminho B falha **sem erro**: o import termina "com sucesso" sobre um CSV que só continha a
+> página visível do Table Editor. Por isso, se você for obrigado a usá-lo, a conferência de
+> contagens do passo 6 deixa de ser opcional.
+
+### Caminho A — restaurar de um dump (`pg_restore`)
+
+1. **Ligue backup antes de qualquer coisa** se for reusar o projeto atual (evita repetir o erro).
+2. Crie um projeto Supabase novo (ou zere o atual, com cuidado).
+3. Restaure estrutura e dados de uma vez, a partir do `.dump` gerado pela Opção 1:
+
+   ```bash
+   pg_restore --no-owner --no-privileges --exit-on-error \
+     -d "postgresql://postgres:[SENHA]@db.<novo-ref>.supabase.co:5432/postgres" \
+     backup_AAAA-MM-DD.dump
+   ```
+
+   `--no-owner`/`--no-privileges` existem porque os roles do projeto de origem não existem no
+   destino; `--exit-on-error` existe para o restore **parar** no primeiro problema em vez de
+   terminar pela metade parecendo bem-sucedido.
+4. **SQL Editor** → cole `backup_schema.sql` inteiro → **Run**. O dump traz a estrutura, mas o
+   `backup_schema.sql` é a baseline **versionada e conferida** de RLS, policies e grants — rodá-lo
+   por cima é o que garante que o projeto restaurado não fique mais aberto que produção. Foi
+   exatamente esse desvio que o exercício de 28/07 encontrou (`anon` com TRUNCATE).
+5. Siga do passo 5 do caminho B em diante (sequências, `SB_URL`/`SB_KEY`, Auth).
+
+### Caminho B — restaurar de CSVs (só sem `.dump`)
+
 1. **Ligue backup antes de qualquer coisa** se for reusar o projeto atual (evita repetir o erro).
 2. Crie um projeto Supabase novo (ou zere o atual, com cuidado).
 3. **SQL Editor** → cole `backup_schema.sql` inteiro → **Run**. Isso recria as 18 tabelas
@@ -157,6 +194,45 @@ criar/alterar tabela, índice, policy ou função, atualize-o. As consultas-font
    de projeto para projeto) e confira a CSP (`vercel.json` → `connect-src` apontando para o
    novo host `*.supabase.co`).
 7. Recrie o **usuário do Auth** do dono (1 login) manualmente no Dashboard — não vai nos CSVs.
+
+### Passo 8 (os DOIS caminhos) — conferir que o restore prestou
+
+Nenhum dos dois caminhos está terminado quando o import termina. Três conferências, nesta ordem —
+as duas primeiras pegam o modo de falha silencioso, a terceira é a única que prova que o **portal**
+funciona contra o resultado:
+
+1. **Contagem por tabela**, contra a tabela de referência da seção "Exportar os dados" acima:
+
+   ```sql
+   select relname, n_live_tup from pg_stat_user_tables
+   where schemaname = 'public' order by n_live_tup desc;
+   ```
+
+   `n_live_tup` é estimativa — rode `analyze;` antes, ou confirme as suspeitas com `count(*)`.
+   **Qualquer tabela abaixo da referência significa restore incompleto**, não "dado que mudou".
+
+2. **Grants e RLS**, com `scripts/gen_security_snapshot.sql`, comparando com produção. É o passo
+   que teria pego o `anon` com TRUNCATE em 28/07 antes de ele virar achado.
+
+3. **O portal contra o banco restaurado.** Aponte `SB_URL`/`SB_KEY` (passo 6) e rode
+   `node scripts/check_views.mjs` — as 17 views, sem stub. Este passo **nunca foi executado**; é um
+   dos três itens que mantêm SEC-06 aberto.
+
+### Passo 9 — medir RTO e RPO, e escrever os números aqui
+
+O item que falta há mais tempo no projeto. **RTO** = quanto tempo, do "percebi a perda" ao "portal
+de pé"; **RPO** = quanto dado se perde, na prática, entre o último backup e a falha (com o backup
+semanal do `backup.yml`, o teto teórico é 7 dias — a medição serve para confirmar que não é pior).
+
+Cronometre o exercício inteiro e preencha:
+
+| Métrica | Medido em | Valor | Caminho usado |
+|---|---|---|---|
+| **RTO** | — | *(não medido)* | — |
+| **RPO** | — | *(não medido)* | — |
+
+Com os dois preenchidos e o passo 8 verde, o SEC-06 se encerra: atualize também `docs/seguranca.md`
+§ 9.3, que hoje o descreve como **mitigado**.
 
 ## Encoding dos CSVs (não é bug)
 
