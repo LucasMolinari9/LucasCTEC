@@ -39,7 +39,18 @@ async function request(pathname) {
   const headers = { 'user-agent': 'divat-deploy-smoke/1.0' };
   if (vercelBypassSecret) {
     headers['x-vercel-protection-bypass'] = vercelBypassSecret;
-    headers['x-vercel-set-bypass-cookie'] = 'true';
+    // NÃO mandar `x-vercel-set-bypass-cookie` aqui. Ele pede à Vercel que ela responda com
+    // redirect + Set-Cookie, para que as requisições SEGUINTES passem pelo cookie. Isso serve a
+    // NAVEGADOR (é a receita da doc para Playwright/Cypress, que têm cookie jar). O `fetch` do
+    // Node não guarda nem reenvia cookie: ele segue o redirect sem o cookie, a Vercel redireciona
+    // de novo, e o laço só termina no limite — `fetch failed (causa: redirect count exceeded)`.
+    //
+    // Medido em 31/07/2026, e o sintoma foi reproduzido com servidor local (21 voltas, cookie
+    // nunca reenviado). Detalhe cruel: com o segredo ERRADO nada disso aparecia — a Vercel
+    // devolvia a tela de login com 200. Ou seja, o loop só começou quando o bypass passou a
+    // valer, e parecia uma piora quando era o oposto.
+    //
+    // Não é preciso cookie nenhum: o header de bypass vai em TODA requisição deste script.
   }
   try {
     return await fetch(new URL(pathname, base), {
