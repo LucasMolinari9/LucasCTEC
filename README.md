@@ -62,7 +62,9 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 allowlist e isolamento do Supabase),
 [`deriva.yml`](.github/workflows/deriva.yml) (semanal + sob demanda),
 [`db-checks.yml`](.github/workflows/db-checks.yml) (**diário** — Realtime, qualidade dos dados e
-grants) e [`backup.yml`](.github/workflows/backup.yml) (backup semanal).
+grants), [`backup.yml`](.github/workflows/backup.yml) (backup semanal) e
+[`phase3-security.yml`](.github/workflows/phase3-security.yml) (contrato das migrações SQL, só
+quando o diff toca `supabase/migrations/`; o job que fala com o banco de teste é manual).
 
 ## Publicação
 
@@ -86,7 +88,8 @@ grants) e [`backup.yml`](.github/workflows/backup.yml) (backup semanal).
 | `docs/` | Documentação técnica (abaixo). |
 | `CLAUDE.md` | Contexto detalhado do projeto para sessões de IA (mapa do código, banco, armadilhas). |
 | `CONTEXT.md` | Glossário do domínio (termos do cadastro de linhas). |
-| `.github/workflows/` | Os 7 workflows de CI (ver a tabela de testes acima). |
+| `.github/workflows/` | Os 8 workflows de CI (ver a tabela de testes acima). |
+| `supabase/migrations/` | Migrações SQL versionadas. **Aplicadas hoje só no projeto de teste** — ver `docs/planos/fase-3-hardening-moderado.md`. |
 
 ### Documentação (`docs/`)
 

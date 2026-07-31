@@ -7,10 +7,10 @@ especialmente arriscada porque induz quem testa a acreditar que produção está
 
 **Decisão:** o Portal DIVAT usa o projeto Supabase `divat - TESTE`
 (`gontnlfmothfglssbyyk`) para previews e desenvolvimento. O `app.js` escolhe o projeto pelo
-hostname: somente `divatdetro.vercel.app`, explicitamente registrado em `HOSTS_PROD`, usa
-produção; qualquer outro host usa teste. A seleção é fail-closed: se a configuração do ambiente
-escolhido estiver incompleta, a aplicação interrompe a inicialização em vez de recorrer ao banco
-de produção.
+hostname: os 3 domínios de produção registrados em `HOSTS_PROD` — o canônico
+`divatdetro.vercel.app`, o alias do time e o alias da branch `main` — usam produção; qualquer
+outro host usa teste. A seleção é fail-closed: se a configuração do ambiente escolhido estiver
+incompleta, a aplicação interrompe a inicialização em vez de recorrer ao banco de produção.
 
 **Por quê:** produção é uma allowlist porque os endereços de preview do Vercel incluem valores
 gerados a cada deploy e não podem ser enumerados antecipadamente. Tratar como produção somente

@@ -210,10 +210,21 @@ console.log('\n[2b] Deriva docs × código');
   const ler = p => fs.readFileSync(path.join(RAIZ, p), 'utf8');
   const existe = p => fs.existsSync(path.join(RAIZ, p));
 
+  // As ADRs entraram em 31/07/2026, depois de a auditoria cruzada achar que a ADR-0002 ainda
+  // dizia "somente `divatdetro.vercel.app` … usa produção" enquanto o HOSTS_PROD já tinha três
+  // hosts — a MESMA deriva que o gate corrigiu no CLAUDE.md dias antes. Ela sobreviveu porque
+  // `docs/adr/` não estava aqui, e por isso as ADRs escapavam de TODAS as guardas do [2b]:
+  // fatos numéricos, links, SB_URL/SB_KEY e @font-face. ADR é documento vivo e prescritivo —
+  // alguém a lê para decidir. São lidas do diretório, não listadas à mão, senão a ADR-0004
+  // nasceria fora do gate pelo mesmo motivo que as três primeiras ficaram.
+  const ADRS = existe('docs/adr')
+    ? fs.readdirSync(path.join(RAIZ, 'docs/adr')).filter(f => f.endsWith('.md')).sort()
+        .map(f => `docs/adr/${f}`)
+    : [];
   const DOCS_VIVOS = ['CLAUDE.md', 'README.md', 'CONTEXT.md', 'docs/estrutura-frontend.md',
     'docs/schema.md', 'docs/backup.md', 'docs/seguranca.md', 'docs/semgrep.md',
     'docs/agents/domain.md', 'docs/agents/issue-tracker.md', 'docs/agents/triage-labels.md',
-    'tests/README.md'].filter(existe);
+    'tests/README.md', ...ADRS].filter(existe);
 
   // Comentário de workflow é prosa viva como qualquer outra — e prosa que ninguém relê, porque
   // não abre em leitor de markdown. A 1ª versão desta guarda varria só `.md`, e por isso o
@@ -283,7 +294,8 @@ console.log('\n[2b] Deriva docs × código');
     { doc:WORKFLOWS, o:'views do check_views (workflows)', re:/([\d]+)\s*views\b/, real:views,   esc:'exato' },
     { doc:WORKFLOWS, o:'% da seção MODAL (workflows)',     re:/~([\d,.]+)% do app\.js/, real:modalPct, esc:'pct' },
     { doc:['README.md','CLAUDE.md'], o:'nº de workflows',  re:/[Oo]s ([\d]+) workflows/,  real:nWorkflows, esc:'exato' },
-    { doc:'CLAUDE.md',               o:'hosts de produção', re:/os ([\d]+) domínios de produção/, real:nHostsProd, esc:'exato' },
+    { doc:['CLAUDE.md','docs/adr/0002-ambiente-de-teste-isolado.md'],
+                                     o:'hosts de produção', re:/os ([\d]+) domínios de produção/, real:nHostsProd, esc:'exato' },
   ];
   // TODA ocorrência é conferida, não só a primeira. A 1ª versão parava no primeiro casamento, e
   // o `views.yml` afirma "23 views" em TRÊS linhas (1, 11 e 71): consertar uma e esquecer as
@@ -354,6 +366,37 @@ console.log('\n[2b] Deriva docs × código');
     });
   }
   if (!sbErrado) okline('SB_URL/SB_KEY sempre atribuídas ao app.js');
+
+  // --- ninguém afirma que só UM host usa produção quando HOSTS_PROD tem vários ---
+  // Guarda de PADRÃO DE ERRO, não de número — e ela nasceu de a guarda numérica ter falhado.
+  // Em 31/07/2026 as ADRs entraram em DOCS_VIVOS justamente porque a ADR-0002 carregava a deriva
+  // do HOSTS_PROD; mas o gate seguiu VERDE, porque o fato `hosts de produção` da tabela FATOS só
+  // olha o CLAUDE.md e só casa uma frase que traz o número. A ADR afirma o mesmo fato em prosa,
+  // sem número — invisível. Guarda que só sabe conferir número não cobre quem escreve por
+  // extenso, e "somente X usa produção" é como um humano naturalmente escreve isso.
+  // Por isso esta pergunta ao CÓDIGO quantos hosts existem e cobra a prosa que diz "só um".
+  // Casa por SENTENÇA no texto com espaço normalizado, não linha a linha: a frase da ADR-0002
+  // quebra em duas linhas ("somente `divatdetro.vercel.app` … usa" / "produção; qualquer outro
+  // host usa teste"), e a 1ª versão desta guarda, que olhava linha a linha, passou VERDE por
+  // isso. Mesmo motivo pelo qual a tabela FATOS normaliza espaço antes de casar.
+  // A isenção existe porque a prosa CORRETA também usa "só": "só os 3 domínios de produção …
+  // usam produção" casaria os três termos. O que separa certo de errado é a frase declarar a
+  // contagem — então sentença que traz o número certo (ou fala no plural) não é erro.
+  let hostErrado = 0;
+  if (nHostsProd != null && nHostsProd > 1){
+    for (const doc of DOCS_VIVOS){
+      const sentencas = ler(doc).replace(/\s+/g, ' ').split(/(?<=[.;])\s+/);
+      for (const s of sentencas){
+        if (/deriva-ok/.test(s)) continue;
+        if (!/\b(somente|apenas|só)\b/i.test(s)) continue;
+        if (!/divatdetro\.vercel\.app/.test(s) || !/produção/.test(s)) continue;
+        if (new RegExp(`\\b${nHostsProd}\\b`).test(s) || /\bdomínios\b|\bhosts\b/i.test(s)) continue;
+        fail(`[${doc}] reduz a produção a um host só: "${s.trim().slice(0, 90)}…" — HOSTS_PROD tem ${nHostsProd} (se reconta o bug histórico, marque com \`<!-- deriva-ok: histórico -->\`)`);
+        hostErrado++;
+      }
+    }
+    if (!hostErrado) okline(`nenhum doc reduz os ${nHostsProd} hosts de produção a um só`);
+  }
 
   // --- os @font-face moram onde a prosa diz que moram ---
   // Mesma família da regra acima, e pela mesma razão: a extração do CSS de 21-22/07/2026 levou os

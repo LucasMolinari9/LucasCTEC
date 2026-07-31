@@ -176,12 +176,14 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    armadilhas antes de escrever SQL/JS. Ajuste isolado de CSS/texto/UI pula direto pro passo 1.
 1. Edite `app.js` (JS) e/ou `index.html` (HTML/CSS). **Trabalhe numa branch**, não direto na
    `main`: push na branch → o Vercel gera **preview deploy** → confira no preview → merge na
-   `main` (que é a publicada). O CI roda **quatro workflows** no seu diff, separados de
-   propósito (um vermelho não esconde o outro): `ci.yml` (gate leve — `tests/check.js`),
+   `main` (que é a publicada). São **os 8 workflows** de CI, separados de propósito (um vermelho
+   não esconde o outro). Rodam em **todo** diff: `ci.yml` (gate leve — `tests/check.js`),
    `views.yml` (navegador — `check_views.mjs` + `check_abas.mjs`), `semgrep.yml` (estático) e
    `deploy-smoke.yml` depois que a Vercel publica (headers, allowlist e isolamento do Supabase).
-   Os outros três (`deriva.yml`, `db-checks.yml`, `backup.yml`) são de cron, e só entram no seu
-   diff se ele tocar os arquivos que eles vigiam.
+   Os outros quatro (`deriva.yml`, `db-checks.yml`, `backup.yml`, `phase3-security.yml`) são de
+   cron ou têm filtro de `paths`, e só entram no seu diff se ele tocar os arquivos que vigiam.
+   (Escrito em dígito de propósito: a guarda `nº de workflows` do `[2b]` só casa número, e
+   enquanto isto dizia "quatro workflows" por extenso a contagem podia envelhecer sem o gate ver.)
    Se previews estiverem protegidos pela Vercel, configure um **Protection Bypass for
    Automation** e grave o mesmo valor no secret GitHub `VERCEL_AUTOMATION_BYPASS_SECRET`;
    sem isso o smoke recebe a tela de login em vez do portal e falha de propósito.
