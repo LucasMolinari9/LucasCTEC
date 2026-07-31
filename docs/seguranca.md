@@ -29,7 +29,8 @@ Auditoria de código + banco ao vivo + histórico do Git.
 
 **Banco:** zero grants de escrita para `anon`/`authenticated`; zero policies além de SELECT; RLS
 ligado em 100% das tabelas. Advisors de segurança do Supabase: só os 4 INFO esperados (staging
-do ETL sem policy, de propósito) e 1 WARN — *Leaked Password Protection* desligado (ação 5).
+do ETL sem policy, de propósito) e 1 WARN — *Leaked Password Protection* desligado (seção 5,
+item 2).
 
 **Código / exposição:** nenhuma `service_role` no código, no site ou em **todo o histórico do
 Git** (checado commit a commit — só existe a `anon`); nenhum segredo, senha ou chave privada;
@@ -78,13 +79,17 @@ bloco `SET ROLE anon` + tentativas de INSERT/UPDATE/DELETE/SELECT em transação
 2. **Ligar Leaked Password Protection:** Supabase Dashboard → Authentication → Passwords → ativar.
    (Fecha o único WARN dos advisors.)
 3. **Manter signup fechado:** Dashboard → Authentication → "Allow new users to sign up" = OFF.
-4. **Repositório GitHub privado:** Settings → Danger Zone → Change visibility → Private. Não
-   afeta o site na Vercel (deploy segue por OAuth) nem o backup semanal. Remove o "mapa" de
-   arquitetura que um repo público entrega a um atacante.
-5. **Rotacionar a `service_role`** se ela já foi colada fora do painel (chat, e-mail, arquivo):
+4. **Rotacionar a `service_role`** se ela já foi colada fora do painel (chat, e-mail, arquivo):
    Dashboard → Settings → API.
-6. **GitHub — branch protection na `main`:** bloquear force-push e exigir o CI verde antes de
+5. **GitHub — branch protection na `main`:** bloquear force-push e exigir o CI verde antes de
    merge; confirmar que *secret scanning / push protection* está ativo.
+
+> **Sobre a visibilidade do repositório:** até 31/07/2026 esta lista trazia "tornar o repositório
+> privado" como item 4, com o caminho do painel. **O repositório é público por decisão** — ver
+> `docs/adr/0003-repositorio-publico.md`. A instrução saiu daqui porque mandava fazer o oposto da
+> decisão em vigor, e este documento é lido por agentes que executam o que leem. A segurança do
+> portal nunca dependeu do sigilo do código: o `app.js` e a chave `anon` são servidos a todo
+> visitante desde sempre.
 
 ## 6. Checklist trimestral (5 min numa sessão do Claude)
 
@@ -137,40 +142,43 @@ bloco `SET ROLE anon` + tentativas de INSERT/UPDATE/DELETE/SELECT em transação
 Três coisas não estão fechadas. Estão aqui para não serem redescobertas como "achado novo" a cada
 auditoria — e para que a decisão de conviver com elas seja explícita, não esquecimento.
 
-**9.1 — Defaults do role `supabase_admin` (SEC-01, parcial).** Existe um segundo conjunto de
-default privileges, dono `supabase_admin`, concedendo `arwdDxtm` (inclui INSERT/UPDATE/DELETE/
-TRUNCATE) a `anon` e `authenticated` em tabelas de `public`. **Não é fechável:** `postgres` não é
-superusuário no Supabase e o `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin` responde
-`42501: permission denied to change default privileges`.
+> **Por que esta seção é curta.** Ela registra **que** cada risco foi avaliado, **qual controle o
+> compensa** e **por que a convivência foi aceita**. Não traz o passo a passo de onde o controle
+> falta nem como o risco se materializaria: o repositório é público (`docs/adr/0003-repositorio-publico.md`),
+> e roteiro operacional de risco aberto não se versiona. Esse detalhe — a medição que originou cada
+> item e o que exatamente falta cumprir — vive **fora do git**, na pasta dos backups do dono, junto
+> do que já não pode ser versionado. Ao fechar um destes itens, atualize os dois lugares.
 
-⚠️ **Até 30/07/2026 este parágrafo dizia que o default "só atinge objetos criados por esse role;
-o painel cria como `postgres`, que já está fechado"** — ou seja, que na prática não pegava. **A
-medição desmentiu isso em 28/07/2026** e o texto ficou para trás quando o §9.3 foi atualizado
-(commit `ead1d67`): ao rodar o `backup_schema.sql` num projeto novo **pelo SQL Editor, portanto
-como `postgres`**, as 18 tabelas nasceram com TRUNCATE/REFERENCES/TRIGGER para `anon` e
-`authenticated` — **108 grants**. **RLS não bloqueia TRUNCATE** e a chave `anon` é pública: era
-caminho aberto para esvaziar o banco. Quem lia só este documento **subestimava** exatamente o
-risco que justifica o gate diário.
+**9.1 — Defaults de privilégio herdados do Supabase (SEC-01, parcial).** O projeto tem um conjunto
+de default privileges que **não pertence ao `postgres`** e por isso **não é fechável** por nós —
+`postgres` não é superusuário no Supabase. Consequência: a garantia "objeto novo nasce fechado",
+que vale para os defaults que controlamos, **não é completa**.
 
-**Por isso:** o `docs/backup_schema.sql` revoga tudo que não é SELECT (não só `MAINTAIN`), e o
-gate `check_grants.mjs` roda **diariamente** enquanto esse default existir, pegando qualquer
-tabela que apareça com grant de escrita. Fonte da verdade sobre o assunto: o `CLAUDE.md`, seção
-**Supabase → RLS / segurança**.
+**Controle que compensa, e que não pode ser removido enquanto o default existir:** o
+`docs/backup_schema.sql` revoga explicitamente tudo que não é SELECT, e o gate
+`scripts/check_grants.mjs` roda **diariamente** (workflow `db-checks.yml`), falhando se qualquer
+tabela aparecer com grant ou policy de escrita para `anon`/`authenticated`. A frequência é diária,
+não semanal, **por causa deste item** — quem for reduzi-la precisa fechar o item antes. Regras
+técnicas: `CLAUDE.md`, seção **Supabase → RLS / segurança**.
 
 **9.2 — Abuso da API pública (SEC-02).** A chave `anon` é pública por design e o navegador fala
-**direto** com o Supabase — a Vercel não está no caminho da requisição, então não há onde aplicar
-rate limit sem mudar a arquitetura (Edge Function, gateway ou RPC agregadora com quota). Um
-atacante pode ignorar o `app.js` e enumerar o PostgREST até os tetos do servidor. **Risco de
-integridade permanece baixo** (o banco é só-leitura para `anon`); o risco é de disponibilidade e
-custo. **Controles que existem hoje:** `statement_timeout=3s` no role `anon`,
-`pgrst.db_max_rows=30000` no `authenticator`, e os limites do plano. As otimizações do `app.js`
-(memoização e cancelamento de busca obsoleta) reduzem a carga que o **portal legítimo** gera —
-não são rate limiting e não devem ser contadas como tal.
+**direto** com o Supabase — a Vercel não está no caminho da requisição, então **não há onde aplicar
+rate limit sem mudar a arquitetura** (Edge Function, gateway ou RPC agregadora com quota). Avaliado
+e aceito: o risco é de **disponibilidade e custo**, não de integridade — o banco é só-leitura para
+`anon`, e isso é verificado contra o banco vivo pelo gate diário, não presumido.
+
+**Controles que existem hoje:** `statement_timeout` no role `anon`, teto de linhas do PostgREST e
+os limites do plano. ⚠️ As otimizações do `app.js` (memoização, cancelamento de busca obsoleta)
+reduzem a carga do **portal legítimo** — **não são rate limiting** e não devem ser contadas como
+tal em auditoria futura.
 
 **9.3 — Restore exercitado, não concluído (SEC-06).** Plano Free, sem PITR. Há backup semanal
 automático, checksum e conferência de contagem. Em 28/07/2026 o runbook de `docs/backup.md` foi
 executado pela primeira vez contra um projeto Supabase descartável e **achou dois defeitos reais**,
-ambos corrigidos: grants mais abertos que os da produção (`anon` com TRUNCATE) e `row_id` recusando
-os valores dos CSVs. Mas a restauração **não foi levada até o fim**, o portal **nunca foi apontado
-para o banco restaurado** e **RTO/RPO seguem sem medição** — por isso SEC-06 continua **mitigado**,
-não encerrado. O que falta está listado em `docs/backup.md`.
+ambos já corrigidos — prova de que o exercício valeu. Mas o exercício **não foi levado até o fim** e
+**RTO/RPO seguem sem medição**: não se sabe quanto tempo uma recuperação real levaria. Por isso
+SEC-06 continua **mitigado**, não encerrado.
+
+É o maior item aberto do projeto, apontado em 16/07 e de novo em 27/07. Só o dono pode fechá-lo
+(exige a máquina dele e um projeto Supabase descartável); o checklist do que falta está no
+`docs/backup.md`, seção **O que a integridade do dump garante (e o que NÃO garante)**.

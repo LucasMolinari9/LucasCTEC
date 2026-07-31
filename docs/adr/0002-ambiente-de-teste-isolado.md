@@ -37,3 +37,14 @@ produção escolha o projeto de teste.
 Accepted e ativado em 28/07/2026. Produção permanece em
 `lwzsxuaqqeoamukduhev`; previews, `localhost` e hostnames não reconhecidos usam
 `gontnlfmothfglssbyyk`.
+
+**Verificado contra um preview real em 31/07/2026** (01:03 UTC). Entre 28/07 e essa data a
+decisão estava implementada e testada offline, mas o gate que a exerceria no ambiente para o qual
+ela foi escrita — `deploy-smoke.yml` → `scripts/check_deploy.mjs` — falhava em **todo** preview,
+primeiro por falta do `VERCEL_AUTOMATION_BYPASS_SECRET` e depois por um laço de redirect no
+próprio script. Só produção era verificada, que é justamente o caso **sem** risco: a propriedade
+central desta ADR — preview nunca lê o banco de produção — nunca tinha sido medida em produção do
+gate. Com o segredo configurado pelo dono e o script corrigido (PR #87), o run passou afirmando
+que um hostname de preview fica fora da allowlist e seleciona teste, que a URL de teste está
+isolada e que a guarda fail-closed está publicada. **A partir daqui isso é regressão vigiada, não
+promessa de documento** — todo deploy repete a verificação.
