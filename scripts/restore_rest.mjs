@@ -44,6 +44,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { PK, ORDEM_INSERCAO as ORDEM, COM_IDENTITY } from './lib/tabelas.mjs';
+import { cabecalhosSB } from './lib/sb.mjs';
 
 const URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -63,7 +64,7 @@ if (!URL || !SERVICE_KEY) {
   process.exit(1);
 }
 
-const headers = { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` };
+const headers = cabecalhosSB(SERVICE_KEY);
 
 // Conta as linhas que a tabela tem AGORA, pelo Content-Range do PostgREST ("0-0/52146").
 async function contar(tabela) {

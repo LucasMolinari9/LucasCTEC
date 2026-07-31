@@ -33,6 +33,7 @@ import { createHash } from 'node:crypto';
 // O inventário de tabelas mora em lib/tabelas.mjs desde 31/07/2026, compartilhado com o
 // restore_rest.mjs — duas cópias divergiriam justamente na hora de um restore.
 import { PK as TABELAS, STAGING } from './lib/tabelas.mjs';
+import { cabecalhosSB } from './lib/sb.mjs';
 
 const URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -47,7 +48,7 @@ if (!URL || !KEY) {
   process.exit(1);
 }
 
-const headers = { apikey: KEY, Authorization: `Bearer ${KEY}` };
+const headers = cabecalhosSB(KEY);
 
 // Filtro keyset: "traga o que vem DEPOIS desta chave". Para PK de uma coluna é um `gt` simples;
 // para PK composta é a comparação lexicográfica escrita à mão, porque o PostgREST não expõe

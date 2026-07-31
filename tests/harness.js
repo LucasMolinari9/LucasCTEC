@@ -4,7 +4,11 @@
    Everything else is copied verbatim. */
 
 const SB_URL = 'https://example.invalid';
-const SB_KEY = 'fake-anon-key';
+// Precisa TER FORMA DE JWT (prefixo `eyJ`): desde 31/07/2026 o formato da chave decide se o
+// `Authorization: Bearer` é enviado (ver cabecalhosSB). Uma chave falsa que não parecesse JWT
+// faria toda a bateria do sbFetch rodar pelo ramo publishable, que NÃO é o de produção hoje —
+// a bancada testaria um caminho e o portal usaria outro. Foi o que o caso j4 pegou.
+const SB_KEY = 'eyJhbGciOiJIUzI1NiJ9.fake-anon-key';
 const SB = { url: SB_URL, key: SB_KEY };
 
 function selecionarSupabase(hostname, config){
@@ -51,13 +55,18 @@ async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal)
   }
 }
 
+const ehJWT = k => /^eyJ/.test(String(k || ''));
+const cabecalhosSB = key => ehJWT(key)
+  ? { apikey: key, Authorization: `Bearer ${key}` }
+  : { apikey: key };
+
 async function sbFetch(table, qs = '', sinal) {
   const url = `${SB.url}/rest/v1/${table}?${qs}`;
   let ultimoErro;
   for (let tentativa = 0; tentativa <= SB_RETRIES; tentativa++) {
     try {
       const res = await fetchComTimeout(url, {
-        headers: { apikey: SB.key, Authorization: `Bearer ${SB.key}` }
+        headers: cabecalhosSB(SB.key)
       }, SB_TIMEOUT_MS, sinal);
       if (!res.ok) {
         // 5xx/429 são transitórios → vale repetir; demais 4xx são definitivos
@@ -112,5 +121,5 @@ module.exports = {
   get SB_TIMEOUT_MS(){ return SB_TIMEOUT_MS; },
   set SB_TIMEOUT_MS(v){ SB_TIMEOUT_MS = v; },
   SB_RETRIES, selecionarSupabase, esperar, fetchComTimeout, sbFetch, marcarTrunc, bannerTrunc,
-  CANCELADO, ehCancelamento,
+  CANCELADO, ehCancelamento, ehJWT, cabecalhosSB,
 };

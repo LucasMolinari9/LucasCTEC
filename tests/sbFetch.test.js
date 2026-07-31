@@ -188,6 +188,42 @@ function jsonRespBadBody(status){
     ok(Array.isArray(r5) && r5[0].id===5, 'i5 sinal ocioso nao interfere');
   }
 
+  // ---- j) cabeçalhos de autenticação: JWT legado × publishable key -------------------------
+  // O Supabase suporta as chaves `anon` legadas (JWT) só até o fim de 2026; as novas
+  // (`sb_publishable_…`) NÃO são JWT, e mandá-las em `Authorization: Bearer` é ignorado no
+  // melhor caso e rejeitado no pior. Estes casos existem para que a troca de chave, no dia em
+  // que acontecer, seja só trocar as constantes do topo do app.js — e para que ninguém
+  // "simplifique" o ramo de volta sem o gate cair.
+  {
+    ok(H.ehJWT('eyJhbGciOiJIUzI1NiJ9.abc') === true, 'j1 ehJWT reconhece JWT');
+    ok(H.ehJWT('sb_publishable_abc123') === false, 'j1 ehJWT rejeita publishable');
+    ok(H.ehJWT('') === false && H.ehJWT(null) === false && H.ehJWT(undefined) === false,
+      'j1 ehJWT nao quebra com vazio/null/undefined');
+
+    const comJWT = H.cabecalhosSB('eyJhbGciOiJIUzI1NiJ9.abc');
+    ok(comJWT.apikey === 'eyJhbGciOiJIUzI1NiJ9.abc', 'j2 JWT: manda apikey');
+    ok(comJWT.Authorization === 'Bearer eyJhbGciOiJIUzI1NiJ9.abc', 'j2 JWT: manda Bearer');
+
+    const comPub = H.cabecalhosSB('sb_publishable_abc123');
+    ok(comPub.apikey === 'sb_publishable_abc123', 'j3 publishable: manda apikey');
+    ok(!('Authorization' in comPub), 'j3 publishable: NAO manda Bearer',
+      JSON.stringify(comPub));
+  }
+
+  // j4) o sbFetch realmente USA esses cabeçalhos — sem isto, os casos acima provariam só que a
+  // função existe, não que ela está ligada no caminho de dados.
+  {
+    let vistos = null;
+    setFetch((n, url, opts) => { vistos = opts && opts.headers; return jsonResp(200, [{id:1}]); });
+    await H.sbFetch('t', 'select=*');
+    ok(vistos && vistos.apikey, 'j4 sbFetch manda apikey', JSON.stringify(vistos));
+    // A chave do harness é a de produção (JWT), então aqui o Bearer DEVE aparecer: este caso
+    // guarda que a mudança não removeu o cabeçalho do caminho legado, que é o de hoje.
+    ok(vistos && vistos.Authorization === `Bearer ${vistos.apikey}`,
+      'j4 sbFetch manda Bearer para chave JWT (comportamento de hoje, intacto)',
+      JSON.stringify(vistos));
+  }
+
   console.log('\n==== PLACAR:', pass+'/'+(pass+fail), '====');
   if (fail){ console.log('FALHAS:'); fails.forEach(f=>console.log('  -',f)); process.exit(1); }
 })();

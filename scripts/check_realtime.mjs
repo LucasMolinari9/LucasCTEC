@@ -26,6 +26,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { cabecalhosSB } from './lib/sb.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -49,7 +50,7 @@ let doBanco;
 try {
   const resp = await fetch(`${SB_URL}/rest/v1/rpc/realtime_tables`, {
     method: 'POST',
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    headers: cabecalhosSB(SB_KEY, { 'Content-Type': 'application/json' }),
     body: '{}',
   });
   if (!resp.ok) {

@@ -67,6 +67,10 @@ async function montarCaso(estadoProd, estadoTeste) {
   const dir = await mkdtemp(join(tmpdir(), 'divat-amb-'));
   await mkdir(join(dir, 'scripts'), { recursive: true });
   await copyFile(join(REAL, 'scripts/check_ambientes.mjs'), join(dir, 'scripts/check_ambientes.mjs'));
+  // A lib de cabeçalhos vai junto: o gate a importa, e sem ela o processo filho morre com
+  // ERR_MODULE_NOT_FOUND antes de chegar em qualquer asserção.
+  await mkdir(join(dir, 'scripts/lib'), { recursive: true });
+  await copyFile(join(REAL, 'scripts/lib/sb.mjs'), join(dir, 'scripts/lib/sb.mjs'));
   // app.js falso com a MESMA forma que o script espera por regex.
   await writeFile(join(dir, 'app.js'), `
 const SB_URL = 'http://127.0.0.1:${p.porta}';

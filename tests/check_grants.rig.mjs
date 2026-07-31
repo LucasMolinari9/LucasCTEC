@@ -34,6 +34,10 @@ await mkdir(`${RAIZ}/scripts`, { recursive: true });
 await writeFile(`${RAIZ}/app.js`,
   `const SB_URL = 'http://127.0.0.1:${PORTA}';\nconst SB_KEY = 'fake-anon-key';\n`);
 await copyFile(`${REAL}/scripts/check_grants.mjs`, `${RAIZ}/scripts/check_grants.mjs`);
+// O gate importa ./lib/sb.mjs (cabeçalhos de auth dependentes do formato da chave) desde
+// 31/07/2026 — sem copiar a lib junto, o script morre com ERR_MODULE_NOT_FOUND aqui dentro.
+await mkdir(`${RAIZ}/scripts/lib`, { recursive: true });
+await copyFile(`${REAL}/scripts/lib/sb.mjs`, `${RAIZ}/scripts/lib/sb.mjs`);
 
 // Estado SÃO: espelha o banco de verdade depois das correções do Bloco 1.
 const sao = () => ({

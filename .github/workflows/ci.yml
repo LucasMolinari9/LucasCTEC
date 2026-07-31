@@ -51,7 +51,10 @@ jobs:
       # — só se alguém lembrasse, que é exatamente o que o CLAUDE.md registra como defeito do
       # check_realtime.mjs. São offline e sem dependências, então cabem aqui e não pesam.
       # A do restore importa mais: restore_rest.mjs é o único script do repo que escreve no banco.
-      - name: Bancadas com stub de PostgREST (backup, restore, ambientes)
+      # TODAS as *.rig.mjs entram aqui. O check_grants.rig.mjs existia desde 27/07/2026 e não
+      # estava em workflow nenhum — o mesmo defeito que o CLAUDE.md já registrava sobre o
+      # check_realtime.mjs, repetido. Ao criar bancada nova, acrescente a linha.
+      - name: Bancadas com stub de PostgREST (backup, restore, ambientes, grants)
         env:
           NO_PROXY: 127.0.0.1
           no_proxy: 127.0.0.1
@@ -59,3 +62,4 @@ jobs:
           node tests/backup_rest.rig.mjs
           node tests/restore_rest.rig.mjs
           node tests/ambientes.rig.mjs
+          node tests/check_grants.rig.mjs

@@ -43,6 +43,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { cabecalhosSB } from './lib/sb.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BASELINE = join(ROOT, 'scripts', 'ambientes_baseline.json');
@@ -98,7 +99,7 @@ async function pedir(amb, caminho) {
   const url = `${amb.url}/rest/v1/${caminho}`;
   try {
     const r = await fetch(url, {
-      headers: { apikey: amb.key, Authorization: `Bearer ${amb.key}`, Prefer: 'count=exact' },
+      headers: cabecalhosSB(amb.key, { Prefer: 'count=exact' }),
     });
     const corpo = r.ok ? await r.json() : await r.text();
     const m = /\/(\d+)\s*$/.exec(r.headers.get('content-range') || '');

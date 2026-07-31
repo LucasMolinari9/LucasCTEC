@@ -102,13 +102,30 @@ async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal)
   }
 }
 
+// Cabeçalhos de autenticação do PostgREST.
+//
+// `apikey` é obrigatório e vale para qualquer formato de chave. O `Authorization: Bearer` só é
+// mandado quando a chave é um JWT (as legadas `anon`, que começam com `eyJ` — cabeçalho JOSE em
+// base64). A distinção existe porque o Supabase está migrando para chaves **publishable**
+// (`sb_publishable_…`), que NÃO são JWT: mandá-las como Bearer é, no melhor caso, ignorado, e no
+// pior rejeitado pelo GoTrue. Hoje as duas chaves do app.js ainda são JWT, então esta função
+// devolve exatamente o que devolvia antes — a mudança é aditiva de propósito, e o
+// tests/sbFetch.test.js prova os dois ramos.
+// Escrito em 31/07/2026 por causa do achado 4 da auditoria cruzada, que notou que o
+// `Authorization: Bearer` "não deve ser copiado cegamente para uma publishable key não-JWT".
+// Com isto, migrar vira troca de duas constantes no topo do arquivo, sem tocar no caminho de dados.
+const ehJWT = k => /^eyJ/.test(String(k || ''));
+const cabecalhosSB = key => ehJWT(key)
+  ? { apikey: key, Authorization: `Bearer ${key}` }
+  : { apikey: key };
+
 async function sbFetch(table, qs = '', sinal) {
   const url = `${SB.url}/rest/v1/${table}?${qs}`;
   let ultimoErro;
   for (let tentativa = 0; tentativa <= SB_RETRIES; tentativa++) {
     try {
       const res = await fetchComTimeout(url, {
-        headers: { apikey: SB.key, Authorization: `Bearer ${SB.key}` }
+        headers: cabecalhosSB(SB.key)
       }, SB_TIMEOUT_MS, sinal);
       if (!res.ok) {
         // 5xx/429 são transitórios → vale repetir; demais 4xx são definitivos

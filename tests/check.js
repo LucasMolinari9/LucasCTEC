@@ -138,6 +138,12 @@ const canon = [
   // marcarTrunc/bannerTrunc, com 28 testes rodando contra cópias que nada garantia estarem
   // atualizadas. Mesmo bug do `ilikeTerm`, um arquivo ao lado.
   ['sbFetch',              "async function sbFetch(table, qs = '', sinal) {"],
+  // O ramo não-JWT existe para a migração às chaves publishable (`sb_publishable_…`), que o
+  // Supabase suporta em paralelo às legadas só até o fim de 2026. Guardar a declaração INTEIRA:
+  // se alguém "simplificar" de volta para mandar Bearer sempre, o gate tem de cair — o defeito
+  // só apareceria no dia da troca de chave, com o portal inteiro sem ler nada.
+  ['ehJWT',                "const ehJWT = k => /^eyJ/.test(String(k || ''));"],
+  ['cabecalhosSB',         'const cabecalhosSB = key => ehJWT(key)'],
   ['selecionarSupabase',   'function selecionarSupabase(hostname, config){'],
   ['SB_RETRIES',           'const SB_RETRIES    = 2;'],
   ['esperar',              'const esperar = ms => new Promise'],
@@ -366,6 +372,19 @@ console.log('\n[2b] Deriva docs × código');
     });
   }
   if (!sbErrado) okline('SB_URL/SB_KEY sempre atribuídas ao app.js');
+
+  // --- toda bancada *.rig.mjs roda em algum workflow ---
+  // As bancadas ficam fora do próprio check.js de propósito (sobem servidor HTTP e processo
+  // filho; o contrato daqui é offline E sem efeitos). O preço é que elas dependem de alguém
+  // lembrar de rodá-las — e "só rodava se alguém lembrasse" é literalmente o defeito que o
+  // CLAUDE.md já registrava sobre o check_realtime.mjs. Aconteceu de novo: o check_grants.rig.mjs
+  // ficou de 27/07 a 31/07/2026 sem estar em workflow nenhum. Escrever "acrescente a linha" num
+  // comentário não impede a terceira vez; esta guarda impede.
+  const RIGS = existe('tests') ? fs.readdirSync(TESTS_DIR).filter(f => f.endsWith('.rig.mjs')).sort() : [];
+  const yml = WORKFLOWS.map(w => ler(w)).join('\n');
+  const orfas = RIGS.filter(r => !yml.includes(`tests/${r}`));
+  if (orfas.length) fail(`bancada(s) fora de todo workflow: ${orfas.join(', ')} — acrescente ao ci.yml, senão só rodam se alguém lembrar`);
+  else if (RIGS.length) okline(`as ${RIGS.length} bancadas *.rig.mjs rodam em workflow`);
 
   // --- quem afirma estado de banco diz DE QUAL banco ---
   // O repo tem DOIS projetos Supabase, e até 31/07/2026 os documentos que mais afirmam fatos

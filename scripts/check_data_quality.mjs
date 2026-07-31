@@ -37,6 +37,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { cabecalhosSB } from './lib/sb.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BASELINE = join(ROOT, 'scripts', 'data_quality_baseline.json');
@@ -59,7 +60,7 @@ let achados;
 try {
   const resp = await fetch(`${SB_URL}/rest/v1/rpc/divat_data_quality`, {
     method: 'POST',
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    headers: cabecalhosSB(SB_KEY, { 'Content-Type': 'application/json' }),
     body: '{}',
   });
   if (!resp.ok) {
