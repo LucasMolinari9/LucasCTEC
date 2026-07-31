@@ -39,7 +39,18 @@ async function request(pathname) {
   const headers = { 'user-agent': 'divat-deploy-smoke/1.0' };
   if (vercelBypassSecret) {
     headers['x-vercel-protection-bypass'] = vercelBypassSecret;
-    headers['x-vercel-set-bypass-cookie'] = 'true';
+    // NÃO mandar `x-vercel-set-bypass-cookie` aqui. Ele pede à Vercel que ela responda com
+    // redirect + Set-Cookie, para que as requisições SEGUINTES passem pelo cookie. Isso serve a
+    // NAVEGADOR (é a receita da doc para Playwright/Cypress, que têm cookie jar). O `fetch` do
+    // Node não guarda nem reenvia cookie: ele segue o redirect sem o cookie, a Vercel redireciona
+    // de novo, e o laço só termina no limite — `fetch failed (causa: redirect count exceeded)`.
+    //
+    // Medido em 31/07/2026, e o sintoma foi reproduzido com servidor local (21 voltas, cookie
+    // nunca reenviado). Detalhe cruel: com o segredo ERRADO nada disso aparecia — a Vercel
+    // devolvia a tela de login com 200. Ou seja, o loop só começou quando o bypass passou a
+    // valer, e parecia uma piora quando era o oposto.
+    //
+    // Não é preciso cookie nenhum: o header de bypass vai em TODA requisição deste script.
   }
   try {
     return await fetch(new URL(pathname, base), {
@@ -52,6 +63,30 @@ async function request(pathname) {
   }
 }
 
+// O `fetch` do Node entrega TODA falha de rede como a mesma frase inútil, "fetch failed", e guarda
+// o motivo real em `error.cause` — ENOTFOUND, ECONNREFUSED, ECONNRESET, certificado, timeout. O
+// script imprimia só `error.message`, então jogava fora exatamente a informação que resolve o
+// problema. Em 31/07/2026 isso custou três execuções seguidas do gate (#83, #84 e a anterior) em
+// que 18 verificações reprovaram dizendo "fetch failed" — sem nenhuma pista de se o alvo não
+// resolvia, recusava conexão ou derrubava o TLS. Gate que não sabe dizer por que falhou obriga a
+// adivinhar toda vez que a rede tossir.
+//
+// `AbortError` do timeout de 20 s não tem `cause`; por isso o sufixo é condicional.
+function descreveErro(error) {
+  const causa = error?.cause;
+  if (!causa) return error?.message ?? String(error);
+  // `code` (ENOTFOUND, ECONNRESET) é o que se procura num runbook; a mensagem vem junto porque
+  // erro de TLS traz o detalhe ali e nem sempre tem `code`.
+  //
+  // Erro de OpenSSL chega em VÁRIAS linhas, com caminho de arquivo do próprio Node no meio
+  // (medido: `ERR_SSL_PACKET_LENGTH_TOO_LONG` ocupa 3 linhas). Sem achatar, uma falha de TLS
+  // empurraria o resto do laço para fora da tela do log; por isso o espaço é normalizado e o
+  // texto cortado — o que identifica a causa está sempre no começo.
+  const detalhe = [causa.code, causa.message].filter(Boolean).join(': ').replace(/\s+/g, ' ').trim();
+  const texto = detalhe || String(causa);
+  return `${error.message} (causa: ${texto.length > 200 ? texto.slice(0, 200) + '…' : texto})`;
+}
+
 async function expectStatus(pathname, status) {
   try {
     const response = await request(pathname);
@@ -59,7 +94,7 @@ async function expectStatus(pathname, status) {
     else fail(`${pathname}: esperado HTTP ${status}, recebido ${response.status}`);
     return response;
   } catch (error) {
-    fail(`${pathname}: ${error.message}`);
+    fail(`${pathname}: ${descreveErro(error)}`);
     return null;
   }
 }

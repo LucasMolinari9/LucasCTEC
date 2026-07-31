@@ -4,6 +4,28 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 31/07/2026 — O `deploy-smoke` passou a verificar preview de verdade (achado A)
+
+Fecha o achado **A** da auditoria preliminar de 30/07: o gate reprovava em **todo** preview, e por
+isso a propriedade central do **ADR-0002** — preview nunca lê o banco de produção — **nunca tinha
+sido exercitada**. Só produção era verificada, que é justamente o caso sem risco.
+
+- **Lado do dono:** Protection Bypass for Automation criado na Vercel e gravado no secret GitHub
+  `VERCEL_AUTOMATION_BYPASS_SECRET`. Nenhuma linha de código dependia disso.
+- **Lado do repo, 2 commits:** (1) `check_deploy.mjs` passou a imprimir `error.cause` — o `fetch`
+  do Node põe TODA falha de rede sob a mesma frase `fetch failed` e o script descartava o motivo;
+  (2) removido o header `x-vercel-set-bypass-cookie`, que pede à Vercel um redirect + Set-Cookie e
+  é receita para **navegador** (Playwright/Cypress, que têm cookie jar). O `fetch` do Node não
+  guarda cookie: seguia o redirect sem ele, a Vercel redirecionava de novo, até estourar o limite.
+- **A inversão que quase custou caro, registrada no comentário do código:** com o segredo ERRADO o
+  loop não acontecia — a Vercel devolvia a tela de login com 200. O loop só começou **porque** o
+  bypass passou a valer. Os runs #83 e #84, lidos sem a causa, pareciam regressão; eram o primeiro
+  sinal de acerto.
+- **Primeiro log verde contra preview:** `divatdetro-4ghtjqif8-… está fora da allowlist e
+  seleciona teste`, `URL de teste isolada`, `guarda fail-closed publicada`.
+- ⚠️ **Deriva aberta por isto:** `docs/seguranca.md` §9.3 e `docs/backup.md` ainda afirmam que o
+  isolamento de preview nunca foi exercitado. Deixou de ser verdade.
+
 ## 30/07/2026 — Cada gate parou de rodar duas vezes por push
 
 PR 1 do plano da auditoria preliminar de 30/07/2026 (achado **C**). `ci`, `views`, `semgrep`,
