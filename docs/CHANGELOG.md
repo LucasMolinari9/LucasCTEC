@@ -4,6 +4,28 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 31/07/2026 — Restore NDJSON executável e documentação reconciliada após o merge do #73
+
+Revisão do pacote `0bfb38a` depois das correções da auditoria anterior.
+
+- Criado `scripts/restore_rest.mjs`: dry-run por padrão, allowlist de 14/18 tabelas, validação de
+  JSON/contagem/SHA-256, confirmação explícita do project ref, recusa do projeto de origem e de
+  destino não vazio, ordem da única FK, lotes e conferência final.
+- Criada `tests/restore_rest.rig.mjs`; ela e a bancada do backup agora rodam no `ci.yml`. As duas
+  provam também que chaves opacas `sb_publishable_*`/`sb_secret_*` vão em `apikey`, nunca como
+  Bearer JWT.
+- Corrigido o Caminho A do runbook: a versão anterior fazia `pg_restore` completo e depois rodava
+  18 `CREATE TABLE` não idempotentes. Agora uma baseline cria o schema e o dump entra somente com
+  `--data-only`.
+- Corrigida outra promessa falsa do runbook: `check_views.mjs` sempre usa fixtures; nunca existiu
+  o modo “sem stub”. A validação contra banco restaurado continua exigindo preview real.
+- Separados backup automático próprio, backup gerenciado e PITR; declarado o estado-alvo
+  pré/pós-Fase 3 e o requisito de exposição explícita do schema na Data API de projetos novos.
+- README, CLAUDE, segurança e handoffs corrigidos para 8 workflows, `@font-face` em `styles.css`,
+  3 domínios de produção, JWT `anon` legada e PR #73 mergeado em `0bfb38a`.
+- A guarda `[2b]` passou a derivar do código a quantidade de workflows e domínios e a bloquear
+  regressões na localização das fontes, no tipo da chave e no estado histórico do #73.
+
 ## 31/07/2026 — O repositório é público POR DECISÃO, e a documentação parou de dizer o contrário
 
 PR 4 do plano da auditoria preliminar de 30/07. O repo já era público havia dias; o que faltava era

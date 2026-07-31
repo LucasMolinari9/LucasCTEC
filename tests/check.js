@@ -244,6 +244,8 @@ console.log('\n[2b] Deriva docs × código');
   const bkTodas = bk ? conta(bk, /const TABELAS\s*=\s*\{([\s\S]*?)^\};/m, /^\s*[a-z_]+\s*:/gm) : null;
   const bkStaging = bk ? conta(bk, /const STAGING\s*=\s*new Set\(\[([\s\S]*?)\]\)/, /'[a-z_]+'/g) : null;
   const bkPublicas = (bkTodas != null && bkStaging != null) ? bkTodas - bkStaging : null;
+  const workflowCount = WORKFLOWS.length;
+  const hostsProd = conta(js, /const HOSTS_PROD\s*=\s*\[([\s\S]*?)\]/, /'[^']+'/g);
 
   // --- fatos que os docs AFIRMAM (regex contra o texto com espaços normalizados,
   //     para que quebra de linha do markdown não escape da checagem) ---
@@ -265,6 +267,9 @@ console.log('\n[2b] Deriva docs × código');
     { doc:'CLAUDE.md',                  o:'tabelas do RT_TABLES',  re:/as ([\d]+) tabelas lidas pelo portal/,  real:rtTables,    esc:'exato' },
     { doc:'docs/backup.md',             o:'tabelas do backup',     re:/as \*\*([\d]+) tabelas\*\*, inclusive staging/, real:bkTodas,   esc:'exato' },
     { doc:'docs/backup.md',             o:'tabelas públicas',      re:/as \*\*([\d]+) tabelas públicas\*\*/,   real:bkPublicas,  esc:'exato' },
+    { doc:'README.md',                  o:'quantidade de workflows', re:/Os ([\d]+) workflows de automação e CI/, real:workflowCount, esc:'exato' },
+    { doc:'CLAUDE.md',                  o:'quantidade de workflows', re:/Existem \*\*([\d]+) workflows\*\*/, real:workflowCount, esc:'exato' },
+    { doc:'CLAUDE.md',                  o:'domínios de produção', re:/allowlist de \*\*([\d]+) domínios\*\*/, real:hostsProd, esc:'exato' },
     // `doc` pode ser uma LISTA de arquivos: o fato tem de aparecer em pelo menos um deles, e toda
     // ocorrência em qualquer um é conferida. Nos workflows a lista é o diretório inteiro, de
     // propósito — se a frase migrar do `views.yml` para outro workflow, continua coberta.
@@ -340,6 +345,78 @@ console.log('\n[2b] Deriva docs × código');
     });
   }
   if (!sbErrado) okline('SB_URL/SB_KEY sempre atribuídas ao app.js');
+
+  // --- localização das fontes: @font-face mora em styles.css, não no HTML ---
+  // A extração do CSS deixou duas descrições vivas apontando para um <style> que não existia.
+  // Além de bloquear a frase velha, exige uma afirmação positiva no manual principal.
+  let fonteErrada = 0;
+  for (const doc of DOCS_VIVOS){
+    ler(doc).split('\n').forEach((l, i) => {
+      if (/deriva-ok/.test(l)) return;
+      if (/@font-face/.test(l) && /(index\.html|<style>)/.test(l)) {
+        fail(`[${doc}:${i + 1}] atribui @font-face ao index.html/<style>; as declarações ficam em styles.css`);
+        fonteErrada++;
+      }
+    });
+  }
+  if (!/@font-face[^\n]*styles\.css/.test(ler('CLAUDE.md'))) {
+    fail('[CLAUDE.md] não afirma que @font-face fica em styles.css');
+    fonteErrada++;
+  }
+  if (!fonteErrada) okline('@font-face documentado em styles.css, não no index.html');
+
+  // --- tipo real da chave pública ---
+  // `anon` (role JWT) e `sb_publishable_*` são públicas, mas não são sinônimos nem usam o mesmo
+  // header Authorization. Chamar a JWT legada de publishable esconde trabalho de migração.
+  {
+    const m = /const SB_KEY\s*=\s*'([^']+)'/.exec(js);
+    let tipo = 'desconhecido';
+    if (m?.[1]?.startsWith('sb_publishable_')) tipo = 'publishable';
+    else if (m?.[1]?.split('.').length === 3) {
+      try {
+        const b64 = m[1].split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+        if (payload.role === 'anon') tipo = 'anon-jwt-legada';
+      } catch (_) { /* a guarda abaixo acusa o tipo desconhecido */ }
+    }
+    if (tipo === 'desconhecido') fail('não consegui classificar SB_KEY como anon JWT legada ou sb_publishable_*');
+    if (tipo === 'anon-jwt-legada' && /anon\s*\(publishable\)/i.test(ler('CLAUDE.md'))) {
+      fail('[CLAUDE.md] chama a anon JWT legada de publishable');
+    } else if (tipo === 'anon-jwt-legada' && !/JWT `anon` legada/.test(ler('CLAUDE.md'))) {
+      fail('[CLAUDE.md] não registra que a chave atual é JWT anon legada');
+    } else if (tipo !== 'desconhecido') okline(`tipo da chave pública documentado (${tipo})`);
+  }
+
+  // --- status estável do PR #73 nos dois handoffs correntes ---
+  // O merge é evento histórico estável. O que drifta é deixar o handoff continuar mandando
+  // "decidir o draft" depois de ele já ter entrado na main.
+  for (const doc of ['docs/contexto-proxima-sessao-2026-07-31.md', 'docs/pendencias-2026-07-31-consolidado.md']) {
+    if (!existe(doc)) continue;
+    const src = ler(doc);
+    if (!/0bfb38a/.test(src) || !/#73[^\n]*(mergeado|merge)/i.test(src)) {
+      fail(`[${doc}] não registra o merge do #73 em 0bfb38a`);
+    } else if (/draft aberto|decidir o destino|Decidir o #73/i.test(src)) {
+      fail(`[${doc}] ainda trata o #73 como decisão/draft aberto`);
+    } else okline(`${doc}: #73 registrado como mergeado`);
+  }
+
+  if (!existe('scripts/restore_rest.mjs') || !existe('tests/restore_rest.rig.mjs')) {
+    fail('runbook NDJSON sem importador e/ou bancada de restauração');
+  } else okline('importador NDJSON e bancada de restauração presentes');
+
+  // --- runbook de DR não pode voltar aos dois caminhos inexequíveis encontrados em 31/07 ---
+  {
+    const runbook = ler('docs/backup.md');
+    const restoreSemDataOnly = runbook.split('\n').findIndex(l => /^\s+pg_restore\s/.test(l) && !/--data-only/.test(l));
+    const promessaSemStub = /rode[^.\n]*check_views\.mjs[^.\n]*sem stub/i.test(runbook);
+    if (restoreSemDataOnly >= 0) {
+      fail(`[docs/backup.md:${restoreSemDataOnly + 1}] pg_restore sem --data-only recria o schema e conflita com backup_schema.sql`);
+    }
+    if (promessaSemStub) {
+      fail('[docs/backup.md] manda rodar check_views.mjs sem stub, mas esse modo não existe');
+    }
+    if (restoreSemDataOnly < 0 && !promessaSemStub) okline('runbook de DR sem DDL duplicado nem promessa de check_views live');
+  }
 
   // --- o baseline de qualidade dos dados é legível offline ---
   // O check_data_quality.mjs só roda no cron semanal (precisa de rede). Um baseline malformado

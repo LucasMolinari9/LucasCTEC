@@ -1,7 +1,8 @@
-# Execução — destravar o PR #73 e fechar os itens de painel
+# Execução — validar a Fase 3 mergeada e fechar os itens de painel
 
 > **Para que serve:** briefing autocontido para uma sessão nova executar dois itens do placar de
-> 31/07/2026 — o **item 2** (destravar ou encerrar o #73) e o **item 4** (itens de painel).
+> 31/07/2026 — o **item 2** (validar operacionalmente a Fase 3 já mergeada) e o **item 4**
+> (itens de painel).
 > Leia junto: `CLAUDE.md` (regras), `docs/contexto-proxima-sessao-2026-07-31.md` (o que está aberto).
 >
 > **Quem executa:** o **dono**, em quase tudo. Um agente não alcança o Supabase nem a Vercel deste
@@ -12,10 +13,9 @@
 
 ## Estado de partida (31/07/2026)
 
-- **`main`:** `47de6ee`.
-- **PR #73** (`security: endurece RPCs e auditoria do Supabase`): **draft aberto**, base `aac916c`,
-  head `631d97e`, 10 arquivos, **CI todo verde**. Já rebaseado e promovido; a correção do
-  `phase3-security.yml` e o registro do pré-requisito da promoção já estão nele.
+- **Versão-base:** `0bfb38a` (merge do PR #73).
+- O código da Fase 3 e o workflow estão na `main`; o job manual `test-auditor` ainda precisa ser
+  executado no projeto de teste.
 - **`pr73-antes-do-rebase`** (`13c897a`): o head do #73 antes da promoção. Rede de segurança —
   **não apagar** sem intenção.
 - A migração da Fase 3 (`20260729034018_phase3_moderate_hardening.sql`) está aplicada **somente no
@@ -27,15 +27,14 @@ no corpo do #73 e no plano da Fase 3 — e **não** faz parte desta tarefa.
 
 ---
 
-## Item 2 — destravar ou encerrar o PR #73
+## Item 2 — concluir a validação operacional da Fase 3
 
-Três pendências operacionais mantêm o PR em rascunho. Todas suas. A quarta que constava do PR
-(`VERCEL_AUTOMATION_BYPASS_SECRET`) **já caiu** — foi o que destravou o #87 em 31/07.
+O merge já ocorreu. As três pendências abaixo continuam sendo do dono e não aplicam nada em
+produção. A antiga pendência `VERCEL_AUTOMATION_BYPASS_SECRET` já foi resolvida.
 
 ### 2a. Criar o login `divat_auditor_ci` no projeto de TESTE
 
-O script é `scripts/bootstrap_phase3_auditor.sql`, que **só existe na branch do #73**
-(`agent/fase-3-hardening-moderado`) — não está na `main`. Faça checkout dela antes.
+O script `scripts/bootstrap_phase3_auditor.sql` já está na `main` desde o merge do #73.
 
 Ele é deliberadamente separado da migração para impedir senha em SQL versionado. Precisa de três
 coisas, e **nenhuma delas pode ir para o Git**:
@@ -80,7 +79,7 @@ vale conferir antes de colar, para não gastar uma rodada:
 
 Depois: aba **Actions → Phase 3 database security → Run workflow**. O job `test-auditor` só roda por
 `workflow_dispatch` — em PR ele sai `skipped`, de propósito, para não expor o secret. Anexe o
-resultado ao PR.
+resultado ao registro da Fase 3.
 
 ### 2c. Branch protection e checks obrigatórios na `main`
 
@@ -104,16 +103,11 @@ marcado como obrigatório que **não roda** fica pendente para sempre, e o PR nu
 **Marque como obrigatórios apenas `check`, `views` e `semgrep`.** Os demais continuam rodando e
 falhando visivelmente quando são relevantes — só não bloqueiam merge de um PR que não os aciona.
 
-### O que fazer com o #73 depois
+### O que fazer depois
 
-Com 2a, 2b e 2c feitos, o PR sai de rascunho e pode ser mergeado. **Mergear não altera banco
-nenhum:** `migration-contract` só lê o diff e `test-auditor` é `workflow_dispatch` puro. Aplicar a
-migração em produção continua sendo ato manual, com o pré-requisito descrito no corpo do PR.
-
-**Se a decisão for encerrar em vez de destravar:** feche o #73, apague
-`agent/fase-3-hardening-moderado`, `claude/fase3-rebased-aac916c` e `claude/fase3-rebased-fda0152`,
-e **mantenha `pr73-antes-do-rebase`** até ter certeza. Registre a decisão numa ADR — a Fase 3 é
-trabalho grande o bastante para que "por que foi abandonada" precise estar escrito.
+Com 2a, 2b e 2c feitos, registre a execução verde e remova a pendência dos handoffs. Aplicar a
+migration em produção continua sendo ato manual separado, com os quatro gates migrados para a
+credencial auditora antes e autorização expressa do dono.
 
 ---
 
@@ -136,7 +130,7 @@ permanente do `CLAUDE.md`, e nenhuma sessão de agente conseguiu verificá-la ao
 
 GitHub → **Settings → Notifications → Actions** → marcar *Only notify for failed workflows*.
 
-Puramente ergonômico: com sete workflows, o verde vira ruído e o vermelho se perde nele.
+Puramente ergonômico: com oito workflows, o verde vira ruído e o vermelho se perde nele.
 
 ---
 

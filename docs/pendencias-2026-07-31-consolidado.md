@@ -5,8 +5,8 @@ modelo) apontou, tudo que a **verificação contra o repositório real** apurou 
 apareceu nas sessões de 30 e 31/07. O objetivo é responder a uma pergunta: **o que ainda falta
 executar.**
 
-- **`main`:** `47de6ee` (merge do #90). Gate verde. *(Era `fda0152` quando este documento foi
-  escrito; o #89 trouxe os três docs de 31/07 para a `main`, e o #90 os atualizou.)*
+- **Versão-base deste pacote:** `0bfb38a` (merge do #73). Gates do merge verdes; `test-auditor`
+  ficou `skipped` por ser exclusivamente manual.
 - **Fontes:** `docs/handoff-2026-07-30-auditoria-verificacao.md` (verificação do relatório),
   `docs/handoff-2026-07-31-prs-e-smoke.md`, `docs/handoff-2026-07-31-pr4-visibilidade.md`.
 - ⚠️ **Nada aqui foi medido contra os bancos vivos.** O ambiente do agente não alcança o Supabase
@@ -65,10 +65,10 @@ provável dos dados faltantes — foi o que travou a tentativa de 28/07 (`tabela
 **Por que subiu de importância:** é o único item do repositório que descreve uma **capacidade** que
 um atacante não consegue inferir de fora. Nenhuma redação de documento melhora isso.
 
-### 2.2 Desbloquear ou encerrar o PR #73
+### 2.2 Concluir a validação operacional da Fase 3
 
-Draft aberto desde 29/07, hoje 778 adições em 10 arquivos — rebaseado, promovido e com **CI todo
-verde** desde 31/07. Três pendências operacionais, todas suas:
+O PR #73 foi mergeado na `main` em `0bfb38a`. O merge não aplicou migration em produção. Restam
+três pendências operacionais do ambiente de teste/painel:
 
 - criar/rotacionar `divat_auditor_ci` via `scripts/bootstrap_phase3_auditor.sql`;
 - configurar `SUPABASE_TEST_AUDIT_DATABASE_URL` nos Actions Secrets;
@@ -172,8 +172,8 @@ O § 10 do #73 entrou inteiro. **Não** foi restaurado o roteiro detalhado do §
 O head novo traz também as duas correções que faltavam: `branches: [main]` no `push:` do
 `phase3-security.yml` e o registro do pré-requisito da promoção (seção 5) no plano da Fase 3.
 
-**Continua em rascunho de propósito** — o que falta são as pendências operacionais listadas no
-corpo do PR, todas do dono.
+O rascunho foi encerrado pelo merge em `0bfb38a`; as pendências operacionais continuam válidas e
+não devem ser confundidas com promoção do schema para produção.
 
 ### 4.2 ✅ FECHADO — o handoff e este documento na `main`
 
@@ -184,7 +184,7 @@ Entraram pelo **PR #89**, mergeado em 31/07 (`aac916c`), com os gates rodando no
 ## 5. Armadilha registrada: a promoção do #73 quebra quatro gates
 
 **Não é risco atual.** A migração vive no projeto de teste, os gates olham produção, e produção não
-tem o schema `audit`. Mergear o #73 **não muda banco nenhum** — o workflow não aplica nada
+tem o schema `audit`. O merge do #73 **não mudou banco nenhum** — o workflow não aplica nada
 (`test-auditor` é `workflow_dispatch` puro; `migration-contract` só lê o diff).
 
 O problema é adiado. A migração move quatro RPCs de `public` para `audit`, revogando o `execute` de
@@ -226,7 +226,7 @@ inspecionar painel de Vercel ou Supabase.
 
 - **Zero** chave `service_role` na árvore e em todo o histórico do git.
 - CSP sem `unsafe-inline`/`unsafe-eval`, com `style-src-attr 'none'`.
-- `.vercelignore` allowlist; `permissions: contents: read` e `persist-credentials: false` em 7/7
+- `.vercelignore` allowlist; `permissions: contents: read` e `persist-credentials: false` em 8/8
   workflows; Actions presas a SHA de 40 caracteres.
 - `selecionarSupabase` falha fechado; `HOSTS_PROD` com 3 domínios.
 - Seam `beginGen`/`commitViewResult` guardado em três camadas (canon, Semgrep, testes).
@@ -239,9 +239,9 @@ inspecionar painel de Vercel ou Supabase.
 
 1. **Restore + RTO/RPO** (2.1). Nada mais no projeto tem esse peso, e é o único que descreve
    capacidade, não configuração.
-2. **Decidir o #73** (2.2 + 4.1). É trabalho pronto parado por três configurações.
-3. Se o #73 for em frente: **corrigir o `push:` do workflow** (3.3) e **registrar o pré-requisito
-   da promoção** (5) antes de qualquer coisa tocar produção.
+2. **Executar `test-auditor`** (2.2): credencial mínima, secret e run manual no projeto de teste.
+3. Antes de qualquer promoção a produção, migrar os quatro gates para a credencial auditora e
+   pedir autorização separada.
 4. **Painel** (2.4) — dois cliques, e um deles fecha o único WARN dos advisors.
 5. **Achado E** (3.1) quando a área autenticada do ADR-0001 sair do papel — é a data em que a
    dívida vence.

@@ -11,8 +11,8 @@ O portal é **somente leitura de verdade**: a chave que vai ao navegador (`anon`
 apagar nada — isso foi **testado ao vivo** (seção 4), não apenas presumido.
 
 ## 2. O modelo de ameaça, sem jargão
-- **A chave `anon` é pública de propósito.** Ela aparece no `app.js` e no `index.html` porque o
-  navegador de todo visitante precisa dela. Isso **não** é um vazamento. A proteção nunca
+- **A JWT `anon` legada é pública de propósito.** Ela aparece no `app.js` porque o navegador de
+  todo visitante precisa dela. Isso **não** é um vazamento. A proteção nunca
   dependeu de escondê-la — depende do **RLS** (Row Level Security) do banco, que dá à `anon`
   apenas permissão de SELECT.
 - **O que a `anon` NÃO pode fazer:** INSERT, UPDATE, DELETE, ler tabelas de staging, chamar

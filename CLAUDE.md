@@ -23,7 +23,7 @@ exibe e **atualiza ao vivo** (Realtime).
   dinamicamente pelo `app.js`** (seção `REALTIME`; não há `<script>` dele no `index.html` — não
   bloqueia a primeira pintura).
 - **Fontes vendoradas** em `vendor/fonts/` (Archivo, IBM Plex Mono/Sans — subset latin, dos
-  pacotes `@fontsource` 5.3.0); `@font-face` no `<style>` do `index.html`. **Nenhum terceiro
+  pacotes `@fontsource` 5.3.0); os `@font-face` ficam no início de `styles.css`. **Nenhum terceiro
   externo em runtime.** Para atualizar: `npm pack @fontsource/<família>`, extrair
   `files/<família>-latin-<peso>-normal.woff2`.
 - O botão **PDF** (barra do modal) monta o documento **completo** num container oculto
@@ -41,8 +41,10 @@ exibe e **atualiza ao vivo** (Realtime).
 
 ## Supabase
 - Projeto: **`bd_teste`** · ref **`lwzsxuaqqeoamukduhev`** · região sa-east-1.
-- `SB_URL` e `SB_KEY` ficam no topo do `app.js`. A chave é a **anon (publishable)** — pública por
-  design; a segurança vem do **RLS + privilégio mínimo** (anon só lê).
+- `SB_URL` e `SB_KEY` ficam no topo do `app.js`. A chave atual é a **JWT `anon` legada**, não uma
+  `sb_publishable_...`; ambas são públicas, mas têm formatos de header diferentes. A migração para
+  publishable precisa atualizar REST, Realtime, scripts e testes em conjunto. A segurança vem do
+  **RLS + privilégio mínimo** (anon só lê).
 - **RLS / segurança (LER COM ATENÇÃO):**
   - Todas as tabelas têm RLS ligado; cada tabela de consulta tem policy `anon_read_*` (SELECT).
   - O portal é **read-only de verdade**: `anon` e `authenticated` têm **apenas SELECT** nas 14
@@ -149,9 +151,10 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
 - **Config:** `vercel.json` (raiz) carrega os cabeçalhos de segurança — em especial a **CSP**,
   cujo `connect-src` autoriza os projetos Supabase de produção
   (`lwzsxuaqqeoamukduhev`) e teste (`gontnlfmothfglssbyyk`) em REST e Realtime.
-  `app.js` mantém produção em allowlist: somente `divatdetro.vercel.app` usa produção; preview,
-  localhost e hostname desconhecido usam teste. Configuração ausente falha fechado, sem fallback
-  para produção. Ao mexer na CSP ou nessa matriz, rode também `tests/environment.test.js`.
+  `app.js` mantém produção numa allowlist de **3 domínios**: o canônico, o alias do time e o alias
+  da branch `main`. Preview, localhost e hostname desconhecido usam teste. Configuração ausente
+  falha fechado, sem fallback para produção. Ao mexer na CSP ou nessa matriz, rode também
+  `tests/environment.test.js`.
 - **Auto-deploy:** conectar o repo GitHub `LucasMolinari9/LucasCTEC` ao projeto Vercel pelo
   **dashboard** (OAuth, ação única) → **push na `main` = deploy** (e **push em branch = preview
   deploy**, use-o). Sem essa conexão, publica-se rodando o MCP `deploy_to_vercel` após o push.
@@ -172,12 +175,11 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    armadilhas antes de escrever SQL/JS. Ajuste isolado de CSS/texto/UI pula direto pro passo 1.
 1. Edite `app.js` (JS) e/ou `index.html` (HTML/CSS). **Trabalhe numa branch**, não direto na
    `main`: push na branch → o Vercel gera **preview deploy** → confira no preview → merge na
-   `main` (que é a publicada). O CI roda **quatro workflows** no seu diff, separados de
-   propósito (um vermelho não esconde o outro): `ci.yml` (gate leve — `tests/check.js`),
-   `views.yml` (navegador — `check_views.mjs` + `check_abas.mjs`), `semgrep.yml` (estático) e
-   `deploy-smoke.yml` depois que a Vercel publica (headers, allowlist e isolamento do Supabase).
-   Os outros três (`deriva.yml`, `db-checks.yml`, `backup.yml`) são de cron, e só entram no seu
-   diff se ele tocar os arquivos que eles vigiam.
+   `main` (que é a publicada). Existem **8 workflows**, separados por preocupação: `ci.yml`,
+   `views.yml`, `semgrep.yml`, `deriva.yml`, `db-checks.yml`, `phase3-security.yml`,
+   `deploy-smoke.yml` e `backup.yml`. Os cinco primeiros mais o contrato offline da Fase 3 podem
+   entrar num PR conforme os arquivos tocados; o smoke acompanha deploys; o backup é cron/manual.
+   Um vermelho não esconde o outro.
    Se previews estiverem protegidos pela Vercel, configure um **Protection Bypass for
    Automation** e grave o mesmo valor no secret GitHub `VERCEL_AUTOMATION_BYPASS_SECRET`;
    sem isso o smoke recebe a tela de login em vez do portal e falha de propósito.
@@ -301,12 +303,13 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
 - Plano **Free (NANO)** — sem PITR automático (só no Pro). A rede de segurança tem 3 camadas
   (runbook completo: **`docs/backup.md`**):
   1. **Automática:** `.github/workflows/backup.yml` roda semanal (e sob demanda) o
-     `scripts/backup_rest.mjs` em **modo público** (anon key, 14 tabelas públicas, sem staging);
+     `scripts/backup_rest.mjs` em **modo público** (anon JWT legada hoje; 14 tabelas públicas, sem staging);
      artifact do Actions por 90 dias.
-  2. **Manual (completa):** `pg_dump` (padrão-ouro) ou `backup_rest.mjs` com service key
+  2. **Manual (completa):** `pg_dump` (padrão-ouro) ou `backup_rest.mjs` com secret/service key
      (18 tabelas) ou 18 CSVs pelo Table Editor — sempre **FORA do git** (dados no repo =
      vazamento; o git versiona só CÓDIGO).
-  3. **Estrutura:** `docs/backup_schema.sql` (versionado). Mapa relacional: `docs/schema.md`.
+  3. **Estrutura:** `docs/backup_schema.sql` (versionado). Para NDJSON, o caminho inverso é
+     `scripts/restore_rest.mjs`, com dry-run padrão, confirmação do ref e destino vazio.
 - **Não rodar nada destrutivo (DROP/DELETE/TRUNCATE/REVOKE/migração) sem backup fresco.**
 
 ## Armadilhas / observações

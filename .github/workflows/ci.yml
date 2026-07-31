@@ -45,3 +45,10 @@ jobs:
           node-version: '20'
       - name: Gate de pré-publicação (sintaxe + anti-drift + testes)
         run: node tests/check.js
+      - name: Bancadas offline de backup e restauração
+        env:
+          NO_PROXY: 127.0.0.1
+          no_proxy: 127.0.0.1
+        run: |
+          node tests/backup_rest.rig.mjs
+          node tests/restore_rest.rig.mjs

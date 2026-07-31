@@ -9,9 +9,9 @@
 // concorrente. Achado da revisão externa.)
 //
 // DOIS MODOS (decidido pela chave presente no ambiente):
-//   COMPLETO — SUPABASE_SERVICE_KEY (ignora RLS): baixa TUDO, inclusive as 4 tabelas
-//              de staging do ETL. Rodar só na SUA máquina; a service key jamais sai dela.
-//   PÚBLICO  — SUPABASE_ANON_KEY (só o que o RLS deixa): baixa as 14 tabelas públicas
+//   COMPLETO — SUPABASE_SECRET_KEY (preferida) ou SUPABASE_SERVICE_KEY legada: baixa TUDO,
+//              inclusive as 4 tabelas de staging do ETL. Rodar só na SUA máquina.
+//   PÚBLICO  — SUPABASE_PUBLISHABLE_KEY (preferida) ou SUPABASE_ANON_KEY legada: baixa as 14 tabelas públicas
 //              do portal (sem staging). É o modo do workflow do GitHub Actions
 //              (.github/workflows/backup.yml) — a anon key é pública por design, então o
 //              artifact não expõe nada além do que a API pública já expõe.
@@ -20,10 +20,10 @@
 //
 // Uso (modo completo, na SUA máquina):
 //   SUPABASE_URL="https://lwzsxuaqqeoamukduhev.supabase.co" \
-//   SUPABASE_SERVICE_KEY="<service_role key: Dashboard → Settings → API>" \
+//   SUPABASE_SECRET_KEY="<sb_secret_...: Dashboard → Settings → API Keys>" \
 //   node scripts/backup_rest.mjs ./backup_$(date +%Y-%m-%d)
 //
-// Uso (modo público — mesmo comando, com SUPABASE_ANON_KEY no lugar da service key).
+// Uso público: mesmo comando, com SUPABASE_PUBLISHABLE_KEY (ou SUPABASE_ANON_KEY legada).
 //
 // Requer apenas Node 18+ (usa fetch nativo). Nenhuma dependência.
 
@@ -32,15 +32,17 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
 const URL = process.env.SUPABASE_URL;
+const SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
 const ANON_KEY = process.env.SUPABASE_ANON_KEY;
-const KEY = SERVICE_KEY || ANON_KEY;
-const PUBLICO = !SERVICE_KEY; // sem service key → modo público (só tabelas com anon_read_*)
+const KEY = SECRET_KEY || SERVICE_KEY || PUBLISHABLE_KEY || ANON_KEY;
+const PUBLICO = !SECRET_KEY && !SERVICE_KEY; // sem chave administrativa → só o que o RLS público permite
 const OUT = process.argv[2] || `./backup_${new Date().toISOString().slice(0, 10)}`;
 const PAGE = 1000; // linhas por requisição (abaixo de qualquer max-rows do PostgREST)
 
 if (!URL || !KEY) {
-  console.error('Faltou SUPABASE_URL e/ou uma chave (SUPABASE_SERVICE_KEY ou SUPABASE_ANON_KEY) no ambiente. Veja o cabeçalho do arquivo.');
+  console.error('Faltou SUPABASE_URL e/ou uma chave (SECRET/SERVICE para completo; PUBLISHABLE/ANON para público). Veja o cabeçalho do arquivo.');
   process.exit(1);
 }
 
@@ -69,7 +71,10 @@ const TABELAS = {
   origem_teste: 'cod_origem',
 };
 
-const headers = { apikey: KEY, Authorization: `Bearer ${KEY}` };
+// Chaves novas sb_publishable_*/sb_secret_* são opacas: vão no header apikey, mas não são JWTs
+// e não podem ser tratadas como `Authorization: Bearer`. O Bearer fica só para as JWTs legadas.
+const headers = { apikey: KEY };
+if (/^[^.]+\.[^.]+\.[^.]+$/.test(KEY)) headers.Authorization = `Bearer ${KEY}`;
 
 // Filtro keyset: "traga o que vem DEPOIS desta chave". Para PK de uma coluna é um `gt` simples;
 // para PK composta é a comparação lexicográfica escrita à mão, porque o PostgREST não expõe
@@ -132,8 +137,8 @@ async function dumpTabela(tabela, pk) {
 async function main() {
   await mkdir(OUT, { recursive: true });
   const alvo = Object.entries(TABELAS).filter(([t]) => !PUBLICO || !STAGING.has(t));
-  console.log(`Modo: ${PUBLICO ? 'PÚBLICO (anon key — sem staging)' : 'COMPLETO (service key)'} — ${alvo.length} tabelas`);
-  const manifest = { gerado_em: new Date().toISOString(), url: URL, modo: PUBLICO ? 'publico' : 'completo', tabelas: {} };
+  console.log(`Modo: ${PUBLICO ? 'PÚBLICO (publishable/anon — sem staging)' : 'COMPLETO (secret/service)'} — ${alvo.length} tabelas`);
+  const manifest = { formato: 1, gerado_em: new Date().toISOString(), url: URL, modo: PUBLICO ? 'publico' : 'completo', tabelas: {} };
   let total = 0;
   const faltando = [], sobrando = [];
   for (const [tabela, pk] of alvo) {
