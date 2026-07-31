@@ -9,19 +9,24 @@
 ## 0. Estado do repositório
 
 > **Atualizado em 31/07 (2ª sessão).** A versão anterior desta seção dizia `main: fda0152` e
-> listava os três docs como "sem PR"; os dois deixaram de valer com o merge do #89. A branch
-> `claude/fase3-rebased-fda0152`, que aquela versão dava como "intacta, aguardando decisão",
-> **não existe mais** — o rebase foi refeito, ver 2.2.1.
+> listava os três docs como "sem PR"; os dois deixaram de valer com o merge do #89.
 
-- **`main`: `aac916c`** (merge do #89). Gate verde (`node tests/check.js`).
+- **`main`: `47de6ee`** (merge do #90). Gate verde (`node tests/check.js`).
 - **Repositório PÚBLICO**, por decisão registrada em `docs/adr/0003-repositorio-publico.md`.
 
 ### Branches vivas
 
 | Branch | O que tem | Estado |
 |---|---|---|
-| `claude/fase3-rebased-aac916c` | o #73 **rebaseado** em `aac916c`, com o conflito resolvido, **mais** as correções 2.2.2 e 2.2.3 | empurrada, **sem PR** — aguardando decisão do dono |
-| `agent/fase-3-hardening-moderado` | o PR #73 **original**, base 12 merges atrás | é a branch do PR, não foi tocada |
+| `agent/fase-3-hardening-moderado` | **é o head do #73**, hoje `631d97e` — o rebase em `aac916c` mais as correções 2.2.2 e 2.2.3 | promovida em 31/07, CI todo verde |
+| `pr73-antes-do-rebase` | `13c897a`, o head do #73 **antes** da promoção | rede de segurança, não apagar sem querer |
+| `claude/fase3-rebased-aac916c` | idêntica ao head do #73 | redundante, pode apagar |
+| `claude/fase3-rebased-fda0152` | `58903bb`, o rebase da sessão **anterior**, base `fda0152` | superada, pode apagar |
+
+⚠️ **`git branch -a` não lista as branches do remoto neste ambiente** — o clone traz poucos refs, e
+o que ele mostra é só o que já foi buscado. Foi assim que a 2ª sessão de 31/07 concluiu que a
+`claude/fase3-rebased-fda0152` tinha sumido e refez um rebase que já existia. **Use
+`git ls-remote --heads origin`**, que pergunta ao servidor.
 
 ### PRs
 
@@ -101,8 +106,9 @@ Sobra para o dono exatamente o que só ele pode fazer: rodar e cronometrar.
 
 ### 2.2 🟡 PR #73 — decidir o destino
 
-O único PR aberto. Draft desde 29/07, **722 adições em 10 arquivos, 17 commits**, aplicado somente
-no Supabase de **teste** (`gontnlfmothfglssbyyk`). Produção não é alvo de nada nele.
+O único PR aberto. Draft desde 29/07, hoje **778 adições em 10 arquivos, 18 commits** (eram 722 em
+17 antes do rebase e das correções), aplicado somente no Supabase de **teste**
+(`gontnlfmothfglssbyyk`). Produção não é alvo de nada nele.
 
 **O que ele faz:** cria schemas `private` e `audit`; move `f_unaccent`/`fn_vigor_auto` para
 `private` (saem do alcance do PostgREST); move as 4 RPCs diagnósticas para `audit` como
@@ -113,12 +119,18 @@ se qualquer coisa não bater, a transação inteira volta atrás.
 **Mergear o #73 não muda banco nenhum.** O workflow não aplica nada: `migration-contract` só lê o
 diff, e `test-auditor` é `workflow_dispatch` puro. Aplicar continua sendo ato manual do dono.
 
-#### 2.2.1 O rebase está feito — em `claude/fase3-rebased-aac916c`
+#### 2.2.1 ✅ O rebase está promovido — é o head do #73
 
-⚠️ **A branch mudou de nome.** A `claude/fase3-rebased-fda0152` citada na versão anterior deste
-documento **sumiu** (o contêiner é efêmero e ela não sobreviveu). O rebase foi **refeito do zero**
-sobre `aac916c`, com a mesma resolução de conflito, e empurrado como
-**`claude/fase3-rebased-aac916c`**.
+> ⚠️ **Correção de um erro deste documento.** Uma versão anterior desta seção afirmava que a
+> `claude/fase3-rebased-fda0152` "sumiu" e que por isso o rebase foi refeito. **Falso.** A branch
+> está no remoto, em `58903bb`. O engano veio de ler `git branch -a`, que neste ambiente só mostra
+> refs já buscados, e tratar a ausência como prova de que não existia — o mesmo erro de raciocínio
+> que o § 4.5 registra sobre o `get_job_logs` 404. O rebase foi refeito à toa.
+>
+> **O que se salvou do retrabalho:** as duas resoluções do conflito são **semanticamente idênticas**
+> (conferido por diff — mudam só as palavras), o rebase novo caiu numa base mais recente e trouxe
+> junto as correções 2.2.2 e 2.2.3. Nada se perdeu, mas o trabalho foi duplicado por uma
+> verificação preguiçosa.
 
 Rebase em `aac916c`: **um conflito**, em `docs/seguranca.md` § 9 — a seção reescrita no #88 poucas
 horas antes, que o #73 também tinha reescrito por conta própria em 29/07. Idêntico ao da 1ª vez.
@@ -132,11 +144,22 @@ horas antes, que o #73 também tinha reescrito por conta própria em 29/07. Idê
 - **não** foi restaurado o roteiro detalhado do § 9.1 (`arwdDxtm`, TRUNCATE) — seria desfazer a
   decisão 3 da seção 1.
 
-`node tests/check.js` verde contra a árvore rebaseada. `node scripts/check_migrations.mjs` roda
-offline e passa.
+**Promovido em 31/07**, com autorização do dono, para `agent/fase-3-hardening-moderado` (a branch
+do #73), por `--force-with-lease` com o SHA esperado explícito. O head anterior (`13c897a`) ficou
+preservado na branch **`pr73-antes-do-rebase`**.
 
-**Para promover:** `git push --force-with-lease origin claude/fase3-rebased-aac916c:agent/fase-3-hardening-moderado`.
-Reescreve a história do draft — decisão do dono, por isso não foi feito.
+**O #73 hoje:** base `aac916c`, head `631d97e`, **CI todo verde** — `check`, `views`, `semgrep`,
+`deriva`, `seguranca`, `qualidade`, `realtime`, `migration-contract` e `smoke`; `test-auditor`
+`skipped` por desenho. Foi a primeira vez que qualquer gate rodou contra este trabalho.
+
+Três coisas que só se souberam aí: o **`semgrep` passa** nos `.mjs`/`.sql` novos (era o risco não
+avaliável offline); **cada gate rodou uma vez só**, confirmando na prática a correção 2.2.2; e os
+**quatro gates vivos estão verdes contra produção**, o que é o retrato de "antes" para comparar no
+dia da promoção da migração.
+
+**Nota sobre tags:** o proxy git deste ambiente **não aceita push de tag** — falha com
+`the remote end hung up` seguido de `Everything up-to-date`, silenciosamente. Por isso a rede de
+segurança virou branch, não tag. Quem precisar marcar um commit aqui, use branch.
 
 #### 2.2.2 ✅ FEITO — `phase3-security.yml` reintroduzia a execução dupla
 
@@ -325,11 +348,21 @@ Calibra o que dá para pedir. Não são falhas a contornar — são o contrato.
    **Regra prática:** se um gate parece travado, compare a duração com a normal (`check` ~15 s,
    `semgrep` ~35 s, `views` ~45 s) e confirme por `get_workflow_job` antes de agir. Push de commit
    vazio para "destravar" um job que já passou só gasta uma rodada.
-6. **O contêiner é efêmero, e "empurrado" não é "seguro para sempre".** A 1ª tentativa de rebase
-   do #73 virou branch justamente para não se perder — e mesmo assim a
-   `claude/fase3-rebased-fda0152` sumiu, obrigando a refazer tudo. A lição corrigida: **trabalho
-   que importa vira PR**, não branch solta. Branch sem PR não roda gate e não tem dono; é fácil de
-   apagar por engano e ninguém percebe.
+6. **O contêiner é efêmero.** Trabalho não empurrado se perde — foi por isso que o rebase do #73
+   virou branch em vez de ficar local, e a branch **sobreviveu** (está lá, em `58903bb`). Empurrar
+   funciona.
+
+   Ainda assim, **trabalho que importa vira PR**, não branch solta: branch sem PR não dispara gate
+   nenhum desde 30/07, não aparece em lugar nenhum da interface e some do radar da sessão seguinte
+   — que foi literalmente o que aconteceu.
+
+7. **Ausência de evidência não é evidência de ausência — de novo.** O § 4.5 registra isso sobre o
+   `get_job_logs` 404; a 2ª sessão de 31/07 repetiu o mesmo erro com `git branch -a`, concluiu que
+   uma branch tinha sumido, e refez um rebase que já existia. **`git branch -a` mostra só os refs
+   que este clone já buscou**, não o que o servidor tem. Para saber o que existe de verdade:
+   `git ls-remote --heads origin`. A regra geral, que já falhou duas vezes por caminhos diferentes:
+   **antes de concluir que algo não existe, use o comando que pergunta à fonte**, não o que mostra
+   o cache local.
 
 ---
 
@@ -356,9 +389,9 @@ nenhum deles.
 > precisa da máquina, do painel ou da autorização do dono.
 
 1. **SEC-06** (2.1). Nada mais tem esse peso, e é o único que descreve capacidade.
-2. **Decidir o #73** (2.2) — o trabalho está pronto e rebaseado em `claude/fase3-rebased-aac916c`,
-   com 2.2.2 e 2.2.3 já resolvidos. O que falta é decisão: promover a branch (reescreve a história
-   do draft) e, se um dia for aplicar em produção, migrar os quatro gates antes.
+2. **Decidir o #73** (2.2) — já rebaseado, promovido e com CI verde; 2.2.2 e 2.2.3 resolvidos. O
+   que falta são as **pendências operacionais** do corpo do PR (credencial, secret, bypass da
+   Vercel, branch protection) e, se um dia for aplicar em produção, migrar os quatro gates antes.
 3. **Painel** (2.6) — dois cliques, e um fecha o único WARN dos advisors.
 4. **Achado E** (2.3) e **lista das órfãs** (2.4) — os dois exigem mudar RPC, então valem uma
    sessão de `db-change` conjunta, com o dono aplicando.
