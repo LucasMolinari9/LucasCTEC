@@ -346,8 +346,10 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   `paginateTable`/`paginateLines` (núcleo `paginate` + `pageBounds`). Como só a fatia atual
   entra no DOM, o fallback do `baixarPdf` exportaria só a página aberta — por isso os wrappers
   **escrevem `pdfHTML` (via `commitViewResult`) com a lista completa**. Quem tem PDF próprio mais
-  rico passa **`pdf:false`** (Quadro "por empresa"; Município). Detalhes: `docs/estrutura-frontend.md`
-  §4. Em tela nova que lista muita coisa, **use esses helpers** em vez de `tableHTML` cru.
+  rico passa **`pdf:false`** (Quadro "por empresa"; Município; o bloco secundário do Localidade,
+  cujo PDF cobre os DOIS blocos e por isso não pode ser sobrescrito pelo paginador). Detalhes:
+  `docs/estrutura-frontend.md` §4. Em tela nova que lista muita coisa, **use esses helpers** em
+  vez de `tableHTML` cru.
 - **NUNCA atribua `currentView.pdfHTML` direto — use o seam do ciclo de vida da view:**
   `beginGen`/`commitViewResult`/`pushDetail`/`popDetail` (declarados logo após `let currentView`,
   seção `MODAL / SISTEMA DE VIEWS`). Todo loader/run/render que faz `await` e depois escreve um

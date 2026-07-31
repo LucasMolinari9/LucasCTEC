@@ -2548,6 +2548,10 @@ async function codsPorLocalidade(term){
   return out;
 }
 async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
+  // capturados ANTES do primeiro await: a busca pode ser trocada enquanto esta está no ar, e
+  // quem escreve o resultado no fim precisa saber se ainda é a tentativa mais nova (ver o
+  // contrato do seam em MODAL / SISTEMA DE VIEWS).
+  const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   try{
     const termos = await termosLocalidade(a);
@@ -2575,7 +2579,7 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     if(b && bTipo==='municipio'){
       // localidade A × MUNICÍPIO B: interseção com as linhas que passam pelo município
       const cods = Object.entries(ibge).filter(([,v])=>norm(v.nome).includes(norm(b))).map(([c])=>c);
-      if(!cods.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(b)}".`); return; }
+      if(!cods.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(b)}".`); commitViewResult(view, gen, { pdfHTML:null }); return; }
       const munSet = new Set();
       for(const c of cods.slice(0,5)){ (await linhasNoMunicipio(c)).forEach(cl=>munSet.add(cl)); }
       rows = rows.filter(r=> munSet.has(r.codlinha));
@@ -2590,7 +2594,7 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     const fetchCods = extraCods.slice(0,250);
     let base = rows;
     if(fetchCods.length) base = rows.concat(await fetchLinesByCods(fetchCods, { limit: fetchCods.length }));
-    if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${esc(a)}" e "${esc(b)}".`:`Nenhuma linha encontrada para "${esc(a)}".`); return; }
+    if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${esc(a)}" e "${esc(b)}".`:`Nenhuma linha encontrada para "${esc(a)}".`); commitViewResult(view, gen, { pdfHTML:null }); return; }
     await getEmpresas();
     // seções de tarifa cujo NOME casa a(s) localidade(s) buscada(s), por linha — reproduz o
     // relatório oficial. Município B é só filtro de trânsito, não entra nos termos de seção.
@@ -2621,7 +2625,7 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     const corteNote = corte>0 ? ` (${corte} linha(s) a mais não exibidas — refine a busca)` : '';
     const prefix = bannerTrunc(lineRows)
       + `<p class="doc-count">${base.length} linha(s) · ${titulo}${secNote}${corteNote}</p>`;
-    renderLocalidadeSecoes(host, base, secByLine, { prefixHTML: prefix });
+    renderLocalidadeSecoes(host, base, secByLine, { prefixHTML: prefix, view, gen });
   }catch(e){ host.innerHTML = errorBox(e.message); }
 }
 // 5 modos de busca da tela "Linhas por Localidade e Município" — cada botão de filtro decide
@@ -2900,7 +2904,7 @@ function secoesLocalidadeTable(secoes){
 // `lineResults` (via situacaoSelectHTML/filtrarSituacao): as duas telas listam linha e
 // precisam concordar no que é "ativa". O filtro repinta os DOIS blocos e refaz o
 // `bindLineRows` — quem entra na tela depois de filtrar tem que continuar clicável.
-function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='' } = {}){
+function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='', view, gen } = {}){
   host.innerHTML = prefixHTML
     + `<div class="loc-tools">${situacaoSelectHTML()}</div><div id="locSecResult"></div>`;
   const result = host.querySelector('#locSecResult');
@@ -2909,34 +2913,61 @@ function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='' } = {}){
     const rows = filtrarSituacao(base, statusSel.value);
     // o contador do `prefixHTML` é o do resultado INTEIRO e fica acima da barra; ao filtrar,
     // repetir só o total mentiria sobre o que está na tela — daí a contagem do recorte.
-    pintarLocalidadeSecoes(result, rows, secByLine, { total: base.length });
+    pintarLocalidadeSecoes(result, rows, secByLine, { total: base.length, view, gen });
   };
   statusSel.addEventListener('change', paint);
   paint();
 }
-function pintarLocalidadeSecoes(host, base, secByLine, { total = base.length } = {}){
-  const comSecao = base.filter(r=>secByLine.has(r.codlinha));
+// uma linha do bloco "com seção": cabeçalho clicável (data-row → bindLineRows) + as seções dela
+function locLinhaSecHTML(r, secByLine){
+  const chips = [boolChip(r.cancelado,'canc.'), boolChip(r.paralisado,'paral.')].filter(Boolean).join(' ');
+  return `<div class="loc-linha-sec">
+    <div class="loc-linha-head clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r))}'><span class="mono">${esc(fmtCode(r.codlinha))}</span> <span>${fmtLineName(r.nome_ligacao)}</span> ${chips}</div>
+    ${secoesLocalidadeTable(secByLine.get(r.codlinha)||[])}</div>`;
+}
+// bloco "com seção" de uma FATIA de linhas já ordenada por empresa: os cabeçalhos de empresa
+// entram DENTRO da fatia, e a contagem do cabeçalho é a do grupo INTEIRO (`totais`), não a da
+// página — mesma convenção do `paginateLines` no modo agrupado.
+function locComSecaoHTML(fatia, secByLine, totais){
+  return [...groupBy(fatia, r=>r.codempresa||'—')].map(([cod,rs])=>
+    `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${totais.get(cod)} linha(s)</span></h3>`
+    + rs.map(r=>locLinhaSecHTML(r, secByLine)).join('')).join('');
+}
+const LOC_SEM_SECAO_OBS = 'Ligam os pontos buscados, mas não têm uma seção de tarifa com esse nome.';
+// Os DOIS blocos são paginados em 25/página (`paginate`/`paginateLines`), como as demais listas
+// de linha do portal — uma localidade grande chega a 400 linhas, cada uma com sua tabela de
+// seções, e despejar tudo no DOM de uma vez travava a tela.
+// Como só a fatia atual entra no DOM, o fallback do `baixarPdf` exportaria só a página aberta:
+// por isso o `pdfHTML` é escrito aqui pelo seam (`commitViewResult`), com os dois blocos
+// INTEIROS. Ver CLAUDE.md § "Paginação é SÓ de tela; o PDF sai INTEIRO".
+function pintarLocalidadeSecoes(host, base, secByLine, { total = base.length, view, gen } = {}){
+  // filtro que não sobra nada: zera o pdfHTML junto, senão o botão PDF baixaria o recorte anterior
+  if(!base.length){ host.innerHTML = emptyBox('Nenhuma linha com esse filtro.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+  const comSecao = [...groupBy(base.filter(r=>secByLine.has(r.codlinha)), r=>r.codempresa||'—')]
+    .sort((x,y)=>rjOrder(x[0],y[0])).flatMap(([,rs])=>[...rs].sort(byCodlinha));
   const semSecao = base.filter(r=>!secByLine.has(r.codlinha));
-  let html = base.length < total ? `<p class="doc-count">${base.length} de ${total} linha(s) com o filtro escolhido</p>` : '';
+  const totais = countBy(comSecao, r=>r.codempresa||'—');
+
+  const cabSemSecao = `<h3 class="loc-emp-head mt22">Outras linhas <span class="loc-emp-rj">por itinerário ou nome · ${semSecao.length} linha(s)</span></h3>`
+    + `<div class="doc-obs tight">${LOC_SEM_SECAO_OBS}</div>`;
+  host.innerHTML = (base.length < total ? `<p class="doc-count">${base.length} de ${total} linha(s) com o filtro escolhido</p>` : '')
+    + (comSecao.length ? '<div id="locComSecao"></div>' : '')
+    + (semSecao.length ? cabSemSecao + '<div id="locSemSecao"></div>' : '');
+
+  const fatiaComSecao = (s,e) => locComSecaoHTML(comSecao.slice(s,e), secByLine, totais);
   if(comSecao.length){
-    const groups = [...groupBy(comSecao, r=>r.codempresa||'—')].sort((x,y)=>rjOrder(x[0],y[0]));
-    html += groups.map(([cod,rs])=>{
-      const linhas = [...rs].sort(byCodlinha).map(r=>{
-        const chips = [boolChip(r.cancelado,'canc.'), boolChip(r.paralisado,'paral.')].filter(Boolean).join(' ');
-        return `<div class="loc-linha-sec">
-          <div class="loc-linha-head clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r))}'><span class="mono">${esc(fmtCode(r.codlinha))}</span> <span>${fmtLineName(r.nome_ligacao)}</span> ${chips}</div>
-          ${secoesLocalidadeTable(secByLine.get(r.codlinha)||[])}</div>`;
-      }).join('');
-      return `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${rs.length} linha(s)</span></h3>${linhas}`;
-    }).join('');
+    paginate(host.querySelector('#locComSecao'), comSecao.length, fatiaComSecao,
+      { afterPaint: bindLineRows, unit:'linhas', view, gen });
   }
+  // `pdf:false`: o PDF deste documento é escrito abaixo, com os DOIS blocos — deixar o
+  // paginateLines escrever o dele sobrescreveria isso com só a lista secundária.
   if(semSecao.length){
-    html += `<h3 class="loc-emp-head mt22">Outras linhas <span class="loc-emp-rj">por itinerário ou nome · ${semSecao.length} linha(s)</span></h3>`
-      + `<div class="doc-obs tight">Ligam os pontos buscados, mas não têm uma seção de tarifa com esse nome.</div>`
-      + linhasTable(semSecao);
+    paginateLines(host.querySelector('#locSemSecao'), semSecao, { grouped:false, pdf:false, view, gen });
   }
-  host.innerHTML = html || emptyBox('Nenhuma linha com esse filtro.');
-  bindLineRows(host);
+  if(view) commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead(view.title)}`
+    + (comSecao.length ? fatiaComSecao(0, comSecao.length) : '')
+    + (semSecao.length ? cabSemSecao + linhasTable([...semSecao].sort(byCodlinha)) : '')
+    + '</div>' });
 }
 // tabela de empresas p/ escolher (código/nome/situação) — `extraChips(e)` acrescenta chips à situação
 function empresaChooserHTML(emps, { prompt, sitWidth = '150px', extraChips } = {}){

@@ -33,10 +33,21 @@ com loop de repro em navegador headless antes de qualquer hipótese.
   (escrita sobre o `isLinhaAtiva` que já existia) substituem a cópia que só o `lineResults` tinha.
   Sem isso as duas telas divergiriam na definição de "ativa" — o modo de falha que o `CLAUDE.md`
   chama de "cópias que divergem".
+- **Os dois blocos passaram a paginar em 25/página**, como as demais listas de linha. Uma
+  localidade grande chega ao teto de 400 linhas da query, cada uma com sua tabela de seções, e
+  despejar tudo no DOM travava a tela. O bloco "com seção" usa o `paginate` com os cabeçalhos de
+  empresa dentro da fatia (convenção do `paginateLines` agrupado, com a contagem do grupo
+  inteiro); o bloco "outras linhas" usa o `paginateLines` com `pdf:false`. Como só a fatia atual
+  entra no DOM, o documento passou a **escrever `pdfHTML` pelo seam** (`view`/`gen` capturados
+  antes do primeiro `await` do `mostrarLinhasPorLocalidade`), com os dois blocos inteiros — sem
+  isso o botão PDF exportaria só a página aberta. Os caminhos de resultado vazio zeram o
+  `pdfHTML`, para o botão não baixar o recorte da busca anterior.
 - **Guardas novas:** `scripts/check_selecao_linha.mjs` (bancada do `rig.mjs`, no `views.yml`)
   reproduz o caminho do usuário — entra sem linha ativa, abre o card pelo clique, busca, filtra e
-  clica — e confere também que o conserto não empilhou histórico nem quebrou o "Voltar fecha o
-  modal". Conferido que ele fica **vermelho** sem cada uma das duas correções. `filtrarSituacao`
+  clica — e confere também a paginação (25 na 1ª página, o resto na 2ª, clique vivo depois de
+  virar), que o PDF sai com as 30 linhas e não com as 5 da página aberta, e que o conserto não
+  empilhou histórico nem quebrou o "Voltar fecha o modal". Conferido que ele fica **vermelho**
+  sem cada uma das correções. `filtrarSituacao`
   entrou no `pure.harness.js` com 6 testes e guarda no `canon`. As fixtures do `rig.mjs` ganharam
   uma linha **cancelada**: uma bancada só com linhas ativas não consegue ver barra de situação
   nenhuma funcionando.
