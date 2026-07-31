@@ -162,6 +162,13 @@ tabela aparecer com grant ou policy de escrita para `anon`/`authenticated`. A fr
 não semanal, **por causa deste item** — quem for reduzi-la precisa fechar o item antes. Regras
 técnicas: `CLAUDE.md`, seção **Supabase → RLS / segurança**.
 
+**Segundo controle, pelo outro lado (Fase 3, § 10):** toda migração que cria tabela pública precisa
+**revogar `anon`/`authenticated` e ligar RLS na mesma transação**, e o gate
+`scripts/check_migrations.mjs` cobra isso **no diff**, offline. Os dois são complementares e nenhum
+substitui o outro: o `check_migrations.mjs` fecha **pelo código**, antes de a tabela existir; o
+`check_grants.mjs` detecta **drift vivo**, inclusive o que nasce fora de migração (um clique no
+painel). Só o par cobre um default que não podemos fechar.
+
 **9.2 — Abuso da API pública (SEC-02).** A chave `anon` é pública por design e o navegador fala
 **direto** com o Supabase — a Vercel não está no caminho da requisição, então **não há onde aplicar
 rate limit sem mudar a arquitetura** (Edge Function, gateway ou RPC agregadora com quota). Avaliado
@@ -183,3 +190,19 @@ SEC-06 continua **mitigado**, não encerrado.
 É o maior item aberto do projeto, apontado em 16/07 e de novo em 27/07. Só o dono pode fechá-lo
 (exige a máquina dele e um projeto Supabase descartável); o checklist do que falta está no
 `docs/backup.md`, seção **O que a integridade do dump garante (e o que NÃO garante)**.
+
+## 10. Fase 3 — RPCs diagnósticas e auditor mínimo
+
+No projeto de teste, a migração `20260729034018_phase3_moderate_hardening.sql` removeu as quatro
+RPCs diagnósticas da Data API e as colocou em `audit`. Somente
+`divat_busca_logradouro(text,integer)` e `divat_linhas_regiao(text,text)` seguem executáveis por
+`anon`; `authenticated` ficou sem grants porque o produto não usa Auth nem sessões.
+
+O owner `divat_audit_owner` é `NOLOGIN`, sem privilégios administrativos e herda somente
+`anon`. As funções diagnósticas são `SECURITY DEFINER` sob esse owner limitado e só
+`divat_auditor` pode executá-las. O login externo `divat_auditor_ci`, quando criado pelo runbook,
+é apenas membro desse papel e não tem `SELECT` direto nas tabelas.
+
+A aplicação em produção exige autorização separada. Até lá, os gates vivos existentes continuam
+consultando produção pelo caminho anterior, e o novo workflow de auditoria PostgreSQL é exclusivo
+do projeto de teste. Decisões, evidências e rollback: `docs/planos/fase-3-hardening-moderado.md`.

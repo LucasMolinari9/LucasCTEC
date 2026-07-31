@@ -1,0 +1,79 @@
+# Fase 3 — contrato das migrações SQL e auditoria do projeto de TESTE.
+#
+# Dois jobs, de propósito separados por quem eles conseguem alcançar:
+#   migration-contract — offline, só lê o diff (`scripts/check_migrations.mjs`): cobra que toda
+#     migração que cria tabela pública revogue anon/authenticated e ligue RLS na MESMA transação.
+#     É o par do `check_grants.mjs` do db-checks.yml — este fecha pelo código, aquele detecta
+#     drift vivo. Ver docs/seguranca.md § 9.1.
+#   test-auditor — fala com o banco de TESTE pela credencial auditora, e por isso é
+#     `workflow_dispatch` puro: o secret não é exposto a PR de fora.
+#
+# Mergear este workflow NÃO aplica migração nenhuma. Aplicar segue sendo ato manual do dono, e
+# tem pré-requisito — ver docs/planos/fase-3-hardening-moderado.md, seção "Pré-requisito da
+# promoção a produção".
+#
+# Os `uses:` estão presos ao SHA (o `# v4` ao lado é só legenda) — ver docs/semgrep.md
+# § "Actions presas ao SHA".
+name: Phase 3 database security
+
+on:
+  workflow_dispatch:
+  # `branches: [main]` para não rodar duas vezes por push em branch com PR aberto — o porquê
+  # completo, e o custo aceito, estão no cabeçalho do ci.yml. Sem esta linha, este arquivo
+  # reintroduziria para os seus caminhos exatamente a execução dupla que o PR #86 removeu dos
+  # demais gates em 30/07/2026. O filtro de `paths` abaixo continua valendo por cima.
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - scripts/check_migrations.mjs
+      - scripts/check_phase3_audit.mjs
+      - scripts/bootstrap_phase3_auditor.sql
+      - scripts/rollback_phase3_test.sql
+      - .github/workflows/phase3-security.yml
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - scripts/check_migrations.mjs
+      - scripts/check_phase3_audit.mjs
+      - scripts/bootstrap_phase3_auditor.sql
+      - scripts/rollback_phase3_test.sql
+      - .github/workflows/phase3-security.yml
+
+permissions:
+  contents: read
+
+jobs:
+  migration-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+      - name: RLS, revokes e allowlist na mesma migração
+        run: node scripts/check_migrations.mjs
+
+  # A credencial não é exposta a PRs. Este job roda só por despacho manual no ambiente de teste;
+  # depois que o secret estiver configurado, pode ser promovido a gate obrigatório em mudança SQL.
+  test-auditor:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SUPABASE_TEST_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_TEST_AUDIT_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+      - name: Exigir credencial auditora de teste
+        shell: bash
+        run: test -n "$SUPABASE_TEST_AUDIT_DATABASE_URL"
+      - name: Executar diagnósticos pelo auditor mínimo
+        run: node scripts/check_phase3_audit.mjs
