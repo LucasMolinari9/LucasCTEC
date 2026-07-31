@@ -56,6 +56,16 @@ python3 -m venv .venv-semgrep && .venv-semgrep/bin/pip install semgrep   # sem p
 O `.venv-semgrep/` está no `.gitignore`; o `scripts/semgrep.sh` acha o binário sozinho (PATH
 primeiro, depois a venv local).
 
+**Nas sessões web do Claude Code isso é automático:** o hook `SessionStart`
+(`.claude/hooks/session-start.sh`, ligado pelo `.claude/settings.json`) monta a
+`.venv-semgrep/` no início de cada sessão, porque o container de lá é efêmero e a venv não
+sobrevive entre sessões — sem ele o `./scripts/semgrep.sh` sai 127 e a análise acaba sendo
+feita à mão (foi o que aconteceu no PR #93). A versão instalada é lida do
+`.github/workflows/semgrep.yml`, para não existir um segundo lugar onde atualizar; se o PyPI
+estiver fora, o hook avisa e sai 0 — sessão sem Semgrep é ruim, sessão que não abre é pior.
+Na máquina do dono ele não faz nada (só roda com `CLAUDE_CODE_REMOTE=true`): ali quem manda
+na instalação é o dono, e o `pipx` acima já sobrevive entre sessões.
+
 ## Rodar
 
 ```sh
