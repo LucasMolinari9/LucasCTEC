@@ -187,14 +187,18 @@ function exigirChaveAdministrativa(chave) {
   }
   if (chave.startsWith('sb_secret_')) return;
   if (/^[^.]+\.[^.]+\.[^.]+$/.test(chave)) {
+    // O try cobre só a DECODIFICAÇÃO. A recusa por role errada fica fora dele: dentro, o próprio
+    // catch reembrulhava o throw e a mensagem saía aninhada ("legada inválida: JWT tem role=anon"),
+    // escondendo o motivo real atrás de um diagnóstico de formato.
+    let payload;
     try {
       const b64 = chave.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-      const payload = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
-      if (payload.role === 'service_role') return;
-      throw new Error(`JWT tem role=${payload.role || '(ausente)'}, não service_role`);
+      payload = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
     } catch (e) {
       throw new Error(`chave administrativa legada inválida: ${e.message}`);
     }
+    if (payload?.role === 'service_role') return;
+    throw new Error(`JWT tem role=${payload?.role || '(ausente)'}, não service_role`);
   }
   throw new Error('formato de chave administrativa desconhecido; use sb_secret_* ou service_role JWT legada');
 }
