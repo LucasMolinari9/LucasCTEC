@@ -2630,9 +2630,17 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
 }
 // 5 modos de busca da tela "Linhas por Localidade e Município" — cada botão de filtro decide
 // o tipo do campo A/B e qual função de busca roda (localidade× vs. município×).
+// `aLabel`/`aPlaceholder`/`aVazio` são opcionais: quando ausentes, o modo cai no rótulo padrão
+// por tipo (Localidade/Município). Existem porque o 1º modo busca por NOME DE SEÇÃO de tarifa e
+// o campo rotulado só "Localidade" escondia isso — o usuário não descobria que podia digitar a
+// seção ali (o campo sempre aceitou: `termosLocalidade` inclui o termo cru, e a busca bate em
+// tarifa_atual_teste.nome_ligacao/via). Rótulo que não anuncia a capacidade = capacidade que não
+// existe, na prática.
 const LOC_FILTERS = [
-  { label:'Possui seção na Localidade A', kind:'localidade', aType:'localidade', bMode:'none',
-    hint:'Lista as linhas que têm uma seção de tarifa com esse nome na localidade A.' },
+  { label:'Possui seção com este nome', kind:'localidade', aType:'localidade', bMode:'none',
+    aLabel:'Seção ou localidade', aPlaceholder:'Nome da seção ou localidade…',
+    aVazio:'Informe o nome da seção ou da localidade.',
+    hint:'Digite o NOME DA SEÇÃO de tarifa (ex.: "CENTRO X ALCÂNTARA") ou de uma localidade — lista as linhas que têm uma seção com esse nome.' },
   { label:'De localidade A para localidade B', kind:'localidade', aType:'localidade', bMode:'localidade',
     hint:'Cruza duas localidades: mostra as linhas que ligam A a B (independe da ordem digitada).' },
   { label:'De localidade A para Município B', kind:'localidade', aType:'localidade', bMode:'municipio',
@@ -2670,9 +2678,9 @@ LOADERS.localidades = async () => {
       b.classList.toggle('active', active); b.setAttribute('aria-pressed', active);
     });
     hint.innerHTML = `<b>Dica:</b> ${esc(f.hint)}`;
-    ALbl.textContent = f.aType==='municipio' ? 'Município' : 'Localidade';
+    ALbl.textContent = f.aLabel || (f.aType==='municipio' ? 'Município' : 'Localidade');
     A.setAttribute('list', f.aType==='municipio' ? 'munLocList' : 'locList');
-    A.placeholder = f.aType==='municipio' ? 'Nome do município…' : 'Digite a localidade…';
+    A.placeholder = f.aPlaceholder || (f.aType==='municipio' ? 'Nome do município…' : 'Digite a localidade…');
     A.value=''; B.value='';
     if(f.bMode==='none'){
       BLbl.style.display='none';
@@ -2694,7 +2702,7 @@ LOADERS.localidades = async () => {
   const run = async () => {
     const f = LOC_FILTERS[modeIdx];
     const a=(A.value||'').trim(), b=(B.value||'').trim();
-    if(!a){ host.innerHTML = emptyBox(`Informe ${f.aType==='municipio'?'o município':'a localidade'}.`); return; }
+    if(!a){ host.innerHTML = emptyBox(f.aVazio || `Informe ${f.aType==='municipio'?'o município':'a localidade'}.`); return; }
     if(f.kind==='localidade'){
       const bTipo = f.bMode==='municipio' ? 'municipio' : 'localidade';
       const bb = f.bMode==='none' ? '' : b;

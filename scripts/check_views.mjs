@@ -47,9 +47,30 @@ const VIEWS = [
   { key: 'ligacoesPorLogradouro', busca: 'vargas' },
   { key: 'municipioRegiao',       busca: 'rio' },
   // Formulário próprio (#locA/#locGo), não o painel de busca padrão.
-  { key: 'localidades', busca: 'rio', driver: async page => {
-      await page.fill('.modal-body.active #locA', 'rio');
+  // O `driver` usa o 1º filtro com um termo que, nas fixtures, SÓ existe como nome de seção de
+  // tarifa ('PETROPOLIS X TERESOPOLIS', linha 740000001) — não é município, localidade nem
+  // logradouro. Assim o caminho seção -> linha é exercitado de verdade: com 'rio' a view passava
+  // mesmo se esse ramo estivesse morto, porque 'rio' casa o nome da própria linha.
+  { key: 'localidades', busca: 'teresopolis', driver: async page => {
+      await page.click('.modal-body.active .loc-filter-btn[data-idx="0"]');
+      await page.fill('.modal-body.active #locA', 'teresopolis');
       await page.click('.modal-body.active #locGo');
+    },
+    // Regressão do rótulo: o campo do 1º modo aceita NOME DE SEÇÃO, mas ficou anos anunciando só
+    // "Localidade" — capacidade que a tela não anuncia é capacidade que o usuário não acha.
+    verificar: async page => {
+      const ui = await page.evaluate(() => {
+        const p = document.querySelector('.modal-body.active');
+        return { lbl: p?.querySelector('#locALabel .loc-lbl-txt')?.textContent || '',
+                 ph: p?.querySelector('#locA')?.placeholder || '',
+                 achou: [...(p?.querySelectorAll('#locHost [data-row]') || [])]
+                   .some(e => (e.dataset.row || '').includes('740000001')) };
+      });
+      const out = [];
+      if (!/seç/i.test(ui.lbl + ' ' + ui.ph))
+        out.push(`campo do 1º filtro não anuncia "seção" (rótulo="${ui.lbl}" placeholder="${ui.ph}")`);
+      if (!ui.achou) out.push('busca por NOME DE SEÇÃO não trouxe a linha 740000001');
+      return out;
     } },
   { key: 'ligacoesPorTerminal',   busca: 'terminal' },
   { key: 'secoesPorLigacao',      busca: '549' },
@@ -102,13 +123,17 @@ async function estadoDoPane() {
       // que devolve vazio deixa o pane com ~30 caracteres de moldura e passaria despercebido
       // se medíssemos o pane. `#spHost`/`#locHost` são onde os loaders efetivamente pintam.
       corpo: (pane.querySelector('#spHost, #locHost') || pane).innerText.trim().length,
+      // Mesmo recorte, em texto: o teste de "não achou nada" tem que olhar só o RESULTADO. Ao
+      // varrer o pane inteiro ele lia também a dica da tela, e uma dica que diz "Digite o nome
+      // da seção…" casava /digite o/ e reprovava uma view que tinha acabado de achar resultado.
+      corpoTxt: (pane.querySelector('#spHost, #locHost') || pane).innerText.trim(),
     };
   });
 }
 
-for (const { key, busca, driver } of alvo) {
+for (const { key, busca, driver, verificar } of alvo) {
   erros = [];
-  let est;
+  let est, extras = [];
   try {
     // about:blank entre as views: troca só de hash NÃO recarrega a página, e queremos cada
     // view partindo de um estado limpo (sem cache/aba/erro herdado da anterior).
@@ -131,6 +156,8 @@ for (const { key, busca, driver } of alvo) {
       await esperarPintura();
     }
     est = await estadoDoPane();
+    // asserção específica da view (opcional): devolve lista de problemas, [] se está tudo certo
+    if (verificar) extras = await verificar(page);
   } catch (e) {
     check(false, key, `não pintou em 20s — ${e.message.split('\n')[0]}`);
     continue;
@@ -142,8 +169,9 @@ for (const { key, busca, driver } of alvo) {
   if (est.spin)            detalhes.push('preso no spinner');
   if (!est.txt?.length)    detalhes.push('pane vazio');
   else if (!est.corpo)     detalhes.push('documento em branco (só a moldura pintou)');
-  if (busca && !est.erro && SEM_RESULTADO.test(est.txt || ''))
-    detalhes.push(`busca "${busca}" não achou nada — "${(est.txt.match(SEM_RESULTADO) ? est.txt.split('\n').find(l => SEM_RESULTADO.test(l)) : '').trim()}"`);
+  if (busca && !est.erro && SEM_RESULTADO.test(est.corpoTxt || ''))
+    detalhes.push(`busca "${busca}" não achou nada — "${(est.corpoTxt.split('\n').find(l => SEM_RESULTADO.test(l)) || '').trim()}"`);
+  if (extras.length)       detalhes.push(...extras);
   if (erros.length)        detalhes.push(...erros.slice(0, 3));
 
   check(!detalhes.length, key,
