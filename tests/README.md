@@ -16,6 +16,13 @@ executá-lo; (2) confere que as cópias verbatim ainda batem com o `app.js`
 (**guarda anti-drift**); (3) roda todos os `*.test.js`. Sai com código ≠ 0 se algo
 falhar — **rode-o antes de cada publicação**.
 
+As bancadas com servidor/processo filho ficam separadas e também rodam no workflow `ci.yml`:
+
+```bash
+NO_PROXY=127.0.0.1 node tests/backup_rest.rig.mjs
+NO_PROXY=127.0.0.1 node tests/restore_rest.rig.mjs
+```
+
 Avulso (um arquivo só), se quiser:
 ```bash
 cd tests
@@ -53,6 +60,11 @@ cada teste novo).
 - `pure.harness.js` — cópia **verbatim** das funções puras (com a linha de origem citada).
 - `pure.test.js` — casos das funções puras.
 - `realtime.test.js` — guarda a sincronização `VIEW_TABLES`/`RT_TABLES` (extrai os literais do `app.js`).
+- `backup_rest.rig.mjs` — paginação keyset, contagem, SHA-256 e headers das chaves opacas.
+- `restore_rest.rig.mjs` — corrupção, confirmação do ref, destino vazio, ordem da FK e contagem final.
+
+> `scripts/check_views.mjs` e `check_abas.mjs` também usam fixtures locais por desenho. Eles
+> validam renderização determinística, não substituem um preview ligado a um banco restaurado.
 
 ## ⚠️ Regra de ouro (anti-drift)
 Os harness **copiam o código do `app.js` à mão**. Ao **editar uma dessas funções

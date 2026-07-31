@@ -48,9 +48,11 @@ const COMPOSTA = Array.from({ length: 1500 }, (_, i) => ({
 
 let mentirContagem = 0;   // soma ao total anunciado no Content-Range
 let pedidos = [];
+let chaveOpacaCorreta = true;
 
 const srv = createServer((req, res) => {
   pedidos.push(req.url);
+  if (req.headers.apikey !== 'sb_publishable_fake' || req.headers.authorization) chaveOpacaCorreta = false;
   if (req.url.includes('offset=')) { // regressão para offset: derruba a bancada
     res.writeHead(400); res.end(JSON.stringify({ message: 'offset proibido nesta bancada' })); return;
   }
@@ -87,7 +89,7 @@ const PORTA = srv.address().port;
 function rodar(saida) {
   return new Promise(res => {
     const p = spawn('node', [join(REAL, 'scripts/backup_rest.mjs'), saida], {
-      env: { ...process.env, SUPABASE_URL: `http://127.0.0.1:${PORTA}`, SUPABASE_ANON_KEY: 'fake', NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1' },
+      env: { ...process.env, SUPABASE_URL: `http://127.0.0.1:${PORTA}`, SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_fake', NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1' },
     });
     let out = ''; p.stdout.on('data', d => out += d); p.stderr.on('data', d => out += d);
     p.on('close', code => res({ code, out }));
@@ -108,6 +110,7 @@ checar(man.tabelas.tabela_vista_teste?.linhas === 1500, 'paginou as 1500 linhas 
 checar(/^[0-9a-f]{64}$/.test(man.tabelas.itinerario_teste?.sha256 || ''), 'SHA-256 gravado no manifest');
 checar(pedidos.some(u => u.includes('row_id=gt.1000')), 'usou keyset (row_id=gt.1000), não offset');
 checar(pedidos.some(u => u.includes('or=')), 'PK composta usou comparação lexicográfica (or=)');
+checar(chaveOpacaCorreta, 'sb_publishable_* vai em apikey, nunca como Bearer JWT');
 const sha1 = man.tabelas.itinerario_teste.sha256;
 
 // --- caso 2: determinismo do hash -------------------------------------------------------------

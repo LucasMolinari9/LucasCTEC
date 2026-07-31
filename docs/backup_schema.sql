@@ -4,14 +4,18 @@
 --
 -- O QUE ISTO É: reconstrói tabelas, PK/FK, índices, RLS policies, grants,
 -- funções, trigger e extensões — tudo que o CSV exportado pelo Table Editor
--- NÃO carrega. Rode este script UMA VEZ contra um banco novo/vazio e depois
--- importe os CSVs (Table Editor → tabela → Import data from CSV) por cima.
+-- NÃO carrega. Esta é a baseline PRÉ-FASE 3. Rode UMA VEZ contra um banco novo/vazio e depois
+-- importe os dados com `pg_restore --data-only`, `scripts/restore_rest.mjs` ou, como último
+-- recurso, os CSVs. Para alvo pós-Fase 3, aplique as migrations versionadas DEPOIS deste arquivo
+-- e ANTES dos dados.
+--
+-- NÃO É IDEMPOTENTE nem script de reconciliação: as 18 instruções CREATE TABLE são deliberadamente
+-- estritas. Nunca rode por cima de um schema já criado por pg_restore ou por execução anterior.
 --
 -- COMO USAR (em caso de perda total do banco):
 --   1. Crie um projeto Supabase novo (ou zere o atual, com cuidado).
 --   2. SQL Editor → cole este arquivo inteiro → Run.
---   3. Table Editor → em cada uma das 18 tabelas → Import data from CSV
---      (usando os CSVs exportados via Table Editor → Export data).
+--   3. Importe os dados por um dos caminhos de docs/backup.md.
 --   4. Confira o Realtime (seção no fim) e o vercel.json/CSP — nada aqui
 --      mexe em configuração de hosting, só no banco.
 --

@@ -8,13 +8,14 @@
 
 ## 0. Estado do repositório
 
-> **Atualizado em 31/07 (2ª sessão).** A versão anterior desta seção dizia `main: fda0152` e
-> listava os três docs como "sem PR"; os dois deixaram de valer com o merge do #89.
+> **Atualização final de 31/07.** O PR #73 foi mergeado depois da 2ª sessão. Referências abaixo ao
+> draft/head são registro histórico do caminho até o merge, não estado pendente.
 
-- **`main`: `47de6ee`** (merge do #90). Gate verde (`node tests/check.js`).
+- **Versão-base deste pacote: `0bfb38a`** (merge do #73). Gates do merge verdes; o job manual
+  `test-auditor` permaneceu `skipped` por desenho e ainda precisa ser executado pelo dono.
 - **Repositório PÚBLICO**, por decisão registrada em `docs/adr/0003-repositorio-publico.md`.
 
-### Branches vivas
+### Branches registradas antes do merge (histórico)
 
 | Branch | O que tem | Estado |
 |---|---|---|
@@ -35,7 +36,7 @@ o que ele mostra é só o que já foi buscado. Foi assim que a 2ª sessão de 31
 | #85, #86, #87, #88 | ✅ mergeados (o plano dos 4 PRs, concluído) |
 | #89 | ✅ mergeado em 31/07 — trouxe os três docs de 31/07 para a `main` |
 | #84 | ✅ fechado como redundante em 31/07 |
-| **#73** | 🟡 **draft aberto desde 29/07** — o único PR aberto |
+| **#73** | ✅ mergeado na `main` em `0bfb38a` |
 
 ---
 
@@ -104,11 +105,10 @@ Sobra para o dono exatamente o que só ele pode fazer: rodar e cronometrar.
 
 ---
 
-### 2.2 🟡 PR #73 — decidir o destino
+### 2.2 ✅ PR #73 mergeado — concluir validação operacional
 
-O único PR aberto. Draft desde 29/07, hoje **778 adições em 10 arquivos, 18 commits** (eram 722 em
-17 antes do rebase e das correções), aplicado somente no Supabase de **teste**
-(`gontnlfmothfglssbyyk`). Produção não é alvo de nada nele.
+O código foi mergeado na `main` em `0bfb38a`. A migration continua aplicada somente no Supabase de
+**teste** (`gontnlfmothfglssbyyk`); merge de código não promove schema para produção.
 
 **O que ele faz:** cria schemas `private` e `audit`; move `f_unaccent`/`fn_vigor_auto` para
 `private` (saem do alcance do PostgREST); move as 4 RPCs diagnósticas para `audit` como
@@ -116,10 +116,10 @@ O único PR aberto. Draft desde 29/07, hoje **778 adições em 10 arquivos, 18 c
 fecha os default privileges. Tudo numa transação, com pré-condições antes e asserções depois —
 se qualquer coisa não bater, a transação inteira volta atrás.
 
-**Mergear o #73 não muda banco nenhum.** O workflow não aplica nada: `migration-contract` só lê o
-diff, e `test-auditor` é `workflow_dispatch` puro. Aplicar continua sendo ato manual do dono.
+**O merge do #73 não mudou banco nenhum.** O workflow não aplica nada: `migration-contract` só lê
+o diff, e `test-auditor` é `workflow_dispatch` puro. Aplicar continua sendo ato manual do dono.
 
-#### 2.2.1 ✅ O rebase está promovido — é o head do #73
+#### 2.2.1 ✅ Rebase promovido e incorporado pelo merge (histórico)
 
 > ⚠️ **Correção de um erro deste documento.** Uma versão anterior desta seção afirmava que a
 > `claude/fase3-rebased-fda0152` "sumiu" e que por isso o rebase foi refeito. **Falso.** A branch
@@ -148,7 +148,7 @@ horas antes, que o #73 também tinha reescrito por conta própria em 29/07. Idê
 do #73), por `--force-with-lease` com o SHA esperado explícito. O head anterior (`13c897a`) ficou
 preservado na branch **`pr73-antes-do-rebase`**.
 
-**O #73 hoje:** base `aac916c`, head `631d97e`, **CI todo verde** — `check`, `views`, `semgrep`,
+**Antes do merge:** base `aac916c`, head `631d97e`, **CI todo verde** — `check`, `views`, `semgrep`,
 `deriva`, `seguranca`, `qualidade`, `realtime`, `migration-contract` e `smoke`; `test-auditor`
 `skipped` por desenho. Foi a primeira vez que qualquer gate rodou contra este trabalho.
 
@@ -372,7 +372,7 @@ Calibra o que dá para pedir. Não são falhas a contornar — são o contrato.
 node tests/check.js              # offline, sempre — sintaxe, canon, deriva docs×código, unitários
 node scripts/check_views.mjs     # navegador headless, 17 views; aceita filtro: check_views.mjs frota
 node scripts/check_abas.mjs      # abas do modal / seletor de documentos
-node scripts/check_migrations.mjs # (só na branch do #73 / fase3-rebased) contrato das migrações, offline
+node scripts/check_migrations.mjs # contrato das migrações, offline
 ```
 
 ⚠️ **Push numa branch SEM PR aberto não dispara gate nenhum** (consequência do PR 1, desde 30/07).
@@ -389,9 +389,9 @@ nenhum deles.
 > precisa da máquina, do painel ou da autorização do dono.
 
 1. **SEC-06** (2.1). Nada mais tem esse peso, e é o único que descreve capacidade.
-2. **Decidir o #73** (2.2) — já rebaseado, promovido e com CI verde; 2.2.2 e 2.2.3 resolvidos. O
-   que falta são as **pendências operacionais** do corpo do PR (credencial, secret, bypass da
-   Vercel, branch protection) e, se um dia for aplicar em produção, migrar os quatro gates antes.
+2. **Concluir a validação da Fase 3** (2.2) — criar/rotacionar o auditor de teste, configurar o
+   secret e executar manualmente `test-auditor`. Se um dia houver promoção a produção, migrar os
+   quatro gates antes e pedir autorização separada.
 3. **Painel** (2.6) — dois cliques, e um fecha o único WARN dos advisors.
 4. **Achado E** (2.3) e **lista das órfãs** (2.4) — os dois exigem mudar RPC, então valem uma
    sessão de `db-change` conjunta, com o dono aplicando.

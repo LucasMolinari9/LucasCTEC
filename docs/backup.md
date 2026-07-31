@@ -11,7 +11,7 @@ O backup é feito de **duas peças** que se completam:
 | Peça | O que é | Onde fica | Como refazer |
 |---|---|---|---|
 | **Estrutura** | `docs/backup_schema.sql` — recria tabelas, PK/FK, índices, RLS, grants, funções, trigger | **versionada no git** | regenerar do banco (ver abaixo) |
-| **Dados** | dump do banco (`pg_dump`, script Node ou 18 CSVs) | **fora do git** (Drive/local do dono) | 3 formas — ver "Formas de fazer o backup" |
+| **Dados** | dump do banco (`pg_dump`, NDJSON ou 18 CSVs) | **fora do git** (Drive/local do dono) | 3 formas — ver "Formas de fazer o backup" |
 
 Além das rotinas manuais acima, existe uma **camada automática** (21/07/2026): o workflow
 **`.github/workflows/backup.yml`** roda o `backup_rest.mjs` em **modo público** toda segunda
@@ -29,13 +29,16 @@ o dump **completo** continua sendo o manual abaixo.
 > **⚠️ Os CSVs NÃO vão para o git.** Dados no repositório = vazamento. Só o `.sql` e os `.md`
 > (estrutura e docs) são versionados. Os CSVs ficam numa pasta do dono (Google Drive etc.).
 
-## Por que não há backup automático
+## O que é automático — e o que o plano Free não oferece
 
-O projeto está no **plano Free (NANO)** do Supabase. Backup diário automático e PITR são
-recursos **exclusivos do plano Pro** (US$25/mês) — no Free não existe botão de "ativar", a
-seção Database → Backups só oferece upgrade. Enquanto o projeto ficar no Free, o backup é
-**manual** (este runbook). Migrar para o Pro tornaria o backup automático e tornaria este
-processo manual desnecessário.
+O projeto **tem backup automático próprio**: o `backup.yml` exporta semanalmente as 14 tabelas
+públicas em NDJSON e guarda o artifact por 90 dias. Isso reduz o risco de ficar sem nenhuma cópia,
+mas não equivale a um backup gerenciado da plataforma: não inclui staging, Auth, estrutura nem
+PITR (*point-in-time recovery*).
+
+No plano Free, a proteção completa continua dependendo do dump manual fora do Git. Um plano com
+backup gerenciado/PITR acrescentaria outra camada; não tornaria desnecessários o teste de restore,
+o controle de acesso nem uma cópia independente.
 
 ## Formas de fazer o backup dos DADOS
 
@@ -43,33 +46,44 @@ Há três formas de tirar os dados do banco, da mais completa à mais simples. *
 máquina** (o ambiente do Claude não alcança o Supabase) e o resultado vai **fora do git**.
 
 ### Opção 1 — `pg_dump` (padrão-ouro: dados + estrutura + policies + índices)
-Precisa do `pg_dump` (vem com o Postgres client) e da **senha do banco** (Dashboard → Project
-Settings → Database → Connection string).
+Precisa do `pg_dump` (vem com o Postgres client) e da **senha do banco**. Para dump/restore, copie
+no Dashboard a conexão direta ou o **Session pooler na porta 5432**; não use o pooler em modo
+Transaction.
 ```bash
-pg_dump "postgresql://postgres:[SUA-SENHA]@db.lwzsxuaqqeoamukduhev.supabase.co:5432/postgres" \
+pg_dump "$SUPABASE_DB_URL" \
   --schema=public --no-owner --no-privileges -Fc \
   -f "divat_backup_$(date +%Y-%m-%d).dump"
 ```
-Restaurar num projeto vazio: `pg_restore --no-owner --no-privileges -d "postgresql://…" arquivo.dump`.
-Variações: `--schema-only` (só estrutura) e `--data-only` (só dados).
+O arquivo é completo. Na recuperação documentada abaixo, porém, a estrutura vem da baseline
+versionada e o dump entra com `pg_restore --data-only`; isso evita executar dois DDLs concorrentes
+e é exatamente o conflito que a versão anterior deste runbook provocava.
 
-### Opção 2 — Script Node `scripts/backup_rest.mjs` (sem `pg_dump`; só DADOS)
+### Opção 2 — Scripts Node NDJSON (sem `pg_dump`; só DADOS)
 Para quando não há `pg_dump` instalado. Baixa as tabelas em NDJSON via REST, paginando pela PK.
 Requer só **Node 18+** (nenhuma dependência). Tem **dois modos**, decididos pela chave no ambiente:
 
-- **Completo** (`SUPABASE_SERVICE_KEY`): as **18 tabelas**, inclusive staging. A `service_role` key
-  fica em Dashboard → Settings → API (é **SECRETA** — não commite, não cole em lugar público).
-- **Público** (`SUPABASE_ANON_KEY`): as **14 tabelas públicas** (sem staging). É o modo usado pelo
-  workflow automático do Actions — a anon key é a mesma pública do `app.js`.
+- **Completo** (`SUPABASE_SECRET_KEY`, preferida, ou `SUPABASE_SERVICE_KEY` legada): as **18
+  tabelas**, inclusive staging. A chave é **SECRETA** — não commite nem cole em lugar público.
+- **Público** (`SUPABASE_PUBLISHABLE_KEY`, preferida, ou `SUPABASE_ANON_KEY` legada): as **14
+  tabelas públicas** (sem staging). É o modo usado pelo workflow automático do Actions.
 
 ```bash
 SUPABASE_URL="https://lwzsxuaqqeoamukduhev.supabase.co" \
-SUPABASE_SERVICE_KEY="<service_role key>" \
+SUPABASE_SECRET_KEY="<sb_secret_...>" \
 node scripts/backup_rest.mjs "./backup_$(date +%Y-%m-%d)"
 ```
 Saída: pasta `backup_AAAA-MM-DD/` com um `.ndjson` por tabela + `manifest.json` (confira a contagem
 de linhas e o campo `modo`). O `.gitignore` já ignora `backup_*/`. Limitação: só dados — a estrutura
-vem da Opção 1 (`--schema-only`) ou de `docs/backup_schema.sql`.
+da restauração documentada vem de `docs/backup_schema.sql`.
+
+O caminho inverso agora é executável e testado offline:
+
+```bash
+node scripts/restore_rest.mjs ./backup_AAAA-MM-DD
+```
+
+Sem `--apply`, ele apenas valida JSON, contagens e SHA-256. A gravação real exige projeto vazio,
+chave administrativa e confirmação explícita do project ref; veja o Caminho B.
 
 ### Opção 3 — Table Editor → CSV (sem terminal)
 A forma manual pelo painel, detalhada abaixo. Não precisa instalar nada, mas é a mais trabalhosa
@@ -129,96 +143,154 @@ criar/alterar tabela, índice, policy ou função, atualize-o. As consultas-font
 
 ## Como RESTAURAR (em caso de perda total)
 
-> ### ⚠️ Escolha o caminho ANTES de começar
+> ### ⚠️ Regra de ouro
 >
-> Há dois, e **eles não são equivalentes**. O exercício de 28/07/2026 travou justamente por ter
-> seguido o de baixo:
->
-> | Caminho | Quando usar | Risco conhecido |
-> |---|---|---|
-> | **A — `pg_restore`** (recomendado) | sempre que existir um `.dump` da Opção 1 | nenhum medido |
-> | **B — CSV pelo Table Editor** | só se não houver `.dump`, nem `pg_dump` instalado | **exportação parcial silenciosa** — foi o que deixou `tabela_vista_teste` vazia e `itinerario_teste` com 5.298 de 52.146 linhas |
->
-> O caminho B falha **sem erro**: o import termina "com sucesso" sobre um CSV que só continha a
-> página visível do Table Editor. Por isso, se você for obrigado a usá-lo, a conferência de
-> contagens do passo 6 deixa de ser opcional.
+> Restaure **somente num projeto novo/descartável**. `backup_schema.sql` é DDL de criação para banco
+> vazio, não script idempotente de reconciliação. Nunca execute o arquivo por cima de uma estrutura
+> já criada por `pg_restore`: a primeira `CREATE TABLE` existente encerra o processo.
+
+| Caminho | Quando usar | O que restaura |
+|---|---|---|
+| **A — baseline + `pg_restore --data-only`** | existe `.dump` da Opção 1 | 18 tabelas; recomendado |
+| **B — baseline + `restore_rest.mjs`** | existe pasta NDJSON | 18 tabelas no modo completo ou 14 no público |
+| **C — baseline + CSV** | último recurso | depende de cada CSV; risco de exportação parcial silenciosa |
+
+### Passo comum 1 — escolher o estado do schema
+
+O alvo padrão de recuperação é o **estado atual de produção**, que ainda é **pré-Fase 3**. Nesse
+caso, execute apenas `docs/backup_schema.sql`. Para reproduzir deliberadamente o projeto de teste
+pós-Fase 3, execute a baseline e depois as migrations de `supabase/migrations/`, em ordem. Não
+misture os dois estados nem aplique a Fase 3 em produção como efeito colateral de um restore.
+
+Em projeto novo, confirme também em **Data API settings** que o schema `public` está exposto. Em
+projetos novos, tabelas podem não ser expostas automaticamente; RLS e grants continuam sendo
+obrigatórios e são controles separados.
 
 ### Caminho A — restaurar de um dump (`pg_restore`)
 
-1. **Ligue backup antes de qualquer coisa** se for reusar o projeto atual (evita repetir o erro).
-2. Crie um projeto Supabase novo (ou zere o atual, com cuidado).
-3. Restaure estrutura e dados de uma vez, a partir do `.dump` gerado pela Opção 1:
+1. Crie um projeto Supabase novo.
+2. No SQL Editor, execute `docs/backup_schema.sql` **uma vez**. Se o estado-alvo for pós-Fase 3,
+   aplique depois as migrations versionadas.
+3. Restaure **somente os dados** do dump completo:
 
    ```bash
-   pg_restore --no-owner --no-privileges --exit-on-error \
-     -d "postgresql://postgres:[SENHA]@db.<novo-ref>.supabase.co:5432/postgres" \
+   pg_restore --data-only --no-owner --no-privileges --exit-on-error \
+     -d "$SUPABASE_RESTORE_DB_URL" \
      backup_AAAA-MM-DD.dump
    ```
 
-   `--no-owner`/`--no-privileges` existem porque os roles do projeto de origem não existem no
-   destino; `--exit-on-error` existe para o restore **parar** no primeiro problema em vez de
-   terminar pela metade parecendo bem-sucedido.
-4. **SQL Editor** → cole `backup_schema.sql` inteiro → **Run**. O dump traz a estrutura, mas o
-   `backup_schema.sql` é a baseline **versionada e conferida** de RLS, policies e grants — rodá-lo
-   por cima é o que garante que o projeto restaurado não fique mais aberto que produção. Foi
-   exatamente esse desvio que o exercício de 28/07 encontrou (`anon` com TRUNCATE).
-5. Siga do passo 5 do caminho B em diante (sequências, `SB_URL`/`SB_KEY`, Auth).
+   `--exit-on-error` impede que um restore parcial pareça concluído. A estrutura fica sob uma única
+   fonte de verdade: a baseline versionada, em vez de um DDL do dump seguido por outro DDL
+   incompatível.
 
-### Caminho B — restaurar de CSVs (só sem `.dump`)
+### Caminho B — restaurar NDJSON com validação automática
 
-1. **Ligue backup antes de qualquer coisa** se for reusar o projeto atual (evita repetir o erro).
-2. Crie um projeto Supabase novo (ou zere o atual, com cuidado).
-3. **SQL Editor** → cole `backup_schema.sql` inteiro → **Run**. Isso recria as 18 tabelas
-   vazias já com PK/FK, índices, RLS, grants, funções e o trigger.
-4. **Table Editor** → em cada tabela → **Import data from CSV**, usando os CSVs guardados.
+1. Crie um projeto novo e prepare a estrutura conforme o passo comum.
+2. Valide o backup **sem credencial e sem rede**:
+
+   ```bash
+   node scripts/restore_rest.mjs ./backup_AAAA-MM-DD
+   ```
+
+   O comando aborta se faltar tabela, houver JSON inválido, contagem diferente ou SHA-256
+   divergente.
+3. Só depois, aplique no projeto-alvo. Copie a chave **secret** do novo projeto; a service role JWT
+   legada continua aceita apenas durante a transição:
+
+   ```bash
+   SUPABASE_RESTORE_URL="https://<novo-ref>.supabase.co" \
+   SUPABASE_RESTORE_SECRET_KEY="<sb_secret_...>" \
+   node scripts/restore_rest.mjs ./backup_AAAA-MM-DD \
+     --apply --confirm-ref=<novo-ref>
+   ```
+
+4. **Reposicione as sequências de `row_id`** conforme o **Passo comum 2**. O importador grava
+   `row_id` explícito e não avança as sequências; sem este passo a próxima carga do ETL colide.
+
+O script verifica todas as tabelas antes do primeiro `INSERT` e recusa qualquer destino não vazio.
+Também restaura a tabela-pai antes da filha, trabalha em lotes e confere a contagem de cada tabela
+depois da escrita. Ele **nunca apaga dados**; se falhar depois de começar, descarte e recrie o
+projeto-alvo antes de repetir.
+
+### Caminho C — restaurar de CSVs (último recurso)
+
+1. Prepare a estrutura conforme o passo comum.
+2. No Table Editor, importe cada CSV.
    - **Ordem importa:** `tabela_vista_teste` **antes** de `tarifa_atual_teste` (por causa da
      FK `fk_tarifa_linha`). As demais podem entrar em qualquer ordem.
    - Os CSVs incluem `row_id`; a importação só funciona porque `backup_schema.sql` declara essas
      colunas como `GENERATED BY DEFAULT AS IDENTITY`.
-5. **SQL Editor** → depois de importar todos os CSVs, reposicione as sequências de `row_id`.
-   Sem isso, o próximo `INSERT` que omitir `row_id` pode colidir com as chaves importadas:
+3. Depois de importar, **reposicione as sequências de `row_id`** conforme o **Passo comum 2**
+   abaixo. Não é opcional.
+
+O Table Editor pode exportar apenas a página visível sem acusar erro. Por isso o CSV permanece
+último recurso e a conferência de contagens abaixo é obrigatória.
+
+### Passo comum 2 — reposicionar as sequências de `row_id`
+
+Obrigatório nos Caminhos **B e C**. Cinco tabelas declaram
+`row_id bigint GENERATED BY DEFAULT AS IDENTITY` no `backup_schema.sql`, e tanto o importador
+NDJSON quanto o Table Editor gravam `row_id` **explícito**. Inserir valor explícito numa coluna
+`GENERATED BY DEFAULT` **não avança a sequência** — ela continua onde estava. O portal não percebe
+(é somente leitura), mas a próxima carga do ETL que omitir `row_id` colide com as chaves
+restauradas, e num cenário de recuperação esse é o pior momento para descobrir.
+
+```sql
+select setval(pg_get_serial_sequence('public.evento_empresa_teste','row_id'),
+              coalesce((select max(row_id) from public.evento_empresa_teste), 1));
+select setval(pg_get_serial_sequence('public.evento_linha_teste','row_id'),
+              coalesce((select max(row_id) from public.evento_linha_teste), 1));
+select setval(pg_get_serial_sequence('public.itinerario_teste','row_id'),
+              coalesce((select max(row_id) from public.itinerario_teste), 1));
+select setval(pg_get_serial_sequence('public.qh_intervalo_teste','row_id'),
+              coalesce((select max(row_id) from public.qh_intervalo_teste), 1));
+select setval(pg_get_serial_sequence('public.qh_predeterminado_teste','row_id'),
+              coalesce((select max(row_id) from public.qh_predeterminado_teste), 1));
+```
+
+O **Caminho A não precisa** deste passo: o `pg_dump` já emite os `setval` e o
+`pg_restore --data-only` os aplica. Rodar mesmo assim é inofensivo — o bloco é idempotente.
+
+O `restore_rest.mjs` não faz isso sozinho **de propósito**: `setval` é SQL, e o script fala apenas
+PostgREST. Este passo é do SQL Editor, e por isso mora no runbook em vez do código.
+
+### Passo comum 3 — conferir que o restore prestou
+
+Nenhum caminho termina quando o import termina:
+
+1. **Contagem por tabela.** Para NDJSON, o manifest é a referência e o importador já compara cada
+   tabela. Para dump/CSV, registre as contagens da origem no momento do backup e compare com
+   `count(*)`; os números históricos deste documento são apenas uma verificação de plausibilidade,
+   não verdade eterna.
 
    ```sql
-   select setval(pg_get_serial_sequence('public.evento_empresa_teste','row_id'),
-                 coalesce((select max(row_id) from public.evento_empresa_teste), 1));
-   select setval(pg_get_serial_sequence('public.evento_linha_teste','row_id'),
-                 coalesce((select max(row_id) from public.evento_linha_teste), 1));
-   select setval(pg_get_serial_sequence('public.itinerario_teste','row_id'),
-                 coalesce((select max(row_id) from public.itinerario_teste), 1));
-   select setval(pg_get_serial_sequence('public.qh_intervalo_teste','row_id'),
-                 coalesce((select max(row_id) from public.qh_intervalo_teste), 1));
-   select setval(pg_get_serial_sequence('public.qh_predeterminado_teste','row_id'),
-                 coalesce((select max(row_id) from public.qh_predeterminado_teste), 1));
-   ```
-6. Se o projeto for **novo**, atualize `SB_URL` e `SB_KEY` no topo do `app.js` (a chave anon muda
-   de projeto para projeto) e confira a CSP (`vercel.json` → `connect-src` apontando para o
-   novo host `*.supabase.co`).
-7. Recrie o **usuário do Auth** do dono (1 login) manualmente no Dashboard — não vai nos CSVs.
-
-### Passo 8 (os DOIS caminhos) — conferir que o restore prestou
-
-Nenhum dos dois caminhos está terminado quando o import termina. Três conferências, nesta ordem —
-as duas primeiras pegam o modo de falha silencioso, a terceira é a única que prova que o **portal**
-funciona contra o resultado:
-
-1. **Contagem por tabela**, contra a tabela de referência da seção "Exportar os dados" acima:
-
-   ```sql
-   select relname, n_live_tup from pg_stat_user_tables
-   where schemaname = 'public' order by n_live_tup desc;
+   create temp table restore_counts (tabela text, linhas bigint);
+   do $$
+   declare r record;
+   begin
+     for r in select tablename from pg_tables where schemaname = 'public' loop
+       execute format(
+         'insert into restore_counts select %L, count(*) from public.%I',
+         r.tablename, r.tablename
+       );
+     end loop;
+   end $$;
+   select * from restore_counts order by tabela;
    ```
 
-   `n_live_tup` é estimativa — rode `analyze;` antes, ou confirme as suspeitas com `count(*)`.
-   **Qualquer tabela abaixo da referência significa restore incompleto**, não "dado que mudou".
+2. **Grants, RLS, funções e Realtime:** execute `scripts/gen_security_snapshot.sql` no alvo e
+   compare com o estado-alvo escolhido. Confirme 14 tabelas públicas legíveis, quatro tabelas de
+   staging invisíveis e nenhuma escrita para `anon`/`authenticated`.
+3. **Auth:** recrie manualmente o login do dono; Auth não está nos dumps do schema `public`.
+4. **Portal contra o restaurado:** faça um preview temporário com `SB_TESTE_URL`/`SB_TESTE_KEY`
+   apontando para o projeto restaurado e confira busca, linha, horários, tarifa, histórico e
+   Realtime. Não altere as constantes de produção.
 
-2. **Grants e RLS**, com `scripts/gen_security_snapshot.sql`, comparando com produção. É o passo
-   que teria pego o `anon` com TRUNCATE em 28/07 antes de ele virar achado.
+> `node scripts/check_views.mjs` **não** prova este passo: ele intercepta o PostgREST e usa fixtures
+> locais por desenho. A versão anterior do runbook dizia “sem stub”, mas o código nunca teve esse
+> modo. Enquanto o preview real não for exercitado, SEC-06 continua aberto.
 
-3. **O portal contra o banco restaurado.** Aponte `SB_URL`/`SB_KEY` (passo 6) e rode
-   `node scripts/check_views.mjs` — as 17 views, sem stub. Este passo **nunca foi executado**; é um
-   dos três itens que mantêm SEC-06 aberto.
-
-### Passo 9 — medir RTO e RPO, e escrever os números aqui
+### Passo comum 4 — medir RTO e RPO
 
 O item que falta há mais tempo no projeto. **RTO** = quanto tempo, do "percebi a perda" ao "portal
 de pé"; **RPO** = quanto dado se perde, na prática, entre o último backup e a falha (com o backup
@@ -231,7 +303,7 @@ Cronometre o exercício inteiro e preencha:
 | **RTO** | — | *(não medido)* | — |
 | **RPO** | — | *(não medido)* | — |
 
-Com os dois preenchidos e o passo 8 verde, o SEC-06 se encerra: atualize também `docs/seguranca.md`
+Com os dois preenchidos e a validação comum verde, o SEC-06 se encerra: atualize também `docs/seguranca.md`
 § 9.3, que hoje o descreve como **mitigado**.
 
 ## Encoding dos CSVs (não é bug)
@@ -256,6 +328,8 @@ Desde 27/07/2026 (achado SEC-06 da auditoria externa), o `backup_rest.mjs`:
   **menos** do que o servidor contou, o backup **aborta** — dump incompleto não pode terminar com
   cara de sucesso. Se descer **mais**, apenas avisa (linha inserida durante a corrida é benigna).
 - **Grava SHA-256 por tabela** no `manifest.json`.
+- O `restore_rest.mjs` refaz a validação antes de escrever, recusa destino ocupado/origem e confere
+  as contagens depois de cada tabela. As bancadas de backup e restore rodam no CI.
 
 **O que isso NÃO prova:** o SHA-256 responde "este arquivo é o mesmo que eu gerei?", não "este
 dump presta?". Um dump internamente incoerente tem hash tão válido quanto um bom. E nenhuma dessas
@@ -270,9 +344,15 @@ verificações substitui o item abaixo.
 > das 18 tabelas. Os dois só apareceriam durante uma perda real de dados — o pior momento
 > possível — e em silêncio, porque estrutura, policies e portal continuam parecendo corretos.
 >
-> **O que ficou provado:** os passos 1-3 (projeto novo + `backup_schema.sql`) reconstroem a
-> estrutura inteira — 18 tabelas, 14 policies, RLS, 44 índices, Realtime, extensões — e o passo 4
-> passa a funcionar depois da correção do `row_id`.
+> A revisão de 31/07 encontrou mais duas falhas no próprio texto: o Caminho A mandava criar todo o
+> schema pelo dump e depois executar 18 `CREATE TABLE` não idempotentes; e o passo de validação
+> dizia que `check_views.mjs` rodaria “sem stub”, embora esse script sempre use fixtures. O runbook
+> agora usa uma única fonte de DDL, restaura dados separadamente e descreve o teste do portal com
+> honestidade.
+>
+> **O que ficou provado:** `backup_schema.sql` reconstitui a estrutura; os scripts NDJSON validam
+> bytes, JSON, contagens, ordem da FK, destino vazio e chaves opacas numa bancada offline. Isso
+> protege a mecânica local, mas ainda não substitui um ensaio contra Supabase real.
 >
 > **O que NÃO ficou provado — e por isso a pendência não está encerrada:**
 > - a restauração não foi levada até o fim: na medição, `tabela_vista_teste` seguia **vazia** e
@@ -284,8 +364,9 @@ verificações substitui o item abaixo.
 >
 > Enquanto esses três itens não forem cumpridos, **SEC-06 continua "mitigado", não "encerrado"**.
 >
-> Lição que já vale: nenhum gate do repositório detecta esse tipo de defeito. Todos conferem um
-> banco que já está de pé; nenhum tenta reconstruir um do zero.
+> Lição que já vale: o CI agora detecta regressões na mecânica do backup/importador, mas nenhum gate
+> consegue criar sozinho um projeto Supabase e provar a recuperação completa. O drill real segue
+> sendo o fechamento do item.
 
 ## O que este backup NÃO cobre
 

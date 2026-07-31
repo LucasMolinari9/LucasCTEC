@@ -17,7 +17,7 @@ histórico/eventos, empresas e relatórios. Os dados são mantidos pelo dono dir
   [`vendor/`](vendor/) (versão fixa, mesma origem) e é injetado dinamicamente pelo `app.js`.
   **Nenhum terceiro externo em runtime** — as fontes também são vendoradas.
 - O botão **PDF** usa a impressão nativa do navegador (`window.print()`) — sem dependência externa.
-- **Somente leitura de verdade:** a chave usada no site é a `anon` (pública por design); a
+- **Somente leitura de verdade:** a chave usada hoje no site é a JWT `anon` legada (pública por design); a
   segurança vem do **RLS + privilégio mínimo** no banco (o público só faz `SELECT`).
 
 ## Rodar localmente
@@ -53,6 +53,9 @@ ou de rede ficam de fora dele e rodam no CI:
 | `node scripts/check_realtime.mjs` | publicação Realtime × `RT_TABLES` | rede |
 | `node scripts/check_deriva.mjs` | deriva docs × banco | rede |
 | `node scripts/check_data_quality.mjs` | órfãos referenciais e `U+FFFD` no banco (pós-ETL) | rede |
+| `node scripts/check_grants.mjs` | RLS, grants, policies e funções expostas | rede |
+| `node tests/backup_rest.rig.mjs` | paginação, contagem, hash e chave publishable | nada |
+| `node tests/restore_rest.rig.mjs` | validação e travas do importador NDJSON | nada |
 
 O CI roda esses em workflows **separados de propósito**, para que um vermelho não esconda o
 outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
@@ -60,7 +63,9 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 [`semgrep.yml`](.github/workflows/semgrep.yml) (estático),
 [`deriva.yml`](.github/workflows/deriva.yml) (semanal + sob demanda),
 [`db-checks.yml`](.github/workflows/db-checks.yml) (semanal — Realtime e qualidade dos dados) e
-[`backup.yml`](.github/workflows/backup.yml) (backup semanal).
+[`backup.yml`](.github/workflows/backup.yml) (backup semanal),
+[`deploy-smoke.yml`](.github/workflows/deploy-smoke.yml) (produção e previews) e
+[`phase3-security.yml`](.github/workflows/phase3-security.yml) (contrato da migration + auditor).
 
 ## Publicação
 
@@ -73,18 +78,18 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 
 | Caminho | O que é |
 |---|---|
-| `index.html` | A marcação do portal (+ os `@font-face` das fontes vendoradas). |
+| `index.html` | A marcação do portal. |
 | `app.js` | Todo o JS, num IIFE. Dividido em seções com marcas `/* ===== TÍTULO ===== */`. |
-| `styles.css` | Todo o CSS. |
+| `styles.css` | Todo o CSS, inclusive os `@font-face` das fontes vendoradas. |
 | `vendor/` | `supabase-js` (versão fixa), fontes (Archivo, IBM Plex Mono/Sans) e o ícone. Nada disso vem de CDN em runtime. |
 | `manifest.webmanifest` | Manifest do PWA. |
 | `vercel.json` | Cabeçalhos de segurança (CSP) e cache do host (Vercel). |
 | `tests/` | Testes da lógica pura + o gate `check.js`. Ver [`tests/README.md`](tests/README.md). |
-| `scripts/` | Checagens que não cabem no gate offline (navegador, rede) + backup + snapshot de segurança. |
+| `scripts/` | Checagens de navegador/rede, backup, importador NDJSON e snapshot de segurança. |
 | `docs/` | Documentação técnica (abaixo). |
 | `CLAUDE.md` | Contexto detalhado do projeto para sessões de IA (mapa do código, banco, armadilhas). |
 | `CONTEXT.md` | Glossário do domínio (termos do cadastro de linhas). |
-| `.github/workflows/` | Os 6 workflows de CI (ver a tabela de testes acima). |
+| `.github/workflows/` | Os 8 workflows de automação e CI (ver a tabela de testes acima). |
 
 ### Documentação (`docs/`)
 
