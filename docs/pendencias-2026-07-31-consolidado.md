@@ -5,7 +5,8 @@ modelo) apontou, tudo que a **verificação contra o repositório real** apurou 
 apareceu nas sessões de 30 e 31/07. O objetivo é responder a uma pergunta: **o que ainda falta
 executar.**
 
-- **`main`:** `fda0152`. Gate verde.
+- **`main`:** `aac916c` (merge do #89). Gate verde. *(Era `fda0152` quando este documento foi
+  escrito; o #89 trouxe os três docs de 31/07 para a `main`.)*
 - **Fontes:** `docs/handoff-2026-07-30-auditoria-verificacao.md` (verificação do relatório),
   `docs/handoff-2026-07-31-prs-e-smoke.md`, `docs/handoff-2026-07-31-pr4-visibilidade.md`.
 - ⚠️ **Nada aqui foi medido contra os bancos vivos.** O ambiente do agente não alcança o Supabase
@@ -145,21 +146,27 @@ Ativar é ergonomia (achado vira anotação na linha do diff), não cobertura no
 
 ### 4.1 Force-push do rebase do #73
 
-A branch `agent/fase-3-hardening-moderado` foi rebaseada em `fda0152` **localmente**, não empurrada.
-Um conflito, em `docs/seguranca.md` § 9 — a seção reescrita no #88 horas antes, que o #73 também
-tinha reescrito por conta própria em 29/07.
+O rebase está **empurrado**, em `claude/fase3-rebased-aac916c` (base `aac916c`). A 1ª tentativa,
+`claude/fase3-rebased-fda0152`, se perdeu com o contêiner e foi refeita do zero. Um conflito, em
+`docs/seguranca.md` § 9 — a seção reescrita no #88 horas antes, que o #73 também tinha reescrito
+por conta própria em 29/07. Idêntico nas duas tentativas.
 
 **Resolução aplicada:** mantido o enquadramento do #88 (registro de decisão) e incorporado o
 controle novo que o #73 traz de fato — toda migração que cria tabela pública revoga
 `anon`/`authenticated` e liga RLS na mesma transação, com `check_migrations.mjs` cobrando no diff.
 O § 10 do #73 entrou inteiro. **Não** foi restaurado o roteiro detalhado do § 9.1.
 
-Falta decidir: empurrar (reescreve a história de um draft seu) ou revisar a resolução antes.
+A branch traz também as duas correções que faltavam: `branches: [main]` no `push:` do
+`phase3-security.yml` e o registro do pré-requisito da promoção (seção 5) no plano da Fase 3.
+`node tests/check.js` e `node scripts/check_migrations.mjs` passam contra ela.
 
-### 4.2 O handoff e este documento na `main`
+Falta decidir: promover
+(`git push --force-with-lease origin claude/fase3-rebased-aac916c:agent/fase-3-hardening-moderado`,
+que reescreve a história de um draft seu) ou revisar a resolução antes.
 
-Estão na branch `claude/handoff-audit-pr87-merge-5exd3g`, **sem PR aberto** — portanto sem gate
-disparado no GitHub.
+### 4.2 ✅ FECHADO — o handoff e este documento na `main`
+
+Entraram pelo **PR #89**, mergeado em 31/07 (`aac916c`), com os gates rodando no GitHub.
 
 ---
 
@@ -183,8 +190,10 @@ O problema é adiado. A migração move quatro RPCs de `public` para `audit`, re
 os quatro param — inclusive o diário, que o § 9.1 nomeia como o controle que compensa o default
 não-fechável do `supabase_admin`.
 
-**Pré-requisito da promoção, hoje não escrito em lugar nenhum:** migrar os quatro gates para a
-credencial de auditor **antes** de aplicar a migração em produção.
+**Pré-requisito da promoção:** migrar os quatro gates para a credencial de auditor **antes** de
+aplicar a migração em produção. ✅ **Já registrado** — quando este documento foi escrito não estava
+em lugar nenhum; agora tem seção própria em `docs/planos/fase-3-hardening-moderado.md` (mais o item
+7 dos critérios de promoção), na branch `claude/fase3-rebased-aac916c`.
 
 ---
 
