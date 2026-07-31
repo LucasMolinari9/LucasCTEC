@@ -63,6 +63,11 @@ efeitos. Rode com `NO_PROXY=127.0.0.1 node tests/<arquivo>`.
 - `backup_rest.rig.mjs` — prova que o backup pagina por **keyset** (não offset), monta a
   comparação lexicográfica da PK composta, e que dump incompleto **aborta** em vez de sair
   com cara de sucesso.
+- `ambientes.rig.mjs` — prova o gate de divergência teste × produção (`check_ambientes.mjs`):
+  que falta de tabela/coluna/RPC no teste é **erro** e sobra é **aviso** (a assimetria é o
+  ponto), que tabela vazia no teste não inventa achado de coluna, e que o baseline perdoa o
+  conhecido sem esconder o novo. Isola o script copiando-o para um diretório temporário com um
+  `app.js` falso — o código de produção não tem gancho de teste.
 - `restore_rest.rig.mjs` — prova que o restore **não escreve** sem `--executar`, que SHA-256
   divergente / arquivo truncado / arquivo fora do manifest abortam **antes** de qualquer
   escrita, que a ordem de inserção respeita a FK (`tabela_vista_teste` antes de

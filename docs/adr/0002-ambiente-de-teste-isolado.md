@@ -25,12 +25,25 @@ substituí-las por uma expressão impediria os quatro gates de localizar a confi
 
 ## Dívida assumida
 
-Os projetos de teste e produção mantêm duas cópias do schema manualmente. Não existe hoje um
-gate que detecte divergência entre elas. Mudanças de schema precisam ser aplicadas em produção
-antes ou junto do merge do código que depende delas, e o projeto Supabase Free de teste pode
-pausar após um período de inatividade. Como o `vercel.json` é comum a todos os deploys, a CSP de
-produção permite conexão com os dois projetos; a seleção de hostname impede que o código de
-produção escolha o projeto de teste.
+Os projetos de teste e produção mantêm duas cópias do schema manualmente. Mudanças de schema
+precisam ser aplicadas em produção antes ou junto do merge do código que depende delas, e o
+projeto Supabase Free de teste pode pausar após um período de inatividade. Como o `vercel.json` é
+comum a todos os deploys, a CSP de produção permite conexão com os dois projetos; a seleção de
+hostname impede que o código de produção escolha o projeto de teste.
+
+**Desde 31/07/2026 a divergência é vigiada** — `scripts/check_ambientes.mjs`, job `ambientes` do
+`db-checks.yml`, diário. Até essa data este parágrafo dizia "não existe hoje um gate que detecte
+divergência entre elas", e a mesma dívida estava registrada em outros três documentos; registrá-la
+quatro vezes não a pagava. O gate **não** exige que os dois bancos sejam iguais — eles divergem de
+propósito, porque a Fase 3 está aplicada só no teste. Ele exige que **tudo que o portal usa em
+produção também funcione no teste**: tabela legível, coluna presente, RPC executável por `anon`.
+Divergência na direção "teste tem a menos" é erro; "teste tem a mais" é aviso. A assimetria é o
+ponto — a primeira produz preview com tela vazia e **sem erro**, que é o modo de falha que esta
+ADR previa e ninguém conseguia detectar.
+
+O que ele **não** cobre, e continua dívida: índices, policies, RLS, grants e triggers do projeto
+de teste. Como `anon`, o gate vê o que um visitante veria; a postura interna do teste segue sem
+vigilância (o `check_grants.mjs` só olha produção).
 
 ## Status
 

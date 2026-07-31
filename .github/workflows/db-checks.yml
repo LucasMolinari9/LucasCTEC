@@ -6,10 +6,11 @@
 # escreva codlinha/cod_origem inexistente no pai não é barrado por ninguém — e o portal não
 # avisa: a tela fica vazia, sem erro. Este workflow é o alarme.
 #
+# ESCOPO: três dos quatro jobs (`realtime`, `qualidade`, `seguranca`) só enxergam PRODUÇÃO
+# (`Banco - Divat`, lwzsxuaqqeoamukduhev) — leem SB_URL/SB_KEY do app.js e não têm como apontar
+# para outro projeto. O quarto, `ambientes`, é a exceção e o motivo de existir: é o único job do
+# repositório que fala com os DOIS projetos, e vigia se o de teste ainda cobre o que o portal usa.
 #
-# ESCOPO: os scripts deste workflow só enxergam PRODUÇÃO (`Banco - Divat`,
-# lwzsxuaqqeoamukduhev) — leem SB_URL/SB_KEY do app.js e não têm como apontar para outro
-# projeto. O banco de TESTE (`divat - TESTE`) não é vigiado aqui nem em lugar nenhum.
 # Por que por CRON e não só em push: os scripts leem o BANCO, e mudança de dado (ou um clique no
 # painel do Supabase) não gera push. É a mesma razão do backup.yml e do cron do deriva.yml. O
 # filtro de `paths` cobre o caso em que o próprio script (ou a lista que ele confere) muda.
@@ -23,11 +24,12 @@
 # JOBS SEPARADOS, não steps do mesmo job, de propósito: em steps sequenciais o primeiro
 # vermelho aborta o job e esconde o resultado do segundo — e "um vermelho não esconde o outro"
 # é o padrão que o repo já segue ao ter ci/views/semgrep/deriva em arquivos distintos. Aqui os
-# TRÊS rodam em paralelo e reportam independentemente. O ticket #63 pediu um arquivo só; o
-# arquivo é um, os veredictos são três.
+# QUATRO rodam em paralelo e reportam independentemente. O ticket #63 pediu um arquivo só; o
+# arquivo é um, os veredictos são quatro.
 #
-# Nenhum segredo: os três usam a anon key pública que já está no app.js. Não há chave no
-# ambiente deste workflow — se algum dia precisar de service key, ela NÃO vem para cá.
+# Nenhum segredo: os quatro usam anon key pública que já está no app.js (o `ambientes` usa as
+# DUAS, produção e teste). Não há chave no ambiente deste workflow — se algum dia precisar de
+# service key, ela NÃO vem para cá.
 #
 # Os `uses:` estão presos ao SHA (o `# v4` ao lado é só legenda) — ver docs/semgrep.md
 # § "Actions presas ao SHA".
@@ -50,6 +52,8 @@ on:
       - scripts/data_quality_baseline.json
       - scripts/check_grants.mjs
       - scripts/security_baseline.json
+      - scripts/check_ambientes.mjs
+      - scripts/ambientes_baseline.json
       - docs/backup_schema.sql
       - docs/schema.md
       - .github/workflows/db-checks.yml
@@ -61,6 +65,8 @@ on:
       - scripts/data_quality_baseline.json
       - scripts/check_grants.mjs
       - scripts/security_baseline.json
+      - scripts/check_ambientes.mjs
+      - scripts/ambientes_baseline.json
       - docs/backup_schema.sql
       - docs/schema.md
       - .github/workflows/db-checks.yml
@@ -84,6 +90,25 @@ jobs:
           node-version: '20'
       - name: RT_TABLES (app.js) x publicacao supabase_realtime
         run: node scripts/check_realtime.mjs
+
+  # Único job deste repo que fala com os DOIS projetos Supabase. Os outros três acima, e o
+  # deriva.yml, só enxergam produção — e por isso nada detectava o teste divergir. Era dívida
+  # registrada em quatro documentos desde 28/07/2026, e paga em 31/07 com este script.
+  # Ele NÃO exige que os dois bancos sejam iguais (divergem de propósito: a Fase 3 está aplicada
+  # só no teste). Exige que tudo que o PORTAL usa em produção também funcione no teste, porque a
+  # falha na direção contrária é muda: preview com tela vazia e sem erro.
+  ambientes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+      - name: Divergencia teste x producao (o teste cobre o que o portal usa?)
+        run: node scripts/check_ambientes.mjs
 
   qualidade:
     runs-on: ubuntu-latest

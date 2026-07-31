@@ -62,10 +62,15 @@ coisas sobre "o banco" havendo dois. Ambos sa-east-1, plano Free (NANO):
 - `SB_URL`/`SB_KEY` (topo do `app.js`) são de **produção**; `SB_TESTE_URL`/`SB_TESTE_KEY` são de
   teste. As chaves são **anon (publishable)** — públicas por design; a segurança vem do
   **RLS + privilégio mínimo** (anon só lê).
-- **Os quatro gates vivos só enxergam PRODUÇÃO.** `check_deriva.mjs`, `check_realtime.mjs`,
+- **Quatro dos cinco gates vivos só enxergam PRODUÇÃO.** `check_deriva.mjs`, `check_realtime.mjs`,
   `check_data_quality.mjs` e `check_grants.mjs` extraem `SB_URL`/`SB_KEY` por regex do `app.js` —
-  não há flag, env var nem argumento para apontá-los para teste. **Nada no repositório vigia o
-  banco de teste**, e nada compara os dois (dívida assumida em `docs/adr/0002`).
+  não há flag, env var nem argumento para apontá-los para teste.
+- **O quinto compara os dois: `scripts/check_ambientes.mjs`** (job `ambientes` do `db-checks.yml`,
+  diário; bancada offline em `tests/ambientes.rig.mjs`). Ele **não** exige bancos iguais — exige
+  que **tudo que o portal usa em produção também funcione no teste** (tabela legível, coluna
+  presente, RPC executável por `anon`). Falta no teste é **erro**; sobra é aviso. Baseline em
+  `scripts/ambientes_baseline.json`. **Ainda descoberto:** índices, policies, RLS e grants do
+  teste — como `anon`, o gate vê o que um visitante veria, não a postura interna.
 - **⚠️ Teste NÃO é cópia fiel de produção.** A migração `20260729034018_phase3_moderate_hardening`
   (Fase 3) está aplicada **só no teste**, que por isso é **mais restrito**: menos RPCs para `anon`,
   diagnósticos movidos para o schema `audit`, `authenticated` sem nada. Consequência prática: um

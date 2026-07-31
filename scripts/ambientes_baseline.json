@@ -1,0 +1,6 @@
+{
+  "gerado_em": "2026-07-31",
+  "nota": "Divergências teste × produção CONHECIDAS e aceitas pelo check_ambientes.mjs. Cada entrada precisa de motivo escrito à mão. Isto não é perdão: divergência NOVA derruba o gate. Ao alinhar os ambientes, rode --atualizar-baseline para o gate voltar a apertar.",
+  "previsao_a_confirmar": "Este baseline nasce VAZIO de propósito, e isso é uma previsão que a primeira execução real vai confirmar ou desmentir. O raciocínio: a Fase 3 divergiu o teste de produção, mas divergiu no que o PORTAL não usa — ela moveu para o schema `audit` as quatro RPCs de diagnóstico (divat_api_shape, divat_security_shape, divat_data_quality, realtime_tables), e o app.js não chama nenhuma delas. As duas RPCs que ele chama (divat_busca_logradouro, divat_linhas_regiao) são exatamente as duas da allowlist da Fase 3, e a auditoria mediu `anon` com as 14 tabelas legíveis no teste. Logo, pelo invariante deste gate (cobertura, não igualdade), não deve haver achado. SE A PRIMEIRA EXECUÇÃO FALHAR, a previsão estava errada e o achado é real — investigue antes de baselinar.",
+  "achados": []
+}
