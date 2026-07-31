@@ -113,6 +113,10 @@ export const FIXTURES = {
   tabela_vista_teste: [
     linha('549000001', '549M', 'RIO DE JANEIRO X NITEROI', '101', 'PONTE'),
     linha('740000001', '740D', 'PETROPOLIS X TERESOPOLIS', '102', 'BR-495'),
+    // Linha CANCELADA: o cadastro real tem ~500 delas misturadas nos resultados (o hub não
+    // apaga linha extinta), então uma bancada só com linhas ativas não consegue ver barra de
+    // situação nenhuma funcionando. É a fixture do check_selecao_linha.mjs.
+    { ...linha('999000001', '999C', 'NITEROI X SAO GONCALO', '102', 'ALAMEDA'), cancelado: '2020-03-01' },
   ],
   codempresa_teste: [
     { codempresa: '101', nome_empresa: 'VIACAO ALFA', situacao: 'REGULAR', cassada: false, sob_intervencao: false },

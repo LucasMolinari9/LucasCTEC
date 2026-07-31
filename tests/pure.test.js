@@ -139,6 +139,23 @@ ok(P.isVigente({transferido:true}) === false,                      'isVigente tr
 ok(P.isLinhaAtiva({sub_judice:true}) === true && P.isVigente({sub_judice:true}) === false, 'sub judice: ativa mas NÃO vigente');
 ok(P.isLinhaAtiva({transferido:true}) === true && P.isVigente({transferido:true}) === false, 'transferida: ativa mas NÃO vigente');
 
+// --- filtrarSituacao (barra Todas/Ativas/Canceladas; mesma regra nas duas telas que listam linha) ---
+console.log('filtrarSituacao');
+{
+  const ativa = {codlinha:'1'}, canc = {codlinha:'2', cancelado:'2020-03-01'},
+        paral = {codlinha:'3', paralisado:true}, cancEparal = {codlinha:'4', cancelado:'2019-01-01', paralisado:true};
+  const todas = [ativa, canc, paral, cancEparal];
+  const cods = rs => rs.map(r=>r.codlinha).join(',');
+  ok(cods(P.filtrarSituacao(todas,'todas')) === '1,2,3,4',   'filtrarSituacao "todas" não filtra nada');
+  ok(cods(P.filtrarSituacao(todas,'ativas')) === '1',        'filtrarSituacao "ativas" tira cancelada E paralisada');
+  ok(cods(P.filtrarSituacao(todas,'canceladas')) === '2,4',  'filtrarSituacao "canceladas" pega toda cancelada, inclusive a também paralisada');
+  // valor desconhecido cai no "todas" — barra nova com opção a mais não pode sumir com a lista
+  ok(cods(P.filtrarSituacao(todas,'qualquer')) === '1,2,3,4','filtrarSituacao situação desconhecida → devolve tudo');
+  ok(P.filtrarSituacao([],'ativas').length === 0,            'filtrarSituacao lista vazia → vazia');
+  // paralisada NÃO é cancelada: some das "ativas" mas não aparece nas "canceladas"
+  ok(!P.filtrarSituacao(todas,'canceladas').includes(paral), 'filtrarSituacao paralisada não vira cancelada');
+}
+
 // --- norm ---
 console.log('norm');
 eq(P.norm('Niterói '),    'niteroi',     'norm acento + caixa + trim');

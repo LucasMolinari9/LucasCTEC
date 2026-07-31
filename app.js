@@ -1149,8 +1149,23 @@ function closeModal(){
   if (lastFocused && lastFocused.focus) { try { lastFocused.focus(); } catch(_){} lastFocused = null; }
   // rota: fechar pela UI desfaz a entrada criada na abertura (back) ou limpa o hash;
   // fechamento disparado pela PRÓPRIA rota (botão Voltar do navegador) não mexe no histórico.
+  //
+  // O `history.back()` só é seguro quando a entrada ANTERIOR ainda descreve o estado atual.
+  // Clicar numa linha DENTRO do modal (bindLineRows: `selectLine(...)` e logo `closeModal()`)
+  // muda a linha ativa e grava isso por replaceState — na entrada do modal, que o back()
+  // acabou de descartar. O usuário voltava para a entrada pré-modal, o `hashchange` chamava
+  // applyRoute e, sem `linha/` no hash, ela executava `setActiveLine(null)`: a seleção
+  // recém-feita era apagada. Sem linha ativa antes (cards que não exigem linha, como
+  // "Linhas por Localidade e Município") o resultado era não conseguir selecionar linha
+  // nenhuma por ali; com uma linha já ativa, a seleção revertia em silêncio para a antiga.
+  // Quando a linha mudou com o modal aberto, então, mantemos a entrada e só reescrevemos o
+  // hash (replaceState não dispara hashchange, logo não há applyRoute para desfazer nada).
+  // Efeito colateral aceito e desejável: o Voltar do navegador passa a desfazer a seleção.
   if (!_applyingRoute){
-    if (_modalPushed){ _modalPushed = false; history.back(); }
+    const linhaAgora = activeLine ? String(activeLine.codlinha) : null;
+    const empurrou = _modalPushed;
+    _modalPushed = false;
+    if (empurrou && linhaAgora === _lineAtPush) history.back();
     else syncHash();
   } else { _modalPushed = false; }
   if (window.__divatReload) location.reload();
@@ -2533,6 +2548,10 @@ async function codsPorLocalidade(term){
   return out;
 }
 async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
+  // capturados ANTES do primeiro await: a busca pode ser trocada enquanto esta está no ar, e
+  // quem escreve o resultado no fim precisa saber se ainda é a tentativa mais nova (ver o
+  // contrato do seam em MODAL / SISTEMA DE VIEWS).
+  const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   try{
     const termos = await termosLocalidade(a);
@@ -2560,7 +2579,7 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     if(b && bTipo==='municipio'){
       // localidade A × MUNICÍPIO B: interseção com as linhas que passam pelo município
       const cods = Object.entries(ibge).filter(([,v])=>norm(v.nome).includes(norm(b))).map(([c])=>c);
-      if(!cods.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(b)}".`); return; }
+      if(!cods.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(b)}".`); commitViewResult(view, gen, { pdfHTML:null }); return; }
       const munSet = new Set();
       for(const c of cods.slice(0,5)){ (await linhasNoMunicipio(c)).forEach(cl=>munSet.add(cl)); }
       rows = rows.filter(r=> munSet.has(r.codlinha));
@@ -2575,7 +2594,7 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     const fetchCods = extraCods.slice(0,250);
     let base = rows;
     if(fetchCods.length) base = rows.concat(await fetchLinesByCods(fetchCods, { limit: fetchCods.length }));
-    if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${esc(a)}" e "${esc(b)}".`:`Nenhuma linha encontrada para "${esc(a)}".`); return; }
+    if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${esc(a)}" e "${esc(b)}".`:`Nenhuma linha encontrada para "${esc(a)}".`); commitViewResult(view, gen, { pdfHTML:null }); return; }
     await getEmpresas();
     // seções de tarifa cujo NOME casa a(s) localidade(s) buscada(s), por linha — reproduz o
     // relatório oficial. Município B é só filtro de trânsito, não entra nos termos de seção.
@@ -2606,7 +2625,7 @@ async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
     const corteNote = corte>0 ? ` (${corte} linha(s) a mais não exibidas — refine a busca)` : '';
     const prefix = bannerTrunc(lineRows)
       + `<p class="doc-count">${base.length} linha(s) · ${titulo}${secNote}${corteNote}</p>`;
-    renderLocalidadeSecoes(host, base, secByLine, { prefixHTML: prefix });
+    renderLocalidadeSecoes(host, base, secByLine, { prefixHTML: prefix, view, gen });
   }catch(e){ host.innerHTML = errorBox(e.message); }
 }
 // 5 modos de busca da tela "Linhas por Localidade e Município" — cada botão de filtro decide
@@ -2797,6 +2816,20 @@ function paginateLines(container, rows, { grouped=false, pageSize=25, pdf=true, 
   // próprio mais rico (ex.: Município com meta/aviso).
   if(pdf && view) commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead(view.title)}${renderSlice(0, rows.length)}</div>` });
 }
+// Filtro de SITUAÇÃO das listas de linha — definição única, usada pelo `lineResults` (listas
+// paginadas) e pelo `renderLocalidadeSecoes` (relatório por localidade). Ficava só no
+// lineResults, então o card "Linhas por Localidade e Município" não tinha filtro nenhum;
+// duplicar a regra aqui faria as duas telas divergirem na definição de "ativa".
+// PURA (cópia em tests/pure.harness.js; testada).
+function filtrarSituacao(rows, st){
+  return st==='ativas'     ? rows.filter(isLinhaAtiva)
+       : st==='canceladas' ? rows.filter(r=>!!r.cancelado)
+       : rows;
+}
+// markup do seletor Todas/Ativas/Canceladas (id `lrStatus` — a CSS de `.loc-tools` já o cobre)
+function situacaoSelectHTML(){
+  return `<label>Situação <select id="lrStatus"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="canceladas">Canceladas</option></select></label>`;
+}
 // Lista de linhas com barra de filtro (situação) + agrupamento por empresa LIGADO por padrão,
 // com os grupos ordenados pelo RJ (codempresa). Padrão de qualquer consulta que lista linhas.
 // `prefixHTML` entra antes da barra (contadores/banner). Requer getEmpresas() já carregado.
@@ -2807,16 +2840,14 @@ function lineResults(host, rows, { prefixHTML='', pdf=true, view, gen } = {}){
   // (limit). A paginação abaixo exibe tudo em páginas — não corta mais no cliente.
   host.innerHTML = prefixHTML + bannerTrunc(rows)
     + `<div class="loc-tools">
-         <label>Situação <select id="lrStatus"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="canceladas">Canceladas</option></select></label>
+         ${situacaoSelectHTML()}
          <label><input type="checkbox" id="lrGroup" checked> Agrupar por empresa</label>
        </div>
        <div id="lrResult"></div>`;
   const result = host.querySelector('#lrResult');
   const statusSel = host.querySelector('#lrStatus'), groupChk = host.querySelector('#lrGroup');
   const paint = ()=>{
-    const st = statusSel.value;
-    const f = st==='ativas' ? rows.filter(r=>!r.cancelado && !r.paralisado)
-            : st==='canceladas' ? rows.filter(r=>r.cancelado) : rows;
+    const f = filtrarSituacao(rows, statusSel.value);
     if(!f.length){ result.innerHTML = emptyBox('Nenhuma linha com esse filtro.'); return; }
     if(groupChk.checked){
       // achata os grupos (empresas por RJ; linhas por codlinha) num array global e pagina
@@ -2869,29 +2900,74 @@ function secoesLocalidadeTable(secoes){
 // render do "Linhas por Localidade": bloco principal = linhas COM seção na localidade,
 // agrupadas por empresa e com as seções por linha (reproduz o relatório antigo); bloco
 // secundário = demais linhas da cobertura ampla (entram por itinerário/nome), como lista.
-function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='' } = {}){
-  const comSecao = base.filter(r=>secByLine.has(r.codlinha));
+// A barra de situação (Todas/Ativas/Canceladas) usa o MESMO seletor e a MESMA regra do
+// `lineResults` (via situacaoSelectHTML/filtrarSituacao): as duas telas listam linha e
+// precisam concordar no que é "ativa". O filtro repinta os DOIS blocos e refaz o
+// `bindLineRows` — quem entra na tela depois de filtrar tem que continuar clicável.
+function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='', view, gen } = {}){
+  host.innerHTML = prefixHTML
+    + `<div class="loc-tools">${situacaoSelectHTML()}</div><div id="locSecResult"></div>`;
+  const result = host.querySelector('#locSecResult');
+  const statusSel = host.querySelector('#lrStatus');
+  const paint = () => {
+    const rows = filtrarSituacao(base, statusSel.value);
+    // o contador do `prefixHTML` é o do resultado INTEIRO e fica acima da barra; ao filtrar,
+    // repetir só o total mentiria sobre o que está na tela — daí a contagem do recorte.
+    pintarLocalidadeSecoes(result, rows, secByLine, { total: base.length, view, gen });
+  };
+  statusSel.addEventListener('change', paint);
+  paint();
+}
+// uma linha do bloco "com seção": cabeçalho clicável (data-row → bindLineRows) + as seções dela
+function locLinhaSecHTML(r, secByLine){
+  const chips = [boolChip(r.cancelado,'canc.'), boolChip(r.paralisado,'paral.')].filter(Boolean).join(' ');
+  return `<div class="loc-linha-sec">
+    <div class="loc-linha-head clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r))}'><span class="mono">${esc(fmtCode(r.codlinha))}</span> <span>${fmtLineName(r.nome_ligacao)}</span> ${chips}</div>
+    ${secoesLocalidadeTable(secByLine.get(r.codlinha)||[])}</div>`;
+}
+// bloco "com seção" de uma FATIA de linhas já ordenada por empresa: os cabeçalhos de empresa
+// entram DENTRO da fatia, e a contagem do cabeçalho é a do grupo INTEIRO (`totais`), não a da
+// página — mesma convenção do `paginateLines` no modo agrupado.
+function locComSecaoHTML(fatia, secByLine, totais){
+  return [...groupBy(fatia, r=>r.codempresa||'—')].map(([cod,rs])=>
+    `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${totais.get(cod)} linha(s)</span></h3>`
+    + rs.map(r=>locLinhaSecHTML(r, secByLine)).join('')).join('');
+}
+const LOC_SEM_SECAO_OBS = 'Ligam os pontos buscados, mas não têm uma seção de tarifa com esse nome.';
+// Os DOIS blocos são paginados em 25/página (`paginate`/`paginateLines`), como as demais listas
+// de linha do portal — uma localidade grande chega a 400 linhas, cada uma com sua tabela de
+// seções, e despejar tudo no DOM de uma vez travava a tela.
+// Como só a fatia atual entra no DOM, o fallback do `baixarPdf` exportaria só a página aberta:
+// por isso o `pdfHTML` é escrito aqui pelo seam (`commitViewResult`), com os dois blocos
+// INTEIROS. Ver CLAUDE.md § "Paginação é SÓ de tela; o PDF sai INTEIRO".
+function pintarLocalidadeSecoes(host, base, secByLine, { total = base.length, view, gen } = {}){
+  // filtro que não sobra nada: zera o pdfHTML junto, senão o botão PDF baixaria o recorte anterior
+  if(!base.length){ host.innerHTML = emptyBox('Nenhuma linha com esse filtro.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+  const comSecao = [...groupBy(base.filter(r=>secByLine.has(r.codlinha)), r=>r.codempresa||'—')]
+    .sort((x,y)=>rjOrder(x[0],y[0])).flatMap(([,rs])=>[...rs].sort(byCodlinha));
   const semSecao = base.filter(r=>!secByLine.has(r.codlinha));
-  let html = prefixHTML;
+  const totais = countBy(comSecao, r=>r.codempresa||'—');
+
+  const cabSemSecao = `<h3 class="loc-emp-head mt22">Outras linhas <span class="loc-emp-rj">por itinerário ou nome · ${semSecao.length} linha(s)</span></h3>`
+    + `<div class="doc-obs tight">${LOC_SEM_SECAO_OBS}</div>`;
+  host.innerHTML = (base.length < total ? `<p class="doc-count">${base.length} de ${total} linha(s) com o filtro escolhido</p>` : '')
+    + (comSecao.length ? '<div id="locComSecao"></div>' : '')
+    + (semSecao.length ? cabSemSecao + '<div id="locSemSecao"></div>' : '');
+
+  const fatiaComSecao = (s,e) => locComSecaoHTML(comSecao.slice(s,e), secByLine, totais);
   if(comSecao.length){
-    const groups = [...groupBy(comSecao, r=>r.codempresa||'—')].sort((x,y)=>rjOrder(x[0],y[0]));
-    html += groups.map(([cod,rs])=>{
-      const linhas = [...rs].sort(byCodlinha).map(r=>{
-        const chips = [boolChip(r.cancelado,'canc.'), boolChip(r.paralisado,'paral.')].filter(Boolean).join(' ');
-        return `<div class="loc-linha-sec">
-          <div class="loc-linha-head clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r))}'><span class="mono">${esc(fmtCode(r.codlinha))}</span> <span>${fmtLineName(r.nome_ligacao)}</span> ${chips}</div>
-          ${secoesLocalidadeTable(secByLine.get(r.codlinha)||[])}</div>`;
-      }).join('');
-      return `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${rs.length} linha(s)</span></h3>${linhas}`;
-    }).join('');
+    paginate(host.querySelector('#locComSecao'), comSecao.length, fatiaComSecao,
+      { afterPaint: bindLineRows, unit:'linhas', view, gen });
   }
+  // `pdf:false`: o PDF deste documento é escrito abaixo, com os DOIS blocos — deixar o
+  // paginateLines escrever o dele sobrescreveria isso com só a lista secundária.
   if(semSecao.length){
-    html += `<h3 class="loc-emp-head mt22">Outras linhas <span class="loc-emp-rj">por itinerário ou nome · ${semSecao.length} linha(s)</span></h3>`
-      + `<div class="doc-obs tight">Ligam os pontos buscados, mas não têm uma seção de tarifa com esse nome.</div>`
-      + linhasTable(semSecao);
+    paginateLines(host.querySelector('#locSemSecao'), semSecao, { grouped:false, pdf:false, view, gen });
   }
-  host.innerHTML = html || emptyBox('Nenhuma linha encontrada.');
-  bindLineRows(host);
+  if(view) commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead(view.title)}`
+    + (comSecao.length ? fatiaComSecao(0, comSecao.length) : '')
+    + (semSecao.length ? cabSemSecao + linhasTable([...semSecao].sort(byCodlinha)) : '')
+    + '</div>' });
 }
 // tabela de empresas p/ escolher (código/nome/situação) — `extraChips(e)` acrescenta chips à situação
 function empresaChooserHTML(emps, { prompt, sitWidth = '150px', extraChips } = {}){
@@ -3235,6 +3311,10 @@ checarNovaVersao();                                              // referência 
    ================================================================ */
 let _applyingRoute = false;   // aplicando uma rota → runView/selectLine/selectTopic não reescrevem o hash
 let _modalPushed  = false;    // a abertura do modal criou uma entrada de histórico?
+// codlinha da linha ativa NO MOMENTO em que o modal empurrou sua entrada de histórico.
+// Serve para o closeModal saber se a entrada anterior ainda descreve o estado atual — ver o
+// comentário longo lá.
+let _lineAtPush   = null;
 
 // estado atual → hash. `push:true` cria entrada de histórico (só na ABERTURA do modal —
 // é o que faz o Voltar do navegador fechar o modal em vez de sair do site). Trocar de tópico no
@@ -3249,7 +3329,7 @@ function syncHash({ push = false } = {}){
   const alvoHash = parts.length ? target : '';
   if ((location.hash || '') === alvoHash) return;
   try {
-    if (push){ history.pushState(null, '', target); _modalPushed = true; }
+    if (push){ history.pushState(null, '', target); _modalPushed = true; _lineAtPush = activeLine ? String(activeLine.codlinha) : null; }
     else history.replaceState(null, '', target);
   } catch(_){ /* file:// ou contexto sem History API → segue sem rota */ }
 }

@@ -113,6 +113,9 @@ const canon = [
   ['boolChip',             'chip chip-on'],
   ['situacaoHTML',         'const situacaoHTML = r => r.cancelado'],
   ['isLinhaAtiva',         'const isLinhaAtiva = r => !r.cancelado && !r.paralisado;'],
+  // filtrarSituacao é a definição ÚNICA do "Ativas/Canceladas" das barras de situação —
+  // duas telas dependem dela concordarem, então o trecho vigiado é o corpo inteiro.
+  ['filtrarSituacao',      "st==='canceladas' ? rows.filter(r=>!!r.cancelado)"],
   ['isVigente',            'const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;'],
   ['norm',                 "normalize('NFD')"],
   ['yearOf',               'parseInt(String(d).slice(0,4),10)'],
