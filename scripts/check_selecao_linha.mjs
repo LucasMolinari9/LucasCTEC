@@ -140,8 +140,16 @@ if (clicaveis) {
   const dep = await estado();
   check(dep.banner, 'clicar numa linha do resultado a deixa SELECIONADA (banner visível)',
     dep.banner ? dep.bannerTxt : `banner escondido · hash "${dep.hash}"`);
-  check(/^Linha /.test(dep.chip), 'a linha selecionada fica disponível para os cards que a exigem',
-    dep.chip || '(sem chip)');
+  // O chip "Linha X" só existe no card que EXIGE linha — e ele não mora no tópico onde a busca
+  // começou. A checagem entra no tópico dono desses cards (clicando na sidebar, como o usuário
+  // faria: trocar de tópico por `location.hash` à mão passaria por uma rota sem `linha/` e
+  // apagaria justamente a seleção que estamos conferindo). Se um dia o card needs-line mudar de
+  // tópico de novo, é este seletor que muda — o resto da asserção segue valendo.
+  await page.click('.topic-btn[data-topic="doc"]');
+  await page.waitForSelector('.card.needs-line .need-chip');
+  const { chip } = await estado();
+  check(/^Linha /.test(chip), 'a linha selecionada fica disponível para os cards que a exigem',
+    chip || '(sem chip)');
   check(/linha\//.test(dep.hash), 'o hash conserva a linha selecionada (deep link continua válido)', dep.hash);
 }
 

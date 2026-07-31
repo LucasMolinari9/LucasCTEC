@@ -241,10 +241,15 @@ const SECTIONS = [
   // Documentos: os mais consultados primeiro; cada descrição diz o que o DOCUMENTO contém
   // (a instrução "busque a linha…" repetida virava ruído — a busca fica dentro do card).
   { key:'doc', name:'Linhas',
-    icon:'file', desc:'Quadro de horários, tarifas, frota, histórico e estrutura de cada linha regular.',
+    icon:'file', desc:'Itinerários, quadro de horários, tarifas, seções, frota, histórico e estrutura de cada linha regular.',
     items:[
+      // Itinerários e Seções por Ligação vivem aqui (não em "Consultas"): são documentos de UMA
+      // linha, como os demais deste tópico — o que "Consultas" reúne são buscas que partem de
+      // logradouro/terminal/localidade/empresa para CHEGAR às linhas.
+      ['route','Itinerários','Percurso por sentido: logradouros e municípios','itinerarios',false],
       ['clock','Quadro de Horários','Partidas por sentido e dia — por linha ou empresa','quadroHorarios',false],
       ['ticket','Tarifas','Seções e valores vigentes — por linha ou empresa','tarifas',false],
+      ['ruler','Seções por Ligação','Seções que compõem uma linha','secoesPorLigacao',true],
       ['history','Histórico da Linha','Alterações e eventos registrados','historicoLinha',false],
       ['bus','Frota','Frota operacional e reserva por tipo de veículo','frota',false],
       ['structure','Estrutura Operacional','Consolidado: cadastro, seções, itinerário, horários e frota','estrutura',false],
@@ -259,16 +264,12 @@ const SECTIONS = [
       ['fleet','Frota por Empresa','Frota consolidada por operadora e hierarquia','frotaPorEmpresa',false],
     ]},
   { key:'lig', name:'Consultas',
-    icon:'hub', desc:'Percurso das linhas e busca por logradouro, terminal, localidade ou município.',
+    icon:'hub', desc:'Busca de linhas por logradouro, terminal, localidade ou município.',
     items:[
-      // Itinerários vem primeiro: é o único documento do tópico (percurso de UMA linha); os
-      // demais são buscas que partem de logradouro/terminal/localidade para chegar às linhas.
-      ['route','Itinerários','Percurso por sentido: logradouros e municípios','itinerarios',false],
       ['signpost','Ligações por Logradouro','Linhas que passam por uma via','ligacoesPorLogradouro',false],
       ['map','Município e Região','Linhas por origem e destino','municipioRegiao',false],
       ['pin','Linhas por Localidade e Município','Busque por seção, "via" ou cruze localidades/municípios','localidades',false],
       ['hub','Ligações por Terminais','Linhas que atendem um terminal','ligacoesPorTerminal',false],
-      ['ruler','Seções por Ligação','Seções que compõem uma linha','secoesPorLigacao',true],
     ]},
   { key:'ger', name:'Portarias', direct:'portarias',
     icon:'law', desc:'Portarias e legislação — busca por número, assunto ou texto.',
