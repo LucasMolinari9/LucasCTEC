@@ -1,5 +1,6 @@
 {
   "gerado_em": "2026-07-27",
+  "projeto": "producao — `Banco - Divat`, ref lwzsxuaqqeoamukduhev. Esta baseline descreve o banco de PRODUCAO e so ele; o projeto de teste (`divat - TESTE`, gontnlfmothfglssbyyk) nao e coberto por gate nenhum. Campo acrescentado em 31/07/2026 (achado 3 da auditoria cruzada): ate entao a baseline nao dizia de qual banco falava.",
   "nota": "Dívida de integridade conhecida. Cada entrada é dado para consertar; ao consertar, rode --atualizar-baseline. Só entra aqui o que pode DERRUBAR o gate — erro DEPOIS da reclassificação por natureza feita no check_data_quality.mjs (evento_teste órfã é aviso, não erro; o porquê está no comentário REBAIXADOS_A_AVISO do script).",
   "como_listar_os_orfaos": "select 'itinerario_teste' as tabela, codlinha, count(*) as linhas from itinerario_teste i where codlinha is not null and not exists (select 1 from tabela_vista_teste t where t.codlinha = i.codlinha) group by 1,2 -- repita o padrão para qh_teste, qh_predeterminado_teste, evento_teste",
   "orfaos_conhecidos": {

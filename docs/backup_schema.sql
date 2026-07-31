@@ -1,6 +1,13 @@
 -- ============================================================================
--- Portal DIVAT (bd_teste) — SCHEMA-ONLY backup (estrutura, sem dados)
--- Gerado ao vivo em 2026-07-16 a partir do banco de produção (lwzsxuaqqeoamukduhev).
+-- Portal DIVAT — SCHEMA-ONLY backup (estrutura, sem dados) do banco de PRODUÇÃO
+-- (`Banco - Divat`, ref lwzsxuaqqeoamukduhev). Gerado ao vivo em 2026-07-16.
+--
+-- ESCOPO: esta é a baseline de PRODUÇÃO. O projeto de teste (`divat - TESTE`,
+-- gontnlfmothfglssbyyk) NÃO é descrito por este arquivo e hoje diverge dele — a Fase 3
+-- (supabase/migrations/) está aplicada só lá. Rodar este arquivo contra o teste o traria de
+-- volta para a postura de produção, que é MENOS restrita: não faça isso sem querer.
+-- Até 31/07/2026 a linha 2 dizia `bd_teste` enquanto a 3 dizia "produção" — dois nomes para o
+-- mesmo alvo, em linhas seguidas, sendo que `bd_teste` era o nome antigo da própria produção.
 --
 -- O QUE ISTO É: reconstrói tabelas, PK/FK, índices, RLS policies, grants,
 -- funções, trigger e extensões — tudo que o CSV exportado pelo Table Editor

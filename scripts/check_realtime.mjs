@@ -1,5 +1,12 @@
 // check_realtime.mjs — Checagem VIVA da sincronização do Realtime (RT_TABLES ↔ banco).
 //
+// ⚠️ ESCOPO: este gate só enxerga PRODUÇÃO (`Banco - Divat`, ref lwzsxuaqqeoamukduhev). Ele extrai
+// SB_URL/SB_KEY por regex do app.js, que são literais de produção — NÃO há flag, variável de
+// ambiente nem argumento para apontá-lo para o projeto de teste. Consequência, e é o ponto: o
+// banco de TESTE (`divat - TESTE`, gontnlfmothfglssbyyk) não é vigiado por este nem por nenhum
+// outro gate do repositório, e nada compara os dois. Dívida registrada em docs/adr/0002.
+// (Dito aqui em 31/07/2026 — achado 3 da auditoria cruzada. Antes, só a ADR-0002 sabia disso.)
+//
 // O teste offline tests/realtime.test.js garante que o lado do JS é consistente
 // (VIEW_TABLES ⊆ RT_TABLES e RT_TABLES == a lista esperada), mas essa lista esperada é
 // mantida À MÃO — pode driftar da publicação real do Postgres. Este script fecha essa
@@ -11,7 +18,9 @@
 //
 // Requer apenas Node 18+ (fetch nativo). Nenhuma dependência. Não precisa de chave no
 // ambiente: usa a URL e a anon key que já estão públicas no app.js, e uma função RPC
-// public.realtime_tables() (SECURITY DEFINER, EXECUTE p/ anon) que lista a publicação.
+// public.realtime_tables() (SECURITY INVOKER, EXECUTE p/ anon) que lista a publicação.
+// (Dizia DEFINER até 31/07/2026; a função nunca declarou `SECURITY DEFINER`, e a baseline
+// docs/backup_schema.sql registra desde 26/07 que INVOKER basta e é mais seguro.)
 // Sai com código 0 se bate, 1 se há divergência (ou erro).
 
 import { readFile } from 'node:fs/promises';

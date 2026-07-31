@@ -12,7 +12,8 @@ instruir a torná-lo privado; quem quiser reverter a decisão reabre esta ADR.
 
 **Por quê:** a segurança do portal nunca dependeu do sigilo do código. Ela está no banco — RLS
 ligado em todas as tabelas, `anon` com SELECT e nada além, objeto novo nascendo fechado — e isso
-é verificado contra o banco vivo pelos gates, não presumido. A chave `anon` é pública por
+é verificado contra o banco vivo **de produção** pelos gates, não presumido (eles não alcançam o
+projeto de teste — ver `CLAUDE.md` § Supabase). A chave `anon` é pública por
 projeto, e o `app.js` é servido a todo visitante: o código já era legível por qualquer um antes
 da mudança de visibilidade. O que um repo privado escondia era a **prosa**, não a superfície de
 ataque.
@@ -36,7 +37,7 @@ existe. O `CLAUDE.md` continua registrando, por inteiro e com a medição que o 
 o gate `check_grants.mjs` rodar diariamente e de o `backup_schema.sql` revogar tudo que não é
 SELECT. Regra sem lastro é regra que a próxima faxina apaga por parecer redundante — foi assim que
 a versão anterior daquele parágrafo pôde afirmar o oposto do medido por dois dias. Sigilo não é o
-que protege o banco aqui; o gate diário é.
+que protege produção aqui; o gate diário é.
 
 ## Consequências verificáveis
 

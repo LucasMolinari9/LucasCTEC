@@ -1,11 +1,25 @@
+# Dois servidores MCP, um por projeto Supabase. Os nomes importam: `supabase` é PRODUÇÃO.
+# Comentário simétrico nos dois blocos desde 31/07/2026 — antes o bloco de produção não tinha
+# nenhum, e só o de teste era explicado, o que obrigava a decodificar o ref de cabeça para saber
+# qual era qual (achado 3 da auditoria cruzada).
+#
+# O OAuth de cada servidor é feito pelo dono; a configuração aqui não autoriza nada sozinha.
+
+# Projeto `Banco - Divat` — PRODUÇÃO. É o banco que o portal publicado lê, o único que os quatro
+# gates vivos (check_deriva, check_realtime, check_data_quality, check_grants) verificam, e o
+# único com backup. `read_only=true`: agente nenhum escreve aqui. Alteração de schema em produção
+# é ato manual do dono, e a Fase 3 tem pré-requisito próprio — ver
+# docs/planos/fase-3-hardening-moderado.md.
 [mcp_servers.supabase]
 url = "https://mcp.supabase.com/mcp?project_ref=lwzsxuaqqeoamukduhev&read_only=true&features=docs,database,debugging,development"
 auth = "oauth"
 
-# Projeto `divat - TESTE`. Até 29/07/2026 os dois agentes só enxergavam produção, então nenhum
-# conseguia inspecionar o ambiente de teste nem para diagnosticar. Continua `read_only=true`: a
-# escrita no banco de teste é da migração versionada em supabase/migrations/, não de agente.
-# O OAuth de cada servidor é feito pelo dono; a configuração aqui não autoriza nada sozinha.
+# Projeto `divat - TESTE` — TESTE (previews, localhost, hostname desconhecido). Até 29/07/2026 os
+# dois agentes só enxergavam produção, então nenhum conseguia inspecionar o ambiente de teste nem
+# para diagnosticar. Continua `read_only=true`: a escrita no banco de teste é da migração
+# versionada em supabase/migrations/, não de agente.
+# ⚠️ Este projeto NÃO é cópia fiel de produção: a Fase 3 está aplicada só aqui, o que o torna
+# mais restrito. Nenhum gate do repositório o vigia.
 [mcp_servers.supabase-teste]
 url = "https://mcp.supabase.com/mcp?project_ref=gontnlfmothfglssbyyk&read_only=true&features=docs,database,debugging,development"
 auth = "oauth"

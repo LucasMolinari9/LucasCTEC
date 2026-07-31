@@ -54,6 +54,10 @@ ou de rede ficam de fora dele e rodam no CI:
 | `node scripts/check_deriva.mjs` | deriva docs × banco | rede |
 | `node scripts/check_data_quality.mjs` | órfãos referenciais e `U+FFFD` no banco (pós-ETL) | rede |
 
+> Os quatro gates que falam com o banco (`check_realtime`, `check_deriva`, `check_data_quality`
+> e `check_grants`) só enxergam **produção** — eles leem `SB_URL`/`SB_KEY` do `app.js` e não têm
+> como apontar para outro projeto. O banco de teste não é vigiado por nenhum deles.
+
 O CI roda esses em workflows **separados de propósito**, para que um vermelho não esconda o
 outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 [`views.yml`](.github/workflows/views.yml) (navegador),

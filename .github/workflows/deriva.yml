@@ -5,6 +5,10 @@
 # OpenAPI de `anon` (mesma anon key pública do app.js — nenhum segredo aqui) e compara com o
 # que CLAUDE.md / docs/schema.md / app.js afirmam.
 #
+#
+# ESCOPO: os scripts deste workflow só enxergam PRODUÇÃO (`Banco - Divat`,
+# lwzsxuaqqeoamukduhev) — leem SB_URL/SB_KEY do app.js e não têm como apontar para outro
+# projeto. O banco de TESTE (`divat - TESTE`) não é vigiado aqui nem em lugar nenhum.
 # Por que SEMANAL além de push/PR: a deriva nasce de mudança NO BANCO (que não gera push)
 # tanto quanto de mudança nos docs — mesma razão do backup.yml. O filtro de `paths` cobre o
 # lado do repo; o cron cobre o lado do banco.

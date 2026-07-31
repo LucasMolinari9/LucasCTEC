@@ -1,5 +1,12 @@
 // check_deriva.mjs — Checagem VIVA de deriva docs × banco (a guarda que faltava).
 //
+// ⚠️ ESCOPO: este gate só enxerga PRODUÇÃO (`Banco - Divat`, ref lwzsxuaqqeoamukduhev). Ele extrai
+// SB_URL/SB_KEY por regex do app.js, que são literais de produção — NÃO há flag, variável de
+// ambiente nem argumento para apontá-lo para o projeto de teste. Consequência, e é o ponto: o
+// banco de TESTE (`divat - TESTE`, gontnlfmothfglssbyyk) não é vigiado por este nem por nenhum
+// outro gate do repositório, e nada compara os dois. Dívida registrada em docs/adr/0002.
+// (Dito aqui em 31/07/2026 — achado 3 da auditoria cruzada. Antes, só a ADR-0002 sabia disso.)
+//
 // As 8 divergências da auditoria de 26/07/2026 nasceram todas do mesmo jeito: um fato do
 // banco copiado à mão para um doc (CLAUDE.md, docs/schema.md, docs/seguranca.md,
 // docs/backup_schema.sql) e nunca mais conferido. Este script fecha o laço para os fatos
@@ -35,8 +42,14 @@ import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-// Nomes que casam o padrão de tabela mas NÃO são tabelas do schema public:
-const NAO_TABELA = new Set(['bd_teste']); // bd_teste = nome do projeto Supabase
+// Nomes que casam o padrão `*_teste` mas NÃO são tabelas do schema public.
+// `bd_teste` é o nome ANTIGO do projeto Supabase de produção (hoje `Banco - Divat`). Em
+// 31/07/2026 ele saiu dos títulos do schema.md e do backup.md, e a intenção era apagar esta
+// exceção junto — ela existia para contornar aqueles títulos. Ficou porque o CLAUDE.md passou a
+// citar o nome antigo de propósito, na nota que explica que ele é resíduo; e o varredor abaixo
+// lê o CLAUDE.md. Ou seja: a exceção continua carregando peso, só que por outro motivo.
+// Regra geral: nome de PROJETO não é nome de tabela, e o padrão `*_teste` não distingue os dois.
+const NAO_TABELA = new Set(['bd_teste']);
 // Staging do ETL: existem no banco mas são invisíveis para anon DE PROPÓSITO (RLS sem
 // policy, sem grant) — o OpenAPI de anon não as lista, então não dá para conferi-las daqui.
 const STAGING = new Set(['evento_dados', 'evento_textos', 'portaria_data', 'portaria_texto_teste']);

@@ -41,9 +41,36 @@ exibe e **atualiza ao vivo** (Realtime).
   ser reaberto lá, senão vira 404.
 
 ## Supabase
-- Projeto: **`bd_teste`** · ref **`lwzsxuaqqeoamukduhev`** · região sa-east-1.
-- `SB_URL` e `SB_KEY` ficam no topo do `app.js`. A chave é a **anon (publishable)** — pública por
-  design; a segurança vem do **RLS + privilégio mínimo** (anon só lê).
+
+**São DOIS projetos.** Até 31/07/2026 esta seção declarava um só, e o ref do outro não aparecia
+em nenhuma linha deste arquivo — foi a raiz do achado 3 da auditoria cruzada: docs afirmando
+coisas sobre "o banco" havendo dois. Ambos sa-east-1, plano Free (NANO):
+
+| Papel | Nome no painel | Ref | Quem usa |
+|---|---|---|---|
+| **Produção** | `Banco - Divat` | `lwzsxuaqqeoamukduhev` | os 3 domínios de `HOSTS_PROD` |
+| **Teste** | `divat - TESTE` | `gontnlfmothfglssbyyk` | preview, `localhost`, hostname desconhecido |
+
+> **`bd_teste` era o nome ANTIGO do projeto de produção**, e ficou pelo repo até 31/07/2026 —
+> inclusive como título do `schema.md` e do `backup.md`. Num projeto em que toda tabela se chama
+> `*_teste` e existe um projeto de teste de verdade, era um nome que fazia o leitor concluir o
+> oposto. Se encontrar `bd_teste` em algum lugar, é resíduo: o nome não existe mais.
+
+- **Daqui para baixo, esta seção descreve PRODUÇÃO.** A escolha do projeto em runtime é do
+  `app.js` (`selecionarSupabase`, fail-closed) e o racional está em
+  `docs/adr/0002-ambiente-de-teste-isolado.md`.
+- `SB_URL`/`SB_KEY` (topo do `app.js`) são de **produção**; `SB_TESTE_URL`/`SB_TESTE_KEY` são de
+  teste. As chaves são **anon (publishable)** — públicas por design; a segurança vem do
+  **RLS + privilégio mínimo** (anon só lê).
+- **Os quatro gates vivos só enxergam PRODUÇÃO.** `check_deriva.mjs`, `check_realtime.mjs`,
+  `check_data_quality.mjs` e `check_grants.mjs` extraem `SB_URL`/`SB_KEY` por regex do `app.js` —
+  não há flag, env var nem argumento para apontá-los para teste. **Nada no repositório vigia o
+  banco de teste**, e nada compara os dois (dívida assumida em `docs/adr/0002`).
+- **⚠️ Teste NÃO é cópia fiel de produção.** A migração `20260729034018_phase3_moderate_hardening`
+  (Fase 3) está aplicada **só no teste**, que por isso é **mais restrito**: menos RPCs para `anon`,
+  diagnósticos movidos para o schema `audit`, `authenticated` sem nada. Consequência prática: um
+  card que funciona em produção pode falhar no preview por falta de RPC, e **o sintoma é tela
+  vazia sem erro**. Ao depurar preview, suspeite disto antes de suspeitar do seu código.
 - **RLS / segurança (LER COM ATENÇÃO):**
   - Todas as tabelas têm RLS ligado; cada tabela de consulta tem policy `anon_read_*` (SELECT).
   - O portal é **read-only de verdade**: `anon` e `authenticated` têm **apenas SELECT** nas 14
@@ -230,7 +257,8 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    O CI (`.github/workflows/semgrep.yml`) roda as duas metades. Runbook e como escrever regra
    nova: **`docs/semgrep.md`**.
 2c. **Deriva docs×banco — `node scripts/check_deriva.mjs`** (precisa de rede; irmão do
-   `check_realtime.mjs`, mesma anon key do `app.js`). Compara a visão de `anon` do banco
+   `check_realtime.mjs`, mesma anon key do `app.js`; **só olha produção**, como os outros três —
+   ver § Supabase). Compara a visão de `anon` do banco
    (RPC `divat_api_shape()` — o OpenAPI do PostgREST deste projeto é restrito à service_role)
    com o que o repo afirma: toda tabela citada no `CLAUDE.md`/`docs/schema.md` existe no banco;
    toda coluna do diagrama mermaid do `docs/schema.md` existe na tabela real; toda RPC chamada
@@ -278,7 +306,7 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    cada. **Consequência prática: as views dessas linhas renderizam VAZIAS, sem erro** — é
    exatamente o modo de falha que a issue #63 descreve, já acontecendo.
    (U+FFFD e `codempresa` inválida: zero achados, os dois limpos.)
-   **Órfã não quer dizer a mesma coisa em toda tabela** (apurado em 27/07/2026, contra o banco):
+   **Órfã não quer dizer a mesma coisa em toda tabela** (apurado em 27/07/2026, contra produção):
    as 7 de `evento_teste` são **atos reais de 1974–1996**, da época do DTC/RJ, de linhas
    anteriores ao cadastro atual — e linha extinta **não some** do cadastro (o hub tem a coluna
    `cancelado`, com **500 linhas** marcadas assim), então órfã em `evento_teste` não é rastro de
@@ -323,7 +351,7 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
 - **CSS — dropdown da busca:** o dropdown é inserido **dentro de `.selector`**. A regra do botão
   verde usa **`.selector > button`** (filho direto) de propósito — **não** use `.selector button`,
   senão os `<button>` dos resultados herdam o fundo verde do "Abrir linha".
-- **Encoding dos dados:** o banco está **limpo de U+FFFD** (corrigido em 21/07/2026 — ver
+- **Encoding dos dados:** produção está **limpa de U+FFFD** (corrigido em 21/07/2026 — ver
   CHANGELOG). **Atenção ETL:** importar com encoding errado recria o problema — **sempre UTF-8**.
 - **Estética:** topo navy + faixa verde fina (identidade DETRO/DIVAT); banner da linha em navy
   com faixa verde inferior. Manter esse idioma visual ao criar telas novas.

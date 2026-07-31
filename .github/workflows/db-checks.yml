@@ -6,6 +6,10 @@
 # escreva codlinha/cod_origem inexistente no pai não é barrado por ninguém — e o portal não
 # avisa: a tela fica vazia, sem erro. Este workflow é o alarme.
 #
+#
+# ESCOPO: os scripts deste workflow só enxergam PRODUÇÃO (`Banco - Divat`,
+# lwzsxuaqqeoamukduhev) — leem SB_URL/SB_KEY do app.js e não têm como apontar para outro
+# projeto. O banco de TESTE (`divat - TESTE`) não é vigiado aqui nem em lugar nenhum.
 # Por que por CRON e não só em push: os scripts leem o BANCO, e mudança de dado (ou um clique no
 # painel do Supabase) não gera push. É a mesma razão do backup.yml e do cron do deriva.yml. O
 # filtro de `paths` cobre o caso em que o próprio script (ou a lista que ele confere) muda.

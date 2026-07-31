@@ -58,14 +58,25 @@ Escreva um mini-spec curto (pode ser só no chat, não precisa virar arquivo) co
 
 Quebre a spec nesta ordem — cada item é um passo verificável:
 
-1. [ ] Migration/DDL no Supabase (via painel/service role — dono do dado).
+> **EM QUAL BANCO?** São **dois** projetos Supabase — produção (`Banco - Divat`,
+> `lwzsxuaqqeoamukduhev`) e teste (`divat - TESTE`, `gontnlfmothfglssbyyk`). Este checklist tem
+> como alvo **produção**, que é o que o portal publicado lê e o único que os gates vigiam. Se a
+> mudança for para o teste, diga isso explicitamente: os passos 8 e o `check_deriva.mjs` **não
+> alcançam o teste** e vão continuar verdes sem terem olhado para o que você mudou.
+> Ver `CLAUDE.md` § Supabase.
+
+1. [ ] **Migração versionada em `supabase/migrations/`** — desde o PR #73 (31/07/2026), toda
+   alteração de schema é migração, não DDL solta no painel. Tabela pública nova liga RLS e
+   revoga `anon`/`authenticated` na **mesma** migração; RPC anônima nova é proibida por padrão
+   (allowlist em `scripts/check_migrations.mjs`). Aplicar continua sendo ato manual do dono.
 2. [ ] Policy `anon_read_*` (SELECT only) + conferir RLS ligado.
 3. [ ] Índice(s).
 4. [ ] `alter publication supabase_realtime add table public.<tabela>;`
 5. [ ] `app.js`: loader/card + `RT_TABLES` + `VIEW_TABLES` da(s) view(s) + lookups indiretos.
 6. [ ] Atualizar `docs/backup_schema.sql` e `docs/schema.md` se a estrutura mudou.
-7. [ ] `node tests/check.js` (sintaxe, cópias `*.harness.js`, anti-drift, `<script>` inline).
-8. [ ] `scripts/check_realtime.mjs` (checagem viva do Realtime contra o banco).
+7. [ ] `node tests/check.js` (sintaxe, cópias `*.harness.js`, anti-drift, `<script>` inline)
+   **e `node scripts/check_migrations.mjs`** (contrato da migração, offline).
+8. [ ] `scripts/check_realtime.mjs` (checagem viva do Realtime — **contra produção**).
 9. [ ] Push em branch (não `main`) → preview deploy → conferir manualmente no preview.
 10. [ ] `/code-review` antes do merge.
 11. [ ] Merge na `main` → bump do carimbo de versão (`#verTag`) se for algo que o usuário

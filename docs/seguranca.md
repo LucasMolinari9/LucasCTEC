@@ -5,6 +5,18 @@ da auditoria de 23/07/2026 (com o teste de invasão real), o que só o dono pode
 checklist para revisar de tempos em tempos. Complementa a seção **RLS / segurança** do
 `CLAUDE.md` (regras técnicas) e o `docs/backup.md` (rede de segurança de dados).
 
+> **Escopo: o projeto Supabase de PRODUÇÃO** — `Banco - Divat`, ref `lwzsxuaqqeoamukduhev`.
+> Toda medição deste documento (advisors, grants, o teste de invasão da § 4, as contagens da
+> § 3) foi feita contra ele. Isto precisou ser dito em 31/07/2026: até então o arquivo não tinha
+> **nenhuma** referência de projeto, embora existam **dois** — achado 3 da auditoria cruzada.
+>
+> **O que isso implica, e é a parte que importa:** o projeto de teste (`divat - TESTE`,
+> `gontnlfmothfglssbyyk`) **não é coberto por nada aqui**, e nenhum gate do repositório olha para
+> ele. Onde este manual disser que um controle "é verificado pelo gate diário, não presumido",
+> leia **em produção**. Para o teste, o checklist manual continua sendo a única verificação —
+> e há um caso registrado de divergência real: quando o `backup_schema.sql` foi rodado num
+> projeto novo, as 18 tabelas nasceram com TRUNCATE para `anon` (§ 9.1).
+
 ## 1. Em uma frase
 O portal é **somente leitura de verdade**: a chave que vai ao navegador (`anon`) só consegue
 **ler** dados que já são públicos. Não existe caminho pela API pública para escrever, alterar ou

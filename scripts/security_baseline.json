@@ -1,5 +1,6 @@
 {
   "gerado_em": "2026-07-27",
+  "projeto": "producao — `Banco - Divat`, ref lwzsxuaqqeoamukduhev. Esta baseline descreve o banco de PRODUCAO e so ele; o projeto de teste (`divat - TESTE`, gontnlfmothfglssbyyk) nao e coberto por gate nenhum. Campo acrescentado em 31/07/2026 (achado 3 da auditoria cruzada): ate entao a baseline nao dizia de qual banco falava.",
   "nota": "Exceções de segurança CONHECIDAS e aceitas. Cada entrada precisa de justificativa em docs/seguranca.md §9. Isto não é perdão: se um achado NOVO aparecer, revogue — não baseline.",
   "achados": [
     {

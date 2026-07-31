@@ -367,6 +367,30 @@ console.log('\n[2b] Deriva docs × código');
   }
   if (!sbErrado) okline('SB_URL/SB_KEY sempre atribuídas ao app.js');
 
+  // --- quem afirma estado de banco diz DE QUAL banco ---
+  // O repo tem DOIS projetos Supabase, e até 31/07/2026 os documentos que mais afirmam fatos
+  // sobre "o banco" não diziam qual: `docs/schema.md` e `docs/seguranca.md` não tinham UMA
+  // referência de projeto no arquivo inteiro — incluindo as contagens de advisors, a tabela do
+  // teste de invasão e o "0 views, 8 funções e 1 trigger". Era o achado 3 da auditoria cruzada.
+  // Agravante: o teste NÃO é cópia fiel de produção (a Fase 3 está aplicada só lá), então "o
+  // banco" sem qualificador não é imprecisão de estilo — é uma afirmação que fica falsa para
+  // metade dos ambientes.
+  // A guarda é deliberadamente burra: exige que o ARQUIVO cite a ref do projeto que descreve, em
+  // qualquer lugar. Não tenta julgar frase a frase — foi essa ambição que produziu os 61 falsos
+  // positivos da 1ª versão do [2b]. Ela não prova que o escopo está certo; prova que alguém
+  // escreveu um, e derruba o gate se ele for apagado.
+  const REF_PROD = /lwzsxuaqqeoamukduhev/;
+  const ESCOPADOS = ['docs/schema.md', 'docs/seguranca.md', 'docs/backup_schema.sql',
+    'docs/backup.md'].filter(existe);
+  let semEscopo = 0;
+  for (const doc of ESCOPADOS){
+    if (!REF_PROD.test(ler(doc))){
+      fail(`[${doc}] afirma estado de banco e não diz de QUAL: cite a ref do projeto (produção é \`lwzsxuaqqeoamukduhev\`). São dois projetos, e o de teste não é cópia fiel.`);
+      semEscopo++;
+    }
+  }
+  if (!semEscopo) okline(`os ${ESCOPADOS.length} docs de estado de banco declaram o projeto que descrevem`);
+
   // --- ninguém afirma que só UM host usa produção quando HOSTS_PROD tem vários ---
   // Guarda de PADRÃO DE ERRO, não de número — e ela nasceu de a guarda numérica ter falhado.
   // Em 31/07/2026 as ADRs entraram em DOCS_VIVOS justamente porque a ADR-0002 carregava a deriva

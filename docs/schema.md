@@ -1,4 +1,14 @@
-# Relação das Tabelas — Portal DIVAT (`bd_teste`)
+# Relação das Tabelas — Portal DIVAT · **produção**
+
+> **Escopo deste documento: o projeto Supabase de PRODUÇÃO** — `Banco - Divat`,
+> ref `lwzsxuaqqeoamukduhev`. Existe um segundo projeto, `divat - TESTE`
+> (`gontnlfmothfglssbyyk`), que **não** é descrito aqui e **não** é cópia fiel deste: a Fase 3
+> está aplicada só lá, o que o torna mais restrito (ver `CLAUDE.md` § Supabase). Toda contagem,
+> coluna, função e medição abaixo foi apurada contra produção, que é também o único projeto que
+> o `scripts/check_deriva.mjs` verifica.
+>
+> Até 31/07/2026 este título dizia `bd_teste` — nome antigo **da produção**, que num repo onde
+> toda tabela se chama `*_teste` levava a ler exatamente o oposto.
 
 Mapa **relacional** do banco: como as tabelas se ligam entre si, por qual chave, e se a
 ligação é uma **FK real** (garantida pelo banco) ou uma **convenção** (join feito no código

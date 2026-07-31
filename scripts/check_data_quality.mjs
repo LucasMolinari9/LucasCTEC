@@ -1,5 +1,12 @@
 // check_data_quality.mjs — Checagem VIVA de qualidade dos dados pós-ETL (issue #63).
 //
+// ⚠️ ESCOPO: este gate só enxerga PRODUÇÃO (`Banco - Divat`, ref lwzsxuaqqeoamukduhev). Ele extrai
+// SB_URL/SB_KEY por regex do app.js, que são literais de produção — NÃO há flag, variável de
+// ambiente nem argumento para apontá-lo para o projeto de teste. Consequência, e é o ponto: o
+// banco de TESTE (`divat - TESTE`, gontnlfmothfglssbyyk) não é vigiado por este nem por nenhum
+// outro gate do repositório, e nada compara os dois. Dívida registrada em docs/adr/0002.
+// (Dito aqui em 31/07/2026 — achado 3 da auditoria cruzada. Antes, só a ADR-0002 sabia disso.)
+//
 // Por que existe: o banco é "hub-and-spoke" — quase tudo se liga a tabela_vista_teste por
 // codlinha, mas a ÚNICA foreign key real é a fk_tarifa_linha. Os outros joins são convenção,
 // feitos no JavaScript, e o Postgres não os garante. Logo a integridade depende da disciplina

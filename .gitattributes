@@ -1,0 +1,6 @@
+# `scripts/check_grants.mjs` usa um byte NUL como separador de chave composta
+# (`const chave = a => `${a.tipo}\0${a.alvo}``) — técnica legítima, porque NUL não aparece nos
+# valores. O efeito colateral é que o git passa a tratar o arquivo como BINÁRIO: o diff vira
+# "Bin 9800 -> 10399 bytes" e a revisão de um gate de SEGURANÇA fica cega.
+# Isto força diff textual. Não muda armazenamento nem fim de linha — só como o git exibe.
+*.mjs diff

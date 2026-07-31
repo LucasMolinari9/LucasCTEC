@@ -1,4 +1,10 @@
-# Backup & Recuperação — Portal DIVAT (`bd_teste`)
+# Backup & Recuperação — Portal DIVAT · **produção**
+
+> **Escopo deste runbook: o projeto Supabase de PRODUÇÃO** — `Banco - Divat`,
+> ref `lwzsxuaqqeoamukduhev`. É dele que os backups saem e é ele que os caminhos de restauração
+> reconstroem. O projeto de teste (`divat - TESTE`, `gontnlfmothfglssbyyk`) **não** tem backup
+> automático e não é coberto aqui. Até 31/07/2026 este título dizia `bd_teste`, nome antigo da
+> produção.
 
 Runbook do backup do banco. Nasceu de uma sessão de **diagnóstico + proteção contra perda de
 dados** em **16/07/2026**. Antes disso o projeto estava marcado como *"SEM BACKUP (risco
