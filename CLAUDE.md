@@ -227,8 +227,10 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    `currentView.pdfHTML` (fora do seam). O modo padrão usa só as regras locais
    (`.semgrep/rules/`) e roda **offline**; `--full` soma os rulesets do registry e **precisa
    de rede** (bloqueada no ambiente do Claude — igual ao `vercel` CLI; lá rode sem `--full`).
-   O CI (`.github/workflows/semgrep.yml`) roda as duas metades. Runbook e como escrever regra
-   nova: **`docs/semgrep.md`**.
+   O CI (`.github/workflows/semgrep.yml`) roda as duas metades. Nas **sessões web** o binário é
+   instalado sozinho pelo hook `SessionStart` (`.claude/hooks/session-start.sh`, ligado pelo
+   `.claude/settings.json`), que lê a versão do próprio workflow — o container de lá é efêmero e
+   a venv não sobrevive entre sessões. Runbook e como escrever regra nova: **`docs/semgrep.md`**.
 2c. **Deriva docs×banco — `node scripts/check_deriva.mjs`** (precisa de rede; irmão do
    `check_realtime.mjs`, mesma anon key do `app.js`). Compara a visão de `anon` do banco
    (RPC `divat_api_shape()` — o OpenAPI do PostgREST deste projeto é restrito à service_role)
