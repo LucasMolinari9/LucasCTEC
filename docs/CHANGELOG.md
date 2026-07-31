@@ -4,6 +4,61 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 31/07/2026 — O restore parou de ser uma promessa (auditoria cruzada, achados 1, 2, 5-9)
+
+Auditoria cruzada repo × banco feita por agente externo. O banco de produção conferiu em tudo
+(18 tabelas, 44 índices, 14 policies, 8 funções, 1 trigger, 0 views, 14 no Realtime) e o portal
+segue sem caminho de escrita. Os dois achados que importavam eram os dois de **recuperação de
+desastre** — as duas únicas coisas do projeto que ninguém tinha exercitado.
+
+- **[1, crítico] `docs/backup_schema.sql` agora é IDEMPOTENTE.** Tinha 18 `CREATE TABLE` crus, e
+  o caminho A do runbook mandava rodá-lo **depois** de um `pg_restore` completo — que já criara
+  tudo. Abortava no primeiro `already exists` e, como o SQL Editor roda o arquivo como **lote
+  único**, nada das seções 6-8 era aplicado: o banco restaurado ficava sem os GRANTs endurecidos
+  e sem os default privileges fechados. **A falha era na direção perigosa** — em silêncio, e no
+  único momento em que ninguém tem segunda cópia. Ironia registrada: a seção 7 existia
+  justamente para impedir o `anon` com TRUNCATE que o exercício de 28/07 achou, e era a primeira
+  a não rodar.
+  **Medido, não conferido no olho** (PostgreSQL 16 local, pré-requisitos do Supabase simulados):
+  arquivo antigo aborta na 2ª execução (exit 3, linha 57); o novo roda **3× seguidas com exit 0**
+  e termina com os mesmos números que a auditoria mediu em produção, com `anon`/`authenticated`
+  só com SELECT em 14 tabelas. Descoberta lateral: `MAINTAIN` só existe no **PG 17+**, o que
+  confirma indiretamente a versão do Supabase (a medição local usou cópia sem a cláusula).
+  Descoberta que o relatório não tinha: o `pg_restore --no-privileges` do passo 3 **descarta os
+  GRANTs**, então o passo 4 não é redundante — é ele que aplica a postura de segurança.
+- **[2, alto] `scripts/restore_rest.mjs` — o NDJSON ganhou caminho de volta.** O `backup.yml`
+  gerava NDJSON desde 21/07 e **nada sabia lê-lo**: a única camada *automática* do projeto era a
+  única sem volta. Um backup que ninguém sabe restaurar é uma cópia de dados, não um plano de
+  recuperação. É o **primeiro script do repo que escreve no banco**, então o padrão é conferir
+  sem escrever: valida o **SHA-256 contra o `manifest.json`** (que estava lá desde 21/07 e nada
+  consumia), exige service key, aborta se o destino tem conteúdo, insere na ordem da FK e
+  reconfere as contagens no fim. Bancada: `tests/restore_rest.rig.mjs`, 29 asserções — quase
+  todas sobre ele **recusando** escrever quando deve recusar.
+  O inventário de tabelas saiu para `scripts/lib/tabelas.mjs`, compartilhado com o
+  `backup_rest.mjs`: duas cópias divergiriam justamente durante um restore.
+- **[5, 6, 7] Guardas ANTES da prosa.** O `[2b]` do `check.js` não contava workflows nem
+  `HOSTS_PROD` e não sabia olhar **localização de arquivo**. Por isso o README pôde dizer "6
+  workflows" (são 7, faltava o `deploy-smoke.yml`), o `CLAUDE.md` "somente `divatdetro.vercel.app`"
+  (o `HOSTS_PROD` tem 3) e ambos apontar os `@font-face` para o `index.html` (estão no
+  `styles.css` desde a extração do CSS de 21-22/07). Corrigir só as frases as deixaria derivar de
+  novo. As guardas novas acusaram os três achados sozinhas, antes de a prosa ser tocada.
+  Também corrigido: o `db-checks.yml` é **diário** desde 27/07, e dois docs ainda diziam semanal.
+- **[8, 9]** O `backup.md` descrevia o backup automático e logo abaixo se intitulava "Por que não
+  há backup automático" — agora separa **backup nativo do Supabase** (não temos, é Pro) de
+  **automação própria** (temos, parcial). E o comentário do `backup.yml` apontava a anon key para
+  o `index.html`.
+- **As bancadas `*.rig.mjs` passaram a rodar no `ci.yml`.** Existiam e não estavam em workflow
+  nenhum — o mesmo defeito que o `CLAUDE.md` já registrava sobre o `check_realtime.mjs`.
+
+**O que este dia NÃO fechou** — está tudo aberto de propósito, não por esquecimento: o exercício
+de restore de verdade e a medição de **RTO/RPO** (passo 9 do `backup.md`) continuam abertos — o
+que se provou foi que o *script* roda, não que o *procedimento* foi cumprido ponta a ponta contra
+o Supabase; o `restore_rest.mjs` nunca falou com um PostgREST real, só com o stub da bancada; o
+achado 3 (PR #73 / banco de teste à frente da `main`) é decisão do dono; o achado 4 (migrar as
+chaves `anon` legadas para `sb_publishable_…`, suportadas até o fim de 2026) mexe no
+`Authorization: Bearer` do `sbFetch` e merece rodada própria; e a **Leaked Password Protection**
+segue desligada em produção, por ser só dashboard.
+
 ## 31/07/2026 — O repositório é público POR DECISÃO, e a documentação parou de dizer o contrário
 
 PR 4 do plano da auditoria preliminar de 30/07. O repo já era público havia dias; o que faltava era

@@ -250,8 +250,8 @@ Para quando o que você tem é o **artifact do GitHub Actions** (aba Actions →
    sai com erro em vez de dizer "ok".
 6. **Reposicione as sequências de `row_id`** — o script imprime o SQL pronto no fim, porque o
    PostgREST não executa SQL arbitrário. Cole no SQL Editor.
-7. Se o projeto for **novo**, atualize `SB_URL` e `SB_KEY` no topo do `app.js` e confira a CSP.
-8. Recrie o **usuário do Auth** do dono.
+7. Se o projeto for **novo**, atualize `SB_URL` e `SB_KEY` no topo do `app.js` e confira a CSP;
+   e recrie o **usuário do Auth** do dono (1 login) manualmente no Dashboard.
 
 > **⚠️ O artifact do workflow não tem tudo.** O `backup.yml` roda em **modo público** (anon key),
 > então cobre as 14 tabelas do portal e **não** as 4 de staging do ETL. Restaurar a partir dele
