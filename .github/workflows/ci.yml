@@ -45,10 +45,19 @@ jobs:
           node-version: '20'
       - name: Gate de pré-publicação (sintaxe + anti-drift + testes)
         run: node tests/check.js
+      # NÃO declare `NO_PROXY` e `no_proxy` como duas chaves deste `env:`. O YAML aceita (são
+      # chaves distintas) e o PyYAML também, mas o validador do GitHub trata nome de variável
+      # de ambiente como CASE-INSENSITIVE e rejeita o par como duplicado. Workflow rejeitado
+      # não falha num job vermelho que se vê: o run nasce e morre no mesmo segundo, com ZERO
+      # jobs, o nome cai para o caminho do arquivo (`.github/workflows/ci.yml` em vez de `CI`)
+      # e nem os filtros de `on:` chegam a ser avaliados — por isso passou a disparar até em
+      # push de branch, que a linha 26 restringe. Foi assim que este gate ficou morto entre
+      # 31/07 12:26 e 16:5x sem ninguém notar (o PR verde não mostra o que não rodou).
+      # A variável minúscula continua sendo exportada, só que no shell, onde não há colisão.
       - name: Bancadas offline de backup e restauração
         env:
           NO_PROXY: 127.0.0.1
-          no_proxy: 127.0.0.1
         run: |
+          export no_proxy="$NO_PROXY"
           node tests/backup_rest.rig.mjs
           node tests/restore_rest.rig.mjs

@@ -3,6 +3,8 @@
    Faz, em sequência, e agrega o resultado:
      [1] valida a SINTAXE do app.js (sem executar o código) e garante que o
          index.html NÃO tem <script> inline (a CSP publica script-src 'self');
+    [1c] confere que nenhum `env:` de workflow tem duas chaves que só diferem em
+         maiúsculas — o GitHub rejeita o workflow e o run morre com zero jobs;
      [2] guarda anti-drift: confere que as funções copiadas nos *.harness.js ainda
          existem iguais no app.js (avisa se a original mudou e a cópia ficou velha);
      [3] roda todos os *.test.js desta pasta.
@@ -91,6 +93,49 @@ console.log('\n[1b] Segredo: nenhuma JWT service_role no index.html/app.js');
   }
   if (vazou) fail('CHAVE service_role embutida em arquivo servido — ignora o RLS, NÃO publicar.');
   else okline(`ok (${jwts.length} token(s) JWT, nenhum service_role)`);
+}
+
+// ---------- [1c] env: dos workflows sem chave duplicada ignorando maiúsculas ----------
+console.log('\n[1c] Workflows: nenhum env: com chave duplicada ignorando maiúsculas');
+// Por que existe: o validador do GitHub trata nome de variável de ambiente como
+// CASE-INSENSITIVE, então `NO_PROXY:` e `no_proxy:` no MESMO bloco `env:` fazem ele
+// REJEITAR o workflow inteiro. E workflow rejeitado não vira job vermelho que se vê: o run
+// nasce e morre no mesmo segundo, com zero jobs, o nome cai para o caminho do arquivo e nem
+// os filtros de `on:` são avaliados. Foi assim que o gate do ci.yml ficou morto por horas
+// em 31/07/2026, com PRs passando verdes porque os OUTROS workflows rodavam.
+// YAML puro aceita as duas chaves (são distintas), então nenhum parser acusa — só o GitHub,
+// e só depois do push. Daí a guarda ser textual e offline.
+{
+  const WF = path.join(__dirname, '..', '.github', 'workflows');
+  let arquivos = [];
+  try { arquivos = fs.readdirSync(WF).filter(f => /\.ya?ml$/.test(f)); } catch (_) { /* sem workflows */ }
+  let achados = 0, blocos = 0;
+  for (const f of arquivos){
+    const linhas = fs.readFileSync(path.join(WF, f), 'utf8').split('\n');
+    for (let i = 0; i < linhas.length; i++){
+      const abre = /^(\s*)env:\s*$/.exec(linhas[i]);
+      if (!abre) continue;
+      blocos++;
+      const dentro = abre[1].length;                       // indentação do próprio `env:`
+      const vistas = new Map();                            // minúscula → nome como escrito
+      for (let j = i + 1; j < linhas.length; j++){
+        const l = linhas[j];
+        if (!l.trim() || /^\s*#/.test(l)) continue;        // linha vazia/comentário não fecha
+        const ind = l.length - l.trimStart().length;
+        if (ind <= dentro) break;                          // desindentou: acabou o bloco
+        const chave = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/.exec(l);
+        if (!chave) continue;
+        const k = chave[1], baixa = k.toLowerCase();
+        if (vistas.has(baixa)){
+          fail(`${f}:${j + 1} — env: tem '${vistas.get(baixa)}' e '${k}' no mesmo bloco; `
+             + 'o GitHub ignora maiúsculas e REJEITA o workflow (run com zero jobs). '
+             + 'Deixe uma só e exporte a outra no shell do `run:`.');
+          achados++;
+        } else vistas.set(baixa, k);
+      }
+    }
+  }
+  if (!achados) okline(`ok (${blocos} bloco(s) env: em ${arquivos.length} workflow(s))`);
 }
 
 // ---------- [2] guarda anti-drift ----------
