@@ -154,6 +154,9 @@ rodam normalmente — medido nesta sessão, sem `paths` filtrando nenhum deles.
 3. **Sem permissão para disparar workflows** pela API e **sem ferramenta para listar secrets**.
    Rodar o `Run workflow` é do dono; **ler o log é do agente** e funciona bem — foi assim que a
    verificação do preview foi confirmada.
-4. **A API de check-runs do GitHub serve estado velho.** Nesta sessão `semgrep` e `views`
-   apareceram `in_progress` por minutos depois de terem terminado. **Confirme pelo log do job ou
-   pelo `mergeable_state` do PR** antes de concluir que um gate travou.
+4. **A API do GitHub serve estado velho em vários níveis.** Nesta sessão `semgrep` e `views`
+   apareceram `in_progress` por mais de dez minutos depois de terem terminado — duas vezes, e na
+   segunda o engano foi meu: **`get_job_logs` com HTTP 404 não prova que o job está rodando.**
+   Nem `mergeable_state: unstable`. O que resolve é
+   `actions_get(method: 'get_workflow_job')`, que traz `started_at`/`completed_at` **por passo**.
+   Detalhe completo em `docs/contexto-proxima-sessao-2026-07-31.md` § 4, item 5.

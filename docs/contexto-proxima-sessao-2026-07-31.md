@@ -270,9 +270,22 @@ Calibra o que dá para pedir. Não são falhas a contornar — são o contrato.
    `deploy-smoke` foi diagnosticado e que a verificação de preview foi confirmada.
 4. **A API da Vercel não expõe o Protection Bypass** — `get_project_deployment_protection` só
    reporta password, SSO e trusted IPs.
-5. **A API de check-runs do GitHub serve estado velho.** Em 31/07, `semgrep` e `views` apareceram
-   `in_progress` por minutos depois de terem terminado. **Confirme pelo log do job ou pelo
-   `mergeable_state` do PR** antes de concluir que um gate travou.
+5. **A API do GitHub serve estado velho em VÁRIOS níveis — e duas checagens intuitivas não
+   resolvem.** Em 31/07 isto custou dois diagnósticos errados no mesmo dia:
+   - `pull_request_read(get_check_runs)` mostrou `semgrep` e `views` como `in_progress` por mais de
+     **dez minutos** depois de terem terminado;
+   - **`get_job_logs` devolvendo HTTP 404 NÃO prova que o job está rodando.** Parece provar (o log
+     só existe ao terminar), e foi assim que concluí "está mesmo na fila" — errado; os dois já
+     tinham terminado havia dez minutos;
+   - `mergeable_state: unstable` também não distingue "pendente" de "cache velho".
+
+   **O que funciona:** `actions_get(method: 'get_workflow_job', resource_id: <job_id>)`. Ele traz
+   `steps[]` com `started_at`/`completed_at` **por passo** — dá para ver exatamente onde o job está
+   ou quando cada etapa acabou. Foi o que desfez o engano.
+
+   **Regra prática:** se um gate parece travado, compare a duração com a normal (`check` ~15 s,
+   `semgrep` ~35 s, `views` ~45 s) e confirme por `get_workflow_job` antes de agir. Push de commit
+   vazio para "destravar" um job que já passou só gasta uma rodada.
 6. **O contêiner é efêmero.** Trabalho não empurrado se perde — foi por isso que o rebase do #73
    virou a branch `claude/fase3-rebased-fda0152` em vez de ficar local.
 
