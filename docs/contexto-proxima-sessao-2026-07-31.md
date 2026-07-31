@@ -84,6 +84,19 @@ referência em `docs/backup.md`.
 chat, e escrevendo os números em `docs/backup.md` + fechando o § 9.3 do `seguranca.md`. **Não pode**
 executar nada — sem rede até o Supabase.
 
+✅ **O runbook já foi preparado** (31/07, 2ª sessão). O `docs/backup.md` § "Como RESTAURAR" era
+**um caminho só, e era o do CSV** — ou seja, o roteiro versionado levava direto para a armadilha
+acima. Agora tem:
+- **caminho A (`pg_restore`)** como recomendado e **B (CSV)** como exceção, com o risco de cada um
+  numa tabela de escolha logo no topo — o passo do `backup_schema.sql` continua nos dois, porque é
+  ele que impede o projeto restaurado de nascer mais aberto que produção;
+- **passo 8**, conferência em três camadas (contagem por tabela contra a referência já existente no
+  próprio doc, `gen_security_snapshot.sql`, e `check_views.mjs` **sem stub** contra o banco
+  restaurado — este último nunca foi executado);
+- **passo 9**, com a tabela de RTO/RPO já montada e vazia, esperando os números.
+
+Sobra para o dono exatamente o que só ele pode fazer: rodar e cronometrar.
+
 ---
 
 ### 2.2 🟡 PR #73 — decidir o destino
