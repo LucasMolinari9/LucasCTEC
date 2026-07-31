@@ -79,11 +79,45 @@ migração é obrigatório e não substituível por essa configuração de plata
 e ACLs anteriores e remove os papéis. Seu dry-run passou em 29/07/2026. Ele é exclusivo do projeto
 de teste e requer confirmação do snapshot pré-migração; não executar em produção.
 
+## Pré-requisito da promoção a produção — os quatro gates vivos param
+
+⚠️ **Ler antes de aplicar esta migração em `lwzsxuaqqeoamukduhev`.** Não é risco atual: a migração
+vive só no teste e produção não tem o schema `audit`. Mas no dia em que ela for aplicada em
+produção, **quatro gates param de funcionar de uma vez** — e este PR não toca em nenhum dos quatro
+(conferido no diff).
+
+A migração move as quatro RPCs diagnósticas de `public` para `audit` e revoga o `execute` de
+`anon` (linhas 67-83). Os gates chamam exatamente essas RPCs, por `POST /rest/v1/rpc/<nome>` com a
+chave anon lida do `app.js`:
+
+| Gate | RPC | Frequência hoje |
+|---|---|---|
+| `scripts/check_grants.mjs` | `divat_security_shape` | **diária** (`db-checks.yml`) |
+| `scripts/check_deriva.mjs` | `divat_api_shape` | semanal + push/PR (`deriva.yml`) |
+| `scripts/check_data_quality.mjs` | `divat_data_quality` | semanal (`db-checks.yml`) |
+| `scripts/check_realtime.mjs` | `realtime_tables` | semanal (`db-checks.yml`) |
+
+O mais grave é o **diário**: o `check_grants.mjs` é o controle que `docs/seguranca.md` § 9.1 nomeia
+como compensação do default não-fechável do `supabase_admin`. Perdê-lo em silêncio troca um buraco
+fechado por um buraco sem alarme — e a falha seria de leitura, não de escrita, então o portal
+continuaria funcionando normalmente enquanto o gate ficasse cego.
+
+**Portanto, na ordem:** migrar os quatro gates para a credencial de auditor (o mesmo caminho do
+job `test-auditor`, via `divat_auditor_ci`) **antes** de qualquer DDL em produção. Aplicar primeiro
+e consertar depois deixa uma janela sem o gate diário.
+
+Consequência para os scripts: os quatro hoje derivam `SB_URL`/`SB_KEY` do `app.js` por regex. Um
+gate que fale por credencial de auditor não pode continuar fazendo isso — passa a depender de
+secret, e portanto deixa de rodar em PR de fora do repositório, igual ao `test-auditor`. Essa perda
+de alcance é parte da decisão, não um detalhe de implementação.
+
 ## Critérios antes de qualquer promoção
 
 1. Criar/rotacionar `divat_auditor_ci` e configurar o secret sem expô-lo.
 2. Executar o workflow manual e anexar o resultado à PR.
-3. Rodar todos os testes, 23 views e gates existentes da PR.
+3. Rodar todos os testes, 17 views e gates existentes da PR.
 4. Fazer smoke do preview protegido; configurar `VERCEL_AUTOMATION_BYPASS_SECRET` se ainda faltar.
 5. Confirmar no GitHub que os checks obrigatórios bloqueiam alteração da `main`.
 6. Manter a PR em rascunho e solicitar autorização separada para qualquer ação em produção.
+7. **Antes de tocar produção:** migrar os quatro gates vivos para a credencial de auditor — ver a
+   seção acima. Sem isso, aplicar a migração cega o gate diário de grants.
