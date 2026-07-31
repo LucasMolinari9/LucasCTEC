@@ -1149,8 +1149,23 @@ function closeModal(){
   if (lastFocused && lastFocused.focus) { try { lastFocused.focus(); } catch(_){} lastFocused = null; }
   // rota: fechar pela UI desfaz a entrada criada na abertura (back) ou limpa o hash;
   // fechamento disparado pela PRÓPRIA rota (botão Voltar do navegador) não mexe no histórico.
+  //
+  // O `history.back()` só é seguro quando a entrada ANTERIOR ainda descreve o estado atual.
+  // Clicar numa linha DENTRO do modal (bindLineRows: `selectLine(...)` e logo `closeModal()`)
+  // muda a linha ativa e grava isso por replaceState — na entrada do modal, que o back()
+  // acabou de descartar. O usuário voltava para a entrada pré-modal, o `hashchange` chamava
+  // applyRoute e, sem `linha/` no hash, ela executava `setActiveLine(null)`: a seleção
+  // recém-feita era apagada. Sem linha ativa antes (cards que não exigem linha, como
+  // "Linhas por Localidade e Município") o resultado era não conseguir selecionar linha
+  // nenhuma por ali; com uma linha já ativa, a seleção revertia em silêncio para a antiga.
+  // Quando a linha mudou com o modal aberto, então, mantemos a entrada e só reescrevemos o
+  // hash (replaceState não dispara hashchange, logo não há applyRoute para desfazer nada).
+  // Efeito colateral aceito e desejável: o Voltar do navegador passa a desfazer a seleção.
   if (!_applyingRoute){
-    if (_modalPushed){ _modalPushed = false; history.back(); }
+    const linhaAgora = activeLine ? String(activeLine.codlinha) : null;
+    const empurrou = _modalPushed;
+    _modalPushed = false;
+    if (empurrou && linhaAgora === _lineAtPush) history.back();
     else syncHash();
   } else { _modalPushed = false; }
   if (window.__divatReload) location.reload();
@@ -2797,6 +2812,20 @@ function paginateLines(container, rows, { grouped=false, pageSize=25, pdf=true, 
   // próprio mais rico (ex.: Município com meta/aviso).
   if(pdf && view) commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead(view.title)}${renderSlice(0, rows.length)}</div>` });
 }
+// Filtro de SITUAÇÃO das listas de linha — definição única, usada pelo `lineResults` (listas
+// paginadas) e pelo `renderLocalidadeSecoes` (relatório por localidade). Ficava só no
+// lineResults, então o card "Linhas por Localidade e Município" não tinha filtro nenhum;
+// duplicar a regra aqui faria as duas telas divergirem na definição de "ativa".
+// PURA (cópia em tests/pure.harness.js; testada).
+function filtrarSituacao(rows, st){
+  return st==='ativas'     ? rows.filter(isLinhaAtiva)
+       : st==='canceladas' ? rows.filter(r=>!!r.cancelado)
+       : rows;
+}
+// markup do seletor Todas/Ativas/Canceladas (id `lrStatus` — a CSS de `.loc-tools` já o cobre)
+function situacaoSelectHTML(){
+  return `<label>Situação <select id="lrStatus"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="canceladas">Canceladas</option></select></label>`;
+}
 // Lista de linhas com barra de filtro (situação) + agrupamento por empresa LIGADO por padrão,
 // com os grupos ordenados pelo RJ (codempresa). Padrão de qualquer consulta que lista linhas.
 // `prefixHTML` entra antes da barra (contadores/banner). Requer getEmpresas() já carregado.
@@ -2807,16 +2836,14 @@ function lineResults(host, rows, { prefixHTML='', pdf=true, view, gen } = {}){
   // (limit). A paginação abaixo exibe tudo em páginas — não corta mais no cliente.
   host.innerHTML = prefixHTML + bannerTrunc(rows)
     + `<div class="loc-tools">
-         <label>Situação <select id="lrStatus"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="canceladas">Canceladas</option></select></label>
+         ${situacaoSelectHTML()}
          <label><input type="checkbox" id="lrGroup" checked> Agrupar por empresa</label>
        </div>
        <div id="lrResult"></div>`;
   const result = host.querySelector('#lrResult');
   const statusSel = host.querySelector('#lrStatus'), groupChk = host.querySelector('#lrGroup');
   const paint = ()=>{
-    const st = statusSel.value;
-    const f = st==='ativas' ? rows.filter(r=>!r.cancelado && !r.paralisado)
-            : st==='canceladas' ? rows.filter(r=>r.cancelado) : rows;
+    const f = filtrarSituacao(rows, statusSel.value);
     if(!f.length){ result.innerHTML = emptyBox('Nenhuma linha com esse filtro.'); return; }
     if(groupChk.checked){
       // achata os grupos (empresas por RJ; linhas por codlinha) num array global e pagina
@@ -2869,10 +2896,28 @@ function secoesLocalidadeTable(secoes){
 // render do "Linhas por Localidade": bloco principal = linhas COM seção na localidade,
 // agrupadas por empresa e com as seções por linha (reproduz o relatório antigo); bloco
 // secundário = demais linhas da cobertura ampla (entram por itinerário/nome), como lista.
+// A barra de situação (Todas/Ativas/Canceladas) usa o MESMO seletor e a MESMA regra do
+// `lineResults` (via situacaoSelectHTML/filtrarSituacao): as duas telas listam linha e
+// precisam concordar no que é "ativa". O filtro repinta os DOIS blocos e refaz o
+// `bindLineRows` — quem entra na tela depois de filtrar tem que continuar clicável.
 function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='' } = {}){
+  host.innerHTML = prefixHTML
+    + `<div class="loc-tools">${situacaoSelectHTML()}</div><div id="locSecResult"></div>`;
+  const result = host.querySelector('#locSecResult');
+  const statusSel = host.querySelector('#lrStatus');
+  const paint = () => {
+    const rows = filtrarSituacao(base, statusSel.value);
+    // o contador do `prefixHTML` é o do resultado INTEIRO e fica acima da barra; ao filtrar,
+    // repetir só o total mentiria sobre o que está na tela — daí a contagem do recorte.
+    pintarLocalidadeSecoes(result, rows, secByLine, { total: base.length });
+  };
+  statusSel.addEventListener('change', paint);
+  paint();
+}
+function pintarLocalidadeSecoes(host, base, secByLine, { total = base.length } = {}){
   const comSecao = base.filter(r=>secByLine.has(r.codlinha));
   const semSecao = base.filter(r=>!secByLine.has(r.codlinha));
-  let html = prefixHTML;
+  let html = base.length < total ? `<p class="doc-count">${base.length} de ${total} linha(s) com o filtro escolhido</p>` : '';
   if(comSecao.length){
     const groups = [...groupBy(comSecao, r=>r.codempresa||'—')].sort((x,y)=>rjOrder(x[0],y[0]));
     html += groups.map(([cod,rs])=>{
@@ -2890,7 +2935,7 @@ function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='' } = {}){
       + `<div class="doc-obs tight">Ligam os pontos buscados, mas não têm uma seção de tarifa com esse nome.</div>`
       + linhasTable(semSecao);
   }
-  host.innerHTML = html || emptyBox('Nenhuma linha encontrada.');
+  host.innerHTML = html || emptyBox('Nenhuma linha com esse filtro.');
   bindLineRows(host);
 }
 // tabela de empresas p/ escolher (código/nome/situação) — `extraChips(e)` acrescenta chips à situação
@@ -3235,6 +3280,10 @@ checarNovaVersao();                                              // referência 
    ================================================================ */
 let _applyingRoute = false;   // aplicando uma rota → runView/selectLine/selectTopic não reescrevem o hash
 let _modalPushed  = false;    // a abertura do modal criou uma entrada de histórico?
+// codlinha da linha ativa NO MOMENTO em que o modal empurrou sua entrada de histórico.
+// Serve para o closeModal saber se a entrada anterior ainda descreve o estado atual — ver o
+// comentário longo lá.
+let _lineAtPush   = null;
 
 // estado atual → hash. `push:true` cria entrada de histórico (só na ABERTURA do modal —
 // é o que faz o Voltar do navegador fechar o modal em vez de sair do site). Trocar de tópico no
@@ -3249,7 +3298,7 @@ function syncHash({ push = false } = {}){
   const alvoHash = parts.length ? target : '';
   if ((location.hash || '') === alvoHash) return;
   try {
-    if (push){ history.pushState(null, '', target); _modalPushed = true; }
+    if (push){ history.pushState(null, '', target); _modalPushed = true; _lineAtPush = activeLine ? String(activeLine.codlinha) : null; }
     else history.replaceState(null, '', target);
   } catch(_){ /* file:// ou contexto sem History API → segue sem rota */ }
 }

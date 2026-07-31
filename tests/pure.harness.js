@@ -240,7 +240,16 @@ function closeTabState(tabs, activeTabId, id){
   return { tabs: next, activeTabId: nextActiveId, closedModal:false };
 }
 
+// app.js — filtro de SITUAÇÃO das listas de linha (barra Todas/Ativas/Canceladas). Definição
+// única compartilhada pelo lineResults (listas paginadas) e pelo renderLocalidadeSecoes.
+function filtrarSituacao(rows, st){
+  return st==='ativas'     ? rows.filter(isLinhaAtiva)
+       : st==='canceladas' ? rows.filter(r=>!!r.cancelado)
+       : rows;
+}
+
 module.exports = {
+  filtrarSituacao,
   fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, situacaoHTML, isLinhaAtiva, isVigente, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, terminaisDoMunicipio, localidadesQueCasam, orIlike, municipiosExatos,
   tabMatchesEvent, dispatchRealtime,

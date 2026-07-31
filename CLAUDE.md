@@ -198,6 +198,10 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    `node scripts/check_abas.mjs` — checagem de regressão em navegador headless (Playwright, com
    o PostgREST stubado); fica fora do `check.js` porque este é offline e sem dependências, mas
    **roda no CI** junto com o `check_views.mjs` (workflow `views.yml`).
+   **Ao mexer em `bindLineRows`/`selectLine`/`closeModal`/`syncHash` ou nas barras de situação
+   das listas de linha**, rode `node scripts/check_selecao_linha.mjs` — mesma bancada, guarda
+   o bug em que o `history.back()` do `closeModal` apagava a linha recém-selecionada dentro do
+   modal (ver Armadilhas) e a barra Todas/Ativas/Canceladas do card de Localidade.
 2a. **Ao mexer em qualquer render/loader, rode `node scripts/check_views.mjs`** — abre as **17
    views** num navegador headless e falha se alguma explodir (`errorBox`), ficar presa no
    spinner, pintar só a moldura ou não achar nada com um termo que casa as fixtures. É a rede
@@ -372,6 +376,23 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   busca mais nova tivesse ganho, o container nem teria sido escrito. Isso vale mesmo pra quem
   passa `pdf:false` (o guard da tela é independente de escrever PDF ou não) — todo call site de
   `paginateTable`/`paginateLines`/`lineResults`/`paginateEvents` passa `view`+`gen`, sem exceção.
+- **Selecionar linha DENTRO do modal × `history.back()`:** `bindLineRows` faz `selectLine(...)`
+  e logo `closeModal()`. O `selectLine` grava a linha nova por **replaceState — na entrada de
+  histórico DO MODAL**; o `closeModal` desfazia essa entrada com `history.back()`, caindo na
+  entrada PRÉ-modal, que não conhece a linha. O `hashchange` chamava `applyRoute`, que sem
+  `linha/` no hash roda `setActiveLine(null)` — **apagando a seleção recém-feita**. Em card que
+  não exige linha (Localidade, Ligações por Logradouro, Município e Região) o usuário não
+  conseguia selecionar linha nenhuma por ali; com uma linha já ativa, a seleção **revertia em
+  silêncio para a antiga**. Hoje o `closeModal` compara `activeLine` com `_lineAtPush` (gravado
+  no `syncHash({push:true})`) e, **se a linha mudou com o modal aberto, usa `syncHash()` em vez
+  de `history.back()`** — `replaceState` não dispara `hashchange`, então não há `applyRoute`
+  para desfazer nada. Guardado por `scripts/check_selecao_linha.mjs`. **Ao mexer nesse trio,
+  lembre: qualquer estado que a rota carrega e que mude com o modal aberto tem a mesma
+  armadilha.**
+- **Filtro de situação das listas de linha:** a barra Todas/Ativas/Canceladas tem **definição
+  única** — `situacaoSelectHTML()` (markup) + `filtrarSituacao()` (regra, sobre `isLinhaAtiva`),
+  usadas pelo `lineResults` e pelo `renderLocalidadeSecoes`. **Tela nova que lista linha usa
+  esses dois**, não uma quarta cópia do `filter(r=>!r.cancelado…)`.
 - **supabase-js vendorado:** para atualizar a versão: `npm pack @supabase/supabase-js@<v>`,
   extrair `dist/umd/supabase.js`, conferir a integridade contra o registro, trocar o arquivo em
   `vendor/` e a tag `<script src>` no `index.html`.

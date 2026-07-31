@@ -4,6 +4,43 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 31/07/2026 — Clicar numa linha volta a selecioná-la, e o card de Localidade ganha filtro de situação
+
+Dois defeitos relatados pelo dono no card **Linhas por Localidade e Município**, diagnosticados
+com loop de repro em navegador headless antes de qualquer hipótese.
+
+- **A seleção de linha era apagada pelo próprio `closeModal`.** `bindLineRows` faz
+  `selectLine(...)` e logo `closeModal()`. O `selectLine` grava a linha nova por `replaceState`
+  — na entrada de histórico **do modal**; o `closeModal` desfazia essa entrada com
+  `history.back()` para não poluir o histórico, caindo na entrada **pré-modal**, que não conhece
+  a linha. O `hashchange` chamava `applyRoute` e, sem `linha/` no hash, ela executava
+  `setActiveLine(null)`. O efeito dependia do estado anterior: em card que **não exige linha**
+  (Localidade, Ligações por Logradouro, Município e Região) não se conseguia selecionar linha
+  nenhuma clicando no resultado; com uma linha já ativa, a seleção **revertia em silêncio para a
+  antiga** — o modo de falha mais difícil de ver. Agora o `closeModal` compara `activeLine` com
+  `_lineAtPush` (gravado no `syncHash({push:true})`) e só usa `history.back()` quando a entrada
+  anterior ainda descreve o estado atual; se a linha mudou com o modal aberto, reescreve o hash
+  com `syncHash()` — `replaceState` não dispara `hashchange`, então não há `applyRoute` para
+  desfazer nada. Efeito colateral aceito e desejável: o Voltar do navegador passa a desfazer a
+  seleção.
+- **O resultado por localidade era a única lista de linha sem barra de situação.** O
+  `renderLocalidadeSecoes` não tinha filtro algum, e o cadastro real tem **500 linhas canceladas**
+  misturadas nos resultados. Ganhou a barra Todas/Ativas/Canceladas, que repinta os dois blocos
+  (com seção e "outras linhas") e refaz o `bindLineRows` — filtrar não pode transformar as linhas
+  em texto morto. O contador do recorte aparece quando o filtro esconde alguma coisa, senão a
+  contagem do topo mentiria sobre o que está na tela.
+- **A regra do filtro virou definição única.** `situacaoSelectHTML()` + `filtrarSituacao()`
+  (escrita sobre o `isLinhaAtiva` que já existia) substituem a cópia que só o `lineResults` tinha.
+  Sem isso as duas telas divergiriam na definição de "ativa" — o modo de falha que o `CLAUDE.md`
+  chama de "cópias que divergem".
+- **Guardas novas:** `scripts/check_selecao_linha.mjs` (bancada do `rig.mjs`, no `views.yml`)
+  reproduz o caminho do usuário — entra sem linha ativa, abre o card pelo clique, busca, filtra e
+  clica — e confere também que o conserto não empilhou histórico nem quebrou o "Voltar fecha o
+  modal". Conferido que ele fica **vermelho** sem cada uma das duas correções. `filtrarSituacao`
+  entrou no `pure.harness.js` com 6 testes e guarda no `canon`. As fixtures do `rig.mjs` ganharam
+  uma linha **cancelada**: uma bancada só com linhas ativas não consegue ver barra de situação
+  nenhuma funcionando.
+
 ## 31/07/2026 — Restore NDJSON executável e documentação reconciliada após o merge do #73
 
 Revisão do pacote `0bfb38a` depois das correções da auditoria anterior.

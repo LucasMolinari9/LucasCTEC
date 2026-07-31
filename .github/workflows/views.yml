@@ -1,4 +1,5 @@
-# Views (navegador) — laço de fumaça sobre as 17 views + regressão das abas, em todo push e PR.
+# Views (navegador) — laço de fumaça sobre as 17 views + regressões das abas e da seleção de
+# linha, em todo push e PR.
 #
 # Por que em ARQUIVO/JOB SEPARADO e não dentro do ci.yml:
 # o `ci.yml` roda `node tests/check.js` — Node puro, sem dependências, segundos. Essa leveza é
@@ -15,8 +16,11 @@
 #     Estes dois números são cobrados pela seção [2b] do tests/check.js, que desde 30/07/2026
 #     varre também os comentários deste arquivo — atualize o número, não apague a frase.
 #   scripts/check_abas.mjs — regressão das abas do modal / seletor de documentos.
-# Os dois usam a mesma bancada (scripts/lib/rig.mjs) e o mesmo Chromium: com o navegador já
-# instalado no job, rodar o segundo sai quase de graça.
+#   scripts/check_selecao_linha.mjs — regressão do "clicar na linha seleciona a linha" (o
+#     history.back() do closeModal apagava a seleção recém-feita) e da barra de situação
+#     Todas/Ativas/Canceladas do card Linhas por Localidade e Município.
+# Os três usam a mesma bancada (scripts/lib/rig.mjs) e o mesmo Chromium: com o navegador já
+# instalado no job, rodar os seguintes sai quase de graça.
 #
 # Nenhum dos dois fala com o Supabase: toda resposta do PostgREST vem das fixtures do rig.
 # O job é offline depois da instalação — não precisa de segredo nem de rede pro banco.
@@ -81,3 +85,6 @@ jobs:
 
       - name: Regressão das abas do modal
         run: node scripts/check_abas.mjs
+
+      - name: Regressão da seleção de linha e do filtro de situação
+        run: node scripts/check_selecao_linha.mjs
