@@ -240,10 +240,22 @@ console.log('\n[2b] Deriva docs × código');
   const views = existe('scripts/check_views.mjs')
     ? conta(ler('scripts/check_views.mjs'), /const VIEWS\s*=\s*\[([\s\S]*?)^\];/m, /\bkey\s*:/g) : null;
   const rtTables = conta(js, /RT_TABLES\s*=\s*\[([\s\S]*?)\]/, /'[a-z_]+'/g);
-  const bk = existe('scripts/backup_rest.mjs') ? ler('scripts/backup_rest.mjs') : '';
-  const bkTodas = bk ? conta(bk, /const TABELAS\s*=\s*\{([\s\S]*?)^\};/m, /^\s*[a-z_]+\s*:/gm) : null;
-  const bkStaging = bk ? conta(bk, /const STAGING\s*=\s*new Set\(\[([\s\S]*?)\]\)/, /'[a-z_]+'/g) : null;
+  // O inventário saiu do backup_rest.mjs para scripts/lib/tabelas.mjs em 31/07/2026, quando o
+  // restore_rest.mjs passou a precisar do mesmo mapa. Este extrator seguiu junto — e note que a
+  // mudança NÃO passou despercebida: o gate acusou "a guarda ficou cega" em vez de continuar
+  // verde contando zero, que é o que uma guarda mal escrita teria feito.
+  const bk = existe('scripts/lib/tabelas.mjs') ? ler('scripts/lib/tabelas.mjs') : '';
+  const bkTodas = bk ? conta(bk, /export const PK\s*=\s*\{([\s\S]*?)^\};/m, /^\s*[a-z_]+\s*:/gm) : null;
+  const bkStaging = bk ? conta(bk, /export const STAGING\s*=\s*new Set\(\[([\s\S]*?)\]\)/, /'[a-z_]+'/g) : null;
   const bkPublicas = (bkTodas != null && bkStaging != null) ? bkTodas - bkStaging : null;
+  // Quantidade de workflows e de hosts de produção. As duas entraram em 31/07/2026, depois de a
+  // auditoria cruzada achar que o README anunciava "6 workflows" (eram 7 — faltava o
+  // deploy-smoke.yml) e que o CLAUDE.md dizia "somente divatdetro.vercel.app usa produção"
+  // enquanto HOSTS_PROD já tinha 3 domínios. Os dois fatos são contáveis e ninguém os contava:
+  // é exatamente o vão que o [2b] existe para cobrir, e ficou aberto porque a tabela só olhava
+  // o que a extração de 21-22/07 tinha sujado.
+  const nWorkflows = WORKFLOWS.length || null;
+  const nHostsProd = conta(js, /HOSTS_PROD\s*=\s*\[([\s\S]*?)\]/, /'[^']+'/g);
 
   // --- fatos que os docs AFIRMAM (regex contra o texto com espaços normalizados,
   //     para que quebra de linha do markdown não escape da checagem) ---
@@ -270,6 +282,8 @@ console.log('\n[2b] Deriva docs × código');
     // propósito — se a frase migrar do `views.yml` para outro workflow, continua coberta.
     { doc:WORKFLOWS, o:'views do check_views (workflows)', re:/([\d]+)\s*views\b/, real:views,   esc:'exato' },
     { doc:WORKFLOWS, o:'% da seção MODAL (workflows)',     re:/~([\d,.]+)% do app\.js/, real:modalPct, esc:'pct' },
+    { doc:['README.md','CLAUDE.md'], o:'nº de workflows',  re:/[Oo]s ([\d]+) workflows/,  real:nWorkflows, esc:'exato' },
+    { doc:'CLAUDE.md',               o:'hosts de produção', re:/os ([\d]+) domínios de produção/, real:nHostsProd, esc:'exato' },
   ];
   // TODA ocorrência é conferida, não só a primeira. A 1ª versão parava no primeiro casamento, e
   // o `views.yml` afirma "23 views" em TRÊS linhas (1, 11 e 71): consertar uma e esquecer as
@@ -340,6 +354,34 @@ console.log('\n[2b] Deriva docs × código');
     });
   }
   if (!sbErrado) okline('SB_URL/SB_KEY sempre atribuídas ao app.js');
+
+  // --- os @font-face moram onde a prosa diz que moram ---
+  // Mesma família da regra acima, e pela mesma razão: a extração do CSS de 21-22/07/2026 levou os
+  // `@font-face` do `<style>` do index.html para o styles.css, e a prosa do README e do CLAUDE.md
+  // continuou apontando para o index.html — achado 7 da auditoria cruzada de 31/07/2026. É uma
+  // afirmação de LOCALIZAÇÃO, não um número, então não cabe na tabela FATOS; e é exatamente o tipo
+  // de fato que a extração de arquivo suja e ninguém relê. A regra pergunta ao código quem de fato
+  // declara `@font-face` e cobra a prosa contra isso, em vez de fixar "styles.css" no gate — assim
+  // ela continua valendo se um dia as fontes mudarem de arquivo de novo.
+  const CANDIDATOS_FONTE = ['styles.css', 'index.html'];
+  const declaramFonte = CANDIDATOS_FONTE.filter(f => existe(f) && /@font-face/.test(ler(f)));
+  let fonteErrado = 0;
+  if (declaramFonte.length === 1){
+    const certo = declaramFonte[0];
+    const errado = CANDIDATOS_FONTE.find(f => f !== certo);
+    for (const doc of DOCS_VIVOS){
+      ler(doc).split('\n').forEach((l, i) => {
+        if (/deriva-ok/.test(l)) return;
+        if (/@font-face/.test(l) && new RegExp(errado.replace('.', '\\.')).test(l)){
+          fail(`[${doc}:${i + 1}] diz que os @font-face estão no ${errado} — eles estão no ${certo}`);
+          fonteErrado++;
+        }
+      });
+    }
+    if (!fonteErrado) okline(`@font-face declarados no ${certo}, e a prosa concorda`);
+  } else {
+    fail(`@font-face declarado em ${declaramFonte.length} arquivo(s) (${declaramFonte.join(', ') || 'nenhum'}) — a guarda ficou cega, conserte o extrator`);
+  }
 
   // --- o baseline de qualidade dos dados é legível offline ---
   // O check_data_quality.mjs só roda no cron semanal (precisa de rede). Um baseline malformado

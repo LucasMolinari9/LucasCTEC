@@ -53,6 +53,21 @@ cada teste novo).
 - `pure.harness.js` — cópia **verbatim** das funções puras (com a linha de origem citada).
 - `pure.test.js` — casos das funções puras.
 - `realtime.test.js` — guarda a sincronização `VIEW_TABLES`/`RT_TABLES` (extrai os literais do `app.js`).
+- `environment.test.js` — matriz produção × teste (`HOSTS_PROD`, falha fechado).
+
+### Bancadas (`*.rig.mjs`) — fora do `check.js`, rodadas à mão
+Sobem um **stub de PostgREST** (servidor HTTP local) e um processo filho. Ficam fora do
+`check.js` porque o contrato dele é ser offline **e sem efeitos**; elas são offline, mas têm
+efeitos. Rode com `NO_PROXY=127.0.0.1 node tests/<arquivo>`.
+
+- `backup_rest.rig.mjs` — prova que o backup pagina por **keyset** (não offset), monta a
+  comparação lexicográfica da PK composta, e que dump incompleto **aborta** em vez de sair
+  com cara de sucesso.
+- `restore_rest.rig.mjs` — prova que o restore **não escreve** sem `--executar`, que SHA-256
+  divergente / arquivo truncado / arquivo fora do manifest abortam **antes** de qualquer
+  escrita, que a ordem de inserção respeita a FK (`tabela_vista_teste` antes de
+  `tarifa_atual_teste`) e que contagem final divergente derruba o restore. É a bancada mais
+  importante das duas: `restore_rest.mjs` é o **único script do repo que escreve no banco**.
 
 ## ⚠️ Regra de ouro (anti-drift)
 Os harness **copiam o código do `app.js` à mão**. Ao **editar uma dessas funções

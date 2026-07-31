@@ -58,9 +58,11 @@ O CI roda esses em workflows **separados de propósito**, para que um vermelho n
 outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 [`views.yml`](.github/workflows/views.yml) (navegador),
 [`semgrep.yml`](.github/workflows/semgrep.yml) (estático),
+[`deploy-smoke.yml`](.github/workflows/deploy-smoke.yml) (depois que a Vercel publica: cabeçalhos,
+allowlist e isolamento do Supabase),
 [`deriva.yml`](.github/workflows/deriva.yml) (semanal + sob demanda),
-[`db-checks.yml`](.github/workflows/db-checks.yml) (semanal — Realtime e qualidade dos dados) e
-[`backup.yml`](.github/workflows/backup.yml) (backup semanal).
+[`db-checks.yml`](.github/workflows/db-checks.yml) (**diário** — Realtime, qualidade dos dados e
+grants) e [`backup.yml`](.github/workflows/backup.yml) (backup semanal).
 
 ## Publicação
 
@@ -73,18 +75,18 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 
 | Caminho | O que é |
 |---|---|
-| `index.html` | A marcação do portal (+ os `@font-face` das fontes vendoradas). |
+| `index.html` | A marcação do portal. |
 | `app.js` | Todo o JS, num IIFE. Dividido em seções com marcas `/* ===== TÍTULO ===== */`. |
-| `styles.css` | Todo o CSS. |
+| `styles.css` | Todo o CSS (+ os `@font-face` das fontes vendoradas). |
 | `vendor/` | `supabase-js` (versão fixa), fontes (Archivo, IBM Plex Mono/Sans) e o ícone. Nada disso vem de CDN em runtime. |
 | `manifest.webmanifest` | Manifest do PWA. |
 | `vercel.json` | Cabeçalhos de segurança (CSP) e cache do host (Vercel). |
 | `tests/` | Testes da lógica pura + o gate `check.js`. Ver [`tests/README.md`](tests/README.md). |
-| `scripts/` | Checagens que não cabem no gate offline (navegador, rede) + backup + snapshot de segurança. |
+| `scripts/` | Checagens que não cabem no gate offline (navegador, rede) + backup/restore + snapshot de segurança. |
 | `docs/` | Documentação técnica (abaixo). |
 | `CLAUDE.md` | Contexto detalhado do projeto para sessões de IA (mapa do código, banco, armadilhas). |
 | `CONTEXT.md` | Glossário do domínio (termos do cadastro de linhas). |
-| `.github/workflows/` | Os 6 workflows de CI (ver a tabela de testes acima). |
+| `.github/workflows/` | Os 7 workflows de CI (ver a tabela de testes acima). |
 
 ### Documentação (`docs/`)
 

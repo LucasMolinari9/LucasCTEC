@@ -20,7 +20,8 @@ por 90 dias** (aba Actions → run → Artifacts). Ele usa a **anon key** (públ
 cobre as **14 tabelas públicas do portal** — **não** cobre as 4 de staging do ETL
 (`evento_dados`, `evento_textos`, `portaria_data`, `portaria_texto_teste`) nem a estrutura.
 É a rede que garante que sempre existe *algum* dump recente mesmo se a rotina manual atrasar;
-o dump **completo** continua sendo o manual abaixo.
+o dump **completo** continua sendo o manual abaixo. Para ler esse NDJSON de volta, use o
+**`scripts/restore_rest.mjs`** (caminho C do runbook de restauração).
 
 > **Por que separado:** o CSV carrega só as **linhas**; não carrega estrutura, índices, RLS
 > nem funções. O `backup_schema.sql` carrega só a **estrutura**; não carrega dados. Juntos =
@@ -29,13 +30,21 @@ o dump **completo** continua sendo o manual abaixo.
 > **⚠️ Os CSVs NÃO vão para o git.** Dados no repositório = vazamento. Só o `.sql` e os `.md`
 > (estrutura e docs) são versionados. Os CSVs ficam numa pasta do dono (Google Drive etc.).
 
-## Por que não há backup automático
+## Por que não há backup automático **do Supabase** (e o que temos no lugar)
 
-O projeto está no **plano Free (NANO)** do Supabase. Backup diário automático e PITR são
-recursos **exclusivos do plano Pro** (US$25/mês) — no Free não existe botão de "ativar", a
-seção Database → Backups só oferece upgrade. Enquanto o projeto ficar no Free, o backup é
-**manual** (este runbook). Migrar para o Pro tornaria o backup automático e tornaria este
-processo manual desnecessário.
+Duas coisas diferentes, que este documento já confundiu (achado 8 da auditoria de 31/07/2026 —
+o título aqui dizia "Por que não há backup automático" logo depois da seção acima descrever um
+backup automático, e afirmava que o backup era manual):
+
+- **Backup nativo do Supabase (diário + PITR): NÃO temos.** O projeto está no **plano Free
+  (NANO)**, e esses recursos são **exclusivos do plano Pro** (US$25/mês) — no Free não existe
+  botão de "ativar", a seção Database → Backups só oferece upgrade.
+- **Backup automatizado próprio (GitHub Actions): TEMOS, e é parcial.** É o `backup.yml`
+  descrito no TL;DR: semanal, só as 14 tabelas públicas, só dados, sem estrutura e sem staging.
+
+Ou seja: existe automação, mas ela **não substitui** o runbook manual abaixo — nenhum dos dois
+sozinho recupera o portal. Migrar para o Pro tornaria o backup nativo automático e reduziria
+este processo manual ao mínimo.
 
 ## Formas de fazer o backup dos DADOS
 
@@ -131,17 +140,23 @@ criar/alterar tabela, índice, policy ou função, atualize-o. As consultas-font
 
 > ### ⚠️ Escolha o caminho ANTES de começar
 >
-> Há dois, e **eles não são equivalentes**. O exercício de 28/07/2026 travou justamente por ter
-> seguido o de baixo:
+> Há três, e **eles não são equivalentes**. O exercício de 28/07/2026 travou justamente por ter
+> seguido o do meio:
 >
 > | Caminho | Quando usar | Risco conhecido |
 > |---|---|---|
 > | **A — `pg_restore`** (recomendado) | sempre que existir um `.dump` da Opção 1 | nenhum medido |
-> | **B — CSV pelo Table Editor** | só se não houver `.dump`, nem `pg_dump` instalado | **exportação parcial silenciosa** — foi o que deixou `tabela_vista_teste` vazia e `itinerario_teste` com 5.298 de 52.146 linhas |
+> | **C — NDJSON** (`restore_rest.mjs`) | quando o que você tem é o **artifact do Actions** ou uma pasta da Opção 2 | **cobre só dados**; se o artifact veio do workflow, **não tem staging** |
+> | **B — CSV pelo Table Editor** | só se não houver nem `.dump` nem NDJSON | **exportação parcial silenciosa** — foi o que deixou `tabela_vista_teste` vazia e `itinerario_teste` com 5.298 de 52.146 linhas |
 >
 > O caminho B falha **sem erro**: o import termina "com sucesso" sobre um CSV que só continha a
 > página visível do Table Editor. Por isso, se você for obrigado a usá-lo, a conferência de
 > contagens do passo 6 deixa de ser opcional.
+>
+> O caminho C só existe desde **31/07/2026**. Até então o `backup.yml` produzia NDJSON toda
+> semana e **não havia como ler esse formato de volta** — a única camada automática do projeto
+> era a única sem caminho de volta (achado 2 da auditoria cruzada). Um backup que ninguém sabe
+> restaurar é uma cópia de dados, não um plano de recuperação.
 
 ### Caminho A — restaurar de um dump (`pg_restore`)
 
@@ -159,9 +174,21 @@ criar/alterar tabela, índice, policy ou função, atualize-o. As consultas-font
    destino; `--exit-on-error` existe para o restore **parar** no primeiro problema em vez de
    terminar pela metade parecendo bem-sucedido.
 4. **SQL Editor** → cole `backup_schema.sql` inteiro → **Run**. O dump traz a estrutura, mas o
-   `backup_schema.sql` é a baseline **versionada e conferida** de RLS, policies e grants — rodá-lo
-   por cima é o que garante que o projeto restaurado não fique mais aberto que produção. Foi
-   exatamente esse desvio que o exercício de 28/07 encontrou (`anon` com TRUNCATE).
+   comando do passo 3 usa **`--no-privileges`**, que **descarta os GRANTs** — então o projeto
+   restaurado chega aqui sem a postura de segurança. O `backup_schema.sql` é a baseline
+   **versionada e conferida** de RLS, policies e grants; rodá-lo por cima é o que garante que o
+   projeto restaurado não fique mais aberto que produção. Foi exatamente esse desvio que o
+   exercício de 28/07 encontrou (`anon` com TRUNCATE).
+
+   > **Isto só passou a funcionar em 31/07/2026.** Até então o `backup_schema.sql` tinha 18
+   > `CREATE TABLE` crus, e este passo — rodado depois de um `pg_restore` que já criara tudo —
+   > abortava no primeiro `relation "tabela_vista_teste" already exists`. Como o SQL Editor roda
+   > o arquivo como um lote único, **nada** das seções 6-8 era aplicado: o banco restaurado
+   > ficava sem GRANTs endurecidos e sem os default privileges fechados, em silêncio e no pior
+   > momento possível. O arquivo agora é **idempotente** e foi medido: 3 execuções seguidas num
+   > PostgreSQL limpo terminam com exit 0 e o estado correto (18 tabelas, 44 índices, 14
+   > policies, 8 funções, 1 trigger, 1 FK, RLS nas 18, 14 no Realtime, `anon`/`authenticated`
+   > só com SELECT em 14 tabelas). Achado 1 da auditoria cruzada de 31/07/2026.
 5. Siga do passo 5 do caminho B em diante (sequências, `SB_URL`/`SB_KEY`, Auth).
 
 ### Caminho B — restaurar de CSVs (só sem `.dump`)
@@ -195,9 +222,51 @@ criar/alterar tabela, índice, policy ou função, atualize-o. As consultas-font
    novo host `*.supabase.co`).
 7. Recrie o **usuário do Auth** do dono (1 login) manualmente no Dashboard — não vai nos CSVs.
 
-### Passo 8 (os DOIS caminhos) — conferir que o restore prestou
+### Caminho C — restaurar de NDJSON (`scripts/restore_rest.mjs`)
 
-Nenhum dos dois caminhos está terminado quando o import termina. Três conferências, nesta ordem —
+Para quando o que você tem é o **artifact do GitHub Actions** (aba Actions → run do `backup.yml`
+→ Artifacts) ou uma pasta gerada à mão pela Opção 2.
+
+1. **Ligue backup antes de qualquer coisa** se for reusar o projeto atual.
+2. Crie um projeto Supabase novo (ou zere o atual, com cuidado).
+3. **SQL Editor** → cole `backup_schema.sql` inteiro → **Run**. O NDJSON tem **só dados**; a
+   estrutura vem daqui.
+4. **Confira o backup sem escrever nada** — é o comportamento padrão do script:
+
+   ```bash
+   SUPABASE_URL="https://<novo-ref>.supabase.co" \
+   SUPABASE_SERVICE_KEY="<service_role key: Dashboard → Settings → API>" \
+   node scripts/restore_rest.mjs ./backup_AAAA-MM-DD
+   ```
+
+   Ele confere o **SHA-256 de cada arquivo contra o `manifest.json`**, confere as contagens,
+   mostra o estado atual do destino e diz exatamente o que faria. Não escreve nada sem
+   `--executar`. **Exige service key**: `anon` só tem SELECT, por desenho — não existe caminho
+   de escrita pela chave pública, então também não existe restore por ela.
+5. **Restaure**, acrescentando `--executar`. Se alguma tabela de destino tiver conteúdo, ele
+   aborta e manda usar `--sobrescrever` (que **apaga** o conteúdo atual dessas tabelas antes de
+   inserir). O script insere na ordem certa da FK (`tabela_vista_teste` antes de
+   `tarifa_atual_teste`), em lotes, e no fim **reconfere as contagens** no banco — se divergir,
+   sai com erro em vez de dizer "ok".
+6. **Reposicione as sequências de `row_id`** — o script imprime o SQL pronto no fim, porque o
+   PostgREST não executa SQL arbitrário. Cole no SQL Editor.
+7. Se o projeto for **novo**, atualize `SB_URL` e `SB_KEY` no topo do `app.js` e confira a CSP.
+8. Recrie o **usuário do Auth** do dono.
+
+> **⚠️ O artifact do workflow não tem tudo.** O `backup.yml` roda em **modo público** (anon key),
+> então cobre as 14 tabelas do portal e **não** as 4 de staging do ETL. Restaurar a partir dele
+> devolve o portal ao ar, mas deixa a staging vazia — e um rebuild do ETL desfaz correções feitas
+> só nas tabelas finais. Para restore completo, use um NDJSON gerado com **service key** (modo
+> completo) ou o caminho A. O script avisa isso sozinho quando lê `"modo": "publico"` no manifest.
+
+> **Bancada:** `tests/restore_rest.rig.mjs` (offline, stub de PostgREST). Prova que sem
+> `--executar` não sai escrita nenhuma, que SHA divergente/arquivo truncado/arquivo fora do
+> manifest abortam **antes** de escrever, que a ordem respeita a FK e que contagem final
+> divergente derruba o restore. Rode com `NO_PROXY=127.0.0.1 node tests/restore_rest.rig.mjs`.
+
+### Passo 8 (TODOS os caminhos) — conferir que o restore prestou
+
+Nenhum dos caminhos está terminado quando o import termina. Três conferências, nesta ordem —
 as duas primeiras pegam o modo de falha silencioso, a terceira é a única que prova que o **portal**
 funciona contra o resultado:
 

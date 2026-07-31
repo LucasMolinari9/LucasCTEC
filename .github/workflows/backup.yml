@@ -39,7 +39,7 @@ jobs:
       - name: Dump NDJSON via REST (modo público)
         env:
           SUPABASE_URL: https://lwzsxuaqqeoamukduhev.supabase.co
-          # anon key — pública por design (é a mesma embutida no index.html servido a todo visitante)
+          # anon key — pública por design (é a mesma que fica no topo do app.js, servido a todo visitante)
           SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3enN4dWFxcWVvYW11a2R1aGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTk4NjYsImV4cCI6MjA5NTQ5NTg2Nn0.90R-n9pu_gpDfmRr7O4DMAdjtIUkIDGyEKfG9zXXV1s
         run: node scripts/backup_rest.mjs ./backup_out
       - name: Publicar artifact (90 dias)

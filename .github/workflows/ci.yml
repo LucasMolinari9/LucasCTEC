@@ -45,3 +45,16 @@ jobs:
           node-version: '20'
       - name: Gate de pré-publicação (sintaxe + anti-drift + testes)
         run: node tests/check.js
+
+      # As bancadas ficam FORA do check.js de propósito (o contrato dele é offline e SEM efeitos;
+      # elas sobem servidor HTTP e processo filho). Mas até 31/07/2026 não rodavam em lugar nenhum
+      # — só se alguém lembrasse, que é exatamente o que o CLAUDE.md registra como defeito do
+      # check_realtime.mjs. São offline e sem dependências, então cabem aqui e não pesam.
+      # A do restore importa mais: restore_rest.mjs é o único script do repo que escreve no banco.
+      - name: Bancadas de backup e restore (stub de PostgREST)
+        env:
+          NO_PROXY: 127.0.0.1
+          no_proxy: 127.0.0.1
+        run: |
+          node tests/backup_rest.rig.mjs
+          node tests/restore_rest.rig.mjs

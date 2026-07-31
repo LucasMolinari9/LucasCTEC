@@ -30,6 +30,9 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+// O inventário de tabelas mora em lib/tabelas.mjs desde 31/07/2026, compartilhado com o
+// restore_rest.mjs — duas cópias divergiriam justamente na hora de um restore.
+import { PK as TABELAS, STAGING } from './lib/tabelas.mjs';
 
 const URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -43,31 +46,6 @@ if (!URL || !KEY) {
   console.error('Faltou SUPABASE_URL e/ou uma chave (SUPABASE_SERVICE_KEY ou SUPABASE_ANON_KEY) no ambiente. Veja o cabeçalho do arquivo.');
   process.exit(1);
 }
-
-// Staging do ETL: sem grant para anon (invisíveis pela API pública) → só entram no modo completo.
-const STAGING = new Set(['evento_dados', 'evento_textos', 'portaria_data', 'portaria_texto_teste']);
-
-// tabela -> coluna de PK usada para ordenar a paginação (todas têm PK desde 15/07/2026).
-const TABELAS = {
-  tabela_vista_teste: 'codlinha,codempresa', // PK composta; ordenar pelas duas colunas (codlinha repete → offset instável)
-  tarifa_atual_teste: 'ordem_importacao',
-  itinerario_teste: 'row_id',
-  qh_teste: 'id',
-  qh_intervalo_teste: 'row_id',
-  qh_predeterminado_teste: 'row_id',
-  evento_teste: 'id',
-  evento_dados: 'id',
-  evento_textos: 'id',
-  evento_empresa_teste: 'row_id',
-  evento_linha_teste: 'row_id',
-  codempresa_teste: 'id',
-  portaria_teste: 'id',
-  portaria_data: 'id',
-  portaria_texto_teste: 'id',
-  municipio_teste: 'cod_ibge',
-  localidades_teste: 'ordem_importacao',
-  origem_teste: 'cod_origem',
-};
 
 const headers = { apikey: KEY, Authorization: `Bearer ${KEY}` };
 

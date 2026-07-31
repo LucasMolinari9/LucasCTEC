@@ -23,8 +23,9 @@ exibe e **atualiza ao vivo** (Realtime).
   dinamicamente pelo `app.js`** (seção `REALTIME`; não há `<script>` dele no `index.html` — não
   bloqueia a primeira pintura).
 - **Fontes vendoradas** em `vendor/fonts/` (Archivo, IBM Plex Mono/Sans — subset latin, dos
-  pacotes `@fontsource` 5.3.0); `@font-face` no `<style>` do `index.html`. **Nenhum terceiro
-  externo em runtime.** Para atualizar: `npm pack @fontsource/<família>`, extrair
+  pacotes `@fontsource` 5.3.0); os `@font-face` ficam no **`styles.css`** (foram para lá com a
+  extração do CSS de 21-22/07/2026; até 31/07 esta linha ainda dizia `<style>` do `index.html`).
+  **Nenhum terceiro externo em runtime.** Para atualizar: `npm pack @fontsource/<família>`, extrair
   `files/<família>-latin-<peso>-normal.woff2`.
 - O botão **PDF** (barra do modal) monta o documento **completo** num container oculto
   `.pdf-export` e usa `window.print()` (vetorial) — sem dependência externa de PDF.
@@ -149,9 +150,12 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
 - **Config:** `vercel.json` (raiz) carrega os cabeçalhos de segurança — em especial a **CSP**,
   cujo `connect-src` autoriza os projetos Supabase de produção
   (`lwzsxuaqqeoamukduhev`) e teste (`gontnlfmothfglssbyyk`) em REST e Realtime.
-  `app.js` mantém produção em allowlist: somente `divatdetro.vercel.app` usa produção; preview,
-  localhost e hostname desconhecido usam teste. Configuração ausente falha fechado, sem fallback
-  para produção. Ao mexer na CSP ou nessa matriz, rode também `tests/environment.test.js`.
+  `app.js` mantém produção em allowlist (`HOSTS_PROD`): só **os 3 domínios de produção** que o
+  projeto Vercel `divatdetro` serve — o canônico `divatdetro.vercel.app`, o alias do time e o
+  alias da branch `main` — usam produção; preview, localhost e hostname desconhecido usam teste.
+  Configuração ausente falha fechado, sem fallback para produção. (Até 31/07/2026 esta linha
+  dizia "somente `divatdetro.vercel.app`", de quando a lista tinha um domínio só.) Ao mexer na
+  CSP ou nessa matriz, rode também `tests/environment.test.js`.
 - **Auto-deploy:** conectar o repo GitHub `LucasMolinari9/LucasCTEC` ao projeto Vercel pelo
   **dashboard** (OAuth, ação única) → **push na `main` = deploy** (e **push em branch = preview
   deploy**, use-o). Sem essa conexão, publica-se rodando o MCP `deploy_to_vercel` após o push.
@@ -259,9 +263,11 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    mudou de forma, ajuste o regex na tabela `FATOS`). Ela é deliberadamente estreita: a 1ª versão
    varria todo token em backtick e deu 61 falsos positivos contra 0 verdadeiros.
 2e. **Qualidade dos dados pós-ETL — `node scripts/check_data_quality.mjs`** (precisa de rede;
-   chama a RPC `divat_data_quality()` como `anon`). Fecha a issue #63. Roda semanal no workflow
-   `db-checks.yml`, que **também passou a rodar o `check_realtime.mjs`** — ele existia desde
-   sempre e não estava em nenhum workflow, só rodava se alguém lembrasse.
+   chama a RPC `divat_data_quality()` como `anon`). Fecha a issue #63. Roda **diariamente**
+   (08:00 UTC) no workflow `db-checks.yml`, que **também passou a rodar o `check_realtime.mjs`**
+   — ele existia desde sempre e não estava em nenhum workflow, só rodava se alguém lembrasse.
+   Quem dita a cadência diária é o job `seguranca` (o `check_grants.mjs`); os outros dois pegam
+   carona. (Até 31/07/2026 esta linha dizia "semanal", de antes de o cron virar diário em 27/07.)
    **A integridade hub-and-spoke JÁ ESTÁ VIOLADA no banco** (medido em 27/07/2026): há **17
    codlinhas órfãs** — filhos em `itinerario_teste` (2), `qh_teste` (3),
    `qh_predeterminado_teste` (5) e `evento_teste` (7) apontando para `codlinha` que não existe
@@ -302,7 +308,9 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   (runbook completo: **`docs/backup.md`**):
   1. **Automática:** `.github/workflows/backup.yml` roda semanal (e sob demanda) o
      `scripts/backup_rest.mjs` em **modo público** (anon key, 14 tabelas públicas, sem staging);
-     artifact do Actions por 90 dias.
+     artifact do Actions por 90 dias. **A volta é o `scripts/restore_rest.mjs`** (caminho C do
+     runbook) — único script do repo que ESCREVE no banco: exige service key, o padrão é conferir
+     sem escrever, e só escreve com `--executar`. Bancada em `tests/restore_rest.rig.mjs`.
   2. **Manual (completa):** `pg_dump` (padrão-ouro) ou `backup_rest.mjs` com service key
      (18 tabelas) ou 18 CSVs pelo Table Editor — sempre **FORA do git** (dados no repo =
      vazamento; o git versiona só CÓDIGO).
