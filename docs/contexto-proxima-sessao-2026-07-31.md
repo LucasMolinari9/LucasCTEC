@@ -4,24 +4,28 @@
 > descreve **o que está aberto e como atacar cada coisa**. Se divergirem, o `CLAUDE.md` manda.
 >
 > Complementares: `docs/pendencias-2026-07-31-consolidado.md` (o placar dos achados),
-> `docs/handoff-2026-07-31-pr4-visibilidade.md` (o que a sessão de 31/07 fez e decidiu).
+> `docs/handoff-2026-07-31-pr4-visibilidade.md` (o que a sessão de 31/07 fez e decidiu),
+> **`docs/handoff-2026-07-31-auditoria-cruzada.md`** (a lista curta do que ficou aberto depois da
+> 3ª sessão — comece por ela se quiser só o "o que falta").
 
 ## 0. Estado do repositório
 
-> **Atualizado em 31/07 (2ª sessão).** A versão anterior desta seção dizia `main: fda0152` e
-> listava os três docs como "sem PR"; os dois deixaram de valer com o merge do #89.
+> **Atualizado em 31/07 (3ª sessão — auditoria cruzada).** A versão anterior dizia
+> `main: 47de6ee` e listava o **#73 como o único PR aberto**; os dois deixaram de valer.
 
-- **`main`: `47de6ee`** (merge do #90). Gate verde (`node tests/check.js`).
+- **`main`: `0bfb38a`** (merge do **#73**). Gate verde (`node tests/check.js`).
 - **Repositório PÚBLICO**, por decisão registrada em `docs/adr/0003-repositorio-publico.md`.
+- A `main` agora tem **`supabase/migrations/`** e **8 workflows** (entrou o `phase3-security.yml`).
+- ⚠️ **A Fase 3 continua aplicada SÓ no banco de teste.** Mergear o #73 não aplicou DDL em lugar
+  nenhum. Promover para produção segue **proibido sem autorização separada** — ver § 2.2.
 
-### Branches vivas
+### O trabalho da 3ª sessão está numa branch, NÃO na `main`
 
 | Branch | O que tem | Estado |
 |---|---|---|
-| `agent/fase-3-hardening-moderado` | **é o head do #73**, hoje `631d97e` — o rebase em `aac916c` mais as correções 2.2.2 e 2.2.3 | promovida em 31/07, CI todo verde |
-| `pr73-antes-do-rebase` | `13c897a`, o head do #73 **antes** da promoção | rede de segurança, não apagar sem querer |
-| `claude/fase3-rebased-aac916c` | idêntica ao head do #73 | redundante, pode apagar |
-| `claude/fase3-rebased-fda0152` | `58903bb`, o rebase da sessão **anterior**, base `fda0152` | superada, pode apagar |
+| **`claude/gpt-sol-report-9jrx5h`** | 7 commits: achados 1, 2, 3, 5-9 da auditoria cruzada + o gate de ambientes + prontidão para as chaves publishable | ⚠️ **empurrada, SEM PR aberto** |
+| `pr73-antes-do-rebase` | `13c897a`, o head do #73 antes da promoção | rede de segurança, não apagar sem querer |
+| `agent/fase-3-hardening-moderado`, `claude/fase3-rebased-*` | já mergeadas ou redundantes | podem ser apagadas |
 
 ⚠️ **`git branch -a` não lista as branches do remoto neste ambiente** — o clone traz poucos refs, e
 o que ele mostra é só o que já foi buscado. Foi assim que a 2ª sessão de 31/07 concluiu que a
@@ -32,10 +36,9 @@ o que ele mostra é só o que já foi buscado. Foi assim que a 2ª sessão de 31
 
 | PR | Estado |
 |---|---|
-| #85, #86, #87, #88 | ✅ mergeados (o plano dos 4 PRs, concluído) |
-| #89 | ✅ mergeado em 31/07 — trouxe os três docs de 31/07 para a `main` |
-| #84 | ✅ fechado como redundante em 31/07 |
-| **#73** | 🟡 **draft aberto desde 29/07** — o único PR aberto |
+| #84 a #91 | ✅ mergeados ou fechados |
+| **#73** | ✅ **mergeado em 31/07** (`0bfb38a`) — saiu de rascunho depois de a branch ser atualizada e a CI rodar verde contra a base nova |
+| — | 🟡 **nenhum PR aberto.** O trabalho da 3ª sessão está na branch acima esperando PR |
 
 ---
 
@@ -104,11 +107,24 @@ Sobra para o dono exatamente o que só ele pode fazer: rodar e cronometrar.
 
 ---
 
-### 2.2 🟡 PR #73 — decidir o destino
+### 2.2 ✅ FECHADO — PR #73 mergeado em 31/07 (3ª sessão)
 
-O único PR aberto. Draft desde 29/07, hoje **778 adições em 10 arquivos, 18 commits** (eram 722 em
-17 antes do rebase e das correções), aplicado somente no Supabase de **teste**
-(`gontnlfmothfglssbyyk`). Produção não é alvo de nada nele.
+> **Decidido pelo dono e executado.** A branch foi atualizada para a `main` (os 7 commits
+> intermediários eram de documentação, mas tocavam `docs/seguranca.md`, `docs/schema.md` e
+> `CLAUDE.md` — os mesmos arquivos do PR —, então valia rodar os gates contra a base nova em vez
+> de confiar no `mergeable_state: clean`). CI toda verde no head `026bb1e`; saiu de rascunho e
+> mergeou em `0bfb38a`.
+>
+> **O QUE CONTINUA VALENDO, e é a parte que importa:** promover a Fase 3 para **produção** segue
+> proibido sem autorização separada. A leitura abaixo explica por quê — não é burocracia.
+>
+> As três pendências operacionais (credencial `divat_auditor_ci`, secret
+> `SUPABASE_TEST_AUDIT_DATABASE_URL`, branch protection) **continuam abertas e são do dono** —
+> elas não bloqueavam o merge. A quarta, o `VERCEL_AUTOMATION_BYPASS_SECRET`, já tinha caído.
+
+Histórico do que ele faz, mantido porque é o que sustenta a proibição acima: **778 adições em 10
+arquivos, 18 commits**, aplicado somente no Supabase de **teste** (`gontnlfmothfglssbyyk`).
+Produção não é alvo de nada nele.
 
 **O que ele faz:** cria schemas `private` e `audit`; move `f_unaccent`/`fn_vigor_auto` para
 `private` (saem do alcance do PostgREST); move as 4 RPCs diagnósticas para `audit` como
@@ -304,10 +320,47 @@ sem PR; deixou de valer.
 
 ---
 
+### 2.9 🟡 A branch da auditoria cruzada espera PR
+
+Sete commits em `claude/gpt-sol-report-9jrx5h`, gate verde, **sem PR**. Fecham 8 dos 9 achados do
+relatório de 31/07. O que entrou, em uma linha cada:
+
+- `backup_schema.sql` **idempotente** (achado 1, o crítico) — medido em PG 16 local: o arquivo
+  antigo abortava na 2ª execução e, como o SQL Editor roda em lote único, o restore ficava **sem
+  os GRANTs endurecidos**, em silêncio;
+- `scripts/restore_rest.mjs` (achado 2) — o NDJSON do backup automático ganhou caminho de volta;
+- escopo declarado nos docs que afirmam estado de banco (achado 3) + `bd_teste` removido, que era
+  **nome morto**: produção hoje se chama `Banco - Divat`;
+- `scripts/check_ambientes.mjs` — **o gate de divergência teste × produção**, a dívida que estava
+  registrada em quatro documentos e em nenhum código;
+- prontidão para as chaves `sb_publishable_` (achado 4) — o `Bearer` só vai quando a chave é JWT;
+- guardas novas no `[2b]`: ADRs em `DOCS_VIVOS`, marcador de escopo, hosts de produção lidos em
+  prosa, e toda `*.rig.mjs` obrigada a rodar em workflow.
+
+⚠️ **Abrir o PR é o que dispara as verificações que faltam** — ver § 3.
+
+---
+
 ## 3. Nunca verificado — desconhecido, não "fechado"
 
 Nenhuma sessão de agente conseguiu inspecionar painel de Vercel ou Supabase. Três dos quatro
 handoffs anteriores tratavam parte disto como resolvido.
+
+**Acrescentado pela 3ª sessão — nada disto rodou contra os bancos reais:**
+
+- **`check_deriva.mjs`** — o `docs/schema.md` mudou (título e cabeçalho de escopo) e ele valida
+  esse arquivo coluna a coluna. **É a verificação pendente mais importante.**
+- **`check_ambientes.mjs`** — gate novo, nunca executado contra os dois projetos. O baseline nasceu
+  vazio com uma **previsão escrita dentro**: não deve haver achado, porque a Fase 3 divergiu o
+  teste no que o portal não usa. Se a 1ª execução falhar, a previsão estava errada — investigue
+  antes de baselinar.
+- **`restore_rest.mjs`** — conversou só com o stub da bancada, nunca com um PostgREST real. Se o
+  modelo de PostgREST que a bancada implementa estiver errado, o script está errado do mesmo jeito
+  e a bancada passa verde. Três pontos que só um Supabase de verdade resolve: se
+  `?col=not.is.null` é aceito como filtro de DELETE; se lotes de 500 linhas cabem no limite de
+  requisição em tabela larga (`itinerario_teste`, 52k linhas de texto); se
+  `GENERATED BY DEFAULT AS IDENTITY` aceita `row_id` explícito vindo por REST.
+  **Descubra isso no exercício do § 2.1, não num restore de verdade.**
 
 - **MFA nas três contas** (Supabase, GitHub, Vercel) — a ação de maior impacto do `seguranca.md`
   § 5 item 1.
@@ -369,10 +422,24 @@ Calibra o que dá para pedir. Não são falhas a contornar — são o contrato.
 ## 5. Como rodar os gates
 
 ```
-node tests/check.js              # offline, sempre — sintaxe, canon, deriva docs×código, unitários
-node scripts/check_views.mjs     # navegador headless, 17 views; aceita filtro: check_views.mjs frota
-node scripts/check_abas.mjs      # abas do modal / seletor de documentos
-node scripts/check_migrations.mjs # (só na branch do #73 / fase3-rebased) contrato das migrações, offline
+node tests/check.js               # offline, sempre — sintaxe, canon, deriva docs×código, unitários
+node scripts/check_migrations.mjs # contrato das migrações, offline (já está na main desde o #73)
+node scripts/check_views.mjs      # navegador headless, 17 views; aceita filtro: check_views.mjs frota
+node scripts/check_abas.mjs       # abas do modal / seletor de documentos
+
+# bancadas com stub de PostgREST — offline, mas sobem servidor e processo filho,
+# por isso ficam fora do check.js. Rodam no ci.yml e o [2b] cobra que estejam lá.
+NO_PROXY=127.0.0.1 node tests/backup_rest.rig.mjs
+NO_PROXY=127.0.0.1 node tests/restore_rest.rig.mjs
+NO_PROXY=127.0.0.1 node tests/ambientes.rig.mjs
+NO_PROXY=127.0.0.1 node tests/check_grants.rig.mjs
+
+# precisam de REDE — não rodam no ambiente do agente (403 do proxy)
+node scripts/check_deriva.mjs        # docs × produção
+node scripts/check_realtime.mjs      # RT_TABLES × publicação
+node scripts/check_data_quality.mjs  # órfãos e U+FFFD
+node scripts/check_grants.mjs        # RLS/grants/policies
+node scripts/check_ambientes.mjs     # teste × produção (o único que fala com os DOIS bancos)
 ```
 
 ⚠️ **Push numa branch SEM PR aberto não dispara gate nenhum** (consequência do PR 1, desde 30/07).
@@ -384,14 +451,20 @@ nenhum deles.
 
 ## 6. Ordem sugerida
 
-> **O que não depende do dono já foi feito** (31/07, 2ª sessão): o rebase do #73, a correção do
-> `push:` (2.2.2), o registro do pré-requisito (2.2.3) e esta atualização. Tudo o que sobra abaixo
-> precisa da máquina, do painel ou da autorização do dono.
+> **O que não depende do dono já foi feito** (31/07, 3ª sessão): o #73 mergeado, os 8 achados
+> documentais/estruturais da auditoria cruzada, o gate de ambientes e a prontidão para as chaves
+> publishable. Tudo o que sobra abaixo precisa da máquina, do painel ou da autorização do dono.
 
-1. **SEC-06** (2.1). Nada mais tem esse peso, e é o único que descreve capacidade.
-2. **Decidir o #73** (2.2) — já rebaseado, promovido e com CI verde; 2.2.2 e 2.2.3 resolvidos. O
-   que falta são as **pendências operacionais** do corpo do PR (credencial, secret, bypass da
-   Vercel, branch protection) e, se um dia for aplicar em produção, migrar os quatro gates antes.
-3. **Painel** (2.6) — dois cliques, e um fecha o único WARN dos advisors.
+1. **Abrir o PR da branch `claude/gpt-sol-report-9jrx5h`** (2.9). É barato e destrava as
+   verificações do § 3 — nenhum gate de rede rodou contra esse trabalho ainda, e branch sem PR não
+   dispara gate nenhum desde 30/07.
+2. **SEC-06** (2.1). Nada mais tem esse peso, e é o único que descreve **capacidade**, não postura.
+   Junte com a validação do `restore_rest.mjs` (§ 3): o mesmo projeto descartável serve para os
+   dois, e é a diferença entre "o script roda" e "o procedimento funciona".
+3. **Painel** (2.6) — dois cliques, e um fecha o único WARN dos advisors. Some as três pendências
+   operacionais do #73 (§ 2.2), que são da mesma natureza.
 4. **Achado E** (2.3) e **lista das órfãs** (2.4) — os dois exigem mudar RPC, então valem uma
    sessão de `db-change` conjunta, com o dono aplicando.
+5. **Vigiar a postura interna do teste** — o `check_ambientes.mjs` vê os dois bancos como `anon`
+   vê. Índices, policies, RLS e grants do projeto de **teste** seguem sem gate nenhum. É a próxima
+   peça natural se quiser fechar o eixo que a ADR-0002 abriu.

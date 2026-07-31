@@ -5,8 +5,12 @@ modelo) apontou, tudo que a **verificação contra o repositório real** apurou 
 apareceu nas sessões de 30 e 31/07. O objetivo é responder a uma pergunta: **o que ainda falta
 executar.**
 
-- **`main`:** `47de6ee` (merge do #90). Gate verde. *(Era `fda0152` quando este documento foi
-  escrito; o #89 trouxe os três docs de 31/07 para a `main`, e o #90 os atualizou.)*
+- **`main`:** `0bfb38a` (merge do **#73**). Gate verde. *(Era `fda0152` quando este documento foi
+  escrito, depois `47de6ee`; o #73 mergeou na 3ª sessão de 31/07 e trouxe `supabase/migrations/`
+  para a `main`. A Fase 3 continua aplicada só no banco de teste.)*
+- ⚠️ **Este placar cobre os achados de 30/07.** Os da **auditoria cruzada de 31/07** estão em
+  `docs/handoff-2026-07-31-auditoria-cruzada.md`, e o trabalho deles está na branch
+  `claude/gpt-sol-report-9jrx5h`, ainda sem PR.
 - **Fontes:** `docs/handoff-2026-07-30-auditoria-verificacao.md` (verificação do relatório),
   `docs/handoff-2026-07-31-prs-e-smoke.md`, `docs/handoff-2026-07-31-pr4-visibilidade.md`.
 - ⚠️ **Nada aqui foi medido contra os bancos vivos.** O ambiente do agente não alcança o Supabase
@@ -65,10 +69,14 @@ provável dos dados faltantes — foi o que travou a tentativa de 28/07 (`tabela
 **Por que subiu de importância:** é o único item do repositório que descreve uma **capacidade** que
 um atacante não consegue inferir de fora. Nenhuma redação de documento melhora isso.
 
-### 2.2 Desbloquear ou encerrar o PR #73
+### 2.2 ✅ RESOLVIDO — o PR #73 foi mergeado (31/07, 3ª sessão)
 
-Draft aberto desde 29/07, hoje 778 adições em 10 arquivos — rebaseado, promovido e com **CI todo
-verde** desde 31/07. Três pendências operacionais, todas suas:
+Decisão do dono: mergear. A branch foi atualizada para a `main` antes, a CI rodou verde contra a
+base nova, e o merge saiu em `0bfb38a`. **Não aplicou DDL em banco nenhum** — a Fase 3 segue só no
+teste, e promover para produção continua exigindo autorização separada.
+
+As três pendências operacionais abaixo **continuam abertas e são suas** — elas nunca bloquearam o
+merge, ao contrário do que o título anterior deste item sugeria:
 
 - criar/rotacionar `divat_auditor_ci` via `scripts/bootstrap_phase3_auditor.sql`;
 - configurar `SUPABASE_TEST_AUDIT_DATABASE_URL` nos Actions Secrets;
