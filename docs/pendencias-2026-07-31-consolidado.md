@@ -67,7 +67,8 @@ um atacante não consegue inferir de fora. Nenhuma redação de documento melhor
 
 ### 2.2 Desbloquear ou encerrar o PR #73
 
-Draft aberto desde 29/07, 722 adições em 10 arquivos. Três pendências operacionais, todas suas:
+Draft aberto desde 29/07, hoje 778 adições em 10 arquivos — rebaseado, promovido e com **CI todo
+verde** desde 31/07. Três pendências operacionais, todas suas:
 
 - criar/rotacionar `divat_auditor_ci` via `scripts/bootstrap_phase3_auditor.sql`;
 - configurar `SUPABASE_TEST_AUDIT_DATABASE_URL` nos Actions Secrets;
@@ -128,11 +129,14 @@ O `data_quality_baseline.json` **já traz** as 12 órfãs nominalmente classific
 use só contagem" já estava atendido do lado do dado. O que falta é o **gate comparar a lista**: uma
 órfã corrigida e outra criada mantêm o número e passam despercebidas.
 
-### 3.3 `phase3-security.yml` reintroduz a execução dupla
+### 3.3 ✅ FECHADO — `phase3-security.yml` reintroduzia a execução dupla
 
-O workflow novo do PR #73 declara `push:` com `paths:`, **sem `branches: [main]`** — exatamente o
-padrão que o PR 1 removeu dos outros cinco. Se entrar assim, desfaz parcialmente o #86 para os
-caminhos que ele vigia. **Correção de uma linha, antes do merge.**
+O workflow novo do PR #73 declarava `push:` com `paths:`, **sem `branches: [main]`** — exatamente o
+padrão que o PR 1 removeu dos outros cinco. Se entrasse assim, desfaria parcialmente o #86 para os
+caminhos que ele vigia.
+
+**Corrigido em 31/07**, já no head do #73 (`631d97e`), alinhado ao `deriva.yml`/`db-checks.yml`.
+Confirmado na prática: na primeira execução depois da promoção, **cada gate rodou uma vez só**.
 
 ### 3.4 Code Scanning / SARIF (opcional, custo zero)
 
