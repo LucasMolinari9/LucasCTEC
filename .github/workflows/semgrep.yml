@@ -12,8 +12,11 @@
 #       semgrep.dev. Precisam de rede; por isso não dá pra rodar essa metade no ambiente do
 #       agente Claude (saída bloqueada), só aqui e na máquina do dono.
 #
-# Sem upload SARIF / Code Scanning: exige GitHub Advanced Security, que este repo (privado,
-# plano free) não tem. O resultado fica no log do job — e o job falha se houver achado.
+# Sem upload SARIF / Code Scanning. A justificativa antiga ("exige GitHub Advanced Security, que
+# este repo privado no plano free não tem") caiu junto com a premissa: o repo é PÚBLICO desde
+# 31/07/2026 (docs/adr/0003-repositorio-publico.md), e em repo público o Code Scanning é gratuito.
+# Continua de fora por escolha, não por impedimento — o ganho seria ergonomia (achado vira anotação
+# no diff), não cobertura nova. O resultado fica no log do job, e o job falha se houver achado.
 #
 # Os `uses:` estão presos ao SHA (o `# v4` ao lado é só legenda) — ver docs/semgrep.md
 # § "Actions presas ao SHA". Foi a regra `github-actions-mutable-action-tag` deste próprio
@@ -52,7 +55,9 @@ jobs:
       - name: Instalar Semgrep (versão fixa)
         run: pip install semgrep==1.171.0
 
-      # --metrics=off em ambas: o repo é privado, nada de telemetria pra semgrep.dev.
+      # --metrics=off em ambas: nada de telemetria de código pra semgrep.dev. A razão NÃO é a
+      # visibilidade do repo (ele é público) — é não mandar dado do projeto para terceiro sem
+      # necessidade. A justificativa "porque o repo é privado" ficou velha em 31/07/2026.
       # --error faz o job falhar quando há achado (sem isso o Semgrep sai 0 e o gate é decorativo).
       - name: '[1] Regras locais do portal (offline)'
         run: semgrep scan --config=.semgrep/rules --metrics=off --error .

@@ -4,6 +4,48 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 31/07/2026 — O repositório é público POR DECISÃO, e a documentação parou de dizer o contrário
+
+PR 4 do plano da auditoria preliminar de 30/07. O repo já era público havia dias; o que faltava era
+a decisão estar escrita em algum lugar — e, enquanto não estava, a documentação continuava
+mandando o contrário.
+
+- **O item perigoso, corrigido:** `docs/seguranca.md` § 5 listava "**Repositório GitHub privado:**
+  Settings → Danger Zone → Change visibility → Private" entre as ações de maior ganho do dono. Não
+  era premissa velha em prosa — era **instrução acionável**, num documento escrito para ser
+  executado, mandando desfazer a decisão em vigor. Um agente lendo o manual de segurança executa.
+- **`docs/adr/0003-repositorio-publico.md`:** a decisão passa a ter lugar próprio, com o custo
+  aceito registrado — e com o limite desse custo medido, não presumido. A maior parte da
+  documentação descreve controles já observáveis de fora (a chave `anon` e o `app.js` são servidos
+  a todo visitante) ou comportamento público do Postgres. **A exceção é a capacidade de resposta a
+  incidente** (§ 9.2 e § 9.3): essa não é derivável de fora — e a resposta a ela é **fechar o
+  SEC-06**, não redigir a prosa. Enquanto o RTO for desconhecido, a frase é verdadeira dentro ou
+  fora do git.
+- **§ 9 (riscos residuais) reescrito:** registra QUE cada risco foi avaliado, QUAL controle o
+  compensa e POR QUE a convivência foi aceita — **registro de decisão, não log de auditoria**. A
+  versão anterior trazia dump de medição e hash de commit no meio do manual do dono. Os ganchos que
+  impedem remoção silenciosa de controle ficaram: o gate `check_grants.mjs` é diário **por causa do
+  § 9.1**, e as otimizações do `app.js` seguem marcadas como **não** sendo rate limiting.
+- **O `CLAUDE.md` NÃO foi redigido, por decisão.** O plano original previa tirar de lá o mesmo
+  trecho — a medição do default do `supabase_admin`, os 108 grants, "RLS não bloqueia TRUNCATE".
+  Avaliado e recusado: são três fatos públicos compostos, descrevendo um buraco **já fechado**, e
+  aquele parágrafo é o único lugar que explica por que o gate roda todo dia e por que o
+  `backup_schema.sql` revoga mais que `MAINTAIN`. Regra sem lastro é regra que a próxima faxina
+  apaga — foi assim que a versão anterior daquele mesmo parágrafo pôde afirmar o oposto do medido.
+- **Premissas velhas nos comentários:** `semgrep.yml` (× 2), `docs/semgrep.md` e `backup.yml`.
+  Duas conclusões sobreviveram à troca de premissa e ficaram registradas como tal — `--metrics=off`
+  (não mandar dado a terceiro vale em repo público ou privado) e "nada de service key no workflow"
+  (superfície do Actions, não visibilidade). Uma caiu: Code Scanning / SARIF **não** exige Advanced
+  Security em repo público — segue de fora por escolha, não por impedimento.
+- **`LICENSE` conferida, sem mudança:** proprietária, todos os direitos reservados. Público não é
+  open source.
+- **ADR-0002 saiu do papel, e a ADR passou a dizer isso:** a verificação de 31/07 às 01:03 UTC está
+  registrada no Status. Entre 28/07 e essa data a ADR afirmava a propriedade sem que nenhum gate a
+  exercesse em preview.
+- **`docs/handoff-2026-07-30-auditoria-verificacao.md` resgatado:** existia só na branch
+  `claude/ask-matt-u6cwf8`, sem PR, e o CHANGELOG **já citava o caminho** — referência apontando
+  para arquivo ausente na `main` desde a entrada anterior.
+
 ## 31/07/2026 — O `deploy-smoke` passou a verificar preview de verdade (achado A)
 
 Fecha o achado **A** da auditoria preliminar de 30/07: o gate reprovava em **todo** preview, e por

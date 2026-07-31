@@ -138,8 +138,12 @@ versão nova traz regra nova e deixaria vermelho um PR que não mexeu em nada di
 subir: troque o número no workflow, rode `./scripts/semgrep.sh --full` local e resolva os
 achados **no mesmo commit**.
 
-Não há upload SARIF / Code Scanning: exige GitHub Advanced Security, que este repo (privado,
-plano free) não tem. O resultado vive no log do job.
+Não há upload SARIF / Code Scanning. Até 31/07/2026 a razão registrada aqui era "exige GitHub
+Advanced Security, que este repo privado no plano free não tem" — a premissa caiu com a decisão de
+manter o repositório **público** (`docs/adr/0003-repositorio-publico.md`): em repo público o Code
+Scanning é gratuito. Segue de fora **por escolha**, não por impedimento — o ganho seria ergonomia
+(o achado vira anotação na linha do diff, em vez de linha de log), não cobertura nova; o gate já
+falha o job quando encontra algo. O resultado vive no log do job.
 
 ## Actions presas ao SHA
 
