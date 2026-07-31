@@ -15,14 +15,23 @@ mandando o contrário.
   era premissa velha em prosa — era **instrução acionável**, num documento escrito para ser
   executado, mandando desfazer a decisão em vigor. Um agente lendo o manual de segurança executa.
 - **`docs/adr/0003-repositorio-publico.md`:** a decisão passa a ter lugar próprio, com o custo
-  aceito registrado — documentação e riscos residuais viram leitura pública; a resposta não é
-  fechar o repo, é **não versionar roteiro operacional**.
-- **§ 9 (riscos residuais) reescrito conforme a decisão do dono:** registra QUE cada risco foi
-  avaliado, QUAL controle o compensa e POR QUE a convivência foi aceita — sem o passo a passo de
-  onde o controle falta. O detalhe operacional sai para a pasta dos backups, fora do git. Os
-  ganchos que impedem remoção silenciosa de controle ficaram: o gate `check_grants.mjs` é diário
-  **por causa do § 9.1**, e as otimizações do `app.js` seguem marcadas como **não** sendo rate
-  limiting.
+  aceito registrado — e com o limite desse custo medido, não presumido. A maior parte da
+  documentação descreve controles já observáveis de fora (a chave `anon` e o `app.js` são servidos
+  a todo visitante) ou comportamento público do Postgres. **A exceção é a capacidade de resposta a
+  incidente** (§ 9.2 e § 9.3): essa não é derivável de fora — e a resposta a ela é **fechar o
+  SEC-06**, não redigir a prosa. Enquanto o RTO for desconhecido, a frase é verdadeira dentro ou
+  fora do git.
+- **§ 9 (riscos residuais) reescrito:** registra QUE cada risco foi avaliado, QUAL controle o
+  compensa e POR QUE a convivência foi aceita — **registro de decisão, não log de auditoria**. A
+  versão anterior trazia dump de medição e hash de commit no meio do manual do dono. Os ganchos que
+  impedem remoção silenciosa de controle ficaram: o gate `check_grants.mjs` é diário **por causa do
+  § 9.1**, e as otimizações do `app.js` seguem marcadas como **não** sendo rate limiting.
+- **O `CLAUDE.md` NÃO foi redigido, por decisão.** O plano original previa tirar de lá o mesmo
+  trecho — a medição do default do `supabase_admin`, os 108 grants, "RLS não bloqueia TRUNCATE".
+  Avaliado e recusado: são três fatos públicos compostos, descrevendo um buraco **já fechado**, e
+  aquele parágrafo é o único lugar que explica por que o gate roda todo dia e por que o
+  `backup_schema.sql` revoga mais que `MAINTAIN`. Regra sem lastro é regra que a próxima faxina
+  apaga — foi assim que a versão anterior daquele mesmo parágrafo pôde afirmar o oposto do medido.
 - **Premissas velhas nos comentários:** `semgrep.yml` (× 2), `docs/semgrep.md` e `backup.yml`.
   Duas conclusões sobreviveram à troca de premissa e ficaram registradas como tal — `--metrics=off`
   (não mandar dado a terceiro vale em repo público ou privado) e "nada de service key no workflow"

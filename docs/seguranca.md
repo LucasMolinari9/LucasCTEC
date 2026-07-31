@@ -143,11 +143,12 @@ Três coisas não estão fechadas. Estão aqui para não serem redescobertas com
 auditoria — e para que a decisão de conviver com elas seja explícita, não esquecimento.
 
 > **Por que esta seção é curta.** Ela registra **que** cada risco foi avaliado, **qual controle o
-> compensa** e **por que a convivência foi aceita**. Não traz o passo a passo de onde o controle
-> falta nem como o risco se materializaria: o repositório é público (`docs/adr/0003-repositorio-publico.md`),
-> e roteiro operacional de risco aberto não se versiona. Esse detalhe — a medição que originou cada
-> item e o que exatamente falta cumprir — vive **fora do git**, na pasta dos backups do dono, junto
-> do que já não pode ser versionado. Ao fechar um destes itens, atualize os dois lugares.
+> compensa** e **por que a convivência foi aceita** — é registro de decisão, não log de auditoria.
+> A versão anterior trazia dump de medição e hash de commit no meio do manual do dono, e ficava
+> ilegível para a pessoa que precisa decidir. A medição que originou cada item continua registrada
+> onde ela serve: o § 9.1 no `CLAUDE.md` (seção **Supabase → RLS / segurança**), o § 9.3 no
+> `docs/backup.md`. **Encurtar aqui não é esconder nada** — o repositório é público por decisão
+> (`docs/adr/0003-repositorio-publico.md`) e o que protege o banco é o gate diário, não o sigilo.
 
 **9.1 — Defaults de privilégio herdados do Supabase (SEC-01, parcial).** O projeto tem um conjunto
 de default privileges que **não pertence ao `postgres`** e por isso **não é fechável** por nós —

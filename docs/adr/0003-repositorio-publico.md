@@ -21,12 +21,22 @@ O ganho concreto de ser público é operacional: minutos de Actions ilimitados (
 incluindo os dois crons diários, deixam de consumir cota) e Code Scanning / SARIF sem custo.
 
 **O que a decisão custa, e é aceito:** documentação de arquitetura, runbooks e a lista de riscos
-residuais passam a ser legíveis por qualquer pessoa. Isso não abre caminho novo — mas encurta o
-reconhecimento de quem já quisesse atacar. A resposta não é fechar o repo: é **não versionar
-roteiro operacional**. O `docs/seguranca.md` § 9 registra QUE cada risco residual foi avaliado e
-aceito, e qual controle o compensa, sem o passo a passo de onde o controle falta. Esse detalhe
-vive fora do git, na pasta dos backups do dono, junto do que já não pode ser versionado (dumps,
-CSVs, chaves).
+residuais passam a ser legíveis por qualquer pessoa.
+
+Na maior parte isso não entrega nada — a documentação descreve controles que já são observáveis de
+fora (a chave `anon` e o `app.js` são servidos a todo visitante) ou comportamento público do
+Postgres e do Supabase. **A exceção é a capacidade de resposta a incidente:** que não há como
+aplicar rate limit sem mudar a arquitetura (§ 9.2) e que o restore nunca foi concluído, com RTO/RPO
+sem medição (§ 9.3), não são fatos deriváveis de fora. **A resposta certa a isso não é redigir a
+prosa — é fechar o SEC-06.** Enquanto o RTO for desconhecido, a frase é verdadeira esteja ela no
+git ou na pasta de backups; tirá-la do git protegeria o texto, não o portal.
+
+**O que a decisão NÃO justifica:** apagar do repositório a explicação de por que um controle
+existe. O `CLAUDE.md` continua registrando, por inteiro e com a medição que o originou, o motivo de
+o gate `check_grants.mjs` rodar diariamente e de o `backup_schema.sql` revogar tudo que não é
+SELECT. Regra sem lastro é regra que a próxima faxina apaga por parecer redundante — foi assim que
+a versão anterior daquele parágrafo pôde afirmar o oposto do medido por dois dias. Sigilo não é o
+que protege o banco aqui; o gate diário é.
 
 ## Consequências verificáveis
 
