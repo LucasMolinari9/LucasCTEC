@@ -424,6 +424,35 @@ Vocabulário padrão (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-fo
 Single-context — `CONTEXT.md` + `docs/adr/` na raiz do repo. Ver `docs/agents/domain.md`.
 
 
+### Superpowers (skills de processo, vendorizadas)
+
+As **14 skills do Superpowers** (upstream `obra/superpowers`) moram em `.claude/skills/`,
+**dentro do git**, com provenance em `.claude/skills/.superpowers-manifest.json` (versão +
+commit). São skills de *processo* — `brainstorming` antes de criar funcionalidade,
+`test-driven-development`, `systematic-debugging`, `writing-plans`,
+`verification-before-completion`, `requesting-code-review`, … — e convivem com a skill de
+domínio deste repo (`db-change`), que **não** é do Superpowers e não é tocada pelo updater.
+
+- **Por que vendorizado e não instalado como plugin:** plugin mora em `~/.claude/plugins/`,
+  **fora do repo**, e a sessão web roda em container efêmero que só clona o repo — plugin some
+  na sessão seguinte. Registrar o marketplace com `--scope project` **também não resolve**
+  (medido em 03/08/2026: container com cache global vazio nasce com `"plugins": {}` e nenhuma
+  skill `superpowers:`). O único mecanismo que carrega com estado global zero é
+  `.claude/skills/<nome>/SKILL.md`.
+- **Consequência prática: não há prefixo de namespace.** As skills chamam-se `brainstorming`,
+  `test-driven-development`, … e **não** `superpowers:brainstorming`. O updater reescreve as
+  referências cruzadas dentro dos `SKILL.md` para bater com isso — ao editar um deles à mão,
+  não reintroduza o prefixo.
+- **O hook é o que faz elas serem usadas:** `.claude/hooks/superpowers-session-start.sh`
+  (ligado no `.claude/settings.json`, matcher `startup|clear|compact`) injeta o conteúdo da
+  skill `using-superpowers` no contexto da sessão. Sem essa injeção as skills ficam instaladas
+  e ninguém as invoca. Ele sai em silêncio se a cópia vendorizada não existir.
+- **Atualizar:** `./scripts/update_superpowers.sh [ref]` — clona o upstream, troca a leva
+  anterior (só o que o manifesto lista), reescreve o namespace e regrava o manifesto. Precisa
+  de rede (github.com). Confira o diff antes de commitar.
+- A contagem acima é conferida pelo `tests/check.js` §[2b] contra o manifesto: ao mudar a leva
+  de skills, o gate cobra o número aqui e no comentário do hook.
+
 ### Mudanças de banco
 
 Toda alteração de schema deve ser uma migração em `supabase/migrations/` e passar por

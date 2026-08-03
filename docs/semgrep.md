@@ -98,6 +98,12 @@ node tests/check.js && ./scripts/semgrep.sh
 - `tests/*.harness.js` — cópias verbatim de funções do `app.js`. Achado ali seria duplicata
   do achado no original, e "consertar" a cópia quebraria o anti-drift do `check.js`.
 - `.semgrep/tests/` — contém violações **de propósito** (é o que prova que a regra pega).
+- `.claude/skills/` — as skills do Superpowers, vendorizadas sem modificação, e a `db-change`.
+  Nada ali é publicado (o `.vercelignore` é allowlist e não inclui `.claude/`): são instruções
+  para o agente e scripts que rodam na máquina de quem desenvolve. A
+  `divat-style-attr-quebra-csp` acusava 3 vezes o overlay da página companheira do
+  `brainstorming` — página servida pelo próprio script, fora da CSP do portal — e "consertar"
+  código de terceiro viraria conflito no próximo `./scripts/update_superpowers.sh`.
 
 **Atenção:** quando existe, este arquivo **substitui** o `.semgrepignore` padrão do Semgrep
 em vez de somar — por isso ele repete `node_modules/` e companhia.
