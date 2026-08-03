@@ -3,6 +3,10 @@
 Resposta em linguagem direta a três perguntas: **quais tabelas existem e com que colunas**,
 **o que liga uma na outra**, e **qual é o identificador de uma linha**.
 
+> **Nunca mexeu neste banco?** Comece por [`docs/como-os-dados-se-ligam.md`](como-os-dados-se-ligam.md),
+> que explica o modelo do zero, com exemplo passo a passo. Este arquivo aqui é **material de
+> consulta** — pressupõe que você já entendeu o desenho e quer procurar uma coluna ou uma chave.
+
 Complementa os outros dois mapas do repo, sem substituir nenhum:
 
 - [`docs/schema.md`](schema.md) — mapa **relacional** (o diagrama, quais joins são FK real e

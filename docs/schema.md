@@ -11,6 +11,10 @@ do `app.js`, sem constraint no banco). Complementa a tabela *"Tabelas → onde a
 > conferência e para qualquer sessão futura (humana ou IA) entender os joins sem reler ~3,2
 > mil linhas de JS. Gerado do schema **ao vivo** (Supabase) + os joins reais do frontend.
 
+> **Primeiro contato com o modelo?** Leia antes
+> [`docs/como-os-dados-se-ligam.md`](como-os-dados-se-ligam.md) — explicação do desenho do banco
+> do zero, com um exemplo seguindo uma linha tabela por tabela.
+
 > **Procurando a lista de COLUNAS de cada tabela?** Está em
 > [`docs/dicionario-dados.md`](dicionario-dados.md) — o dicionário de dados, com todas as
 > colunas das 18 tabelas, as ligações em linguagem direta e a explicação do identificador da
