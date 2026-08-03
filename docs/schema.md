@@ -11,6 +11,11 @@ do `app.js`, sem constraint no banco). Complementa a tabela *"Tabelas → onde a
 > conferência e para qualquer sessão futura (humana ou IA) entender os joins sem reler ~3,2
 > mil linhas de JS. Gerado do schema **ao vivo** (Supabase) + os joins reais do frontend.
 
+> **Procurando a lista de COLUNAS de cada tabela?** Está em
+> [`docs/dicionario-dados.md`](dicionario-dados.md) — o dicionário de dados, com todas as
+> colunas das 18 tabelas, as ligações em linguagem direta e a explicação do identificador da
+> linha (`codlinha`). Este arquivo aqui é o mapa das *ligações*; lá é o das *colunas*.
+
 > **⚠ Ligação implícita não é ligação garantida — e já falhou.** Como o Postgres não valida
 > essas ligações, a integridade depende só da disciplina do ETL. Medição de 27/07/2026: **17
 > `codlinha` órfãs** (filhos em `itinerario_teste`, `qh_teste`, `qh_predeterminado_teste` e
