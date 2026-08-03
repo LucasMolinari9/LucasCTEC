@@ -294,6 +294,12 @@ console.log('\n[2b] Deriva docs × código');
   const bkPublicas = (bkTodas != null && bkStaging != null) ? bkTodas - bkStaging : null;
   const workflowCount = WORKFLOWS.length;
   const hostsProd = conta(js, /const HOSTS_PROD\s*=\s*\[([\s\S]*?)\]/, /'[^']+'/g);
+  // Skills do Superpowers vendorizadas: a fonte da verdade é o manifesto que o
+  // update_superpowers.sh gera, não a contagem de diretórios (`.claude/skills/` também
+  // guarda skills nossas, como a `db-change`).
+  const spManifesto = existe('.claude/skills/.superpowers-manifest.json')
+    ? JSON.parse(ler('.claude/skills/.superpowers-manifest.json')) : null;
+  const spSkills = spManifesto ? (spManifesto.skills || []).length : null;
 
   // --- fatos que os docs AFIRMAM (regex contra o texto com espaços normalizados,
   //     para que quebra de linha do markdown não escape da checagem) ---
@@ -323,6 +329,11 @@ console.log('\n[2b] Deriva docs × código');
     // propósito — se a frase migrar do `views.yml` para outro workflow, continua coberta.
     { doc:WORKFLOWS, o:'views do check_views (workflows)', re:/([\d]+)\s*views\b/, real:views,   esc:'exato' },
     { doc:WORKFLOWS, o:'% da seção MODAL (workflows)',     re:/~([\d,.]+)% do app\.js/, real:modalPct, esc:'pct' },
+    // O comentário do hook entra na lista pelo mesmo motivo dos workflows: é prosa viva que
+    // ninguém relê (não abre em leitor de markdown) e que afirma um número. Mantenha a frase
+    // numa linha só — o `normalizar` não tira o `#` de `.sh`, então quebra de linha a esconde.
+    { doc:['CLAUDE.md', '.claude/hooks/superpowers-session-start.sh'],
+      o:'skills do Superpowers', re:/([\d]+) skills do Superpowers/, real:spSkills, esc:'exato' },
   ];
   // TODA ocorrência é conferida, não só a primeira. A 1ª versão parava no primeiro casamento, e
   // o `views.yml` afirma "23 views" em TRÊS linhas (1, 11 e 71): consertar uma e esquecer as

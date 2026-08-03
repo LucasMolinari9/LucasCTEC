@@ -1,0 +1,23 @@
+{
+  "_comment": "Gerado por scripts/update_superpowers.sh — NÃO editar à mão.",
+  "upstream": "https://github.com/obra/superpowers.git",
+  "versao": "6.2.0",
+  "commit": "44c9b2d6e889982ac18c27d05a19fefe335194e1",
+  "vendorizadoEm": "2026-08-03",
+  "skills": [
+    "brainstorming",
+    "dispatching-parallel-agents",
+    "executing-plans",
+    "finishing-a-development-branch",
+    "receiving-code-review",
+    "requesting-code-review",
+    "subagent-driven-development",
+    "systematic-debugging",
+    "test-driven-development",
+    "using-git-worktrees",
+    "using-superpowers",
+    "verification-before-completion",
+    "writing-plans",
+    "writing-skills"
+  ]
+}

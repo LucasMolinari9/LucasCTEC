@@ -9,6 +9,17 @@
 # (conferida contra o registro do npm ao atualizar a versão — ver CLAUDE.md), não o lint.
 vendor/
 
+# --- Skills do Superpowers, vendorizadas sem modificação (ver CLAUDE.md) ---
+# Instruções para o agente + scripts auxiliares que rodam na máquina de quem desenvolve, nunca
+# na origem do portal — o .vercelignore é allowlist e não publica `.claude/`. A regra
+# `divat-style-attr-quebra-csp` acusava 3 vezes o overlay da página companheira do
+# `brainstorming`, servida pelo próprio script e fora da nossa CSP: ruído. Além disso,
+# "consertar" código de terceiro vira conflito no próximo ./scripts/update_superpowers.sh.
+# O padrão pega a pasta inteira, inclusive a skill NOSSA que mora lá (`db-change`) — hoje ela
+# é só SKILL.md, sem código. Se um dia uma skill nossa ganhar JS de navegador, estreite isto
+# para os diretórios listados no .superpowers-manifest.json.
+.claude/skills/
+
 # --- Cópias verbatim para teste ---
 # Os *.harness.js são cópias literais de funções do app.js, guardadas pelo anti-drift do
 # tests/check.js. Achado aqui seria duplicata do achado no app.js (e "consertar" a cópia

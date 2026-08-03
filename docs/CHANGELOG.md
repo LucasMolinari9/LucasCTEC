@@ -4,6 +4,48 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 03/08/2026 — Superpowers vendorizado: as skills de processo passam a sobreviver à sessão
+
+O objetivo era ter as skills do **Superpowers** (`obra/superpowers` — `brainstorming`,
+`test-driven-development`, `systematic-debugging`, `writing-plans`,
+`verification-before-completion`, …) disponíveis em toda sessão, inclusive nas sessões web.
+
+O caminho anunciado pelo upstream é `/plugin install`, e **ele não serve aqui**. Plugin
+instalado mora em `~/.claude/plugins/`, fora do repo, e a sessão web roda em container efêmero
+que só clona o repo: some na sessão seguinte. A segunda tentativa foi declarar o marketplace no
+`.claude/settings.json` com `--scope project`, apostando que uma sessão nova auto-instalaria.
+**Medição desmentiu:** com o cache global esvaziado (`rm -rf ~/.claude/plugins`), o
+`installed_plugins.json` nasce com `"plugins": {}` e nenhuma skill `superpowers:` aparece na
+sessão. O único mecanismo que carrega com estado global zero é o diretório de skills do
+projeto, `.claude/skills/<nome>/SKILL.md`.
+
+Então as 14 skills entraram **no git**, planas, com três peças em volta:
+
+- **`scripts/update_superpowers.sh`** — clona o upstream (opcionalmente numa tag/commit),
+  remove a leva anterior pelo que o manifesto lista (não varre o diretório: a skill de domínio
+  `db-change` mora ali do lado e não é do Superpowers), copia as novas, **reescreve
+  `superpowers:X` → `X`** nas referências cruzadas — sem plugin não há namespace, e deixar o
+  prefixo faria a skill mandar invocar um nome que o tool `Skill` não resolve — e regrava o
+  manifesto com versão e commit.
+- **`.claude/skills/.superpowers-manifest.json`** — provenance (upstream, versão 6.2.0, commit,
+  data) e a lista que a próxima limpeza usa.
+- **`.claude/hooks/superpowers-session-start.sh`** — a peça sem a qual o resto é decoração. O
+  Superpowers depende de **uma injeção de contexto** no início da sessão: o conteúdo inteiro da
+  skill `using-superpowers`, que é o que faz o agente procurar skill *antes* de responder. Esse
+  trabalho é do hook do plugin, que aqui não roda; o script faz o mesmo lendo a cópia
+  vendorizada, e sai em silêncio se ela não existir. Entrou como um **segundo** bloco
+  `SessionStart` no `.claude/settings.json` (matcher `startup|clear|compact`), ao lado do hook
+  que instala o Semgrep — dois blocos, não um só, para que um não engula o outro.
+
+Verificado do jeito que este repo exige: container com `~/.claude/plugins` apagado, sessão
+nova, e a pergunta feita ao próprio agente — recebeu a instrução de que tem superpowers (sim),
+enxerga as 5 skills sorteadas da leva (sim), nomeia a primeira (`brainstorming`).
+
+Por fim, o número virou fato guardado: a seção `[2b]` do `tests/check.js` compara a contagem
+declarada no `CLAUDE.md` **e no comentário do hook** com o que o manifesto lista. Comentário de
+script é prosa viva que ninguém relê — a mesma razão pela qual os comentários dos workflows
+entraram na varredura em 30/07.
+
 ## 31/07/2026 — Clicar numa linha volta a selecioná-la, e o card de Localidade ganha filtro de situação
 
 Dois defeitos relatados pelo dono no card **Linhas por Localidade e Município**, diagnosticados
