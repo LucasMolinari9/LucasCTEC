@@ -5,8 +5,10 @@
          index.html NÃO tem <script> inline (a CSP publica script-src 'self');
     [1c] confere que nenhum `env:` de workflow tem duas chaves que só diferem em
          maiúsculas — o GitHub rejeita o workflow e o run morre com zero jobs;
-     [2] guarda anti-drift: confere que as funções copiadas nos *.harness.js ainda
-         existem iguais no app.js (avisa se a original mudou e a cópia ficou velha);
+     [2] guarda anti-drift: recorta cada cópia dos *.harness.js pelos marcadores
+         @fonte/@fim e exige que o CORPO INTEIRO exista igual no app.js — cópia que
+         divergiu derruba o gate nomeando a função; cópia exportada sem marcador
+         derruba por cobertura;
      [3] roda todos os *.test.js desta pasta.
    Sai com código != 0 se QUALQUER etapa falhar. Node puro, sem dependências. */
 const fs = require('fs');
@@ -138,115 +140,18 @@ console.log('\n[1c] Workflows: nenhum env: com chave duplicada ignorando maiúsc
   if (!achados) okline(`ok (${blocos} bloco(s) env: em ${arquivos.length} workflow(s))`);
 }
 
-// ---------- [2] guarda anti-drift ----------
-console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
-// trecho distintivo de cada função copiada nos harness; se sumir do app.js,
-// a cópia no harness provavelmente ficou desatualizada.
-const canon = [
-  ['fmtCode',              's.slice(3,6)'],
-  ['fmtTime',             'm[1]}:${m[2]}'],
-  ['fmtDate',       'm[3]}/${m[2]}/${m[1]}'],
-  ['esc',                  "'&':'&amp;'"],
-  ['enc',                  'const enc = s => encodeURIComponent(s);'],
-  // ilikeTerm é o saneador que neutraliza ( ) * antes de entrar no filtro or=() do
-  // PostgREST — os testes dele rodam contra a CÓPIA, então o trecho vigiado é a
-  // declaração INTEIRA: qualquer mudança no saneador tem de derrubar este gate.
-  ['ilikeTerm',            "const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));"],
-  ['orDash',               "==='') ? '—'"],
-  ['fmtLineName',          "split(' - ').map(p => p.replace(/ /g, '&nbsp;'))"],
-  ['byCodlinha',           "localeCompare(String(b.codlinha||''), undefined, { numeric:true })"],
-  ['boolChip',             'chip chip-on'],
-  ['situacaoHTML',         'const situacaoHTML = r => r.cancelado'],
-  ['isLinhaAtiva',         'const isLinhaAtiva = r => !r.cancelado && !r.paralisado;'],
-  // filtrarSituacao é a definição ÚNICA do "Ativas/Canceladas" das barras de situação —
-  // duas telas dependem dela concordarem, então o trecho vigiado é o corpo inteiro.
-  ['filtrarSituacao',      "st==='canceladas' ? rows.filter(r=>!!r.cancelado)"],
-  ['isVigente',            'const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;'],
-  ['norm',                 "normalize('NFD')"],
-  ['yearOf',               'parseInt(String(d).slice(0,4),10)'],
-  ['matchEvent',           'function matchEvent(r, c){'],
-  ['groupBy',              'if(!m.has(k))m.set(k,[])'],
-  ['countBy',              '(m.get(k)||0)+1'],
-  ['fmtMoney',             'minimumFractionDigits:2,maximumFractionDigits:2'],
-  ['classifyMunLines',     'function classifyMunLines('],
-  ['terminaisDoMunicipio', 'function terminaisDoMunicipio(itRows, codibge){'],
-  ['localidadesQueCasam',  'function localidadesQueCasam('],
-  ['orIlike',              "const orIlike = (cols, termos) => 'or=('"],
-  ['municipiosExatos',     'function municipiosExatos(ibge, termos){'],
-  ['tabMatchesEvent',      'function tabMatchesEvent(tab, table, payload){'],
-  ['dispatchRealtime',     'function dispatchRealtime(tabs, activeTabId, table, payload){'],
-  ['beginGen',              'view._gen = (view._gen || 0) + 1;'],
-  ['isCurrentGen',          'return !!view && gen === view._gen;'],
-  ['commitViewResult',      "if (!isCurrentGen(view, gen)) return false;"],
-  ['pushDetail',            "view._detail = { pdfHTML: view.pdfHTML };"],
-  ['popDetail',             "view.pdfHTML = view._detail.pdfHTML;"],
-  // --- cópias do harness.js (seção SUPABASE CONFIG) ---
-  // Estavam SEM guarda até 27/07/2026: a auditoria anterior fechou o laço para o
-  // pure.harness.js e o harness.js ficou de fora — 8 dos 9 exports descobertos, incluindo
-  // marcarTrunc/bannerTrunc, com 28 testes rodando contra cópias que nada garantia estarem
-  // atualizadas. Mesmo bug do `ilikeTerm`, um arquivo ao lado.
-  ['sbFetch',              "async function sbFetch(table, qs = '', sinal) {"],
-  ['selecionarSupabase',   'function selecionarSupabase(hostname, config){'],
-  ['SB_RETRIES',           'const SB_RETRIES    = 2;'],
-  ['esperar',              'const esperar = ms => new Promise'],
-  ['fetchComTimeout',      'async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal){'],
-  ['SB_TIMEOUT_MS',        'const SB_TIMEOUT_MS = 20000;'],
-  ['marcarTrunc',          'function marcarTrunc(data, qs){'],
-  ['bannerTrunc',          'function bannerTrunc(rows){'],
-  // CANCELADO/ehCancelamento sustentam o cancelamento de busca obsoleta (SEC-02): se a
-  // distinção entre "cancelei" e "deu timeout" sumir do app.js, os testes que a provam
-  // continuariam verdes contra a cópia.
-  ['CANCELADO',            "const CANCELADO = 'RequisicaoCancelada';"],
-  ['ehCancelamento',       'const ehCancelamento = e => e && e.name === CANCELADO;'],
-  ['rjOrder',              'function rjOrder(a, b){'],
-  ['resumoFrota',          'function resumoFrota(rows){'],
-  ['filtrarFrotaEmpresas', "function filtrarFrotaEmpresas(items, status='ativas', termo=''){"],
-  ['pageBounds',           'const p = Math.min(Math.max(1, (page|0) || 1), totalPages);'],
-  ['MAX_TABS',             'const MAX_TABS = 5;'],
-  ['makeTab',              'function makeTab(id){ return { id, line: null, view: null, navStack: [], stale: false }; }'],
-  ['openTabState',         'function openTabState(tabs, tabIdSeq){'],
-  ['closeTabState',        'function closeTabState(tabs, activeTabId, id){'],
-];
-for (const [name, snippet] of canon){
-  if (js.includes(snippet)) okline(`${name}`);
-  else fail(`harness DESATUALIZADO p/ "${name}": não achei no app.js → ${snippet}`);
-}
-
-// A guarda acima só vale para quem está no `canon`. Uma cópia exportada pelo harness SEM
-// entrada aqui passa batido — foi o que aconteceu com `ilikeTerm` e `MAX_TABS` (37 cópias
-// exportadas × 36 guardas; descoberto na auditoria externa de 27/07/2026, contando à mão).
-// Esta checagem fecha o laço: cada símbolo exportado por um harness tem de ter guarda.
+// ---------- [2] guarda anti-drift (corpo inteiro) ----------
+console.log('\n[2] Guarda anti-drift (corpo inteiro das cópias bate com o app.js)');
+// Até 04/08/2026 esta seção era uma tabela `canon` de 54 trechos escolhidos A MÃO — um por
+// cópia — e conferia só se o trecho ainda existia no app.js. Em 16 das 54 esse trecho era
+// apenas a linha de ASSINATURA, e justamente das funções complexas (sbFetch, dispatchRealtime,
+// classifyMunLines, resumoFrota...): dava para mudar o corpo inteiro no app.js, esquecer a
+// cópia, e o gate passava verde. Medido antes de trocar: mutação em `resumoFrota` passou pelo
+// canon E pelos 213 testes do pure.test.js; só a checagem abaixo acusou.
 //
-// Varre os DOIS harness. Na primeira versão varria só o pure.harness.js, e o harness.js ficou
-// descoberto — 8 dos 9 exports sem guarda, achado em 27/07/2026 ao mexer no sbFetch. Fechar o
-// laço num arquivo e deixar o irmão aberto é o mesmo bug, adiado. Harness NOVO entra aqui.
-{
-  const HARNESSES = ['pure.harness.js', 'harness.js'];
-  const guardados = new Set(canon.map(([n]) => n));
-  let totalExportados = 0, falhou = false;
-  for (const arquivo of HARNESSES){
-    const src = fs.readFileSync(path.join(TESTS_DIR, arquivo), 'utf8');
-    const m = src.match(/module\.exports\s*=\s*\{([\s\S]*?)\}\s*;/);
-    if (!m){ fail(`não achei o module.exports do ${arquivo} (a cobertura do canon não pôde ser conferida)`); falhou = true; continue; }
-    const exportados = m[1].split(',').map(s => s.trim()).filter(Boolean)
-      // `get X(){…}` / `set X(v){…}`: o nome é o 2º token, não o 1º.
-      .map(s => s.replace(/^(?:get|set)\s+/, '').split(/[:(]/)[0].trim())
-      .filter(Boolean);
-    totalExportados += new Set(exportados).size;
-    const semGuarda = [...new Set(exportados)].filter(n => !guardados.has(n));
-    if (semGuarda.length){
-      fail(`[${arquivo}] cópia exportada sem guarda anti-drift: ${semGuarda.join(', ')} — adicione ao \`canon\` do check.js`);
-      falhou = true;
-    }
-  }
-  if (!falhou) okline(`cobertura do canon (${totalExportados} cópias exportadas nos ${HARNESSES.length} harness, todas com guarda)`);
-}
-
-// ---------- [2c] anti-drift por CORPO INTEIRO ----------
-// O `canon` acima vigia um TRECHO escolhido à mão. Em 16 das 54 entradas esse trecho é só a
-// linha de assinatura — mudar o corpo no app.js e esquecer a cópia passa batido, e são
-// justamente as funções complexas (sbFetch, dispatchRealtime, classifyMunLines, resumoFrota...).
-// Aqui a comparação é do bloco INTEIRO, delimitado por marcador @fonte/@fim no harness.
+// Agora a comparação é do bloco INTEIRO, delimitado por marcador @fonte/@fim no harness.
+// A cobertura ("toda cópia exportada tem guarda", que o canon precisava conferir à parte
+// depois que `ilikeTerm` e `MAX_TABS` ficaram descobertos) sai de graça: sem marcador, falha.
 //
 // Por que marcador e não parser: `esc` contém o literal de regex /[&<>"']/g, com aspas dentro.
 // Qualquer varredura que entre em "modo string" se perde nele (medido: recortador por contagem

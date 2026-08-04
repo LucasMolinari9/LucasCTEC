@@ -1,7 +1,10 @@
 # Guarda anti-drift por corpo inteiro — Plano de Implementação
 
-> **Para agentes:** SUB-SKILL OBRIGATÓRIA: use `subagent-driven-development` (recomendado) ou
-> `executing-plans` para executar tarefa a tarefa. Os passos usam checkbox (`- [ ]`).
+> **STATUS: EXECUTADO em 04/08/2026**, na branch `claude/chame-brainstorming-86sjad`.
+> As 4 tarefas foram concluídas e o gate está verde (50 cópias conferidas, Semgrep sem achados).
+> A Tarefa 2 (teste de mutação) confirmou o buraco: uma mutação em `resumoFrota` passou pelo
+> `canon` antigo E pelos 213 testes do `pure.test.js`; só a guarda nova acusou.
+> Mantido no repo como registro da decisão e das alternativas descartadas.
 
 **Objetivo:** fazer o `tests/check.js` comparar o **corpo inteiro** de cada cópia dos harness
 contra o `app.js`, em vez de um trecho escolhido à mão — eliminando a possibilidade de uma cópia

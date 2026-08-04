@@ -191,10 +191,10 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
 2. **Antes de publicar, rode `node tests/check.js`** — valida a sintaxe do `app.js`, garante que
    não voltou `<script>` inline no `index.html`, confere as cópias de teste (anti-drift), cobra a
    **deriva docs×código** (seção `[2b]`, ver abaixo) e roda todos os testes. Só publique tudo
-   verde. (Ao alterar função com cópia em `tests/*.harness.js`, atualize a cópia — e se criar
-   cópia nova, **adicione a guarda no `canon`**: o `check.js` agora falha se um símbolo exportado
-   pelo harness não tiver guarda, porque foi assim que `ilikeTerm` e `MAX_TABS` ficaram
-   descobertos.) **Ao mexer nas abas do modal / no seletor de documentos**, rode também
+   verde. (Ao alterar função com cópia em `tests/*.harness.js`, atualize a cópia — o `check.js`
+   compara o **corpo inteiro** e falha nomeando a função que divergiu. Cópia nova precisa dos
+   marcadores `@fonte`/`@fim` em volta da declaração; sem eles o gate falha por cobertura, que
+   é como `ilikeTerm` e `MAX_TABS` ficaram descobertos na época da tabela `canon`.) **Ao mexer nas abas do modal / no seletor de documentos**, rode também
    `node scripts/check_abas.mjs` — checagem de regressão em navegador headless (Playwright, com
    o PostgREST stubado); fica fora do `check.js` porque este é offline e sem dependências, mas
    **roda no CI** junto com o `check_views.mjs` (workflow `views.yml`).
