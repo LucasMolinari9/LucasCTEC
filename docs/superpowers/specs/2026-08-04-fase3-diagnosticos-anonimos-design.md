@@ -88,6 +88,7 @@ caso da matriz, disponibilidade no caso do scan.
   "todas_com_rls": true,
   "anon_escreve": false,
   "anon_maintain": false,
+  "anon_le_view": false,
   "authenticated_tem_privilegio": false,
   "funcoes_definer_anon": 0,
   "funcoes_sem_search_path": 0,
