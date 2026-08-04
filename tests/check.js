@@ -242,6 +242,69 @@ for (const [name, snippet] of canon){
   if (!falhou) okline(`cobertura do canon (${totalExportados} cópias exportadas nos ${HARNESSES.length} harness, todas com guarda)`);
 }
 
+// ---------- [2c] anti-drift por CORPO INTEIRO ----------
+// O `canon` acima vigia um TRECHO escolhido à mão. Em 16 das 54 entradas esse trecho é só a
+// linha de assinatura — mudar o corpo no app.js e esquecer a cópia passa batido, e são
+// justamente as funções complexas (sbFetch, dispatchRealtime, classifyMunLines, resumoFrota...).
+// Aqui a comparação é do bloco INTEIRO, delimitado por marcador @fonte/@fim no harness.
+//
+// Por que marcador e não parser: `esc` contém o literal de regex /[&<>"']/g, com aspas dentro.
+// Qualquer varredura que entre em "modo string" se perde nele (medido: recortador por contagem
+// de chaves acerta 49 de 50 e erra exatamente essa). Marcador literal + busca de substring não
+// tem esse problema, e quando falha, falha alto.
+{
+  const normFonte = s => s
+    .replace(/\/\/[^\n]*/g, '')        // comentário de linha
+    .replace(/\/\*[\s\S]*?\*\//g, '')  // comentário de bloco
+    .replace(/\bconst\b/g, 'let')      // harness usa `let SB_TIMEOUT_MS` de propósito
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const MARCA_FIM = '/* @fim */';
+  const appNorm = normFonte(js);
+  const HARNESSES = ['pure.harness.js', 'harness.js'];
+  let total = 0, falhou = false;
+
+  for (const arquivo of HARNESSES){
+    const src = fs.readFileSync(path.join(TESTS_DIR, arquivo), 'utf8');
+
+    const me = src.match(/module\.exports\s*=\s*\{([\s\S]*?)\}\s*;/);
+    if (!me){ fail(`não achei o module.exports do ${arquivo}`); falhou = true; continue; }
+    const exportados = [...new Set(
+      me[1].split(',').map(s => s.trim()).filter(Boolean)
+        .map(s => s.replace(/^(?:get|set)\s+/, '').split(/[:(]/)[0].trim())
+        .filter(Boolean)
+    )];
+
+    const marcados = new Map();
+    const re = /\/\*\s*@fonte\s+([A-Za-z_$][\w$]*)\s*\*\//g;
+    let m;
+    while ((m = re.exec(src))){
+      const nome = m[1], ini = m.index + m[0].length;
+      const fim = src.indexOf(MARCA_FIM, ini);
+      if (fim < 0){ fail(`[${arquivo}] @fonte ${nome} sem ${MARCA_FIM}`); falhou = true; continue; }
+      marcados.set(nome, src.slice(ini, fim));
+    }
+
+    const semMarca = exportados.filter(n => !marcados.has(n));
+    if (semMarca.length){
+      fail(`[${arquivo}] cópia exportada sem marcador @fonte: ${semMarca.join(', ')}`);
+      falhou = true;
+    }
+
+    for (const [nome, trecho] of marcados){
+      const alvo = normFonte(trecho);
+      if (!alvo){ fail(`[${arquivo}] bloco @fonte ${nome} está vazio`); falhou = true; continue; }
+      if (appNorm.includes(alvo)) total++;
+      else {
+        fail(`cópia DIVERGIU do app.js: "${nome}" (${arquivo}) — o corpo no harness não existe mais igual no app.js`);
+        falhou = true;
+      }
+    }
+  }
+  if (!falhou) okline(`anti-drift por corpo inteiro (${total} cópias conferidas nos ${HARNESSES.length} harness)`);
+}
+
 // ---------- [2b] guarda docs × código ----------
 // Irmã offline do scripts/check_deriva.mjs. Ele guarda docs × BANCO (tabelas, colunas, RPCs);
 // esta guarda o eixo que ficava descoberto: docs × CÓDIGO. As duas nascem da mesma causa —
