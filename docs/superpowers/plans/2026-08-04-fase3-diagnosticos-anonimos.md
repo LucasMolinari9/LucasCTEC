@@ -536,7 +536,10 @@ alter function audit.realtime_tables()  owner to postgres;
 alter function audit.divat_api_shape()  set schema public;
 alter function audit.realtime_tables()  set schema public;
 
-revoke all on function public.divat_api_shape(), public.realtime_tables() from public, authenticated, service_role;
+-- `revoke execute`, nao `revoke all`: scripts/check_migrations.mjs:53 cobra literalmente
+-- /revoke\s+execute\s+on\s+function\s+[^;]+\s+from\s+public/ para toda migracao que cria funcao
+-- em public. Com `revoke all` o gate acusa "funcao public e criada sem REVOKE EXECUTE de PUBLIC".
+revoke execute on function public.divat_api_shape(), public.realtime_tables() from public, authenticated, service_role;
 grant execute on function public.divat_api_shape(), public.realtime_tables() to anon;
 
 -- --- o objeto novo: resumo, nunca matriz ----------------------------------------------------
@@ -616,7 +619,7 @@ select jsonb_build_object(
 );
 $function$;
 
-revoke all on function public.divat_security_digest() from public, authenticated, service_role;
+revoke execute on function public.divat_security_digest() from public, authenticated, service_role;
 grant execute on function public.divat_security_digest() to anon;
 
 -- --- assercoes: a superficie anonima e EXATAMENTE a esperada -------------------------------
@@ -777,30 +780,38 @@ const casos = [];
 const caso = (nome, sql, esperado) => casos.push({ nome, sql, esperado });
 
 // --- faixa PRODUTO: as duas de sempre continuam passando ------------------------------------
+// ATENCAO ao escrever caso novo: o gate (check_migrations.mjs:53) exige literalmente
+// `revoke execute on function ... from public`. Com `revoke all` ele acusa "sem REVOKE EXECUTE
+// de PUBLIC" e o caso sai 1 por um motivo diferente do que se pretendia testar — falso vermelho.
 caso('RPC de produto na allowlist', `
   create or replace function public.divat_linhas_regiao(a text, b text) returns void language sql as $$ select $$;
-  revoke all on function public.divat_linhas_regiao(text, text) from public;
+  revoke execute on function public.divat_linhas_regiao(text, text) from public;
   grant execute on function public.divat_linhas_regiao(text, text) to anon;
 `, 0);
 
 // --- faixa DIAGNOSTICO: as tres novas passam -------------------------------------------------
 caso('RPC de diagnostico na allowlist', `
   create or replace function public.divat_security_digest() returns jsonb language sql as $$ select '{}'::jsonb $$;
-  revoke all on function public.divat_security_digest() from public;
+  revoke execute on function public.divat_security_digest() from public;
   grant execute on function public.divat_security_digest() to anon;
 `, 0);
 
 // --- fora das duas faixas: recusa -----------------------------------------------------------
 caso('RPC anonima fora da allowlist', `
   create or replace function public.divat_qualquer_coisa() returns void language sql as $$ select $$;
-  revoke all on function public.divat_qualquer_coisa() from public;
+  revoke execute on function public.divat_qualquer_coisa() from public;
   grant execute on function public.divat_qualquer_coisa() to anon;
 `, 1);
 
 caso('a mesma RPC concedida tambem a authenticated', `
   create or replace function public.divat_security_digest() returns jsonb language sql as $$ select '{}'::jsonb $$;
-  revoke all on function public.divat_security_digest() from public;
+  revoke execute on function public.divat_security_digest() from public;
   grant execute on function public.divat_security_digest() to anon, authenticated;
+`, 1);
+
+caso('funcao public sem revoke execute de PUBLIC', `
+  create or replace function public.divat_security_digest() returns jsonb language sql as $$ select '{}'::jsonb $$;
+  grant execute on function public.divat_security_digest() to anon;
 `, 1);
 
 caso('tabela publica nova sem RLS', `
@@ -1525,13 +1536,22 @@ fallback anônimo — que é exatamente o comportamento desejado antes do passo 
 
 - [ ] **Step 3: Prove o fallback e a expiração sem banco**
 
+Com a variável ausente, `conectarAuditor` lança e o script cai no caminho anônimo. Com a data
+simulada além do vencimento, ele tem de morrer **antes** de tentar a rede:
+
 ```bash
-node -e "process.env.SUPABASE_PROD_AUDIT_DATABASE_URL='';" # (só para lembrar que vazio = fallback)
-DIVAT_HOJE=2026-12-01 node scripts/check_data_quality.mjs; echo "fallback expirado → $?"
+# 1. fallback ainda válido: avisa e tenta a RPC anônima (aqui sem rede, então falha na rede)
+unset SUPABASE_PROD_AUDIT_DATABASE_URL
+node scripts/check_data_quality.mjs 2>&1 | head -3
+
+# 2. fallback expirado: morre na expiração, sem tocar a rede
+DIVAT_HOJE=2026-12-01 node scripts/check_data_quality.mjs; echo "expirado → $?"
 ```
 
-Esperado: saída **1**, com `o fallback anônimo EXPIROU`. (Sem rede, o caminho anônimo também
-falharia — o ponto do caso é que a expiração é verificada **antes** de tentar a rede.)
+Esperado no caso 1: a linha `⚠ Auditor indisponível (…); usando a RPC anônima (…)`.
+Esperado no caso 2: saída **1** com `o fallback anônimo EXPIROU`, e **nenhuma** menção a erro de
+rede — a ordem importa, porque um gate que só descobre a expiração depois de falhar na rede daria
+a mensagem errada no dia em que a rede também estivesse ruim.
 
 - [ ] **Step 4: Gate e commit**
 
