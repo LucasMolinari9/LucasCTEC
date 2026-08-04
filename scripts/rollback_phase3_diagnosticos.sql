@@ -1,10 +1,18 @@
 -- Desfaz a migracao 2 da Fase 3 (diagnosticos anonimos), devolvendo o estado que a migracao 1
 -- deixou: as quatro diagnosticas em `audit`, SECURITY DEFINER, so para divat_auditor.
 --
--- Rode dentro de transacao e confira o resultado ANTES do commit:
+-- Rode dentro de transacao e confira ANTES do commit:
 --   begin; \i scripts/rollback_phase3_diagnosticos.sql   -- confira; depois commit; ou rollback;
 
 grant divat_audit_owner to postgres;
+
+do $$
+begin
+  if to_regprocedure('public.divat_api_shape()') is null
+     or to_regprocedure('public.realtime_tables()') is null then
+    raise exception 'Rollback abortado: as funcoes nao estao em public — a migracao 2 nao foi aplicada aqui';
+  end if;
+end $$;
 
 drop function if exists public.divat_security_digest();
 
