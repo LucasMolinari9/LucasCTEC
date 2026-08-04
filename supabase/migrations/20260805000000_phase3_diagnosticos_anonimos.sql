@@ -13,6 +13,12 @@
 --     completas sobre ~116 mil linhas — alavanca de indisponibilidade) FICAM em `audit`.
 --   * divat_security_digest() nasce aqui: resumo em vez de matriz.
 --
+-- RODE DENTRO DE BEGIN/COMMIT (ou `psql --single-transaction`). Nao e preferencia: o auto-teste
+-- usa `set local role anon`, que fora de bloco de transacao so emite WARNING. A guarda do
+-- current_user pega isso e aborta corretamente — mas com autocommit por instrucao, o
+-- `revoke divat_audit_owner from postgres` do fim NAO roda, e `postgres` fica membro do papel
+-- com a migracao meio aplicada. Rerodar aborta na pre-condicao; a saida e o rollback.
+--
 -- ORDEM DAS DUAS PRIMEIRAS INSTRUCOES E LOAD-BEARING. O `grant divat_audit_owner to postgres`
 -- vem ANTES da pre-condicao de proposito: a migracao 1 passa o dono do schema `audit` para
 -- divat_audit_owner e concede USAGE so a divat_auditor, entao `postgres` NAO tem USAGE em
@@ -82,20 +88,38 @@ with tabelas as (
   from pg_class c join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind in ('r','p')
 ),
+-- has_any_column_privilege ao lado de has_table_privilege NAO e redundancia: o segundo IGNORA
+-- grant por COLUNA. Um `grant update (nome_logradouro) on itinerario_teste to anon` deixaria
+-- anon_escreve em false com caminho de escrita real aberto — contra a garantia central do repo
+-- de que nao ha escrita pela API publica. has_any_column_privilege cobre os dois casos.
 priv as (
   select t.relname, t.relrowsecurity,
-         has_table_privilege('anon', t.oid, 'SELECT')            as anon_select,
-         has_table_privilege('anon', t.oid, 'INSERT')            as anon_insert,
-         has_table_privilege('anon', t.oid, 'UPDATE')            as anon_update,
-         has_table_privilege('anon', t.oid, 'DELETE')            as anon_delete,
-         has_table_privilege('anon', t.oid, 'TRUNCATE')          as anon_truncate,
-         has_table_privilege('anon', t.oid, 'MAINTAIN')          as anon_maintain,
-         has_table_privilege('authenticated', t.oid, 'SELECT')   as auth_select,
-         has_table_privilege('authenticated', t.oid, 'INSERT')   as auth_insert,
-         has_table_privilege('authenticated', t.oid, 'UPDATE')   as auth_update,
-         has_table_privilege('authenticated', t.oid, 'DELETE')   as auth_delete,
-         has_table_privilege('authenticated', t.oid, 'TRUNCATE') as auth_truncate
+         has_table_privilege('anon', t.oid, 'SELECT')                                              as anon_select,
+         (has_table_privilege('anon', t.oid, 'INSERT')   or has_any_column_privilege('anon', t.oid, 'INSERT'))   as anon_insert,
+         (has_table_privilege('anon', t.oid, 'UPDATE')   or has_any_column_privilege('anon', t.oid, 'UPDATE'))   as anon_update,
+         has_table_privilege('anon', t.oid, 'DELETE')                                              as anon_delete,
+         has_table_privilege('anon', t.oid, 'TRUNCATE')                                            as anon_truncate,
+         has_table_privilege('anon', t.oid, 'MAINTAIN')                                            as anon_maintain,
+         (has_table_privilege('authenticated', t.oid, 'SELECT') or has_any_column_privilege('authenticated', t.oid, 'SELECT')) as auth_select,
+         (has_table_privilege('authenticated', t.oid, 'INSERT') or has_any_column_privilege('authenticated', t.oid, 'INSERT')) as auth_insert,
+         (has_table_privilege('authenticated', t.oid, 'UPDATE') or has_any_column_privilege('authenticated', t.oid, 'UPDATE')) as auth_update,
+         has_table_privilege('authenticated', t.oid, 'DELETE')                                      as auth_delete,
+         has_table_privilege('authenticated', t.oid, 'TRUNCATE')                                    as auth_truncate
   from tabelas t
+),
+-- Views e matviews num bloco PROPRIO, nao dentro de `tabelas`: alargar aquela CTE mudaria a
+-- semantica de `tabelas_publicas`, que a Tarefa 6 consome. View e a rota classica de bypass de
+-- RLS no Postgres — uma view nao-security_invoker roda com os direitos do dono, entao
+-- `create view public.vaza as select * from public.evento_dados` + grant para anon exporia as
+-- tabelas de staging que o CLAUDE.md descreve como deliberadamente invisiveis.
+vis as (
+  select c.relname, c.relkind::text as relkind,
+         has_table_privilege('anon', c.oid, 'SELECT')          as anon_select,
+         has_table_privilege('authenticated', c.oid, 'SELECT') as auth_select,
+         coalesce((select true from unnest(coalesce(c.reloptions, '{}'::text[])) o
+                   where o like 'security\_invoker=%'), false) as security_invoker
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind in ('v','m')
 ),
 pols as (
   select c.relname, p.polname, p.polcmd::text as polcmd
@@ -144,17 +168,21 @@ canonico as (
                   || anon_delete::int || anon_truncate::int || anon_maintain::int
           || '|u' || auth_select::int || auth_insert::int || auth_update::int
                   || auth_delete::int || auth_truncate::int,
-        E'\n' order by relname) from priv), '')
+        E'\n' order by relname collate "C") from priv), '')
+    || E'\n==\n' ||
+    coalesce((select string_agg(relname || '|' || relkind || '|' || anon_select::int
+                                 || auth_select::int || security_invoker::int,
+        E'\n' order by relname collate "C") from vis), '')
     || E'\n==\n' ||
     coalesce((select string_agg(relname || '|' || polname || '|' || polcmd,
-        E'\n' order by relname, polname) from pols), '')
+        E'\n' order by relname collate "C", polname collate "C") from pols), '')
     || E'\n==\n' ||
     coalesce((select string_agg(assinatura || '|' || anon_exec::int || auth_exec::int
                                  || prosecdef::int || search_path_fixo::int,
-        E'\n' order by assinatura) from funcs), '')
+        E'\n' order by assinatura collate "C") from funcs), '')
     || E'\n==\n' ||
     coalesce((select string_agg(dono || '|' || schema || '|' || tipo || '|' || concessoes,
-        E'\n' order by dono, schema, tipo) from defaults_perm), '')
+        E'\n' order by dono collate "C", schema collate "C", tipo collate "C") from defaults_perm), '')
     as texto
 )
 select jsonb_build_object(
@@ -164,6 +192,10 @@ select jsonb_build_object(
   'todas_com_rls', coalesce((select bool_and(relrowsecurity) from priv), false),
   'anon_escreve', coalesce((select bool_or(anon_insert or anon_update or anon_delete or anon_truncate) from priv), true),
   'anon_maintain', coalesce((select bool_or(anon_maintain) from priv), true),
+  -- View/matview legivel por anon: classe perigosa propria, nao cabe em anon_escreve.
+  -- Conjunto vazio devolve false porque "nao existe view nenhuma" e o estado normal deste banco
+  -- (zero views hoje) — aqui o vazio nao e visao perdida, e a ausencia do objeto.
+  'anon_le_view', coalesce((select bool_or(anon_select) from vis), false),
   'authenticated_tem_privilegio',
       coalesce((select bool_or(auth_select or auth_insert or auth_update or auth_delete or auth_truncate) from priv), true),
   'funcoes_definer_anon',    (select count(*) from funcs where prosecdef and anon_exec),
@@ -213,6 +245,7 @@ begin
   if jsonb_typeof(d->'todas_com_rls') <> 'boolean'
      or jsonb_typeof(d->'anon_escreve') <> 'boolean'
      or jsonb_typeof(d->'anon_maintain') <> 'boolean'
+     or jsonb_typeof(d->'anon_le_view') <> 'boolean'
      or jsonb_typeof(d->'authenticated_tem_privilegio') <> 'boolean' then
     raise exception 'Assercao falhou: um dos booleanos nao veio como boolean';
   end if;
@@ -222,7 +255,12 @@ begin
      or jsonb_typeof(d->'anon_rpcs') <> 'number' then
     raise exception 'Assercao falhou: uma das contagens nao veio como number';
   end if;
+  -- authenticated_tem_privilegio entra aqui porque a migracao 1 o assertou como zero
+  -- (20260729034018:162-164) e o default nao-fechavel do supabase_admin pode ter reconcedido
+  -- numa tabela criada entre uma migracao e outra — o cenario que o CLAUDE.md documenta como
+  -- ATIVO. Calcular o campo e nao confer-lo era deixar a asserção mais fraca que a funcao.
   if (d->>'anon_escreve')::boolean or (d->>'anon_maintain')::boolean
+     or (d->>'anon_le_view')::boolean or (d->>'authenticated_tem_privilegio')::boolean
      or not (d->>'todas_com_rls')::boolean or (d->>'funcoes_definer_anon')::int > 0 then
     raise exception 'Assercao falhou: postura de seguranca ja esta errada antes do commit — %', d;
   end if;
