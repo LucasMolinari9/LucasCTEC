@@ -102,15 +102,24 @@ Os campos, sem ambiguidade:
 | `digest` | sha256 hex da serialização canônica (ver § 3.1) | tudo abaixo |
 | `tabelas_publicas` | **todas** as tabelas de `public` (18 — inclui as 4 de staging), não as 14 legíveis por `anon` | `public` |
 | `todas_com_rls` | falso se **qualquer** tabela de `public` estiver sem RLS | `public` |
-| `anon_escreve` | verdadeiro se qualquer tabela conceder `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE` a `anon` | `public` |
+| `anon_escreve` | verdadeiro se qualquer tabela conceder `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE` a `anon` — **por tabela ou por coluna** | `public` |
 | `anon_maintain` | verdadeiro se qualquer tabela conceder `MAINTAIN` a `anon` | `public` |
+| `anon_le_view` | verdadeiro se `anon` puder ler qualquer view/matview | `public` |
 | `authenticated_tem_privilegio` | verdadeiro se `authenticated` tiver qualquer privilégio de tabela | `public` |
 | `funcoes_definer_anon` | funções `SECURITY DEFINER` executáveis por `anon` | `public`+`audit`+`private` |
 | `funcoes_sem_search_path` | funções que não fixam `search_path` | `public`+`audit`+`private` |
 | `defaults_permissivos` | entradas de `pg_default_acl` que concedem a `PUBLIC`/`anon`/`authenticated` | todos os schemas |
 | `anon_rpcs` | funções de `public` executáveis por `anon` | `public` |
 
-**Os quatro últimos campos existem por causa de um achado da revisão da migração (§ 15, I2).** A
+**`anon_le_view` e a cobertura de privilégio por coluna vêm da revisão da T4 (§ 15, I4).** Duas
+lacunas da mesma classe: `relkind in ('r','p')` excluía views — e view não-`security_invoker` roda
+com os direitos do dono, então uma view sobre as tabelas de staging concedida a `anon` saía com
+digest **byte-idêntico** —, e `has_table_privilege` ignora grant por coluna, então um
+`grant update (col) on … to anon` deixava `anon_escreve` em `false` com escrita real aberta,
+contra a garantia central do repositório. Ambas fechadas: bloco hasheado próprio para `('v','m')`
+e `has_any_column_privilege` somado aos termos de escrita.
+
+**Os quatro campos de contagem existem por causa de um achado da revisão da migração (§ 15, I2).** A
 primeira versão deste desenho tinha só seis campos e era **cega** para `MAINTAIN`, `search_path`
 fixo, `default_privileges` e os schemas `audit`/`private` — quatro coisas que o
 `scripts/check_grants.mjs` confere hoje. Como `default_privileges` é justamente a compensação do
@@ -483,3 +492,13 @@ própria nem abre transação.
 para qualquer verificação offline — só apareceriam ao aplicar o SQL, um deles em silêncio. Foram
 achados por leitura estática cuidadosa contra a migração 1. Vale como precedente: SQL destinado a
 produção merece revisor em modelo mais capaz e riscos nomeados um a um, não revisão genérica.
+
+**I4 — o digest era cego para views e para privilégio de coluna.** Achado na revisão da T4
+reescrita, mesma classe do I2: cobertura que faltava no objeto cuja razão de existir é cobrir.
+Corrigido em § 3 (11 campos). A asserção da migração também passou a conferir
+`authenticated_tem_privilegio`, que ela calculava e não checava.
+
+Ainda abertos, rebaixados a Menor e registrados para a revisão final: `prokind = 'f'` deixa
+procedures fora do digest e de `anon_rpcs` (divergência de escopo entre a asserção de uma vez e a
+verificação contínua); `pols` não hasheia `polqual`, então reescrever a expressão de uma policy não
+muda o digest (risco residual baixo — sem GRANT de escrita, policy sozinha não abre escrita).
