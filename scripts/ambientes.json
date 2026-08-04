@@ -1,0 +1,7 @@
+{
+  "nota": "De qual banco cada gate fala (issue #74). O alvo vem de DIVAT_ALVO, decidido pelo gatilho do workflow: teste em PR/push, producao no cron. As duas chaves sao anon publicas, as mesmas do app.js — nao ha segredo aqui.",
+  "ambientes": {
+    "teste":    { "ref": "gontnlfmothfglssbyyk", "url": "https://gontnlfmothfglssbyyk.supabase.co", "key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdvbnRubGZtb3RoZmdsc3NieXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNTU0OTAsImV4cCI6MjEwMDgzMTQ5MH0.NMEaXXeWxI6A50KuA1euHpSH3Mi53CXU71N16zrjhH4" },
+    "producao": { "ref": "lwzsxuaqqeoamukduhev", "url": "https://lwzsxuaqqeoamukduhev.supabase.co", "key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx3enN4dWFxcWVvYW11a2R1aGV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MTk4NjYsImV4cCI6MjA5NTQ5NTg2Nn0.90R-n9pu_gpDfmRr7O4DMAdjtIUkIDGyEKfG9zXXV1s" }
+  }
+}
