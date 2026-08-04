@@ -55,6 +55,8 @@ export function classificar(prazo, hoje) {
 }
 
 const CAMPOS = ['id', 'descricao', 'vence_em', 'aviso_dias', 'erro_dias', 'referencia'];
+const CAMPOS_TEXTO = ['id', 'descricao', 'vence_em', 'referencia'];
+const CAMPOS_INTEIRO = ['aviso_dias', 'erro_dias'];
 
 export async function lerPrazos(root) {
   const caminho = join(root, 'scripts', 'prazos.json');
@@ -70,6 +72,19 @@ export async function lerPrazos(root) {
   for (const p of bruto.prazos) {
     for (const c of CAMPOS) {
       if (p?.[c] === undefined) throw new Error(`Prazo '${p?.id ?? '?'}' sem o campo '${c}' em ${caminho}`);
+    }
+    // Presença não basta: 'erro_dias':'0' (string) passaria pela checagem acima, cairia no
+    // default silencioso do classificar() (Number.isInteger('0') é falso) e o gate quebraria
+    // no dia ERRADO, sem erro nenhum. lerPrazos promete lançar em item inválido — cumpra.
+    for (const c of CAMPOS_TEXTO) {
+      if (typeof p[c] !== 'string') {
+        throw new Error(`Prazo '${p.id ?? '?'}' campo '${c}' devia ser string, veio ${typeof p[c]} (${JSON.stringify(p[c])}) em ${caminho}`);
+      }
+    }
+    for (const c of CAMPOS_INTEIRO) {
+      if (!Number.isInteger(p[c])) {
+        throw new Error(`Prazo '${p.id ?? '?'}' campo '${c}' devia ser inteiro, veio ${typeof p[c]} (${JSON.stringify(p[c])}) em ${caminho}`);
+      }
     }
   }
   return bruto.prazos;
