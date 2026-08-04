@@ -1,6 +1,9 @@
 # Fase 3 — diagnósticos anônimos e a transição dos gates vivos
 
-> **Estado:** desenho aprovado, aguardando plano de implementação.
+> **Estado:** desenho **revisado em 04/08/2026**, depois da execução parcial (T1 e T2 concluídas,
+> T3 reprovada em revisão). Duas coisas forçaram a revisão e estão registradas em § 14 e § 15:
+> a auditoria das issues abertas, que eu deveria ter feito antes de desenhar, e três defeitos
+> técnicos achados na revisão da migração.
 > **Data:** 04/08/2026 · **Base:** `e09893d` (merge do #97)
 > **Substitui a direção** registrada em `docs/planos/fase-3-hardening-moderado.md`, seção
 > "Pré-requisito da promoção a produção — os quatro gates vivos param". O diagnóstico daquela
@@ -84,14 +87,37 @@ caso da matriz, disponibilidade no caso do scan.
   "tabelas_publicas": 18,
   "todas_com_rls": true,
   "anon_escreve": false,
+  "anon_maintain": false,
   "authenticated_tem_privilegio": false,
+  "funcoes_definer_anon": 0,
+  "funcoes_sem_search_path": 0,
+  "defaults_permissivos": 3,
   "anon_rpcs": 5 }
 ```
 
-Os campos, sem ambiguidade: `tabelas_publicas` conta **todas** as tabelas de `public` (18 —
-inclui as 4 de staging), não as 14 legíveis por `anon`; `anon_rpcs` conta as funções de `public`
-executáveis por `anon` (5 depois desta mudança); `anon_escreve` é verdadeiro se **qualquer** tabela
-de `public` conceder `INSERT`, `UPDATE`, `DELETE` ou `TRUNCATE` a `anon`.
+Os campos, sem ambiguidade:
+
+| Campo | O que é | Escopo |
+|---|---|---|
+| `digest` | sha256 hex da serialização canônica (ver § 3.1) | tudo abaixo |
+| `tabelas_publicas` | **todas** as tabelas de `public` (18 — inclui as 4 de staging), não as 14 legíveis por `anon` | `public` |
+| `todas_com_rls` | falso se **qualquer** tabela de `public` estiver sem RLS | `public` |
+| `anon_escreve` | verdadeiro se qualquer tabela conceder `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE` a `anon` | `public` |
+| `anon_maintain` | verdadeiro se qualquer tabela conceder `MAINTAIN` a `anon` | `public` |
+| `authenticated_tem_privilegio` | verdadeiro se `authenticated` tiver qualquer privilégio de tabela | `public` |
+| `funcoes_definer_anon` | funções `SECURITY DEFINER` executáveis por `anon` | `public`+`audit`+`private` |
+| `funcoes_sem_search_path` | funções que não fixam `search_path` | `public`+`audit`+`private` |
+| `defaults_permissivos` | entradas de `pg_default_acl` que concedem a `PUBLIC`/`anon`/`authenticated` | todos os schemas |
+| `anon_rpcs` | funções de `public` executáveis por `anon` | `public` |
+
+**Os quatro últimos campos existem por causa de um achado da revisão da migração (§ 15, I2).** A
+primeira versão deste desenho tinha só seis campos e era **cega** para `MAINTAIN`, `search_path`
+fixo, `default_privileges` e os schemas `audit`/`private` — quatro coisas que o
+`scripts/check_grants.mjs` confere hoje. Como `default_privileges` é justamente a compensação do
+default não-fechável do `supabase_admin` (`docs/seguranca.md` § 9.1), a versão de seis campos
+teria trocado o alarme diário por um alarme diário **sem a checagem que justifica a cadência
+diária** — um `MAINTAIN` reconcedido a `anon` deixaria o digest byte-idêntico. Nenhum dos quatro
+campos novos é enumerável: são contagens e booleanos.
 
 Três decisões dentro dela:
 
@@ -117,33 +143,80 @@ isso de volta cobrindo as classes perigosas diretamente.
 
 | Sinal | Significado | Ação |
 |---|---|---|
-| Booleano vermelho (`anon_escreve`, `!todas_com_rls`, `authenticated_tem_privilegio`) | emergência, classe conhecida na hora | revogar; **nunca** baselinar |
-| Só o digest mudou, booleanos sãos | mudança estrutural benigna (tabela nova, policy renomeada) | investigar com a credencial ou pelo painel; re-baselinar |
+| **Indicador grave** — `anon_escreve`, `anon_maintain`, `!todas_com_rls`, `authenticated_tem_privilegio`, `funcoes_definer_anon > 0` | emergência, classe conhecida na hora | revogar; **nunca** baselinar |
+| **Contagem subiu** — `anon_rpcs`, `defaults_permissivos` ou `funcoes_sem_search_path` acima do baseline | privilégio novo apareceu; é o sinal do SEC-01 | conferir se é deliberado; revogar ou registrar |
+| **Só o digest mudou**, o resto são | mudança estrutural benigna (tabela nova, policy renomeada) | investigar com a credencial ou pelo painel; re-baselinar |
 
 **Detecção fica no canal barato e perene; diagnóstico fica no canal caro.**
 
+Contagem **que sobe** é erro; contagem que **desce** é dívida resolvida — o gate diz para apertar
+o baseline, no mesmo espírito do `resolvidos` que o `check_grants.mjs` já imprime hoje.
+
 ### 3.2 O baseline não pode silenciar a classe perigosa
 
-`--atualizar-baseline` atualiza **o digest, e só o digest**. Os três booleanos são expectativas
-**fixas no código do `check_grants.mjs`**, não dado de `security_baseline.json`. Não existe caminho
-para baselinar `anon_escreve: true`.
+`--atualizar-baseline` atualiza **o digest e as três contagens** (`anon_rpcs`,
+`defaults_permissivos`, `funcoes_sem_search_path`) — e nada mais. Os **cinco indicadores graves**
+(`anon_escreve`, `anon_maintain`, `todas_com_rls`, `authenticated_tem_privilegio`,
+`funcoes_definer_anon`) são expectativas **fixas no código do `check_grants.mjs`**, não dado de
+`security_baseline.json`. Não existe caminho para baselinar `anon_escreve: true`.
+
+O campo `achados` do baseline — as três exceções documentadas do `supabase_admin` — é **preservado
+intacto** por `--atualizar-baseline`, nunca reescrito a partir do digest. Mesma disciplina do
+`orfaos_conhecidos` do `data_quality_baseline.json`.
 
 Razão: um gate cujo conserto habitual é rodar `--atualizar-baseline` ensina o reflexo de apagar o
 alarme. O reflexo continua possível para mudança benigna e **nunca** alcança a classe perigosa.
 
+### 3.3 O alvo vem do gatilho, nunca do `app.js` (issue #74)
+
+A issue **#74** ("Gates de banco devem validar exclusivamente o Supabase de teste") exige, em
+texto: configuração explícita do projeto de teste, falha fechada ao receber o ref de produção, e
+**nenhum gate de PR derivando o alvo do `app.js`**. Hoje os quatro gates derivam `SB_URL`/`SB_KEY`
+dos literais do `app.js` — que são de **produção**.
+
+Isso colide com a premissa deste desenho, que precisa de um alarme **de produção**. As duas coisas
+se reconciliam separando *quem pergunta* de *sobre qual banco*:
+
+> **O alvo de um gate é configuração explícita, resolvida por `scripts/lib/ambiente.mjs` a partir
+> da variável `DIVAT_ALVO` (`teste` | `producao`) e do arquivo `scripts/ambientes.json`. Nenhum
+> gate deriva alvo do `app.js`. Sem `DIVAT_ALVO`, o script falha fechado — não existe default.**
+
+Quem decide o valor é o **gatilho do workflow**:
+
+| Gatilho | `DIVAT_ALVO` | Porquê |
+|---|---|---|
+| `pull_request`, `push` | `teste` | é o requisito da #74: PR jamais toca produção, nem por acidente |
+| `schedule` (cron), `workflow_dispatch` | `producao` | é o monitoramento; sem ele produção fica sem alarme |
+
+**O que isso custa a este desenho:** a versão anterior anunciava que `check_deriva` e
+`check_realtime` "não mudam uma linha". Deixa de ser verdade — os dois passam a resolver o alvo
+pelo `ambiente.mjs` como os demais. É um arquivo a mais tocado em cada um, e a troca vale: fecha
+a #74 e elimina a classe inteira de acidente em que editar o `app.js` redireciona um gate.
+
+**O que isso NÃO faz:** não satisfaz a #74 ao pé da letra. A cláusula "os scripts devem falhar de
+forma fechada se receberem o ref de produção" passa a valer **por gatilho**, não sempre — o cron
+recebe produção de propósito. Essa reinterpretação precisa ser registrada como comentário na #74
+antes de a mudança ser mergeada; se o dono discordar, a alternativa é gates test-only e produção
+sem alarme de grants, e aí o `docs/seguranca.md` § 9.1 precisa parar de afirmar um controle que
+não existe mais.
+
 ## 4. Onde cada gate fica depois
 
-| Gate | Cadência | Precisa de segredo? | Mudança |
-|---|---|---|---|
-| `check_grants` (digest) | **diária** | **não** | adaptado ao digest, modo duplo (§ 5) |
-| `check_deriva` | semanal + PR | não | **nenhuma** |
-| `check_realtime` | semanal | não | **nenhuma** |
-| `check_data_quality` | semanal | sim | portado para o auditor |
-| `check_phase3_audit` | semanal / dispatch | sim | ganha a matriz completa e aceita 2 refs |
+| Gate | Cadência | Alvo | Precisa de segredo? | Mudança |
+|---|---|---|---|---|
+| `check_grants` (digest) | **diária** (cron) | produção | **não** | digest + modo duplo (§ 5) + `ambiente.mjs` |
+| `check_grants` (digest) | PR / push | teste | **não** | mesmo script, `DIVAT_ALVO=teste` |
+| `check_deriva` | semanal + PR | cron: produção · PR: teste | não | só `ambiente.mjs` |
+| `check_realtime` | semanal + PR | cron: produção · PR: teste | não | só `ambiente.mjs` |
+| `check_data_quality` | semanal (cron) | produção | sim | portado para o auditor + `ambiente.mjs` |
+| `check_phase3_audit` | semanal / dispatch | por argumento | sim | matriz completa, aceita 2 refs |
 
-Dos quatro gates que o plano dava como perdidos, **dois não mudam uma linha e um continua diário
-sem credencial**. Só o semanal de qualidade herda o segredo — e para ele isso é aceitável: se
-atrasar um ciclo, não há alarme apagado, há relatório adiado.
+O alarme que importa — o **diário de grants** — continua **sem credencial e sem prazo de
+validade**, que era o ponto de partida deste desenho. Só o semanal de qualidade herda o segredo, e
+para ele isso é aceitável: se atrasar um ciclo, não há alarme apagado, há relatório adiado.
+
+Comparado à versão anterior desta spec, `check_deriva` e `check_realtime` deixam de ser
+"nenhuma mudança" e passam a tocar um arquivo cada — o preço de fechar a #74 (§ 3.3).
 
 ## 5. Modo duplo, com validade — o ponto mais perigoso
 
@@ -220,20 +293,40 @@ duas de volta) é o preço da auditabilidade.
 
 Mesmo molde da 1: pré-condições, DDL, asserções, auto-teste, tudo numa transação.
 
-1. **Pré-condição:** `private` e `audit` existem e os dois papéis existem (isto é, a migração 1
-   rodou). Aborta se não.
-2. **`grant divat_audit_owner to postgres;`** — a migração 1 termina com
-   `revoke divat_audit_owner, divat_auditor from postgres`, e as quatro funções de `audit` são
-   **propriedade de `divat_audit_owner`**. Sem re-conceder, `alter function ... owner to` falha com
-   permissão negada. Revoga de novo no fim.
+1. **`grant divat_audit_owner to postgres;` VEM PRIMEIRO, antes de qualquer pré-condição.** A
+   migração 1 termina com `revoke divat_audit_owner, divat_auditor from postgres`, e as quatro
+   funções de `audit` são **propriedade de `divat_audit_owner`**. Sem re-conceder, `alter function
+   ... owner to` falha com permissão negada. Revoga de novo no fim.
+   **A ordem não é estética (achado I1, § 15).** A migração 1 passa o dono do schema `audit` para
+   `divat_audit_owner` e concede `USAGE` só a `divat_auditor`, então `postgres` **não tem USAGE em
+   `audit`**. Um `to_regprocedure('audit.divat_api_shape()')` com nome qualificado por schema faz
+   verificação de ACL e levanta `permission denied for schema audit` — ou seja, a pré-condição
+   aborta a migração antes de o `grant` acontecer, com um erro que parece dizer que a pré-condição
+   está errada. Alternativa aceitável, se preferir não mexer na ordem: trocar a pré-condição por
+   consulta direta a `pg_proc`/`pg_namespace`, que não faz verificação de schema.
+2. **Pré-condição:** `private` e `audit` existem, os dois papéis existem e as quatro diagnósticas
+   estão todas em `audit` (isto é, a migração 1 rodou e nada a desfez). Aborta se não.
 3. Traz `divat_api_shape` e `realtime_tables` de volta: `security invoker`, `owner to postgres`,
    `set schema public`, `grant execute to anon`.
 4. Cria `public.divat_security_digest()` — `security invoker`, `revoke all from public`,
    `grant execute to anon`.
 5. **Asserção final:** o conjunto de funções executáveis por `anon` em `public` é exatamente os 5
    nomes esperados. Mesma forma da asserção da migração 1, com a lista nova.
-6. **Auto-teste:** `set local role anon; perform public.divat_security_digest(); reset role;` —
-   prova que `anon` alcança, dentro da transação, antes do commit.
+6. **Auto-teste, com guarda contra falha aberta (achado I3, § 15):**
+
+   ```sql
+   set local role anon;
+   if current_user <> 'anon' then
+     raise exception 'SET LOCAL ROLE nao pegou — rode a migracao dentro de BEGIN/COMMIT';
+   end if;
+   d := public.divat_security_digest();
+   reset role;
+   ```
+
+   Sem a guarda, o auto-teste **falha aberto**: `SET LOCAL` fora de bloco de transação emite um
+   `WARNING` e não faz nada, a asserção roda como `postgres` — que executa a função de qualquer
+   forma, tenha `anon` o `EXECUTE` ou não — e passa tautologicamente. A única asserção cujo
+   trabalho é provar que `anon` alcança o digest era a que degradava em silêncio.
 7. Script de rollback próprio, no molde do `scripts/rollback_phase3_test.sql`.
 
 ### 9.3 Pré-requisito que quase passou batido
@@ -341,3 +434,52 @@ A alternativa continua defensável se a prioridade for **regra rígida acima de 
 "2 RPCs anônimas, sem exceção" tem valor por ser inegociável. Nesse caso o conserto do § 1.3 é
 outro: um gate que falha quando a credencial está a menos de 30 dias do vencimento — ou seja, o
 `check_prazos.mjs` do § 6, que vale nos dois caminhos.
+
+## 14. Auditoria das issues abertas (feita em 04/08, tarde demais)
+
+A primeira versão desta spec foi escrita sem ler as issues abertas do repositório. Foi erro de
+método: explorei código, docs, workflows e banco, e não o rastreador. A auditoria posterior achou
+uma colisão real e uma branda.
+
+| Issue | Estado | Relação |
+|---|---|---|
+| **#74** — gates de banco test-only | aberta | **colisão real.** Resolvida pelo § 3.3 (alvo por gatilho). Precisa de comentário na issue registrando a reinterpretação. |
+| **#63** — checagem semanal de qualidade | aberta, já implementada | **colisão branda.** Os critérios de aceite dela especificam `divat_data_quality()` como `SECURITY INVOKER` com `EXECUTE` para `anon` — exatamente o que § 2 remove. Foi esse desenho que criou a alavanca de indisponibilidade medida em § 1.1. A issue é que precisa ser atualizada, não este desenho. |
+| **#75** — payload alto entre municípios | aberta | **sem colisão.** As restrições dela ("não criar nova RPC anônima", "não alterar RLS/grants/schemas") são escopo daquela investigação de desempenho, não política global. Levantei isso como possível conflito e estava errado. |
+| **#65** — 6 codlinhas órfãs | aberta | sem relação (dado, não estrutura) |
+| **#50** — abas no modal | implementada | sem relação |
+
+**Regra que fica:** desenho novo neste repositório lê as issues abertas antes de começar, não
+depois. Está registrada aqui porque `docs/agents/issue-tracker.md` descreve *como* usar o
+rastreador, e não *quando* consultá-lo.
+
+*(À parte, achado da mesma auditoria: a label `ready-for-agent` do `docs/agents/triage-labels.md`
+não existe no rastreador — só `ready-for-human`. O doc descreve um vocabulário que o repo não tem
+inteiro.)*
+
+## 15. Defeitos achados na revisão da migração
+
+A T3 foi implementada, commitada e **reprovada** em revisão. A transcrição estava fiel linha a
+linha; os três defeitos eram do desenho, não da execução.
+
+**I1 — a migração abortava na própria pré-condição.** Corrigido em § 9.2 item 1.
+
+**I2 — o digest era cego para quatro checagens do gate diário.** `MAINTAIN`, `search_path` fixo,
+`default_privileges` e os schemas `audit`/`private`. Como `default_privileges` é a razão de a
+cadência ser diária, a versão de seis campos teria entregue um alarme diário sem o motivo de ser
+diário — e um `MAINTAIN` reconcedido a `anon` deixaria o digest byte-idêntico. Corrigido em § 3
+(dez campos) e § 3.1.
+
+**I3 — o auto-teste falhava aberto.** Corrigido em § 9.2 item 6.
+
+Minors registrados e ainda abertos, para a revisão final triar: `bool_and`/`bool_or` sobre conjunto
+vazio devolvem `NULL` (o consumidor precisa recusar não-booleano, não testar veracidade);
+`divat_auditor` mantém `EXECUTE` nas duas funções que voltam para `public`; nada emite
+`notify pgrst, 'reload schema'` depois do DDL; o `create or replace` da função nova é
+desnecessário dado que a pré-condição já prova que ela não existe; o rollback não tem pré-condição
+própria nem abre transação.
+
+**O que a revisão da T3 provou sobre o método:** dois dos três defeitos (I1 e I3) são invisíveis
+para qualquer verificação offline — só apareceriam ao aplicar o SQL, um deles em silêncio. Foram
+achados por leitura estática cuidadosa contra a migração 1. Vale como precedente: SQL destinado a
+produção merece revisor em modelo mais capaz e riscos nomeados um a um, não revisão genérica.
