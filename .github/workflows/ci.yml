@@ -54,10 +54,11 @@ jobs:
       # push de branch, que a linha 26 restringe. Foi assim que este gate ficou morto entre
       # 31/07 12:26 e 16:5x sem ninguém notar (o PR verde não mostra o que não rodou).
       # A variável minúscula continua sendo exportada, só que no shell, onde não há colisão.
-      - name: Bancadas offline de backup e restauração
+      - name: Bancadas offline de backup, restauração e grants
         env:
           NO_PROXY: 127.0.0.1
         run: |
           export no_proxy="$NO_PROXY"
           node tests/backup_rest.rig.mjs
           node tests/restore_rest.rig.mjs
+          node tests/check_grants.rig.mjs
