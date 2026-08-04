@@ -462,43 +462,252 @@ no db-checks.yml."
 
 ---
 
-## Task 3: A RPC de digest e a migração 2
+## Task 3: Resolução de alvo por gatilho (`ambiente.mjs`)
+
+> **Tarefa NOVA, criada na revisão de 04/08.** Nasce da issue **#74**, que exige configuração
+> explícita do alvo, falha fechada ao receber o ref de produção e **proíbe derivar o alvo do
+> `app.js`**. Todos os gates de banco passam a depender deste módulo, por isso ele vem antes de
+> todos eles. Desenho: spec § 3.3.
 
 **Files:**
-- Create: `supabase/migrations/20260805000000_phase3_diagnosticos_anonimos.sql`
-- Create: `scripts/rollback_phase3_diagnosticos.sql`
+- Create: `scripts/lib/ambiente.mjs`
+- Create: `scripts/ambientes.json`
+- Create: `tests/ambiente.test.js`
 
 **Interfaces:**
-- Consumes: nada do repositório; **pressupõe** a migração `20260729034018` aplicada.
-- Produces: `public.divat_security_digest()` retornando `jsonb` com exatamente estas chaves —
-  `digest` (string hex de 64 caracteres), `tabelas_publicas` (número), `todas_com_rls` (booleano),
-  `anon_escreve` (booleano), `authenticated_tem_privilegio` (booleano), `anon_rpcs` (número).
-  A Tarefa 5 depende desses nomes e tipos.
+- Consumes: nada.
+- Produces:
+  - `ALVOS = ['teste', 'producao']`
+  - `resolverAlvo(config, env): { alvo, ref, url, key }` — **pura**, sem I/O. `env` é um objeto
+    tipo `process.env`. Lança `Error` se `DIVAT_ALVO` faltar, se não for um dos dois valores, ou
+    se o ambiente pedido não existir no `config`.
+  - `carregarAmbiente(root, env): Promise<{ alvo, ref, url, key }>` — lê
+    `scripts/ambientes.json` e delega a `resolverAlvo`.
+  - As Tarefas 6, 8 e 9 consomem `carregarAmbiente`.
 
-**Nota sobre o timestamp do nome:** use um timestamp posterior a `20260729034018` e anterior à data
-de execução. `20260805000000` serve; se você executar em outro dia, ajuste — o que importa é a
-ordem lexicográfica.
+**Por que fail-closed sem default:** um default silencioso é como um gate de PR acaba falando com
+produção. Sem `DIVAT_ALVO`, o script morre com instrução, não escolhe por você.
 
-- [ ] **Step 1: Escreva a migração**
+- [ ] **Step 1: Escreva o teste que falha**
 
-Crie `supabase/migrations/20260805000000_phase3_diagnosticos_anonimos.sql`:
+Crie `tests/ambiente.test.js`:
+
+```js
+'use strict';
+/* Resolução do alvo dos gates de banco (issue #74).
+   Rode: node ambiente.test.js   (ou, melhor, node check.js para rodar tudo).
+
+   Por que existe: até 04/08/2026 os quatro gates derivavam SB_URL/SB_KEY dos literais do
+   app.js — que são de PRODUÇÃO. Editar o frontend redirecionava um gate. Agora o alvo é
+   configuração explícita, e a ausência dela é erro, nunca um default. */
+
+let pass = 0, fail = 0;
+const fails = [];
+function ok(cond, name, detail){
+  if (cond){ pass++; console.log('  PASS', name); }
+  else { fail++; fails.push(name + (detail?(' — '+detail):'')); console.log('  FAIL', name, detail||''); }
+}
+const lanca = fn => { try { fn(); return false; } catch { return true; } };
+
+(async () => {
+  const { resolverAlvo, ALVOS } = await import('../scripts/lib/ambiente.mjs');
+
+  const cfg = {
+    teste:    { ref: 'gontnlfmothfglssbyyk', url: 'https://gontnlfmothfglssbyyk.supabase.co', key: 'k-teste' },
+    producao: { ref: 'lwzsxuaqqeoamukduhev', url: 'https://lwzsxuaqqeoamukduhev.supabase.co', key: 'k-prod' },
+  };
+
+  console.log('resolverAlvo — escolha explícita');
+  ok(resolverAlvo(cfg, { DIVAT_ALVO: 'teste' }).ref === 'gontnlfmothfglssbyyk', 'teste devolve o ref de teste');
+  ok(resolverAlvo(cfg, { DIVAT_ALVO: 'producao' }).ref === 'lwzsxuaqqeoamukduhev', 'producao devolve o ref de produção');
+  ok(resolverAlvo(cfg, { DIVAT_ALVO: 'teste' }).key === 'k-teste', 'a chave acompanha o alvo');
+  ok(resolverAlvo(cfg, { DIVAT_ALVO: 'teste' }).alvo === 'teste', 'o alvo escolhido vem no resultado');
+
+  console.log('resolverAlvo — fail-closed');
+  ok(lanca(() => resolverAlvo(cfg, {})), 'sem DIVAT_ALVO lança, não assume nada');
+  ok(lanca(() => resolverAlvo(cfg, { DIVAT_ALVO: '' })), 'DIVAT_ALVO vazio lança');
+  ok(lanca(() => resolverAlvo(cfg, { DIVAT_ALVO: 'marte' })), 'alvo desconhecido lança');
+  ok(lanca(() => resolverAlvo(cfg, { DIVAT_ALVO: 'PRODUCAO' })), 'valor com caixa diferente lança (sem normalização silenciosa)');
+  ok(lanca(() => resolverAlvo({ teste: cfg.teste }, { DIVAT_ALVO: 'producao' })), 'alvo ausente na config lança');
+  ok(lanca(() => resolverAlvo({ teste: { ref: 'x' } }, { DIVAT_ALVO: 'teste' })), 'config sem url/key lança');
+
+  console.log('ALVOS — o vocabulário é fechado');
+  ok(Array.isArray(ALVOS) && ALVOS.length === 2, 'ALVOS tem exatamente dois valores');
+  ok(ALVOS.includes('teste') && ALVOS.includes('producao'), 'ALVOS é teste e producao');
+
+  console.log('\n==== PLACAR:', pass + '/' + (pass + fail), '====');
+  if (fail){ console.log('FALHAS:'); fails.forEach(f => console.log('  -', f)); process.exit(1); }
+})();
+```
+
+- [ ] **Step 2: Rode para ver falhar**
+
+```bash
+node tests/ambiente.test.js
+```
+
+Esperado: `Cannot find module` apontando `scripts/lib/ambiente.mjs`.
+
+- [ ] **Step 3: Implemente `scripts/lib/ambiente.mjs`**
+
+```js
+// ambiente.mjs — de qual banco um gate fala. Puro no núcleo, sem rede.
+//
+// Nasce da issue #74: até 04/08/2026 check_deriva, check_realtime, check_data_quality e
+// check_grants derivavam SB_URL/SB_KEY dos literais do app.js — que são de PRODUÇÃO. Uma edição
+// no frontend redirecionava um gate, e um gate de PR podia falar com produção sem ninguém pedir.
+//
+// Agora o alvo é configuração explícita, decidida pelo GATILHO do workflow:
+//   pull_request / push        → DIVAT_ALVO=teste     (requisito da #74)
+//   schedule (cron) / dispatch → DIVAT_ALVO=producao  (o monitoramento)
+//
+// NÃO existe default. Ausência de DIVAT_ALVO é erro, porque um default silencioso é exatamente
+// como um gate de PR acaba falando com produção. Ver docs/superpowers/specs/
+// 2026-08-04-fase3-diagnosticos-anonimos-design.md § 3.3.
+
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+export const ALVOS = ['teste', 'producao'];
+
+// Sem normalização de caixa de propósito: 'PRODUCAO' num workflow é quase sempre um engano de
+// quem escreveu o YAML, e aceitar em silêncio esconde o engano.
+export function resolverAlvo(config, env) {
+  const alvo = env?.DIVAT_ALVO;
+  if (!alvo) {
+    throw new Error(
+      'DIVAT_ALVO não definido. Todo gate de banco precisa dizer explicitamente de qual banco fala: '
+      + `'teste' em PR/push, 'producao' no cron. Não há default (issue #74).`);
+  }
+  if (!ALVOS.includes(alvo)) {
+    throw new Error(`DIVAT_ALVO='${alvo}' desconhecido. Valores aceitos: ${ALVOS.join(', ')}.`);
+  }
+  const escolhido = config?.[alvo];
+  if (!escolhido) throw new Error(`scripts/ambientes.json não descreve o ambiente '${alvo}'.`);
+  for (const campo of ['ref', 'url', 'key']) {
+    if (typeof escolhido[campo] !== 'string' || !escolhido[campo]) {
+      throw new Error(`Ambiente '${alvo}' sem o campo '${campo}' em scripts/ambientes.json.`);
+    }
+  }
+  return { alvo, ref: escolhido.ref, url: escolhido.url, key: escolhido.key };
+}
+
+export async function carregarAmbiente(root, env = process.env) {
+  const caminho = join(root, 'scripts', 'ambientes.json');
+  let config;
+  try {
+    config = JSON.parse(await readFile(caminho, 'utf8'));
+  } catch (e) {
+    throw new Error(`Não consegui ler ${caminho}: ${e.message}`);
+  }
+  return resolverAlvo(config.ambientes, env);
+}
+```
+
+- [ ] **Step 4: Rode o teste — tem que passar**
+
+```bash
+node tests/ambiente.test.js
+```
+
+Esperado: `==== PLACAR: 12/12 ====`.
+
+- [ ] **Step 5: Crie `scripts/ambientes.json`**
+
+As duas chaves são **públicas** (anon JWT legada) e já estão versionadas no `app.js` — não há
+segredo novo aqui. Copie os valores **exatos** do `app.js` (`SB_URL`/`SB_KEY` para produção,
+`SB_TESTE_URL`/`SB_TESTE_KEY` para teste), sem reescrever nem reformatar.
+
+```json
+{
+  "nota": "De qual banco cada gate fala (issue #74). O alvo vem de DIVAT_ALVO, decidido pelo gatilho do workflow: teste em PR/push, producao no cron. As duas chaves sao anon publicas, as mesmas do app.js — nao ha segredo aqui.",
+  "ambientes": {
+    "teste":    { "ref": "gontnlfmothfglssbyyk", "url": "<copie SB_TESTE_URL do app.js>", "key": "<copie SB_TESTE_KEY do app.js>" },
+    "producao": { "ref": "lwzsxuaqqeoamukduhev", "url": "<copie SB_URL do app.js>",       "key": "<copie SB_KEY do app.js>" }
+  }
+}
+```
+
+**Substitua os quatro placeholders pelos literais reais do `app.js`.** Não deixe `<copie …>` no
+arquivo commitado.
+
+- [ ] **Step 6: Prove que os dois caminhos resolvem e que a ausência falha**
+
+```bash
+node -e "
+import('./scripts/lib/ambiente.mjs').then(async m => {
+  for (const a of ['teste','producao']) {
+    const r = await m.carregarAmbiente(process.cwd(), { DIVAT_ALVO: a });
+    console.log(a, '→', r.ref, r.url.includes(r.ref) ? '(url bate com o ref)' : '(URL NAO BATE COM O REF)');
+  }
+  try { await m.carregarAmbiente(process.cwd(), {}); console.log('ERRO: sem DIVAT_ALVO nao lancou'); }
+  catch (e) { console.log('sem DIVAT_ALVO →', e.message.slice(0, 60)); }
+});
+"
+```
+
+Esperado: os dois refs, cada URL contendo o próprio ref, e a mensagem de erro na ausência.
+**Se uma URL não contiver o ref correspondente, você trocou os pares** — pare e corrija.
+
+- [ ] **Step 7: Gate e commit**
+
+```bash
+node tests/check.js
+git add scripts/lib/ambiente.mjs scripts/ambientes.json tests/ambiente.test.js
+git commit -m "feat: alvo dos gates por configuracao explicita, nunca pelo app.js (#74)"
+```
+
+---
+
+## Task 4: A RPC de digest e a migração 2
+
+> **Reformulada na revisão de 04/08.** A versão anterior foi implementada, revisada e
+> **reprovada** com três defeitos, todos do desenho (spec § 15). Esta versão os corrige: a ordem
+> do `grant`, a guarda do auto-teste e — a mais importante — o digest passa de 6 para 10 campos,
+> porque a versão de 6 era cega para as quatro checagens que justificam o gate ser diário.
+>
+> **O commit `3655200` já contém a versão reprovada.** Sua tarefa é **substituir** o conteúdo dos
+> dois arquivos, não criar arquivos novos.
+
+**Files:**
+- Modify (substituir conteúdo): `supabase/migrations/20260805000000_phase3_diagnosticos_anonimos.sql`
+- Modify (substituir conteúdo): `scripts/rollback_phase3_diagnosticos.sql`
+
+**Interfaces:**
+- Consumes: pressupõe a migração `20260729034018` aplicada.
+- Produces: `public.divat_security_digest()` devolvendo `jsonb` com **dez** chaves —
+  `digest` (string hex de 64 caracteres), `tabelas_publicas` (int), `todas_com_rls` (bool),
+  `anon_escreve` (bool), `anon_maintain` (bool), `authenticated_tem_privilegio` (bool),
+  `funcoes_definer_anon` (int), `funcoes_sem_search_path` (int), `defaults_permissivos` (int),
+  `anon_rpcs` (int). A Tarefa 6 depende desses nomes e tipos.
+
+- [ ] **Step 1: Substitua a migração**
+
+Conteúdo completo de `supabase/migrations/20260805000000_phase3_diagnosticos_anonimos.sql`:
 
 ```sql
 -- Fase 3, migracao 2 — diagnosticos anonimos.
 --
--- A migracao 1 (20260729034018) moveu as QUATRO RPCs diagnosticas para o schema `audit` e
--- revogou o execute de anon. Medido em 04/08/2026, isso cega quatro gates vivos de uma vez,
--- incluindo o DIARIO (check_grants.mjs), que é a compensacao do default nao-fechavel do
--- supabase_admin descrita em docs/seguranca.md 9.1.
+-- A migracao 1 (20260729034018) moveu as QUATRO RPCs diagnosticas para o schema `audit` e revogou
+-- o execute de anon. Isso cega quatro gates vivos de uma vez, incluindo o DIARIO
+-- (check_grants.mjs), que e a compensacao do default nao-fechavel do supabase_admin descrita em
+-- docs/seguranca.md 9.1.
 --
 -- Esta migracao reparte os quatro por CRITERIO, nao por numero (spec secao 2):
 --   * divat_api_shape e realtime_tables voltam para `public` e continuam anonimas — o que elas
 --     revelam ja esta publicado a mao em docs/schema.md e no CLAUDE.md (ADR-0003), e sao de
---     catalogo, sem varredura. Dois gates seguem sem mudar uma linha.
+--     catalogo, sem varredura.
 --   * divat_security_shape (matriz de grants — recon real) e divat_data_quality (59 varreduras
 --     completas sobre ~116 mil linhas — alavanca de indisponibilidade) FICAM em `audit`.
---   * divat_security_digest() nasce aqui: resumo em vez de matriz, para o alarme diario
---     sobreviver sem credencial e sem prazo de validade.
+--   * divat_security_digest() nasce aqui: resumo em vez de matriz.
+--
+-- ORDEM DAS DUAS PRIMEIRAS INSTRUCOES E LOAD-BEARING. O `grant divat_audit_owner to postgres`
+-- vem ANTES da pre-condicao de proposito: a migracao 1 passa o dono do schema `audit` para
+-- divat_audit_owner e concede USAGE so a divat_auditor, entao `postgres` NAO tem USAGE em
+-- `audit`. Um to_regprocedure('audit.<f>()') com nome qualificado por schema faz verificacao de
+-- ACL e levanta `permission denied for schema audit` — a migracao abortaria na propria
+-- pre-condicao, com um erro que parece dizer que a pre-condicao esta errada.
+grant divat_audit_owner to postgres;
 
 do $$
 begin
@@ -523,11 +732,6 @@ begin
   end if;
 end $$;
 
--- As quatro funcoes de `audit` pertencem a divat_audit_owner, e a migracao 1 termina com
--- `revoke divat_audit_owner, divat_auditor from postgres`. Sem re-conceder, o ALTER FUNCTION
--- ... OWNER TO abaixo falha com 42501 (permissao negada). Revogado de novo no fim.
-grant divat_audit_owner to postgres;
-
 -- --- as duas baratas voltam para public, anonimas e INVOKER --------------------------------
 alter function audit.divat_api_shape()  security invoker;
 alter function audit.realtime_tables()  security invoker;
@@ -543,14 +747,18 @@ revoke execute on function public.divat_api_shape(), public.realtime_tables() fr
 grant execute on function public.divat_api_shape(), public.realtime_tables() to anon;
 
 -- --- o objeto novo: resumo, nunca matriz ----------------------------------------------------
--- SECURITY INVOKER de proposito: has_table_privilege aceita o papel como argumento e os
--- catalogos pg_class/pg_policy/pg_proc sao legiveis por qualquer papel, entao esta funcao NAO
+-- SECURITY INVOKER de proposito: has_table_privilege aceita o papel como argumento e os catalogos
+-- pg_class/pg_policy/pg_proc/pg_default_acl sao legiveis por qualquer papel, entao esta funcao NAO
 -- concede poder nenhum a anon. Ela e a ponte estreita — o PostgREST nao expoe pg_catalog, entao
--- sem ela anon nao alcanca catalogo. Nao ha escalada de privilegio a revisar.
+-- sem ela anon nao alcanca catalogo.
 --
--- O digest NAO inclui timestamp: divat_security_shape() embute now(), e hashear a saida dele
--- daria digest novo a cada chamada — um gate que grita todo dia e um gate que se ignora.
-create or replace function public.divat_security_digest()
+-- O digest NAO inclui timestamp: divat_security_shape() embute now(), e hashear a saida dele daria
+-- digest novo a cada chamada — um gate que grita todo dia e um gate que se ignora.
+--
+-- DEZ campos, nao seis. A primeira versao era cega para MAINTAIN, search_path fixo,
+-- default_privileges e os schemas audit/private — e default_privileges e A RAZAO de o gate ser
+-- diario (SEC-01/SEC-05). Um MAINTAIN reconcedido a anon deixaria o digest byte-identico.
+create function public.divat_security_digest()
 returns jsonb
 language sql
 stable
@@ -569,6 +777,7 @@ priv as (
          has_table_privilege('anon', t.oid, 'UPDATE')            as anon_update,
          has_table_privilege('anon', t.oid, 'DELETE')            as anon_delete,
          has_table_privilege('anon', t.oid, 'TRUNCATE')          as anon_truncate,
+         has_table_privilege('anon', t.oid, 'MAINTAIN')          as anon_maintain,
          has_table_privilege('authenticated', t.oid, 'SELECT')   as auth_select,
          has_table_privilege('authenticated', t.oid, 'INSERT')   as auth_insert,
          has_table_privilege('authenticated', t.oid, 'UPDATE')   as auth_update,
@@ -583,20 +792,44 @@ pols as (
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public'
 ),
+-- Os TRES schemas: a Fase 3 moveu funcoes sensiveis para audit e o helper para private. Olhar so
+-- public deixaria um `grant execute on function audit.divat_data_quality() to anon` invisivel.
 funcs as (
-  select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' as assinatura,
+  select n.nspname as schema,
+         n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' as assinatura,
          has_function_privilege('anon', p.oid, 'EXECUTE')          as anon_exec,
          has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth_exec,
-         p.prosecdef
+         p.prosecdef,
+         coalesce((select true from unnest(coalesce(p.proconfig, '{}'::text[])) cfg
+                   where cfg like 'search\_path=%'), false)        as search_path_fixo
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public' and p.prokind = 'f'
+  where n.nspname in ('public','audit','private') and p.prokind = 'f'
+),
+-- default_privileges: e por causa deste bloco que o gate roda DIARIAMENTE. O default do
+-- supabase_admin nao e fechavel (postgres nao e superusuario no Supabase) e faz objeto novo
+-- nascer com privilegio para anon/authenticated.
+defaults as (
+  select d.defaclobjtype::text as tipo,
+         coalesce(ns.nspname, '-') as schema,
+         pg_get_userbyid(d.defaclrole) as dono,
+         d.defaclacl::text[] as acl
+  from pg_default_acl d
+  left join pg_namespace ns on ns.oid = d.defaclnamespace
+),
+defaults_perm as (
+  select dono, schema, tipo,
+         (select string_agg(a, ',' order by a) from unnest(acl) a
+          where a like '=%' or a like 'anon=%' or a like 'authenticated=%') as concessoes
+  from defaults
+  where exists (select 1 from unnest(acl) a
+                where a like '=%' or a like 'anon=%' or a like 'authenticated=%')
 ),
 canonico as (
   select
     coalesce((select string_agg(
         relname || '|' || relrowsecurity::int
           || '|a' || anon_select::int || anon_insert::int || anon_update::int
-                  || anon_delete::int || anon_truncate::int
+                  || anon_delete::int || anon_truncate::int || anon_maintain::int
           || '|u' || auth_select::int || auth_insert::int || auth_update::int
                   || auth_delete::int || auth_truncate::int,
         E'\n' order by relname) from priv), '')
@@ -604,18 +837,27 @@ canonico as (
     coalesce((select string_agg(relname || '|' || polname || '|' || polcmd,
         E'\n' order by relname, polname) from pols), '')
     || E'\n==\n' ||
-    coalesce((select string_agg(assinatura || '|' || anon_exec::int || auth_exec::int || prosecdef::int,
+    coalesce((select string_agg(assinatura || '|' || anon_exec::int || auth_exec::int
+                                 || prosecdef::int || search_path_fixo::int,
         E'\n' order by assinatura) from funcs), '')
+    || E'\n==\n' ||
+    coalesce((select string_agg(dono || '|' || schema || '|' || tipo || '|' || concessoes,
+        E'\n' order by dono, schema, tipo) from defaults_perm), '')
     as texto
 )
 select jsonb_build_object(
   'digest', encode(sha256(convert_to((select texto from canonico), 'UTF8')), 'hex'),
   'tabelas_publicas', (select count(*) from priv),
-  'todas_com_rls', (select bool_and(relrowsecurity) from priv),
-  'anon_escreve', (select bool_or(anon_insert or anon_update or anon_delete or anon_truncate) from priv),
+  -- coalesce FAIL-CLOSED: conjunto vazio significa visao perdida, nao "tudo certo".
+  'todas_com_rls', coalesce((select bool_and(relrowsecurity) from priv), false),
+  'anon_escreve', coalesce((select bool_or(anon_insert or anon_update or anon_delete or anon_truncate) from priv), true),
+  'anon_maintain', coalesce((select bool_or(anon_maintain) from priv), true),
   'authenticated_tem_privilegio',
-      (select bool_or(auth_select or auth_insert or auth_update or auth_delete or auth_truncate) from priv),
-  'anon_rpcs', (select count(*) from funcs where anon_exec)
+      coalesce((select bool_or(auth_select or auth_insert or auth_update or auth_delete or auth_truncate) from priv), true),
+  'funcoes_definer_anon',    (select count(*) from funcs where prosecdef and anon_exec),
+  'funcoes_sem_search_path', (select count(*) from funcs where not search_path_fixo),
+  'defaults_permissivos',    (select count(*) from defaults_perm),
+  'anon_rpcs',               (select count(*) from funcs where anon_exec and schema = 'public')
 );
 $function$;
 
@@ -642,8 +884,14 @@ begin
     raise exception 'Assercao falhou: uma diagnostica sensivel continua alcancavel por anon';
   end if;
 
-  -- Auto-teste: anon precisa CONSEGUIR chamar o digest, e a resposta precisa ter forma util.
+  -- Auto-teste. A GUARDA do current_user existe porque `SET LOCAL` fora de bloco de transacao
+  -- so emite WARNING e nao faz nada — a assercao rodaria como postgres, que executa a funcao de
+  -- qualquer forma, e passaria tautologicamente. A unica assercao cujo trabalho e provar que
+  -- anon alcanca o digest era a que degradava em silencio.
   set local role anon;
+  if current_user <> 'anon' then
+    raise exception 'Assercao falhou: SET LOCAL ROLE nao pegou — rode a migracao dentro de BEGIN/COMMIT';
+  end if;
   d := public.divat_security_digest();
   reset role;
 
@@ -652,10 +900,18 @@ begin
   end if;
   if jsonb_typeof(d->'todas_com_rls') <> 'boolean'
      or jsonb_typeof(d->'anon_escreve') <> 'boolean'
+     or jsonb_typeof(d->'anon_maintain') <> 'boolean'
      or jsonb_typeof(d->'authenticated_tem_privilegio') <> 'boolean' then
     raise exception 'Assercao falhou: um dos booleanos nao veio como boolean';
   end if;
-  if (d->>'anon_escreve')::boolean or not (d->>'todas_com_rls')::boolean then
+  if jsonb_typeof(d->'funcoes_definer_anon') <> 'number'
+     or jsonb_typeof(d->'funcoes_sem_search_path') <> 'number'
+     or jsonb_typeof(d->'defaults_permissivos') <> 'number'
+     or jsonb_typeof(d->'anon_rpcs') <> 'number' then
+    raise exception 'Assercao falhou: uma das contagens nao veio como number';
+  end if;
+  if (d->>'anon_escreve')::boolean or (d->>'anon_maintain')::boolean
+     or not (d->>'todas_com_rls')::boolean or (d->>'funcoes_definer_anon')::int > 0 then
     raise exception 'Assercao falhou: postura de seguranca ja esta errada antes do commit — %', d;
   end if;
 end $$;
@@ -663,18 +919,27 @@ end $$;
 revoke divat_audit_owner from postgres;
 ```
 
-- [ ] **Step 2: Escreva o rollback**
+- [ ] **Step 2: Substitua o rollback**
 
-Crie `scripts/rollback_phase3_diagnosticos.sql`:
+`scripts/rollback_phase3_diagnosticos.sql` — mesma versão anterior, mais pré-condição própria
+(achado Minor 8 da revisão):
 
 ```sql
 -- Desfaz a migracao 2 da Fase 3 (diagnosticos anonimos), devolvendo o estado que a migracao 1
 -- deixou: as quatro diagnosticas em `audit`, SECURITY DEFINER, so para divat_auditor.
 --
--- Rode dentro de transacao e confira o resultado ANTES do commit:
+-- Rode dentro de transacao e confira ANTES do commit:
 --   begin; \i scripts/rollback_phase3_diagnosticos.sql   -- confira; depois commit; ou rollback;
 
 grant divat_audit_owner to postgres;
+
+do $$
+begin
+  if to_regprocedure('public.divat_api_shape()') is null
+     or to_regprocedure('public.realtime_tables()') is null then
+    raise exception 'Rollback abortado: as funcoes nao estao em public — a migracao 2 nao foi aplicada aqui';
+  end if;
+end $$;
 
 drop function if exists public.divat_security_digest();
 
@@ -704,31 +969,26 @@ end $$;
 revoke divat_audit_owner from postgres;
 ```
 
-- [ ] **Step 3: Rode o gate de migrações contra o arquivo novo**
+- [ ] **Step 3: Rode o gate de migrações e registre o vermelho esperado**
 
 ```bash
 node scripts/check_migrations.mjs
 ```
 
-Esperado **neste momento**: **FALHA**, com `public.divat_api_shape não está na allowlist anônima de
-execução` (e o mesmo para `realtime_tables` e `divat_security_digest`). Isso é o comportamento
-correto do gate atual — a Tarefa 4 é que abre a faixa. Anote a mensagem exata; ela é o teste que a
-Tarefa 4 tem de virar verde.
+Esperado: **FALHA**, com exatamente três erros de allowlist (`public.divat_api_shape`,
+`public.realtime_tables`, `public.divat_security_digest`). A Tarefa 5 é que abre a allowlist.
+**NÃO edite `scripts/check_migrations.mjs`.** Se vier erro diferente desses três, é defeito da sua
+transcrição — relate.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Gate e commit**
 
 ```bash
+node tests/check.js
 git add supabase/migrations/20260805000000_phase3_diagnosticos_anonimos.sql \
         scripts/rollback_phase3_diagnosticos.sql
-git commit -m "feat: migracao 2 da Fase 3 — diagnosticos anonimos e RPC de digest"
+git commit -m "fix: migracao 2 com digest de 10 campos, ordem do grant e guarda do auto-teste"
 ```
-
-O `check_migrations.mjs` fica vermelho entre esta tarefa e a próxima. É esperado e é o teste que
-falha antes da implementação — **não** ajuste a allowlist aqui.
-
----
-
-## Task 4: Allowlist em duas faixas
+## Task 5: Allowlist em duas faixas
 
 **Files:**
 - Modify: `scripts/check_migrations.mjs:8-13` (a constante `ALLOWED_ANON_EXECUTE`) e a validação
@@ -943,7 +1203,7 @@ git commit -m "feat: allowlist anonima em duas faixas, com bancada"
 
 ---
 
-## Task 5: `check_grants.mjs` em modo duplo
+## Task 6: `check_grants.mjs` em modo duplo
 
 **Files:**
 - Modify: `scripts/check_grants.mjs` (cabeçalho, chamada da RPC, `SEP`, baseline)
@@ -1023,11 +1283,16 @@ const digestSao = () => ({
   tabelas_publicas: 18,
   todas_com_rls: true,
   anon_escreve: false,
+  anon_maintain: false,
   authenticated_tem_privilegio: false,
+  funcoes_definer_anon: 0,
+  funcoes_sem_search_path: 0,
+  defaults_permissivos: 3,
   anon_rpcs: 5,
 });
 
-const baselineDigest = { ...baseline, digest: 'a'.repeat(64), anon_rpcs: 5 };
+const baselineDigest = { ...baseline, digest: 'a'.repeat(64), anon_rpcs: 5,
+                         defaults_permissivos: 3, funcoes_sem_search_path: 0 };
 
 async function casoDigest(nome, mutarDigest, esperado, args = [], hoje = '2026-08-04') {
   await writeFile(`${RAIZ}/scripts/security_baseline.json`, JSON.stringify(baselineDigest, null, 2));
@@ -1039,13 +1304,23 @@ async function casoDigest(nome, mutarDigest, esperado, args = [], hoje = '2026-0
 }
 
 await casoDigest('estado são', d => d, 0);
+// --- os CINCO indicadores graves: expectativa fixa no código, nunca baselináveis ---
 await casoDigest('anon ganhou escrita', d => { d.anon_escreve = true; return d; }, 1);
+await casoDigest('anon ganhou MAINTAIN', d => { d.anon_maintain = true; return d; }, 1);
 await casoDigest('RLS caiu em alguma tabela', d => { d.todas_com_rls = false; return d; }, 1);
 await casoDigest('authenticated ganhou privilegio', d => { d.authenticated_tem_privilegio = true; return d; }, 1);
-await casoDigest('digest mudou, booleanos sãos', d => { d.digest = 'b'.repeat(64); return d; }, 1);
+await casoDigest('funcao SECURITY DEFINER executavel por anon', d => { d.funcoes_definer_anon = 1; return d; }, 1);
+// --- as TRÊS contagens: comparadas com o baseline; subir é erro, descer é dívida resolvida ---
 await casoDigest('RPC anonima a mais', d => { d.anon_rpcs = 6; return d; }, 1);
+await casoDigest('default permissivo novo (o sinal do SEC-01)', d => { d.defaults_permissivos = 4; return d; }, 1);
+await casoDigest('funcao perdeu o search_path fixo', d => { d.funcoes_sem_search_path = 1; return d; }, 1);
+await casoDigest('contagem DESCEU (dívida resolvida)', d => { d.defaults_permissivos = 2; return d; }, 1);
+// --- o digest e a forma ---
+await casoDigest('digest mudou, o resto são', d => { d.digest = 'b'.repeat(64); return d; }, 1);
 await casoDigest('booleano veio como string (forma inesperada)', d => { d.anon_escreve = 'false'; return d; }, 1);
-await casoDigest('campo faltando', d => { delete d.todas_com_rls; return d; }, 1);
+await casoDigest('booleano veio null (bool_and sobre conjunto vazio)', d => { d.todas_com_rls = null; return d; }, 1);
+await casoDigest('contagem veio como string', d => { d.defaults_permissivos = '3'; return d; }, 1);
+await casoDigest('campo faltando', d => { delete d.anon_maintain; return d; }, 1);
 await casoDigest('poucas tabelas (visão perdida)', d => { d.tabelas_publicas = 0; return d; }, 1);
 
 // --atualizar-baseline NAO pode silenciar a classe perigosa: os booleanos sao expectativa fixa
@@ -1104,14 +1379,52 @@ No `scripts/check_grants.mjs`:
 //      data, usa-lo e vermelho: caminho temporario sem prazo vira permanente por inercia.
 ```
 
-**(b)** troque o import e acrescente a leitura do prazo:
+**(b)** troque o import e acrescente a leitura do prazo **e do alvo**:
 
 ```js
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { prazoPorId, classificar, hojeISO } from './lib/prazos.mjs';
+import { carregarAmbiente } from './lib/ambiente.mjs';
 ```
+
+**(b2)** substitua as duas linhas que hoje extraem `SB_URL`/`SB_KEY` do `app.js` por resolução de
+alvo (issue #74 — ver Tarefa 3 e spec § 3.3). Este gate roda com `DIVAT_ALVO=producao` no cron
+diário e `DIVAT_ALVO=teste` em PR/push:
+
+```js
+let SB_URL, SB_KEY, ALVO;
+try {
+  ({ url: SB_URL, key: SB_KEY, alvo: ALVO } = await carregarAmbiente(ROOT));
+} catch (e) {
+  console.error(`✗ ${e.message}`);
+  process.exit(1);
+}
+console.log(`· Alvo: ${ALVO}`);
+```
+
+A leitura do `app.js` e a função `extrair()` saem inteiras deste script — diferente do
+`check_realtime.mjs`, que continua lendo o `app.js` para pegar `RT_TABLES`. Aqui não sobra motivo.
+
+**Consequência para a bancada:** `tests/check_grants.rig.mjs` monta hoje um `app.js` falso
+apontando para `127.0.0.1`. Ele passa a montar um `scripts/ambientes.json` falso no fakeroot e a
+rodar com `DIVAT_ALVO=teste`:
+
+```js
+await writeFile(`${RAIZ}/scripts/ambientes.json`, JSON.stringify({
+  nota: 'teste',
+  ambientes: {
+    teste:    { ref: 'rig', url: `http://127.0.0.1:${PORTA}`, key: 'fake-anon-key' },
+    producao: { ref: 'rig-prod', url: 'http://127.0.0.1:1', key: 'fake-prod-key' },
+  },
+}, null, 2));
+await copyFile(`${REAL}/scripts/lib/ambiente.mjs`, `${RAIZ}/scripts/lib/ambiente.mjs`);
+```
+
+e o `env` do `spawn` ganha `DIVAT_ALVO: 'teste'` junto do `DIVAT_HOJE`. O `app.js` falso pode ser
+removido do fakeroot — nada mais o lê. **Acrescente um caso provando que, sem `DIVAT_ALVO`, o
+script sai 1 sem tocar a rede** (o servidor stub não deve registrar requisição nenhuma).
 
 **(c)** substitua o bloco que chama a RPC (linhas 55-86 do arquivo atual) por:
 
@@ -1164,10 +1477,19 @@ Ele termina com `process.exit`, então o código antigo só roda no fallback:
 ```js
 if (digest) {
   // FAIL-CLOSED sobre a FORMA: um campo com tipo errado e visao perdida, nao "tudo certo".
-  const bools = ['todas_com_rls', 'anon_escreve', 'authenticated_tem_privilegio'];
+  // `null` entra aqui de proposito — bool_and/bool_or sobre conjunto vazio devolvem NULL, e
+  // `if (d.anon_escreve)` sobre null seria false: meio-alarme silencioso.
+  const bools = ['todas_com_rls', 'anon_escreve', 'anon_maintain', 'authenticated_tem_privilegio'];
   for (const campo of bools) {
     if (typeof digest[campo] !== 'boolean') {
-      console.error(`✗ Digest sem o booleano '${campo}' — abortando em vez de assumir seguro.`);
+      console.error(`✗ Digest sem o booleano '${campo}' (veio ${JSON.stringify(digest[campo])}) — abortando em vez de assumir seguro.`);
+      process.exit(1);
+    }
+  }
+  const contagens = ['anon_rpcs', 'defaults_permissivos', 'funcoes_sem_search_path', 'funcoes_definer_anon'];
+  for (const campo of contagens) {
+    if (!Number.isInteger(digest[campo])) {
+      console.error(`✗ Digest sem a contagem '${campo}' como inteiro — abortando.`);
       process.exit(1);
     }
   }
@@ -1189,8 +1511,10 @@ if (digest) {
   // mudanca estrutural benigna (o digest) e NUNCA alcanca a classe perigosa (estes tres).
   const graves = [];
   if (digest.anon_escreve) graves.push('anon tem INSERT/UPDATE/DELETE/TRUNCATE em alguma tabela de public');
+  if (digest.anon_maintain) graves.push('anon tem MAINTAIN em alguma tabela de public');
   if (!digest.todas_com_rls) graves.push('alguma tabela de public está sem RLS');
   if (digest.authenticated_tem_privilegio) graves.push('authenticated voltou a ter privilégio de tabela em public');
+  if (digest.funcoes_definer_anon > 0) graves.push(`${digest.funcoes_definer_anon} função(ões) SECURITY DEFINER executável(is) por anon`);
 
   const b = JSON.parse(await readFile(BASELINE, 'utf8').catch(() => '{}'));
 
@@ -1223,11 +1547,34 @@ if (digest) {
     console.error('✗ Baseline sem `digest`. Confira o estado do banco e rode --atualizar-baseline.');
     process.exit(1);
   }
-  if (!semBaseline && digest.anon_rpcs > (b.anon_rpcs ?? 0)) {
-    console.error(`\n✗ Apareceu RPC anônima nova: ${b.anon_rpcs} → ${digest.anon_rpcs}.`);
-    console.error('  Objeto novo em public nasce com EXECUTE para anon pelo default do supabase_admin.');
-    console.error('  Confira se é deliberada e satisfaz uma das faixas de scripts/check_migrations.mjs.');
-    process.exit(1);
+  // As TRÊS contagens baselinadas. Subir é privilégio novo — o sinal do SEC-01. Descer é dívida
+  // resolvida: também derruba o gate, mas com a instrução oposta (aperte o baseline), no mesmo
+  // espírito do `resolvidos` que o caminho antigo já imprime.
+  const CONTAGENS = {
+    anon_rpcs: 'RPC anônima em public',
+    defaults_permissivos: 'default privilege concedendo a PUBLIC/anon/authenticated',
+    funcoes_sem_search_path: 'função sem search_path fixo',
+  };
+  if (!semBaseline) {
+    for (const [campo, oquê] of Object.entries(CONTAGENS)) {
+      const antes = b[campo];
+      if (!Number.isInteger(antes)) {
+        console.error(`✗ Baseline sem a contagem '${campo}'. Confira o banco e rode --atualizar-baseline.`);
+        process.exit(1);
+      }
+      if (digest[campo] > antes) {
+        console.error(`\n✗ Apareceu ${oquê}: ${antes} → ${digest[campo]}.`);
+        console.error('  Objeto novo em public nasce com privilégio para anon pelo default do supabase_admin');
+        console.error('  (docs/seguranca.md §9.1) — é exatamente o caso que este gate roda diariamente para pegar.');
+        console.error('  REVOGUE, ou registre a exceção se for deliberada.');
+        process.exit(1);
+      }
+      if (digest[campo] < antes) {
+        console.error(`\n✗ ${oquê}: ${antes} → ${digest[campo]} — dívida RESOLVIDA.`);
+        console.error('  Rode --atualizar-baseline para o gate voltar a apertar nesse número.');
+        process.exit(1);
+      }
+    }
   }
   if (!semBaseline && digest.digest !== b.digest) {
     console.error('\n✗ A superfície de segurança MUDOU (digest diferente do baseline).');
@@ -1294,7 +1641,7 @@ git commit -m "feat: check_grants em modo duplo (digest + fallback datado)"
 
 ---
 
-## Task 6: Credencial auditora reutilizável e com dois refs
+## Task 7: Credencial auditora reutilizável e com dois refs
 
 **Files:**
 - Create: `scripts/lib/auditor.mjs`
@@ -1453,7 +1800,7 @@ git commit -m "refactor: extrai a conexao auditora e passa a aceitar dois refs"
 
 ---
 
-## Task 7: `check_data_quality.mjs` pelo auditor, com fallback datado
+## Task 8: `check_data_quality.mjs` pelo auditor, com fallback datado
 
 **Files:**
 - Modify: `scripts/check_data_quality.mjs` (cabeçalho e o bloco que chama a RPC, linhas ~50-67)
@@ -1563,7 +1910,102 @@ git commit -m "feat: check_data_quality pelo auditor, com fallback anonimo datad
 
 ---
 
-## Task 8: Documentação e fechamento
+## Task 9: `check_deriva` e `check_realtime` pelo `ambiente.mjs`
+
+> **Tarefa NOVA, criada na revisão de 04/08.** A versão anterior deste plano anunciava que estes
+> dois gates "não mudam uma linha". Deixou de ser verdade quando a issue **#74** entrou no
+> desenho: ela proíbe qualquer gate de PR derivar o alvo do `app.js`, e é exatamente o que os dois
+> fazem hoje. É o custo assumido em spec § 3.3.
+
+**Files:**
+- Modify: `scripts/check_deriva.mjs` (o bloco que extrai `SB_URL`/`SB_KEY` do `app.js`)
+- Modify: `scripts/check_realtime.mjs` (idem)
+
+**Interfaces:**
+- Consumes: `carregarAmbiente(root, env)` de `scripts/lib/ambiente.mjs` (Tarefa 3).
+- Produces: nada.
+
+**Invariante a preservar:** o que cada gate **compara** não muda. `check_deriva` continua
+conferindo docs × banco; `check_realtime` continua conferindo `RT_TABLES` do `app.js` × publicação.
+Só a origem de `SB_URL`/`SB_KEY` muda.
+
+**Cuidado — o `app.js` continua sendo lido, por outro motivo.** `check_realtime.mjs` extrai
+`RT_TABLES` do `app.js`: isso **permanece**, porque é o lado do repositório da comparação. O que
+sai é só a extração de `SB_URL`/`SB_KEY`. Não remova o `extrair()` inteiro.
+
+- [ ] **Step 1: Troque a origem do alvo nos dois scripts**
+
+Em cada um, substitua o par de linhas que hoje faz:
+
+```js
+const SB_URL = extrair(js, /const SB_URL\s*=\s*'([^']+)'/, 'SB_URL');
+const SB_KEY = extrair(js, /const SB_KEY\s*=\s*'([^']+)'/, 'SB_KEY');
+```
+
+por:
+
+```js
+// O alvo vem de DIVAT_ALVO, decidido pelo gatilho do workflow — nunca do app.js (issue #74).
+// Ler o host de produção de um literal do frontend fazia uma edição no app.js redirecionar
+// este gate; e um gate de PR podia falar com produção sem ninguém pedir.
+let SB_URL, SB_KEY, ALVO;
+try {
+  ({ url: SB_URL, key: SB_KEY, alvo: ALVO } = await carregarAmbiente(ROOT));
+} catch (e) {
+  console.error(`✗ ${e.message}`);
+  process.exit(1);
+}
+console.log(`· Alvo: ${ALVO}`);
+```
+
+e acrescente ao topo, junto dos outros imports:
+
+```js
+import { carregarAmbiente } from './lib/ambiente.mjs';
+```
+
+**Imprimir o alvo não é enfeite:** é a evidência que a issue #74 pede no log ("evidência no log do
+project ref de teste"), e é o que permite ver, num run vermelho, se o gate falou com o banco que
+você achava.
+
+- [ ] **Step 2: Prove os dois caminhos e a ausência**
+
+Sem rede este ambiente não completa a chamada, e tudo bem — o que se prova aqui é a **resolução do
+alvo**, que acontece antes de qualquer `fetch`:
+
+```bash
+for s in check_deriva check_realtime; do
+  echo "--- $s sem DIVAT_ALVO"
+  node scripts/$s.mjs 2>&1 | head -2; echo "saida=$?"
+  echo "--- $s com DIVAT_ALVO=teste"
+  DIVAT_ALVO=teste node scripts/$s.mjs 2>&1 | head -2
+done
+```
+
+Esperado sem `DIVAT_ALVO`: saída 1 e a mensagem `DIVAT_ALVO não definido…`, **sem nenhuma tentativa
+de rede**. Com `DIVAT_ALVO=teste`: a linha `· Alvo: teste` antes de qualquer erro de rede.
+
+- [ ] **Step 3: Confirme que nenhum dos dois deriva mais o alvo do `app.js`**
+
+```bash
+grep -n "SB_URL\|SB_KEY" scripts/check_deriva.mjs scripts/check_realtime.mjs
+```
+
+Esperado: **nenhuma** linha extraindo `SB_URL`/`SB_KEY` do `js` por regex. As ocorrências restantes
+devem ser só o uso das constantes já resolvidas. Se sobrar um `extrair(js, /const SB_URL/…)`, a
+issue #74 não foi atendida.
+
+- [ ] **Step 4: Gate e commit**
+
+```bash
+node tests/check.js
+git add scripts/check_deriva.mjs scripts/check_realtime.mjs
+git commit -m "refactor: check_deriva e check_realtime resolvem o alvo pelo gatilho (#74)"
+```
+
+---
+
+## Task 10: Documentação e fechamento
 
 **Files:**
 - Modify: `CLAUDE.md` (seções "Supabase → RLS/segurança" e "Como fazer mudanças" itens 2c/2e)
@@ -1578,6 +2020,55 @@ git commit -m "feat: check_data_quality pelo auditor, com fallback anonimo datad
 **Atenção ao gate `[2b]`:** `CLAUDE.md`, `docs/seguranca.md` e `tests/README.md` são **docs vivos** —
 o `tests/check.js` §[2b] confere os números que a prosa afirma. Se você escrever um número novo,
 ele será cobrado. `docs/planos/*.md` não está na lista de docs vivos.
+
+- [ ] **Step 0: Ligue `DIVAT_ALVO` em todos os workflows que rodam gate de banco**
+
+Este passo é o que faz a Tarefa 3 valer alguma coisa: sem ele, todo gate de banco falha fechado
+por falta de `DIVAT_ALVO`. A regra é **o gatilho decide o alvo** (spec § 3.3).
+
+Em `.github/workflows/db-checks.yml`, `deriva.yml` e onde mais um destes scripts rodar
+(`check_grants`, `check_deriva`, `check_realtime`, `check_data_quality`), acrescente ao passo:
+
+```yaml
+        env:
+          DIVAT_ALVO: ${{ github.event_name == 'schedule' && 'producao' || 'teste' }}
+```
+
+Para o job `qualidade`, que também precisa da credencial, o bloco fica:
+
+```yaml
+        env:
+          DIVAT_ALVO: ${{ github.event_name == 'schedule' && 'producao' || 'teste' }}
+          SUPABASE_PROD_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_PROD_AUDIT_DATABASE_URL }}
+```
+
+**Não** ponha `DIVAT_ALVO` no `env:` do workflow inteiro nem do job: a expressão precisa ser
+avaliada por passo para ficar legível ao lado do comando que ela governa, e um `env:` de topo
+esconderia a decisão do leitor. **Não** declare `divat_alvo` minúsculo junto — o GitHub trata nome
+de variável como case-insensitive e rejeitaria o workflow inteiro (`tests/check.js` §[1c]).
+
+Depois, confira que nenhum passo que roda gate de banco ficou sem a variável:
+
+```bash
+grep -n "check_grants\|check_deriva\|check_realtime\|check_data_quality" .github/workflows/*.yml
+```
+
+Para cada ocorrência num `run:`, o passo correspondente tem de ter `DIVAT_ALVO` no `env:`. Um
+passo sem a variável falha fechado — o que é o comportamento certo, mas como gate vermelho
+permanente, não como proteção.
+
+- [ ] **Step 0b: Comente na issue #74 registrando a reinterpretação**
+
+A #74 pede falha fechada ao receber o ref de produção, **sempre**. Este desenho a torna
+condicional ao gatilho: PR e push falham fechado em produção; o cron aponta para produção de
+propósito, porque é o monitoramento. Isso precisa estar escrito **na issue**, não só na spec —
+senão fica uma issue aberta descrevendo um requisito que o código deliberadamente não cumpre, que
+é a deriva que os gates deste repo existem para pegar.
+
+Comente na #74 com: o que foi implementado (alvo por `DIVAT_ALVO`, resolvido por
+`scripts/lib/ambiente.mjs`, nenhum gate derivando do `app.js`), qual cláusula foi reinterpretada e
+por quê (produção sem alarme de grants seria trocar um risco por outro), e o ponteiro para a spec
+§ 3.3. **Não feche a issue** — quem fecha é o dono.
 
 - [ ] **Step 1: `docs/planos/fase-3-hardening-moderado.md`**
 
