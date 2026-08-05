@@ -99,8 +99,10 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
     const venceu = rodar({ DIVAT_HOJE: '2026-12-01' });
     ok(venceu.status === 1, 'sai 1', String(venceu.status));
     ok(/o fallback anônimo EXPIROU/.test(venceu.saida), 'diz que o fallback expirou', venceu.saida.slice(0, 200));
-    ok(/SUPABASE_PROD_AUDIT_DATABASE_URL/.test(venceu.saida),
-       'diz POR QUE o auditor não respondeu, citando o NOME da variável', venceu.saida.slice(0, 200));
+    // O NOME da variável segue o ALVO — aqui `teste`, o gatilho de PR. É o que se quer ler num
+    // run vermelho: "faltou a credencial DESTE ambiente", não a de um ambiente que ninguém pediu.
+    ok(/SUPABASE_TEST_AUDIT_DATABASE_URL/.test(venceu.saida),
+       'diz POR QUE o auditor não respondeu, citando o NOME da variável do alvo', venceu.saida.slice(0, 200));
     ok(!MARCA_REDE.test(venceu.saida) && !/127\.0\.0\.1/.test(venceu.saida),
        'NÃO tocou a rede: a decisão vem antes do fetch', venceu.saida.slice(0, 300));
 
@@ -115,24 +117,57 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
     ok(!/EXPIROU/.test(valido.saida), 'não confunde válido com expirado', valido.saida.slice(0, 200));
     ok(MARCA_REDE.test(valido.saida), 'tentou a RPC anônima (a outra direção da ordem)', valido.saida.slice(0, 300));
 
-    console.log('auditor DISPONÍVEL — nem consulta prazo nem toca a rede');
+    console.log('auditor DISPONÍVEL (cron, alvo=producao) — nem consulta prazo nem toca a rede');
     // psql falso, no PATH: devolve o que a consulta `jsonb_agg` devolveria. A linha em branco
-    // antes do JSON é de propósito — o script pega a ÚLTIMA linha não vazia do stdout.
+    // antes do JSON é de propósito — o script pega a ÚLTIMA linha não vazia do stdout. Ele também
+    // REGISTRA o PGHOST recebido: é por PGHOST que se descobre com qual banco o auditor falou,
+    // porque a URL de conexão nunca aparece na linha de comando nem no log (auditor.mjs).
+    const REGISTRO = path.join(raiz, 'pghost.log');
     fs.writeFileSync(path.join(bin, 'psql'),
       `#!${process.execPath}\n`
+      + `require('fs').appendFileSync(${JSON.stringify(REGISTRO)}, (process.env.PGHOST || '(sem PGHOST)') + '\\n');\n`
       + `process.stdout.write('\\n[{"verificacao":"codlinha_orfa","severidade":"erro",`
       + `"qtd":2,"detalhe":"itinerario_teste sem match em tabela_vista_teste"}]\\n');\n`,
       { mode: 0o755 });
-    const comAuditor = rodar({
-      PATH: `${bin}${path.delimiter}${process.env.PATH}`,
-      SUPABASE_PROD_AUDIT_DATABASE_URL: `postgres://divat_auditor_ci:x@db.${REFS.producao}.supabase.co/postgres`,
-    });
+    const comPath = { PATH: `${bin}${path.delimiter}${process.env.PATH}` };
+    const urlDe = amb => `postgres://divat_auditor_ci:x@db.${REFS[amb]}.supabase.co/postgres`;
+
+    // O caminho do auditor em produção é o do CRON — e é com DIVAT_ALVO=producao que ele roda.
+    const comAuditor = rodar({ ...comPath, SUPABASE_PROD_AUDIT_DATABASE_URL: urlDe('producao') }, 'producao');
     ok(!/⚠ Auditor indisponível/.test(comAuditor.saida), 'não cai no fallback', comAuditor.saida.slice(0, 200));
     ok(!MARCA_REDE.test(comAuditor.saida), 'não toca a rede', comAuditor.saida.slice(0, 300));
     // O achado devolvido é justamente o que o baseline do repo já carrega: o gate tem de passar
     // com dívida conhecida (é o invariante do baseline, que esta tarefa não pode desarrumar).
     ok(comAuditor.status === 0, 'passa com a dívida já registrada no baseline',
        `exit ${comAuditor.status}: ${comAuditor.saida.slice(0, 300)}`);
+    ok(fs.readFileSync(REGISTRO, 'utf8').trim() === `db.${REFS.producao}.supabase.co`,
+       'no cron o auditor conecta no ref de PRODUÇÃO', fs.readFileSync(REGISTRO, 'utf8'));
+
+    console.log('DIVAT_ALVO=teste — o auditor segue o alvo, não um literal (issue #74)');
+    // A propriedade que este caso fixa: o ALVO governa os DOIS caminhos do modo duplo. Até
+    // 05/08/2026 o `conectarAuditor` recebia 'producao' fixo — o log dizia `· Alvo: teste` e o
+    // psql conectava em produção. Sem este caso, o mesmo vício volta na próxima refatoração.
+    fs.writeFileSync(REGISTRO, '');
+    const alvoTeste = rodar({
+      ...comPath,
+      SUPABASE_TEST_AUDIT_DATABASE_URL: urlDe('teste'),
+      SUPABASE_PROD_AUDIT_DATABASE_URL: urlDe('producao'),   // presente de propósito: é a armadilha
+    }, 'teste');
+    const host = fs.readFileSync(REGISTRO, 'utf8').trim();
+    ok(host === `db.${REFS.teste}.supabase.co`, 'conecta no ref de TESTE', host || '(psql não foi chamado)');
+    ok(!host.includes(REFS.producao), 'NÃO conecta em produção, mesmo com a credencial de prod no ambiente', host);
+    ok(/· Alvo: teste/.test(alvoTeste.saida) && !/⚠ Auditor indisponível/.test(alvoTeste.saida),
+       'usou o auditor de teste e o log não mente sobre o alvo', alvoTeste.saida.slice(0, 300));
+
+    console.log('DIVAT_ALVO=teste sem a credencial de teste — cai no fallback, não em produção');
+    // O estado de HOJE no CI: só a credencial de produção existe. A ausência da de teste não pode
+    // virar um atalho para produção; o desenho da Tarefa 8 já trata ausência — é o fallback.
+    fs.writeFileSync(REGISTRO, '');
+    const soProd = rodar({ ...comPath, SUPABASE_PROD_AUDIT_DATABASE_URL: urlDe('producao'),
+                           DIVAT_HOJE: '2026-08-05' }, 'teste');
+    ok(fs.readFileSync(REGISTRO, 'utf8').trim() === '', 'o psql NÃO é chamado', fs.readFileSync(REGISTRO, 'utf8'));
+    ok(/⚠ Auditor indisponível \(SUPABASE_TEST_AUDIT_DATABASE_URL não configurado/.test(soProd.saida),
+       'avisa que falta a credencial DO ALVO', soProd.saida.slice(0, 300));
 
     console.log('sem DIVAT_ALVO — morre na resolução do alvo, antes do auditor, do prazo e da rede');
     // A ausência é erro por desenho (issue #74): um default silencioso é exatamente como um gate

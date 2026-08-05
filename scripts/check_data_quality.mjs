@@ -25,12 +25,17 @@
 //      achado". É a pior falha possível aqui: gate verde por engano.
 //
 // Uso (na SUA máquina / CI — daqui o ambiente do Claude não alcança o Supabase):
-//   node scripts/check_data_quality.mjs                  # respeita o baseline
-//   node scripts/check_data_quality.mjs --sem-baseline    # estado cru do banco
-//   node scripts/check_data_quality.mjs --atualizar-baseline
+//   DIVAT_ALVO=teste node scripts/check_data_quality.mjs                 # respeita o baseline
+//   DIVAT_ALVO=teste node scripts/check_data_quality.mjs --sem-baseline  # estado cru do banco
+//   DIVAT_ALVO=teste node scripts/check_data_quality.mjs --atualizar-baseline
+//
+// DIVAT_ALVO é OBRIGATÓRIA e não tem default (issue #74): 'teste' em PR/push, 'producao' no cron.
+// Sem ela o script morre no topo, antes de tocar qualquer banco. Ela governa os DOIS caminhos —
+// o auditor e o fallback anônimo —, para que o `· Alvo:` do log não minta sobre com quem se falou.
 //
 // Requer Node 18+ (fetch nativo) e, para o caminho do auditor, o cliente `psql` no PATH mais a
-// variável SUPABASE_PROD_AUDIT_DATABASE_URL. Nenhuma dependência de npm. Sai 1 se houver achado
+// variável de conexão do ALVO escolhido (SUPABASE_PROD_AUDIT_DATABASE_URL ou
+// SUPABASE_TEST_AUDIT_DATABASE_URL). Nenhuma dependência de npm. Sai 1 se houver achado
 // de severidade `erro` além do baseline; avisos nunca derrubam.
 //
 // SOBRE O BASELINE (leia antes de mexer): quando este script nasceu, o banco JÁ tinha 5
@@ -80,7 +85,12 @@ const SQL_ACHADOS = `select coalesce(jsonb_agg(t), '[]'::jsonb) from audit.divat
 
 let achados = null;
 try {
-  const auditor = conectarAuditor({ ambiente: 'producao' });
+  // O auditor fala com o MESMO banco que o resto do gate: quem decide é DIVAT_ALVO, não um
+  // literal aqui. Até 05/08/2026 este argumento era 'producao' fixo — com DIVAT_ALVO=teste o
+  // log dizia `· Alvo: teste` e o psql conectava em produção. Log de evidência que mente é pior
+  // que log ausente, e a #74 pede exatamente essa evidência. Ausência da credencial do alvo já é
+  // caso tratado: cai no fallback anônimo, avisando qual variável falta.
+  const auditor = conectarAuditor({ ambiente: ALVO });
   achados = JSON.parse(auditor.consultar(SQL_ACHADOS).trim().split(/\r?\n/).filter(Boolean).at(-1));
 } catch (e) {
   const prazo = await prazoPorId(ROOT, 'check_data_quality_fallback');
