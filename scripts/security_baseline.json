@@ -1,6 +1,8 @@
 {
   "gerado_em": "2026-07-27",
   "nota": "Exceções de segurança CONHECIDAS e aceitas. Cada entrada precisa de justificativa em docs/seguranca.md §9. Isto não é perdão: se um achado NOVO aparecer, revogue — não baseline.",
+  "digest": null,
+  "anon_rpcs": null,
   "achados": [
     {
       "tipo": "default_privilege_permissivo",
