@@ -25,13 +25,14 @@
 // Uso (na SUA máquina / CI — daqui o ambiente do Claude não alcança o Supabase):
 //   node scripts/check_deriva.mjs
 //
-// Requer apenas Node 18+ (fetch nativo). Nenhuma dependência. Não precisa de chave no
-// ambiente: usa a URL e a anon key que já estão públicas no app.js.
+// Requer apenas Node 18+ (fetch nativo). Nenhuma dependência. O ALVO (de qual banco se
+// pergunta) vem da variável DIVAT_ALVO — ver abaixo.
 // Sai com código 0 se tudo confere, 1 se há deriva (ou erro/rede bloqueada).
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { carregarAmbiente } from './lib/ambiente.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -41,15 +42,21 @@ const NAO_TABELA = new Set(['bd_teste']); // bd_teste = nome do projeto Supabase
 // policy, sem grant) — o OpenAPI de anon não as lista, então não dá para conferi-las daqui.
 const STAGING = new Set(['evento_dados', 'evento_textos', 'portaria_data', 'portaria_texto_teste']);
 
-function extrair(html, re, oquê) {
-  const m = re.exec(html);
-  if (!m) { console.error(`Não achei ${oquê} no app.js.`); process.exit(1); }
-  return m[1];
+// O alvo vem de DIVAT_ALVO, decidido pelo gatilho do workflow — nunca do app.js (issue #74).
+// Ler o host de produção de um literal do frontend fazia uma edição no app.js redirecionar
+// este gate; e um gate de PR podia falar com produção sem ninguém pedir.
+let SB_URL, SB_KEY, ALVO;
+try {
+  ({ url: SB_URL, key: SB_KEY, alvo: ALVO } = await carregarAmbiente(ROOT));
+} catch (e) {
+  console.error(`✗ ${e.message}`);
+  process.exit(1);
 }
+console.log(`· Alvo: ${ALVO}`);
 
+// O app.js continua sendo lido — mas só para saber quais RPCs o front chama (checagem 3),
+// nunca mais pelo endereço do banco.
 const appjs = await readFile(join(ROOT, 'app.js'), 'utf8');
-const SB_URL = extrair(appjs, /const SB_URL\s*=\s*'([^']+)'/, 'SB_URL');
-const SB_KEY = extrair(appjs, /const SB_KEY\s*=\s*'([^']+)'/, 'SB_KEY');
 
 // ---------- lado do REPO (parse antes da rede, para falhar cedo no que for local) ----------
 

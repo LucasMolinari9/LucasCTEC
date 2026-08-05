@@ -9,14 +9,15 @@
 // Uso (na SUA máquina / CI — daqui o ambiente do Claude não alcança o Supabase):
 //   node scripts/check_realtime.mjs
 //
-// Requer apenas Node 18+ (fetch nativo). Nenhuma dependência. Não precisa de chave no
-// ambiente: usa a URL e a anon key que já estão públicas no app.js, e uma função RPC
-// public.realtime_tables() (SECURITY DEFINER, EXECUTE p/ anon) que lista a publicação.
+// Requer apenas Node 18+ (fetch nativo). Nenhuma dependência. O ALVO (de qual banco se
+// pergunta) vem da variável DIVAT_ALVO — ver abaixo —, e a RPC consultada é a
+// public.realtime_tables() (SECURITY DEFINER, EXECUTE p/ anon), que lista a publicação.
 // Sai com código 0 se bate, 1 se há divergência (ou erro).
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { carregarAmbiente } from './lib/ambiente.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -26,10 +27,21 @@ function extrair(html, re, oquê) {
   return m[1];
 }
 
-const html = await readFile(join(ROOT, 'app.js'), 'utf8');
+// O alvo vem de DIVAT_ALVO, decidido pelo gatilho do workflow — nunca do app.js (issue #74).
+// Ler o host de produção de um literal do frontend fazia uma edição no app.js redirecionar
+// este gate; e um gate de PR podia falar com produção sem ninguém pedir.
+let SB_URL, SB_KEY, ALVO;
+try {
+  ({ url: SB_URL, key: SB_KEY, alvo: ALVO } = await carregarAmbiente(ROOT));
+} catch (e) {
+  console.error(`✗ ${e.message}`);
+  process.exit(1);
+}
+console.log(`· Alvo: ${ALVO}`);
 
-const SB_URL = extrair(html, /const SB_URL\s*=\s*'([^']+)'/, 'SB_URL');
-const SB_KEY = extrair(html, /const SB_KEY\s*=\s*'([^']+)'/, 'SB_KEY');
+// O app.js continua sendo lido — mas só pelo LADO DO REPOSITÓRIO da comparação (RT_TABLES),
+// nunca mais pelo endereço do banco.
+const html = await readFile(join(ROOT, 'app.js'), 'utf8');
 
 // RT_TABLES é um array de string literais; pega o bloco e extrai os nomes entre aspas.
 const bloco = extrair(html, /const RT_TABLES\s*=\s*\[([\s\S]*?)\]/, 'RT_TABLES');

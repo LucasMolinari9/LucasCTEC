@@ -47,6 +47,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { conectarAuditor } from './lib/auditor.mjs';
 import { prazoPorId, classificar, hojeISO } from './lib/prazos.mjs';
+import { carregarAmbiente } from './lib/ambiente.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BASELINE = join(ROOT, 'scripts', 'data_quality_baseline.json');
@@ -55,15 +56,20 @@ const args = new Set(process.argv.slice(2));
 const semBaseline = args.has('--sem-baseline') || args.has('--all');
 const atualizar = args.has('--atualizar-baseline');
 
-function extrair(js, re, oquê) {
-  const m = re.exec(js);
-  if (!m) { console.error(`Não achei ${oquê} no app.js.`); process.exit(1); }
-  return m[1];
+// O alvo vem de DIVAT_ALVO, decidido pelo gatilho do workflow — nunca do app.js (issue #74).
+// Ler o host de produção de um literal do frontend fazia uma edição no app.js redirecionar
+// este gate; e um gate de PR podia falar com produção sem ninguém pedir. Aqui SB_URL/SB_KEY só
+// são usadas no CAMINHO DE FALLBACK, mas a resolução acontece no TOPO de propósito: um gate que
+// só descobrisse não saber com qual banco fala depois de tentar o auditor daria a mensagem
+// errada. Não há default — `carregarAmbiente` falha fechado.
+let SB_URL, SB_KEY, ALVO;
+try {
+  ({ url: SB_URL, key: SB_KEY, alvo: ALVO } = await carregarAmbiente(ROOT));
+} catch (e) {
+  console.error(`✗ ${e.message}`);
+  process.exit(1);
 }
-
-const js = await readFile(join(ROOT, 'app.js'), 'utf8');
-const SB_URL = extrair(js, /const SB_URL\s*=\s*'([^']+)'/, 'SB_URL');
-const SB_KEY = extrair(js, /const SB_KEY\s*=\s*'([^']+)'/, 'SB_KEY');
+console.log(`· Alvo: ${ALVO}`);
 
 // MODO DUPLO (desde 04/08/2026), pela mesma razao do check_grants.mjs: a Fase 3 move
 // divat_data_quality para o schema `audit`, fora do alcance de anon — e ainda bem, porque como
