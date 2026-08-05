@@ -5,9 +5,31 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = join(ROOT, 'supabase', 'migrations');
-const ALLOWED_ANON_EXECUTE = new Set([
+// A superficie anonima e definida por CRITERIO, nao por numero (spec de 04/08/2026, secao 8).
+// Duas faixas, com criterios de admissao diferentes:
+//
+//   PRODUTO     — chamada pelo portal em runtime. Entrada aqui e decisao de produto.
+//   DIAGNOSTICO — chamada so por gate. Para entrar precisa satisfazer TRES coisas:
+//                 (a) le apenas catalogo (pg_class/pg_policy/pg_proc/information_schema),
+//                     nunca dado de tabela — senao vira alavanca de indisponibilidade, que foi
+//                     exatamente o caso de divat_data_quality (59 varreduras completas sobre
+//                     ~116 mil linhas por chamada, medido em 04/08/2026);
+//                 (b) nao revela nada alem do que o repositorio ja publica por ADR-0003;
+//                 (c) e SECURITY INVOKER — DEFINER anonima nao entra nesta faixa nunca.
+//
+// Acrescentar nome aqui sem satisfazer o criterio e erosao, nao manutencao.
+const ANON_EXECUTE_PRODUTO = new Set([
   'public.divat_busca_logradouro',
   'public.divat_linhas_regiao',
+]);
+const ANON_EXECUTE_DIAGNOSTICO = new Set([
+  'public.divat_api_shape',
+  'public.realtime_tables',
+  'public.divat_security_digest',
+]);
+const ALLOWED_ANON_EXECUTE = new Set([
+  ...ANON_EXECUTE_PRODUTO,
+  ...ANON_EXECUTE_DIAGNOSTICO,
   // Helper necessário à função INVOKER, mas invisível na Data API porque private não é exposto.
   'private.f_unaccent',
 ]);
@@ -60,7 +82,12 @@ for (const file of files) {
       .map(target => target[1].toLowerCase());
     if (!targets.length) fail(file, 'GRANT EXECUTE TO anon não pôde ser interpretado de forma segura');
     for (const target of targets) {
-      if (!ALLOWED_ANON_EXECUTE.has(target)) fail(file, `${target} não está na allowlist anônima de execução`);
+      if (!ALLOWED_ANON_EXECUTE.has(target)) {
+        fail(file, `${target} não está na allowlist anônima. Para entrar como PRODUTO, precisa ser `
+          + `chamada pelo portal em runtime; como DIAGNÓSTICO, precisa ler só catálogo, ser `
+          + `SECURITY INVOKER e não revelar além do que o repositório já publica (ADR-0003). `
+          + `Ver docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md §8.`);
+      }
     }
   }
 
