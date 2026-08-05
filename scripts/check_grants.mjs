@@ -154,13 +154,20 @@ if (digest) {
       console.error('\n  A resposta certa é REVOGAR o privilégio, não registrar a exceção.');
       process.exit(1);
     }
-    // Atualiza SO o digest e a contagem. `achados` (as excecoes do supabase_admin, documentadas
-    // em docs/seguranca.md §9.1) e mantido a mao — mesma disciplina do orfaos_conhecidos do
-    // data_quality_baseline.json.
+    // Atualiza o digest e AS TRÊS contagens que a execução normal exige (`CONTAGENS`, abaixo:
+    // anon_rpcs, defaults_permissivos, funcoes_sem_search_path) — gravar só duas fecharia um
+    // laço: a 3ª ficaria ausente, a execução normal seguinte abortaria pedindo para rodar
+    // --atualizar-baseline, e --atualizar-baseline já teria rodado e não teria corrigido nada.
+    // `achados` (as excecoes do supabase_admin, documentadas em docs/seguranca.md §9.1) e
+    // mantido a mao — mesma disciplina do orfaos_conhecidos do data_quality_baseline.json.
     const registro = { ...b, digest: digest.digest, anon_rpcs: digest.anon_rpcs,
+                       defaults_permissivos: digest.defaults_permissivos,
+                       funcoes_sem_search_path: digest.funcoes_sem_search_path,
                        gerado_em: new Date().toISOString().slice(0, 10) };
     await writeFile(BASELINE, JSON.stringify(registro, null, 2) + '\n', 'utf8');
-    console.log(`✓ Baseline: digest ${digest.digest.slice(0, 12)}… e anon_rpcs=${digest.anon_rpcs} registrados.`);
+    console.log(`✓ Baseline: digest ${digest.digest.slice(0, 12)}…, anon_rpcs=${digest.anon_rpcs}, `
+      + `defaults_permissivos=${digest.defaults_permissivos}, `
+      + `funcoes_sem_search_path=${digest.funcoes_sem_search_path} registrados.`);
     console.log('  · `achados` foi PRESERVADO. Confira o diff antes de commitar.');
     process.exit(0);
   }
@@ -172,7 +179,22 @@ if (digest) {
     process.exit(1);
   }
 
-  if (!semBaseline && !b.digest) {
+  // --sem-baseline SIGNIFICA não consultar baseline nenhum — os indicadores graves já foram
+  // conferidos acima (incondicionalmente, sempre). Sem baseline não há valor "correto" de
+  // contagem ou de digest para comparar (ao contrário do caminho antigo, que tem uma LISTA de
+  // exceções conhecidas para expor); a resposta honesta é relatar o estado cru e dizer
+  // explicitamente que nada foi comparado — nunca afirmar "bate com o baseline" sobre um
+  // baseline que este branch nunca leu.
+  if (semBaseline) {
+    console.log(`\n✓ Estado CRU do banco (baseline ignorado) — nenhum achado grave. `
+      + `(${digest.tabelas_publicas} tabelas públicas, ${digest.anon_rpcs} RPCs anônimas, `
+      + `${digest.defaults_permissivos} default(s) permissivo(s) em public, `
+      + `${digest.funcoes_sem_search_path} função(ões) sem search_path fixo, RLS em todas.)`);
+    console.log('  · Contagens e digest NÃO foram comparados a nenhum baseline — é o propósito de --sem-baseline.');
+    process.exit(0);
+  }
+
+  if (!b.digest) {
     console.error('✗ Baseline sem `digest`. Confira o estado do banco e rode --atualizar-baseline.');
     process.exit(1);
   }
@@ -184,28 +206,26 @@ if (digest) {
     defaults_permissivos: 'default privilege concedendo a PUBLIC/anon/authenticated',
     funcoes_sem_search_path: 'função sem search_path fixo',
   };
-  if (!semBaseline) {
-    for (const [campo, oquê] of Object.entries(CONTAGENS)) {
-      const antes = b[campo];
-      if (!Number.isInteger(antes)) {
-        console.error(`✗ Baseline sem a contagem '${campo}'. Confira o banco e rode --atualizar-baseline.`);
-        process.exit(1);
-      }
-      if (digest[campo] > antes) {
-        console.error(`\n✗ Apareceu ${oquê}: ${antes} → ${digest[campo]}.`);
-        console.error('  Objeto novo em public nasce com privilégio para anon pelo default do supabase_admin');
-        console.error('  (docs/seguranca.md §9.1) — é exatamente o caso que este gate roda diariamente para pegar.');
-        console.error('  REVOGUE, ou registre a exceção se for deliberada.');
-        process.exit(1);
-      }
-      if (digest[campo] < antes) {
-        console.error(`\n✗ ${oquê}: ${antes} → ${digest[campo]} — dívida RESOLVIDA.`);
-        console.error('  Rode --atualizar-baseline para o gate voltar a apertar nesse número.');
-        process.exit(1);
-      }
+  for (const [campo, oquê] of Object.entries(CONTAGENS)) {
+    const antes = b[campo];
+    if (!Number.isInteger(antes)) {
+      console.error(`✗ Baseline sem a contagem '${campo}'. Confira o banco e rode --atualizar-baseline.`);
+      process.exit(1);
+    }
+    if (digest[campo] > antes) {
+      console.error(`\n✗ Apareceu ${oquê}: ${antes} → ${digest[campo]}.`);
+      console.error('  Objeto novo em public nasce com privilégio para anon pelo default do supabase_admin');
+      console.error('  (docs/seguranca.md §9.1) — é exatamente o caso que este gate roda diariamente para pegar.');
+      console.error('  REVOGUE, ou registre a exceção se for deliberada.');
+      process.exit(1);
+    }
+    if (digest[campo] < antes) {
+      console.error(`\n✗ ${oquê}: ${antes} → ${digest[campo]} — dívida RESOLVIDA.`);
+      console.error('  Rode --atualizar-baseline para o gate voltar a apertar nesse número.');
+      process.exit(1);
     }
   }
-  if (!semBaseline && digest.digest !== b.digest) {
+  if (digest.digest !== b.digest) {
     console.error('\n✗ A superfície de segurança MUDOU (digest diferente do baseline).');
     console.error('  Os três indicadores graves estão sãos, então isto é mudança estrutural —');
     console.error('  tabela nova, policy renomeada, função nova. Confira o que mudou pelo painel');

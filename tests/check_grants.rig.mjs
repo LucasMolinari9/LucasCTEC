@@ -197,6 +197,19 @@ await casoDigest('contagem veio como string', d => { d.defaults_permissivos = '3
 await casoDigest('campo faltando', d => { delete d.anon_maintain; return d; }, 1);
 await casoDigest('poucas tabelas (visão perdida)', d => { d.tabelas_publicas = 0; return d; }, 1);
 
+// --sem-baseline no caminho digest: NÃO pode alegar "bate com o baseline" sobre um baseline que
+// nunca leu. Contagens bem longe do baseline gravado (99) provam que a comparação não rolou —
+// se o gate as tivesse consultado, teria saído 1 (achado 2 da revisão: antes saía 0 com a
+// mensagem de "bate com o baseline", sem ter comparado nada).
+digestAtual = { ...digestSao(), defaults_permissivos: 99, anon_rpcs: 99, funcoes_sem_search_path: 99 };
+await writeFile(`${RAIZ}/scripts/security_baseline.json`, JSON.stringify(baselineDigest, null, 2));
+const cruDigest = await rodar(['--sem-baseline']);
+const okCruDigest = cruDigest.code === 0
+  && !/bate com o baseline/i.test(cruDigest.out)
+  && /não foram comparad/i.test(cruDigest.out);
+if (!okCruDigest) { falhas++; console.log(cruDigest.out.split('\n').map(l => '      ' + l).join('\n')); }
+console.log(`${okCruDigest ? '  ✓' : '  ✗'} [digest] --sem-baseline relata estado cru sem alegar baseline → saiu ${cruDigest.code}, esperado 0`);
+
 // --atualizar-baseline NAO pode silenciar a classe perigosa: os booleanos sao expectativa fixa
 // no codigo, nao dado de baseline.
 digestAtual = { ...digestSao(), anon_escreve: true };
@@ -214,6 +227,19 @@ const depois = JSON.parse(await readFile(`${RAIZ}/scripts/security_baseline.json
 const okPreserva = depois.digest === 'c'.repeat(64) && depois.achados.length === baseline.achados.length;
 if (!okPreserva) falhas++;
 console.log(`${okPreserva ? '  ✓' : '  ✗'} [digest] --atualizar-baseline atualiza o digest e PRESERVA os achados`);
+
+// Fecha o ciclo que o achado Critical 1 da revisão mordeu: --atualizar-baseline rodado sobre um
+// baseline SEM as três contagens (o formato de antes desta correção, só com `achados`) tem que
+// produzir um baseline que a execução NORMAL seguinte aceita de primeira. Gravar só duas das três
+// contagens fechava um laço: a execução normal abortava pedindo pra rodar --atualizar-baseline —
+// o comando que tinha acabado de rodar e não tinha corrigido nada.
+digestAtual = digestSao();
+await writeFile(`${RAIZ}/scripts/security_baseline.json`, JSON.stringify(baseline, null, 2));
+await rodar(['--atualizar-baseline']);
+const cicloFechado = await rodar();
+const okCicloFechado = cicloFechado.code === 0;
+if (!okCicloFechado) { falhas++; console.log(cicloFechado.out.split('\n').map(l => '      ' + l).join('\n')); }
+console.log(`${okCicloFechado ? '  ✓' : '  ✗'} [digest] --atualizar-baseline → execução normal fecha o ciclo → saiu ${cicloFechado.code}, esperado 0`);
 
 // O fallback tem validade: passada a data, usa-lo e vermelho.
 digestAtual = null;
