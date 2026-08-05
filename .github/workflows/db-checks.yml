@@ -19,11 +19,14 @@
 # JOBS SEPARADOS, não steps do mesmo job, de propósito: em steps sequenciais o primeiro
 # vermelho aborta o job e esconde o resultado do segundo — e "um vermelho não esconde o outro"
 # é o padrão que o repo já segue ao ter ci/views/semgrep/deriva em arquivos distintos. Aqui os
-# TRÊS rodam em paralelo e reportam independentemente. O ticket #63 pediu um arquivo só; o
-# arquivo é um, os veredictos são três.
+# jobs rodam em paralelo e reportam independentemente. O ticket #63 pediu um arquivo só; o
+# arquivo é um, os veredictos são vários.
 #
-# Nenhum segredo: os três usam a anon key pública que já está no app.js. Não há chave no
-# ambiente deste workflow — se algum dia precisar de service key, ela NÃO vem para cá.
+# SEGREDO (mudou em 04/08/2026): até a Fase 3, nenhum job daqui tinha chave — todos usavam a anon
+# key pública do app.js. O job `qualidade` passou a receber SUPABASE_PROD_AUDIT_DATABASE_URL, a
+# credencial do login AUDITOR (somente leitura, privilégio mínimo, senha com VALID UNTIL — ver
+# docs/planos/fase-3-hardening-moderado.md). Ela vai só no `env:` do passo que precisa dela e
+# nunca em `run:`/argv. Service key continua PROIBIDA neste workflow: nada aqui escreve no banco.
 #
 # Os `uses:` estão presos ao SHA (o `# v4` ao lado é só legenda) — ver docs/semgrep.md
 # § "Actions presas ao SHA".
@@ -97,10 +100,21 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
+      # O caminho preferido deste gate e o login auditor (psql + audit.divat_data_quality). O
+      # cliente vem daqui; sem ele, conectarAuditor lanca e o script cai no fallback anonimo.
+      - name: Instalar cliente PostgreSQL
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
       # Respeita scripts/data_quality_baseline.json: passa com a divida ja conhecida e falha
       # quando aparece achado NOVO ou um conhecido PIORA. Para ver o estado cru do banco,
       # rode localmente com --sem-baseline.
+      #
+      # Enquanto o secret nao existir, a variavel chega vazia, conectarAuditor lanca e o script
+      # usa a RPC anonima com um aviso — comportamento desejado, nao falha. Esse fallback tem
+      # validade em scripts/prazos.json (id check_data_quality_fallback): passada a data, o gate
+      # fica vermelho de proposito, para caminho temporario nao virar permanente por inercia.
       - name: Qualidade dos dados pos-ETL (orfaos referenciais, U+FFFD)
+        env:
+          SUPABASE_PROD_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_PROD_AUDIT_DATABASE_URL }}
         run: node scripts/check_data_quality.mjs
 
   # Achado SEC-04 da auditoria externa de 27/07/2026: RLS, grants, policies e privilegios de

@@ -6,17 +6,32 @@
 // do ETL, não do banco. Quando um filho aponta para codlinha/cod_origem que não existe no pai,
 // o portal NÃO avisa: a tela simplesmente aparece vazia, sem erro. Este script é o alarme.
 //
-// Irmão do check_realtime.mjs e do check_deriva.mjs: mesma anon key pública do app.js, mesma
-// forma (função read-only no banco + runner fino aqui). A função public.divat_data_quality()
-// é SECURITY INVOKER com EXECUTE para anon, então roda exatamente com a visão de anon.
+// Irmão do check_realtime.mjs e do check_deriva.mjs: mesma forma (função read-only no banco +
+// runner fino aqui).
+//
+// MODO DUPLO (desde 04/08/2026), pela mesma razão do check_grants.mjs: a Fase 3 move
+// divat_data_quality para o schema `audit`, fora do alcance de anon — e ainda bem, porque como
+// RPC anônima ela é uma alavanca de indisponibilidade (59 varreduras completas sobre ~116 mil
+// linhas por chamada, medido em 04/08/2026, acionável por qualquer um com a anon key, que é
+// pública). Enquanto produção não recebe a migração, o caminho antigo continua valendo:
+//   1. tenta audit.divat_data_quality() pelo login auditor (scripts/lib/auditor.mjs);
+//   2. se ele não estiver disponível, cai na RPC anônima e AVISA — dizendo POR QUE o auditor
+//      não respondeu e ATÉ QUANDO o fallback vale;
+//   3. o fallback tem validade em scripts/prazos.json (id `check_data_quality_fallback`), e a
+//      validade é consultada ANTES de tocar a rede: passada a data, o gate morre ali. Um gate
+//      que só descobrisse a expiração depois de falhar no fetch daria a mensagem errada
+//      justamente no dia em que a rede também estivesse ruim.
+//   4. resposta que não seja uma LISTA aborta — perder a visão do banco nunca vira "nenhum
+//      achado". É a pior falha possível aqui: gate verde por engano.
 //
 // Uso (na SUA máquina / CI — daqui o ambiente do Claude não alcança o Supabase):
 //   node scripts/check_data_quality.mjs                  # respeita o baseline
 //   node scripts/check_data_quality.mjs --sem-baseline    # estado cru do banco
 //   node scripts/check_data_quality.mjs --atualizar-baseline
 //
-// Requer apenas Node 18+ (fetch nativo). Nenhuma dependência. Sai 1 se houver achado de
-// severidade `erro` além do baseline; avisos nunca derrubam.
+// Requer Node 18+ (fetch nativo) e, para o caminho do auditor, o cliente `psql` no PATH mais a
+// variável SUPABASE_PROD_AUDIT_DATABASE_URL. Nenhuma dependência de npm. Sai 1 se houver achado
+// de severidade `erro` além do baseline; avisos nunca derrubam.
 //
 // SOBRE O BASELINE (leia antes de mexer): quando este script nasceu, o banco JÁ tinha 5
 // achados de erro (17 codlinhas órfãs em 4 tabelas + 4 linhas com cod_origem inválido) — a
@@ -30,6 +45,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { conectarAuditor } from './lib/auditor.mjs';
+import { prazoPorId, classificar, hojeISO } from './lib/prazos.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BASELINE = join(ROOT, 'scripts', 'data_quality_baseline.json');
@@ -48,22 +65,40 @@ const js = await readFile(join(ROOT, 'app.js'), 'utf8');
 const SB_URL = extrair(js, /const SB_URL\s*=\s*'([^']+)'/, 'SB_URL');
 const SB_KEY = extrair(js, /const SB_KEY\s*=\s*'([^']+)'/, 'SB_KEY');
 
-let achados;
+// MODO DUPLO (desde 04/08/2026), pela mesma razao do check_grants.mjs: a Fase 3 move
+// divat_data_quality para o schema `audit`, fora do alcance de anon — e ainda bem, porque como
+// RPC anonima ela e uma alavanca de indisponibilidade (59 varreduras completas sobre ~116 mil
+// linhas por chamada, medido em 04/08/2026). Enquanto producao nao recebe a migracao, o caminho
+// antigo continua valendo, com validade em scripts/prazos.json.
+const SQL_ACHADOS = `select coalesce(jsonb_agg(t), '[]'::jsonb) from audit.divat_data_quality() t;`;
+
+let achados = null;
 try {
+  const auditor = conectarAuditor({ ambiente: 'producao' });
+  achados = JSON.parse(auditor.consultar(SQL_ACHADOS).trim().split(/\r?\n/).filter(Boolean).at(-1));
+} catch (e) {
+  const prazo = await prazoPorId(ROOT, 'check_data_quality_fallback');
+  const v = classificar(prazo, hojeISO());
+  if (v.nivel === 'erro') {
+    console.error(`✗ Caminho do auditor indisponível (${e.message}) e o fallback anônimo EXPIROU: ${v.mensagem}`);
+    process.exit(1);
+  }
+  console.log(`⚠ Auditor indisponível (${e.message}); usando a RPC anônima (${v.mensagem}).`);
   const resp = await fetch(`${SB_URL}/rest/v1/rpc/divat_data_quality`, {
     method: 'POST',
     headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
     body: '{}',
   });
   if (!resp.ok) {
-    const txt = await resp.text();
-    console.error(`RPC divat_data_quality falhou (HTTP ${resp.status}): ${txt}`);
-    console.error('A função public.divat_data_quality() existe e tem GRANT EXECUTE para anon?');
+    console.error(`RPC divat_data_quality falhou (HTTP ${resp.status}): ${await resp.text()}`);
+    console.error('Nem o auditor nem a RPC anônima responderam — abortando.');
     process.exit(1);
   }
   achados = await resp.json();
-} catch (e) {
-  console.error('Erro de rede ao chamar o Supabase (este script precisa de rede):', e.message);
+}
+
+if (!Array.isArray(achados)) {
+  console.error('A verificação não devolveu uma lista de achados — abortando em vez de assumir vazio.');
   process.exit(1);
 }
 
