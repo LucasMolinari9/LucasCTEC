@@ -1,33 +1,19 @@
-// Executa as RPCs diagnósticas pelo login PostgreSQL mínimo da Fase 3.
-// A URL nunca é passada na linha de comando nem impressa.
-import { spawnSync } from 'node:child_process';
+// Executa as RPCs diagnosticas pelo login PostgreSQL minimo da Fase 3.
+//
+// Ambiente por argumento: `node scripts/check_phase3_audit.mjs teste` (padrao) ou `... producao`.
+// Ate 04/08/2026 este script travava o ref de TESTE e recusava producao de proposito. Isso
+// deixou de servir quando a Fase 3 passou a ser aplicavel em producao — e check_data_quality
+// depende deste mesmo caminho la. A recusa de ref DESCONHECIDO continua, que e o que protege.
+// A guarda de ref/login/senha e a montagem do psql moram em scripts/lib/auditor.mjs, para nao
+// divergirem entre os dois gates. A URL nunca e passada na linha de comando nem impressa.
+import { conectarAuditor } from './lib/auditor.mjs';
 
-const PROJECT_REF = 'gontnlfmothfglssbyyk';
-const LOGIN_PREFIX = 'divat_auditor_ci';
-const rawUrl = process.env.SUPABASE_TEST_AUDIT_DATABASE_URL;
-
-if (!rawUrl) {
-  console.error('SUPABASE_TEST_AUDIT_DATABASE_URL não configurado. Consulte docs/planos/fase-3-hardening-moderado.md.');
-  process.exit(1);
-}
-
-let url;
+const ambiente = process.argv[2] || 'teste';
+let auditor;
 try {
-  url = new URL(rawUrl);
-} catch {
-  console.error('SUPABASE_TEST_AUDIT_DATABASE_URL não é uma URL PostgreSQL válida.');
-  process.exit(1);
-}
-
-const directHost = `db.${PROJECT_REF}.supabase.co`;
-const pooler = url.hostname.endsWith('.pooler.supabase.com') && url.username.endsWith(`.${PROJECT_REF}`);
-const direct = url.hostname === directHost;
-if ((!direct && !pooler) || !url.username.startsWith(LOGIN_PREFIX)) {
-  console.error('Conexão recusada: host/project ref ou login não pertence ao auditor do Supabase de teste.');
-  process.exit(1);
-}
-if (!url.password) {
-  console.error('Conexão recusada: a credencial auditora não contém senha.');
+  auditor = conectarAuditor({ ambiente });
+} catch (e) {
+  console.error(e.message);
   process.exit(1);
 }
 
@@ -61,31 +47,17 @@ select jsonb_build_object(
 from payload;
 `;
 
-const child = spawnSync('psql', ['-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-c', query], {
-  encoding: 'utf8',
-  env: {
-    PATH: process.env.PATH,
-    PGHOST: url.hostname,
-    PGPORT: url.port || '5432',
-    PGDATABASE: url.pathname.slice(1) || 'postgres',
-    PGUSER: decodeURIComponent(url.username),
-    PGPASSWORD: decodeURIComponent(url.password),
-    PGSSLMODE: url.searchParams.get('sslmode') || 'require',
-  },
-});
-
-if (child.error) {
-  console.error(`Não foi possível executar psql: ${child.error.message}`);
-  process.exit(1);
-}
-if (child.status !== 0) {
-  console.error(child.stderr.trim() || `psql terminou com status ${child.status}`);
+let saida;
+try {
+  saida = auditor.consultar(query);
+} catch (e) {
+  console.error(e.message);
   process.exit(1);
 }
 
 let shape;
 try {
-  const line = child.stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
+  const line = saida.trim().split(/\r?\n/).filter(Boolean).at(-1);
   shape = JSON.parse(line);
 } catch {
   console.error('Saída do auditor não é JSON válido; abortando em vez de assumir sucesso.');
@@ -102,7 +74,7 @@ const checks = [
   [shape.realtime_count === 14, 'publicação Realtime divergiu das 14 tabelas'],
   [shape.direct_table_select === false, 'credencial auditora ganhou leitura direta de tabela'],
   [typeof shape.data_quality_rows === 'number', 'RPC de qualidade não pôde ser executada'],
-  [String(shape.session_user || '').startsWith(LOGIN_PREFIX), 'checagem não executou com o login auditor dedicado'],
+  [String(shape.session_user || '').startsWith('divat_auditor_ci'), 'checagem não executou com o login auditor dedicado'],
 ];
 
 const failed = checks.filter(([ok]) => !ok).map(([, message]) => message);
