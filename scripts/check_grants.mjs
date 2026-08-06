@@ -8,10 +8,13 @@
 // É o gate que sustenta as correções SEC-01 e SEC-05: sem ele, os default privileges que acabaram
 // de ser fechados podem ser reabertos por um clique e nada avisa.
 //
-// Irmão do check_data_quality.mjs, check_realtime.mjs e check_deriva.mjs: mesma anon key pública
-// do app.js, mesma forma (função read-only no banco + runner fino aqui). A RPC
-// public.divat_security_shape() é SECURITY INVOKER com EXECUTE para anon, então o que este script
-// enxerga é exatamente o que um visitante anônimo enxergaria.
+// Irmão do check_data_quality.mjs, check_realtime.mjs e check_deriva.mjs: mesma forma (função
+// read-only no banco + runner fino aqui) e mesma resolução de alvo. Desde 04/08/2026 (issue #74)
+// a chave NÃO vem mais de um regex sobre o app.js: o banco com quem se fala vem de DIVAT_ALVO
+// ('teste' em PR/push, 'producao' no cron) resolvido contra scripts/ambientes.json por
+// scripts/lib/ambiente.mjs. Sem a variável o script morre no topo, antes de tocar a rede.
+// A RPC é SECURITY INVOKER com EXECUTE para anon, então o que este script enxerga é exatamente
+// o que um visitante anônimo enxergaria.
 //
 // Uso (na SUA máquina / CI — daqui o ambiente do Claude não alcança o Supabase):
 //   node scripts/check_grants.mjs                     # respeita o baseline
@@ -77,8 +80,18 @@ try {
     digest = await resp.json();
   } else if (resp.status === 404) {
     // A funcao ainda nao existe neste banco: mundo pre-Fase 3. Cai no caminho antigo.
-    const prazo = await prazoPorId(ROOT, 'check_grants_fallback');
-    const v = classificar(prazo, hojeISO());
+    // Catch PROPRIO para a leitura do prazo: ela nao e rede. Sem ele, um prazos.json ilegivel
+    // (ou o id removido por engano) caia no catch de baixo e saia como "Erro ao consultar o
+    // Supabase (este script precisa de rede)" — mensagem que manda investigar o lugar errado,
+    // justamente quando o conserto e de uma linha num JSON versionado.
+    let v;
+    try {
+      v = classificar(await prazoPorId(ROOT, 'check_grants_fallback'), hojeISO());
+    } catch (ePrazo) {
+      console.error(`✗ Não consegui ler o prazo 'check_grants_fallback': ${ePrazo.message}`);
+      console.error('  O fallback só vale enquanto tem validade conferível — abortando.');
+      process.exit(1);
+    }
     if (v.nivel === 'erro') {
       console.error(`✗ O fallback para divat_security_shape EXPIROU: ${v.mensagem}`);
       console.error('  Se a Fase 3 já está em produção, remova o fallback (é o trabalho que venceu).');
@@ -129,14 +142,13 @@ if (digest) {
     console.error(`✗ Digest reporta ${digest.tabelas_publicas} tabelas públicas (esperado ≥ 18) — visão perdida, abortando.`);
     process.exit(1);
   }
-  if (!Number.isInteger(digest.anon_rpcs)) {
-    console.error('✗ Digest sem anon_rpcs numérico — abortando.');
-    process.exit(1);
-  }
+  // (`anon_rpcs` já foi conferido como inteiro no laço de `contagens` acima — a segunda
+  // conferência que existia aqui era código morto: nunca chegou a ser alcançada com valor
+  // diferente do que aquele laço já tinha aprovado.)
 
   // EXPECTATIVAS FIXAS. Ficam no CODIGO, nunca no baseline: um gate cujo conserto habitual e
   // `--atualizar-baseline` ensina o reflexo de apagar o alarme. O reflexo continua possivel para
-  // mudanca estrutural benigna (o digest) e NUNCA alcanca a classe perigosa (estes tres).
+  // mudanca estrutural benigna (o digest) e NUNCA alcanca a classe perigosa (estes SEIS).
   const graves = [];
   if (digest.anon_escreve) graves.push('anon tem INSERT/UPDATE/DELETE/TRUNCATE em alguma tabela de public');
   if (digest.anon_maintain) graves.push('anon tem MAINTAIN em alguma tabela de public');
@@ -227,7 +239,7 @@ if (digest) {
   }
   if (digest.digest !== b.digest) {
     console.error('\n✗ A superfície de segurança MUDOU (digest diferente do baseline).');
-    console.error('  Os três indicadores graves estão sãos, então isto é mudança estrutural —');
+    console.error('  Os seis indicadores graves estão sãos, então isto é mudança estrutural —');
     console.error('  tabela nova, policy renomeada, função nova. Confira o que mudou pelo painel');
     console.error('  ou pelo auditor (node scripts/check_phase3_audit.mjs) e, se for esperado,');
     console.error('  registre com --atualizar-baseline.');

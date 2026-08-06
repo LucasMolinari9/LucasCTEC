@@ -217,13 +217,19 @@ não existe mais.
 | `check_grants` (digest) | **diária** (cron) | produção | **não** | digest + modo duplo (§ 5) + `ambiente.mjs` |
 | `check_grants` (digest) | PR / push | teste | **não** | mesmo script, `DIVAT_ALVO=teste` |
 | `check_deriva` | semanal + PR | cron: produção · PR: teste | não | só `ambiente.mjs` |
-| `check_realtime` | semanal + PR | cron: produção · PR: teste | não | só `ambiente.mjs` |
-| `check_data_quality` | semanal (cron) | produção | sim | portado para o auditor + `ambiente.mjs` |
+| `check_realtime` | **diária** (cron) + PR / push | cron: produção · PR: teste | não | só `ambiente.mjs` |
+| `check_data_quality` | **diária** (cron) + PR / push | cron: produção · PR: teste | sim, no cron | portado para o auditor + `ambiente.mjs` |
 | `check_phase3_audit` | semanal / dispatch | por argumento | sim | matriz completa, aceita 2 refs |
 
+⚠️ **A cadência do `check_data_quality` não é "semanal, só no cron".** Ele mora no `db-checks.yml`,
+cujo cron é **diário** e que também dispara em `pull_request` e em `push` na `main` pelo filtro de
+`paths`. Uma versão anterior desta tabela dizia "semanal (cron) · produção", e foi essa premissa
+falsa que gerou o defeito da Tarefa 9: um gate que também roda em PR **não** pode ter o ambiente do
+auditor fixado em `producao`. Quem for mexer neste gate leia a cadência no workflow, não aqui.
+
 O alarme que importa — o **diário de grants** — continua **sem credencial e sem prazo de
-validade**, que era o ponto de partida deste desenho. Só o semanal de qualidade herda o segredo, e
-para ele isso é aceitável: se atrasar um ciclo, não há alarme apagado, há relatório adiado.
+validade**, que era o ponto de partida deste desenho. Só o gate de qualidade herda o segredo, e só
+no cron: em PR ele fala com teste, e sem a credencial de teste cai no fallback anônimo datado.
 
 Comparado à versão anterior desta spec, `check_deriva` e `check_realtime` deixam de ser
 "nenhuma mudança" e passam a tocar um arquivo cada — o preço de fechar a #74 (§ 3.3).

@@ -21,6 +21,8 @@ As bancadas com servidor/processo filho ficam separadas e também rodam no workf
 ```bash
 NO_PROXY=127.0.0.1 node tests/backup_rest.rig.mjs
 NO_PROXY=127.0.0.1 node tests/restore_rest.rig.mjs
+NO_PROXY=127.0.0.1 node tests/check_grants.rig.mjs
+node tests/check_migrations.rig.mjs
 ```
 
 Avulso (um arquivo só), se quiser:
@@ -62,6 +64,23 @@ cada teste novo).
 - `realtime.test.js` — guarda a sincronização `VIEW_TABLES`/`RT_TABLES` (extrai os literais do `app.js`).
 - `backup_rest.rig.mjs` — paginação keyset, contagem, SHA-256 e headers das chaves opacas.
 - `restore_rest.rig.mjs` — corrupção, confirmação do ref, destino vazio, ordem da FK e contagem final.
+- `check_grants.rig.mjs` — bancada do gate diário de segurança. Cobre os dois caminhos (digest e
+  fallback), a expiração do fallback, a recusa de baselinar achado grave e a falha fechada sem
+  `DIVAT_ALVO`. Roda no `ci.yml`.
+- `check_migrations.rig.mjs` — bancada do gate de migrações: prova que ele recusa RPC anônima fora
+  das duas faixas, tabela pública sem RLS e senha versionada. Roda no `ci.yml`.
+- `ambiente.test.js` — resolução do alvo dos gates de banco (`DIVAT_ALVO` + `scripts/ambientes.json`):
+  sem default silencioso, valor desconhecido recusado, campo faltando é erro (issue #74).
+- `prazos.test.js` — classificador de prazo do `scripts/check_prazos.mjs`, com `hoje` injetado
+  (nenhum caso depende do relógio).
+- `environment.test.js` — matriz de ambiente do `app.js`: quais hostnames caem em produção e quais
+  caem em teste (`selecionarSupabase`, via `harness.js`).
+- `auditor.test.js` — guarda de conexão do `scripts/lib/auditor.mjs`: project ref, login e senha
+  recusados antes de tocar a rede; e, com um `psql` falso, que a senha não vai em `argv` e o `env`
+  do filho é montado do zero.
+- `check_data_quality.test.js` — modo duplo do `scripts/check_data_quality.mjs`: auditor primeiro,
+  validade do fallback consultada antes da rede, e o alvo governando os dois caminhos. Offline por
+  desenho (fakeroot + `psql` falso).
 
 > `scripts/check_views.mjs` e `check_abas.mjs` também usam fixtures locais por desenho. Eles
 > validam renderização determinística, não substituem um preview ligado a um banco restaurado.

@@ -76,11 +76,10 @@ try {
 }
 console.log(`· Alvo: ${ALVO}`);
 
-// MODO DUPLO (desde 04/08/2026), pela mesma razao do check_grants.mjs: a Fase 3 move
-// divat_data_quality para o schema `audit`, fora do alcance de anon — e ainda bem, porque como
-// RPC anonima ela e uma alavanca de indisponibilidade (59 varreduras completas sobre ~116 mil
-// linhas por chamada, medido em 04/08/2026). Enquanto producao nao recebe a migracao, o caminho
-// antigo continua valendo, com validade em scripts/prazos.json.
+// A consulta do caminho PREFERIDO (o auditor). O modo duplo — por que ele existe, em que ordem
+// os dois caminhos são tentados e até quando o fallback vale — está no cabeçalho deste arquivo,
+// em UMA cópia só: a segunda, que vivia aqui, repetia inclusive o número das varreduras, e duas
+// cópias de um número é uma que envelhece sem ninguém ver.
 const SQL_ACHADOS = `select coalesce(jsonb_agg(t), '[]'::jsonb) from audit.divat_data_quality() t;`;
 
 let achados = null;
@@ -100,17 +99,29 @@ try {
     process.exit(1);
   }
   console.log(`⚠ Auditor indisponível (${e.message}); usando a RPC anônima (${v.mensagem}).`);
-  const resp = await fetch(`${SB_URL}/rest/v1/rpc/divat_data_quality`, {
-    method: 'POST',
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-    body: '{}',
-  });
-  if (!resp.ok) {
-    console.error(`RPC divat_data_quality falhou (HTTP ${resp.status}): ${await resp.text()}`);
+  // try/catch em volta do fetch: DESVIO DELIBERADO do bloco normativo do plano (Tarefa 8), que
+  // escrevia o fetch cru. Sem ele, uma falha de REDE (DNS, proxy, socket) vira unhandled
+  // rejection com stack do undici — o código de saída continua 1 e o ⚠ acima continua impresso,
+  // mas quem lê o log vê um despejo de biblioteca em vez da mensagem que este script sempre teve.
+  // O caminho do auditor já falhou aqui; este é o segundo e último, e é o que precisa dizer o
+  // que houve.
+  try {
+    const resp = await fetch(`${SB_URL}/rest/v1/rpc/divat_data_quality`, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    if (!resp.ok) {
+      console.error(`RPC divat_data_quality falhou (HTTP ${resp.status}): ${await resp.text()}`);
+      console.error('Nem o auditor nem a RPC anônima responderam — abortando.');
+      process.exit(1);
+    }
+    achados = await resp.json();
+  } catch (eRede) {
+    console.error(`Erro de rede ao chamar o Supabase (este script precisa de rede): ${eRede.message}`);
     console.error('Nem o auditor nem a RPC anônima responderam — abortando.');
     process.exit(1);
   }
-  achados = await resp.json();
 }
 
 if (!Array.isArray(achados)) {

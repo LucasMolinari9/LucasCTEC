@@ -316,8 +316,11 @@ Assim a Fase 3 entra com evidência viva, não com evidência narrada no corpo d
 
 Duas armadilhas práticas do bootstrap: ele **exige `psql`** (usa `\set`, `\if` e `\gexec`, que o
 SQL Editor do painel não interpreta), e o `check_phase3_audit.mjs` só aceita host direto
-`db.gontnlfmothfglssbyyk.supabase.co` ou pooler com usuário `divat_auditor_ci.<ref>` — qualquer
-outra forma, inclusive produção, é recusada de propósito.
+`db.<ref>.supabase.co` ou pooler com usuário `divat_auditor_ci.<ref>` — qualquer outra forma é
+recusada de propósito. **Atualização de 04/08/2026:** o `<ref>` passou a ser o do ambiente pedido
+por argumento (`teste`, o padrão, ou `producao`); a trava de ref único saiu quando a Fase 3 passou
+a ser aplicável em produção. Ref desconhecido continua recusado — a guarda mora hoje em
+`scripts/lib/auditor.mjs`.
 
 **4. Fase 4: segurar.** É a maior e a mais arriscada — muda a arquitetura zero-build ao publicar
 `shared/*.js`, mexe na allowlist do `.vercelignore` e no detector de versão, e está empilhada

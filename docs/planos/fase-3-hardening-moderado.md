@@ -111,6 +111,19 @@ gate que fale por credencial de auditor não pode continuar fazendo isso — pas
 secret, e portanto deixa de rodar em PR de fora do repositório, igual ao `test-auditor`. Essa perda
 de alcance é parte da decisão, não um detalhe de implementação.
 
+> **Atualização de 04/08/2026 — o remédio mudou.** O diagnóstico acima continua válido, mas a
+> direção "migrar os quatro gates para a credencial" foi substituída. Três fatos medidos
+> mudaram a conta: `divat_data_quality()` é cara o bastante para ser alavanca de
+> indisponibilidade como RPC anônima; `check_phase3_audit.mjs` confere forma, não substância, e
+> portanto não é substituto dos quatro; e a credencial vence em 31/10/2026, o que daria ao
+> alarme diário uma data de validade. O desenho vigente está em
+> `docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md`.
+>
+> Duas consequências que a tabela acima não antecipa: (1) os quatro gates deixaram de derivar
+> `SB_URL`/`SB_KEY` do `app.js` — o alvo agora vem de `DIVAT_ALVO` + `scripts/ambientes.json`,
+> decidido pelo gatilho do workflow (issue #74); (2) o `check_data_quality.mjs` roda **diariamente**
+> no `db-checks.yml`, não semanalmente, e em `pull_request`/`push` também.
+
 ## Critérios antes de qualquer promoção
 
 1. Criar/rotacionar `divat_auditor_ci` e configurar o secret sem expô-lo.
@@ -119,5 +132,6 @@ de alcance é parte da decisão, não um detalhe de implementação.
 4. Fazer smoke do preview protegido; configurar `VERCEL_AUTOMATION_BYPASS_SECRET` se ainda faltar.
 5. Confirmar no GitHub que os checks obrigatórios bloqueiam alteração da `main`.
 6. Manter a PR em rascunho e solicitar autorização separada para qualquer ação em produção.
-7. **Antes de tocar produção:** migrar os quatro gates vivos para a credencial de auditor — ver a
-   seção acima. Sem isso, aplicar a migração cega o gate diário de grants.
+7. **Antes de tocar produção:** ter aplicado o plano
+   `docs/superpowers/plans/2026-08-04-fase3-diagnosticos-anonimos.md` — em especial a migração 2
+   e o modo duplo dos gates. Aplicar a migração 1 sozinha em produção cega o gate diário.

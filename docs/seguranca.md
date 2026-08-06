@@ -162,6 +162,13 @@ tabela aparecer com grant ou policy de escrita para `anon`/`authenticated`. A fr
 não semanal, **por causa deste item** — quem for reduzi-la precisa fechar o item antes. Regras
 técnicas: `CLAUDE.md`, seção **Supabase → RLS / segurança**.
 
+Desde 04/08/2026 esse gate fala por `public.divat_security_digest()` — resumo, não matriz — para
+continuar diário **sem credencial e sem prazo de validade**. Os seis indicadores graves
+(`anon_escreve`, `anon_maintain`, `anon_le_view`, `todas_com_rls` em falso,
+`authenticated_tem_privilegio` e `funcoes_definer_anon` maior que zero) são expectativa fixa no
+código: não existe `--atualizar-baseline` que os silencie. O digest, sim, é baselinado — é ele que
+detecta mudança estrutural benigna.
+
 **Segundo controle, pelo outro lado (Fase 3, § 10):** toda migração que cria tabela pública precisa
 **revogar `anon`/`authenticated` e ligar RLS na mesma transação**, e o gate
 `scripts/check_migrations.mjs` cobra isso **no diff**, offline. Os dois são complementares e nenhum

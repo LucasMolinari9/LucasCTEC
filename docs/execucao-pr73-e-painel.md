@@ -66,16 +66,26 @@ aplicada, isto é, no teste. Confira o project ref antes de investigar qualquer 
 Grave a URL de conexão do `divat_auditor_ci` no secret de Actions
 **`SUPABASE_TEST_AUDIT_DATABASE_URL`** (GitHub → Settings → Secrets and variables → Actions).
 
-O `scripts/check_phase3_audit.mjs` **recusa a conexão** se ela não passar em quatro validações —
-vale conferir antes de colar, para não gastar uma rodada:
+O `scripts/check_phase3_audit.mjs` **recusa a conexão** se ela não passar pelas validações do
+`scripts/lib/auditor.mjs` (extraído em 04/08/2026 e compartilhado com o `check_data_quality.mjs`,
+para a guarda não divergir entre os dois gates) — vale conferir antes de colar, para não gastar
+uma rodada:
 
-1. tem de ser URL PostgreSQL válida;
-2. host tem de ser `db.gontnlfmothfglssbyyk.supabase.co` **ou** um pooler
-   `*.pooler.supabase.com` cujo usuário termine em `.gontnlfmothfglssbyyk`;
-3. o usuário tem de começar com `divat_auditor_ci`;
-4. tem de conter senha.
+- a variável do ambiente escolhido tem de estar configurada
+  (`SUPABASE_TEST_AUDIT_DATABASE_URL` para `teste`, `SUPABASE_PROD_AUDIT_DATABASE_URL` para
+  `producao`);
+- tem de ser URL PostgreSQL válida;
+- host tem de ser `db.<ref do ambiente>.supabase.co` **ou** um pooler `*.pooler.supabase.com`
+  cujo usuário termine em `.<ref do ambiente>` (para `teste`, `gontnlfmothfglssbyyk`);
+- o usuário tem de começar com `divat_auditor_ci`;
+- tem de conter senha.
 
-É fail-closed por desenho: recusa qualquer outro project ref, **inclusive produção**.
+**O ambiente vem do argumento:** `node scripts/check_phase3_audit.mjs` usa `teste` (o padrão);
+`... producao` usa o ref de produção. Até 04/08/2026 o script travava o ref de teste e recusava
+produção de propósito — trava que deixou de servir quando a Fase 3 passou a ser aplicável em
+produção e o `check_data_quality.mjs` passou a depender deste mesmo caminho. O que continua
+fail-closed é o ref **desconhecido**: host, login ou senha fora do esperado são recusados antes
+de qualquer conexão.
 
 Depois: aba **Actions → Phase 3 database security → Run workflow**. O job `test-auditor` só roda por
 `workflow_dispatch` — em PR ele sai `skipped`, de propósito, para não expor o secret. Anexe o

@@ -53,10 +53,23 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
     fs.mkdirSync(path.join(raiz, 'scripts', 'lib'), { recursive: true });
     fs.mkdirSync(bin);
     for (const rel of ['scripts/check_data_quality.mjs', 'scripts/lib/auditor.mjs',
-                       'scripts/lib/prazos.mjs', 'scripts/lib/ambiente.mjs',
-                       'scripts/data_quality_baseline.json']) {
+                       'scripts/lib/prazos.mjs', 'scripts/lib/ambiente.mjs']) {
       fs.copyFileSync(path.join(REAL, rel), path.join(raiz, rel));
     }
+    // Baseline PRÓPRIO, pela mesma razão do prazos.json abaixo: até 05/08/2026 este teste copiava
+    // o data_quality_baseline.json REAL e o `psql` falso fabricava justamente a primeira entrada
+    // dele. Quer dizer que consertar aquele dado no banco e rodar `--atualizar-baseline` deixaria
+    // este teste vermelho por um motivo que nada tem a ver com o que ele guarda (a ORDEM dos dois
+    // caminhos). O achado abaixo é o mesmo que o `psql` falso devolve — é o par que faz o caso do
+    // auditor sair 0 "com dívida já conhecida".
+    fs.writeFileSync(path.join(raiz, 'scripts', 'data_quality_baseline.json'), JSON.stringify({
+      gerado_em: '2026-08-05',
+      nota: 'fixture do teste — dívida inventada, não é o baseline do repo',
+      achados: [{
+        verificacao: 'codlinha_orfa', severidade: 'erro', qtd: 2,
+        detalhe: 'itinerario_teste sem match em tabela_vista_teste',
+      }],
+    }, null, 2) + '\n');
     // Alvo vem de DIVAT_ALVO + scripts/ambientes.json (issue #74), não mais de um app.js falso —
     // nada mais lê o app.js aqui, por isso ele saiu do fakeroot. Os dois endereços são mortos de
     // propósito (ver o cabeçalho): nem em caso de regressão este teste alcança um Supabase real.
@@ -136,7 +149,7 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
     const comAuditor = rodar({ ...comPath, SUPABASE_PROD_AUDIT_DATABASE_URL: urlDe('producao') }, 'producao');
     ok(!/⚠ Auditor indisponível/.test(comAuditor.saida), 'não cai no fallback', comAuditor.saida.slice(0, 200));
     ok(!MARCA_REDE.test(comAuditor.saida), 'não toca a rede', comAuditor.saida.slice(0, 300));
-    // O achado devolvido é justamente o que o baseline do repo já carrega: o gate tem de passar
+    // O achado devolvido é justamente o que a fixture de baseline carrega: o gate tem de passar
     // com dívida conhecida (é o invariante do baseline, que esta tarefa não pode desarrumar).
     ok(comAuditor.status === 0, 'passa com a dívida já registrada no baseline',
        `exit ${comAuditor.status}: ${comAuditor.saida.slice(0, 300)}`);

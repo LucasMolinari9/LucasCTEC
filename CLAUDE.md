@@ -59,6 +59,13 @@ exibe e **atualiza ao vivo** (Realtime).
     front. A skill `db-change` cobra isso. **Fechar o default não conserta o que já existe:** as
     18 tabelas atuais nasceram sob o default antigo e ficaram com `MAINTAIN` até um `REVOKE
     MAINTAIN ON ALL TABLES` explícito — achado do próprio gate na 1ª rodada contra o banco.
+  - **Superfície anônima: duas faixas, não um número.** `scripts/check_migrations.mjs` separa RPC
+    de **produto** (`divat_busca_logradouro`, `divat_linhas_regiao` — chamadas pelo portal) de RPC
+    de **diagnóstico** (`divat_api_shape`, `realtime_tables`, `divat_security_digest` — chamadas só
+    por gate). Diagnóstico novo só entra se ler apenas catálogo, for `SECURITY INVOKER` e não
+    revelar além do que o repositório já publica (ADR-0003). `divat_security_shape` e
+    `divat_data_quality` **não** satisfazem isso e vivem em `audit`: a primeira é matriz de grants
+    (recon), a segunda varre 59 colunas `text` sobre ~116 mil linhas por chamada.
   - **Limitação ATIVA:** há um segundo conjunto de defaults, do role `supabase_admin`, que concede
     escrita a `anon` em tabelas de `public`, e não é fechável — `postgres` não é superusuário no
     Supabase. Até 28/07/2026 esta linha dizia que ele "só atinge objetos criados por esse role (o
@@ -232,7 +239,11 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    `.claude/settings.json`), que lê a versão do próprio workflow — o container de lá é efêmero e
    a venv não sobrevive entre sessões. Runbook e como escrever regra nova: **`docs/semgrep.md`**.
 2c. **Deriva docs×banco — `node scripts/check_deriva.mjs`** (precisa de rede; irmão do
-   `check_realtime.mjs`, mesma anon key do `app.js`). Compara a visão de `anon` do banco
+   `check_realtime.mjs`). **Desde 04/08/2026 ele não lê mais chave nenhuma do `app.js`:** o banco
+   com quem fala vem de `DIVAT_ALVO` (`teste` em PR/push, `producao` no cron) resolvido contra
+   `scripts/ambientes.json` — sem a variável ele falha fechado, de propósito (issue #74). Vale para
+   os quatro gates de banco: este, o `check_realtime.mjs`, o `check_grants.mjs` e o
+   `check_data_quality.mjs`. Compara a visão de `anon` do banco
    (RPC `divat_api_shape()` — o OpenAPI do PostgREST deste projeto é restrito à service_role)
    com o que o repo afirma: toda tabela citada no `CLAUDE.md`/`docs/schema.md` existe no banco;
    toda coluna do diagrama mermaid do `docs/schema.md` existe na tabela real; toda RPC chamada
@@ -266,10 +277,15 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    carrega número, o gate cobra o número — **atualize o número, não apague a guarda** (se a frase
    mudou de forma, ajuste o regex na tabela `FATOS`). Ela é deliberadamente estreita: a 1ª versão
    varria todo token em backtick e deu 61 falsos positivos contra 0 verdadeiros.
-2e. **Qualidade dos dados pós-ETL — `node scripts/check_data_quality.mjs`** (precisa de rede;
-   chama a RPC `divat_data_quality()` como `anon`). Fecha a issue #63. Roda semanal no workflow
-   `db-checks.yml`, que **também passou a rodar o `check_realtime.mjs`** — ele existia desde
-   sempre e não estava em nenhum workflow, só rodava se alguém lembrasse.
+2e. **Qualidade dos dados pós-ETL — `node scripts/check_data_quality.mjs`** (precisa de rede).
+   Fecha a issue #63. Roda **diariamente** no workflow `db-checks.yml` (e em `pull_request`/`push`
+   que toquem os arquivos dele), que **também passou a rodar o `check_realtime.mjs`** — ele existia
+   desde sempre e não estava em nenhum workflow, só rodava se alguém lembrasse.
+   **Modo duplo desde 04/08/2026:** o caminho principal é `audit.divat_data_quality()` pelo login
+   auditor via `psql` (`scripts/lib/auditor.mjs`); só se ele estiver indisponível é que o gate cai
+   na RPC anônima `divat_data_quality()`, avisando por quê e até quando (o fallback tem validade em
+   `scripts/prazos.json`). O banco alvo dos DOIS caminhos vem de `DIVAT_ALVO` — nunca de literal do
+   `app.js`.
    **A integridade hub-and-spoke JÁ ESTÁ VIOLADA no banco** (medido em 27/07/2026): há **17
    codlinhas órfãs** — filhos em `itinerario_teste` (2), `qh_teste` (3),
    `qh_predeterminado_teste` (5) e `evento_teste` (7) apontando para `codlinha` que não existe
@@ -301,6 +317,11 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    `--atualizar-baseline` para o gate voltar a apertar; para ver o estado cru, `--sem-baseline`.
    **Atenção:** `qtd` não tem unidade única — em `codlinha_orfa` é `count(distinct codlinha)`,
    nas outras verificações é `count(*)` de linhas (a saída rotula qual é qual).
+2f. **Compromissos com data — `node scripts/check_prazos.mjs`** (offline, diário no `db-checks.yml`).
+   Cobra `scripts/prazos.json`: rotação da credencial auditora, remoção dos caminhos de fallback e
+   a revisão trimestral de segurança. Fica **fora** do `tests/check.js` porque o contrato dele é ser
+   determinístico, e um gate que muda de veredito com o calendário não é. Nasceu da constatação de
+   que, neste repo, o que cabe num `git push` acontece e o que depende de lembrar não acontece.
 3. Merge na `main` → republica sozinho (ou MCP `deploy_to_vercel`). As telas dos usuários se
    atualizam via detector de versão. Bumpe o carimbo se quiser confirmar a chegada.
 4. Mudanças de **dados** NÃO exigem deploy — o site lê o Supabase ao vivo.
