@@ -315,6 +315,15 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    dívida conhecida e falha no instante em que aparece achado **novo** ou um conhecido **piora**.
    O baseline é dívida registrada, não perdão — ao consertar dado, rode
    `--atualizar-baseline` para o gate voltar a apertar; para ver o estado cru, `--sem-baseline`.
+   **Terceira condição de falha, desde 06/08/2026: zero achados com baseline não vazio.** A
+   verificação só emite linha quando a contagem é > 0, então `[]` significa duas coisas que o
+   script não distingue — dívida corrigida ou **fonte cega** (permissão/RLS/schema/migração pela
+   metade) sobre banco sujo. Antes ele escolhia sozinho a leitura otimista: imprimia "✓ Resolvido
+   desde o baseline" e saía **0** — a única falha deste gate que saía verde. Agora aborta e manda
+   confirmar com `--atualizar-baseline`, que grava mas **avisa alto** quando a dívida vai a zero.
+   **Alcance:** com o baseline já zerado, `[]` volta a ser indistinguível de tudo certo; fechar
+   esse resto exige a verificação devolver uma linha por varredura (com `qtd = 0`), o que é
+   migração, não conserto no script.
    **Atenção:** `qtd` não tem unidade única — em `codlinha_orfa` é `count(distinct codlinha)`,
    nas outras verificações é `count(*)` de linhas (a saída rotula qual é qual).
 2f. **Compromissos com data — `node scripts/check_prazos.mjs`** (offline, diário no `db-checks.yml`).

@@ -94,7 +94,7 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
     const script = path.join(raiz, 'scripts', 'check_data_quality.mjs');
     // `alvo` separado de `extra` para o caso da AUSÊNCIA poder pedir explicitamente `null` — o
     // runner pode ter DIVAT_ALVO no ambiente e não se pode herdar isso sem querer.
-    const rodar = (extra = {}, alvo = 'teste') => {
+    const rodar = (extra = {}, alvo = 'teste', argv = []) => {
       const env = { ...process.env, ...extra };
       delete env.SUPABASE_PROD_AUDIT_DATABASE_URL;   // o runner do CI tem essa variável; o teste não pode herdá-la
       delete env.SUPABASE_TEST_AUDIT_DATABASE_URL;
@@ -104,7 +104,7 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
       // passa justamente SUPABASE_PROD_AUDIT_DATABASE_URL, que a linha acima acabou de apagar.
       for (const [k, v] of Object.entries(extra)) env[k] = v;
       if (alvo === null) delete env.DIVAT_ALVO; else env.DIVAT_ALVO = alvo;
-      const r = spawnSync(process.execPath, [script], { encoding: 'utf8', env, timeout: 30000 });
+      const r = spawnSync(process.execPath, [script, ...argv], { encoding: 'utf8', env, timeout: 30000 });
       return { status: r.status, saida: (r.stdout || '') + (r.stderr || '') };
     };
 
@@ -181,6 +181,43 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
     ok(fs.readFileSync(REGISTRO, 'utf8').trim() === '', 'o psql NÃO é chamado', fs.readFileSync(REGISTRO, 'utf8'));
     ok(/⚠ Auditor indisponível \(SUPABASE_TEST_AUDIT_DATABASE_URL não configurado/.test(soProd.saida),
        'avisa que falta a credencial DO ALVO', soProd.saida.slice(0, 300));
+
+    console.log('fonte devolve lista VAZIA com dívida no baseline — é cegueira, não "resolvido"');
+    // O modo de falha mais perigoso deste gate, e o único que sai VERDE: a fonte perde a visão do
+    // banco (permissão revogada, RLS, função trocada de schema, migração pela metade) e devolve
+    // zero achados. Como a RPC só emite linha quando a contagem é > 0, banco limpo devolve `[]`
+    // igualzinho — as duas causas são indistinguíveis daqui. Antes desta guarda o script escolhia
+    // sozinho a interpretação otimista: imprimia "✓ Resolvido desde o baseline" para a dívida
+    // inteira e saía 0. O `Array.isArray` logo acima não cobre isto — `[]` É uma lista.
+    fs.writeFileSync(path.join(bin, 'psql'),
+      `#!${process.execPath}\nprocess.stdout.write('\\n[]\\n');\n`, { mode: 0o755 });
+    const vazio = rodar({ ...comPath, SUPABASE_PROD_AUDIT_DATABASE_URL: urlDe('producao') }, 'producao');
+    ok(vazio.status === 1, 'sai 1 em vez de verde', `exit ${vazio.status}: ${vazio.saida.slice(0, 300)}`);
+    ok(!/✓ Qualidade dos dados: nenhum achado/.test(vazio.saida),
+       'NÃO declara qualidade em dia', vazio.saida.slice(0, 300));
+    ok(!/✓ Resolvido desde o baseline/.test(vazio.saida),
+       'NÃO afirma que a dívida foi resolvida', vazio.saida.slice(0, 300));
+    ok(/--atualizar-baseline/.test(vazio.saida),
+       'diz como confirmar, caso a dívida tenha sido mesmo corrigida', vazio.saida.slice(0, 400));
+
+    console.log('--atualizar-baseline zerando a dívida — grava, mas AVISA alto');
+    // A saída de emergência do caso acima não pode ser ela mesma um caminho cego. O `psql` falso
+    // continua devolvendo `[]`; se o operador seguir a instrução do gate sem desconfiar, isto aqui
+    // apaga as entradas do baseline — que é a dívida REGISTRADA, não o perdão dela. Gravar é
+    // legítimo (o `--atualizar-baseline` é a confirmação humana), mas passar de N para ZERO é a
+    // assinatura da cegueira, e tem de deixar rastro em duas camadas: o aviso no log e o diff do
+    // arquivo versionado, que ainda precisa ser commitado por alguém.
+    const baselinePath = path.join(raiz, 'scripts', 'data_quality_baseline.json');
+    const antes = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
+    const zerou = rodar({ ...comPath, SUPABASE_PROD_AUDIT_DATABASE_URL: urlDe('producao') },
+                        'producao', ['--atualizar-baseline']);
+    ok(zerou.status === 0, 'grava (a confirmação humana é explícita)', `exit ${zerou.status}: ${zerou.saida.slice(0, 300)}`);
+    ok(/⚠/.test(zerou.saida) && /1 achado\(s\)/.test(zerou.saida),
+       'avisa que a dívida registrada foi a ZERO, dizendo quantos sumiram', zerou.saida.slice(0, 500));
+    ok(/cegou|cegueira/.test(zerou.saida),
+       'nomeia a hipótese da fonte cega — não trata como vitória', zerou.saida.slice(0, 500));
+    ok(JSON.parse(fs.readFileSync(baselinePath, 'utf8')).achados.length === 0, 'o baseline foi mesmo reescrito');
+    fs.writeFileSync(baselinePath, JSON.stringify(antes, null, 2) + '\n');   // devolve a fixture
 
     console.log('sem DIVAT_ALVO — morre na resolução do alvo, antes do auditor, do prazo e da rede');
     // A ausência é erro por desenho (issue #74): um default silencioso é exatamente como um gate

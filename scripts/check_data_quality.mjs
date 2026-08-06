@@ -173,9 +173,11 @@ if (atualizar) {
   // `orfaos_conhecidos` é escrito À MÃO (a RPC agrega e não devolve QUAIS codlinhas). Sem este
   // resgate, o primeiro --atualizar-baseline montaria um objeto novo e apagaria em silêncio o
   // levantamento inteiro — que custou uma sessão para reconstruir.
-  let herdado = null;
+  let herdado = null, achadosAntes = 0;
   try {
-    herdado = JSON.parse(await readFile(BASELINE, 'utf8')).orfaos_conhecidos ?? null;
+    const anterior = JSON.parse(await readFile(BASELINE, 'utf8'));
+    herdado = anterior.orfaos_conhecidos ?? null;
+    achadosAntes = (anterior.achados || []).length;
   } catch (e) {
     if (e.code !== 'ENOENT') console.error(`Aviso: não consegui reler o baseline atual (${e.message}); orfaos_conhecidos não será preservado.`);
   }
@@ -201,6 +203,19 @@ if (atualizar) {
   };
   await writeFile(BASELINE, JSON.stringify(registro, null, 2) + '\n', 'utf8');
   console.log(`✓ Baseline reescrito com ${registro.achados.length} achado(s) → scripts/data_quality_baseline.json`);
+  // A saída de emergência da guarda de cegueira (mais abaixo) não pode ser ela mesma um caminho
+  // cego: é para cá que o gate manda o operador quando a fonte devolve zero achados, e obedecer
+  // sem desconfiar apaga a dívida REGISTRADA — que é o oposto do que o baseline existe para
+  // fazer. Gravar continua sendo legítimo (o `--atualizar-baseline` é a confirmação humana), mas
+  // ir de N para ZERO é a assinatura da cegueira e fica dito em voz alta. A segunda camada é o
+  // diff: o baseline é versionado e alguém ainda precisa commitar este arquivo.
+  if (!registro.achados.length && achadosAntes) {
+    console.log(`\n⚠ ATENÇÃO: o baseline tinha ${achadosAntes} achado(s) e agora tem ZERO.`);
+    console.log('  Se a dívida foi mesmo corrigida no banco, ótimo — é o desfecho esperado.');
+    console.log('  Se a fonte cegou (permissão/RLS/schema/migração pela metade), você acabou de');
+    console.log('  apagar dívida real, e o gate passará a sair verde sobre um banco sujo.');
+    console.log('  Confira o diff deste arquivo antes de commitar.');
+  }
   if (herdado) console.log('  · `orfaos_conhecidos` preservado do arquivo anterior — é MANTIDO À MÃO. Se você acabou de corrigir dado, atualize a lista também; a contagem sozinha não denuncia órfã trocada por outra.');
   process.exit(0);
 }
@@ -213,6 +228,38 @@ if (!semBaseline) {
   } catch (e) {
     if (e.code !== 'ENOENT') { console.error(`Baseline ilegível (${BASELINE}): ${e.message}`); process.exit(1); }
   }
+}
+
+// CEGUEIRA SILENCIOSA — a única falha deste gate que sai VERDE, e por isso a pior.
+//
+// A verificação só emite linha quando a contagem é > 0 (veja a função em docs/backup_schema.sql).
+// Logo `[]` significa duas coisas que daqui NÃO se distinguem: (a) a dívida foi corrigida no
+// banco, ou (b) a fonte perdeu a visão dele — permissão revogada, RLS, função trocada de schema,
+// migração aplicada pela metade — e o banco segue sujo. O `Array.isArray` lá em cima não cobre
+// isto: `[]` É uma lista.
+//
+// Até 06/08/2026 o script escolhia sozinho a leitura otimista: `resolvidos` virava o baseline
+// inteiro, imprimia "✓ Resolvido desde o baseline" e saía 0. Quer dizer que o dia em que a fonte
+// cegasse era exatamente o dia em que o gate ficaria mais verde do que nunca.
+//
+// Como as duas causas são indistinguíveis, o gate PERGUNTA em vez de assumir. Assumir (a) é o
+// único dos dois erros que passa despercebido; gate vermelho à toa alguém investiga, gate verde
+// por engano ninguém investiga. A confirmação humana é o `--atualizar-baseline`.
+//
+// O ALCANCE desta guarda, dito para ninguém confiar demais nela: ela só enxerga a cegueira
+// enquanto houver dívida registrada para desaparecer. Com o baseline zerado — depois de uma
+// limpeza legítima — `[]` volta a ser indistinguível de tudo certo, e nada aqui detecta. Fechar
+// esse resto exige mudar a FONTE: a verificação teria de devolver uma linha por varredura, com
+// `qtd = 0` inclusive, para que lista vazia passasse a significar "não rodei". Isso é migração,
+// não conserta-se daqui. `--sem-baseline` também fica de fora, de propósito: é modo de
+// diagnóstico manual, cujo contrato é mostrar o estado cru sem opinar.
+if (!semBaseline && achados.length === 0 && base.size > 0) {
+  console.error(`\n✗ A verificação não devolveu achado NENHUM, mas o baseline registra ${base.size}.`);
+  console.error('  Zero achados tem duas causas possíveis, e elas não se distinguem daqui:');
+  console.error('   a) a dívida foi corrigida no banco — confirme com --atualizar-baseline;');
+  console.error('   b) a fonte cegou (permissão/RLS/schema/migração pela metade) e o banco segue sujo.');
+  console.error('  Abortando em vez de escolher a leitura otimista.');
+  process.exit(1);
 }
 
 const novos = [], piorados = [], conhecidos = [], avisos = [];
