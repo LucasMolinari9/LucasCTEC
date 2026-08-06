@@ -5,10 +5,12 @@
 # de `anon` (RPC `divat_api_shape()`) e compara com o que CLAUDE.md / docs/schema.md / app.js
 # afirmam. Chave anon pública, nenhum segredo aqui.
 #
-# ALVO (desde 05/08/2026, issue #74): até a Fase 3, este gate lia SB_URL/SB_KEY dos literais do
+# ALVO (desde 04/08/2026, issue #74): até a Fase 3, este gate lia SB_URL/SB_KEY dos literais do
 # app.js — que são de PRODUÇÃO, então um PR podia falar com produção sem ninguém pedir. Agora
 # quem decide é DIVAT_ALVO, resolvido por scripts/lib/ambiente.mjs contra scripts/ambientes.json,
-# e quem decide DIVAT_ALVO é o GATILHO: `teste` em pull_request/push, `producao` no cron. A
+# e quem decide DIVAT_ALVO é o GATILHO: `teste` em pull_request/push, `producao` no cron e no
+# dispatch (os dois são monitoramento: o dispatch existe para conferir produção sob demanda,
+# porque alimentar o banco pelo painel do Supabase não gera push nenhum). A
 # variável vai no `env:` do PASSO, não no do workflow, para a decisão ficar ao lado do comando
 # que ela governa. Sem a variável o script morre no topo — falha fechada, de propósito.
 #
@@ -66,5 +68,5 @@ jobs:
           node-version: '20'
       - name: Verificador de deriva docs×banco
         env:
-          DIVAT_ALVO: ${{ github.event_name == 'schedule' && 'producao' || 'teste' }}
+          DIVAT_ALVO: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'producao' || 'teste' }}
         run: node scripts/check_deriva.mjs

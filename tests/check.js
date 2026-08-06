@@ -300,6 +300,12 @@ console.log('\n[2b] Deriva docs × código');
   const spManifesto = existe('.claude/skills/.superpowers-manifest.json')
     ? JSON.parse(ler('.claude/skills/.superpowers-manifest.json')) : null;
   const spSkills = spManifesto ? (spManifesto.skills || []).length : null;
+  // Indicadores GRAVES do gate diário de segurança: a fonte é o próprio `check_grants.mjs`, onde
+  // cada um é um `graves.push(...)`. O plano da Fase 3 mandava escrever "três" em docs/seguranca.md
+  // quando já eram seis — deriva plantada na revisão, pega a olho. Esta guarda existe para que o
+  // sétimo indicador não repita a história: quem acrescentar um `graves.push` é cobrado na prosa.
+  const cgrants = existe('scripts/check_grants.mjs') ? ler('scripts/check_grants.mjs') : '';
+  const gravesCount = cgrants ? (cgrants.match(/^\s*if\s*\(.*\)\s*graves\.push\(/gm) || []).length : null;
 
   // --- fatos que os docs AFIRMAM (regex contra o texto com espaços normalizados,
   //     para que quebra de linha do markdown não escape da checagem) ---
@@ -308,7 +314,15 @@ console.log('\n[2b] Deriva docs × código');
   // \n#  views" nunca casa o regex — a guarda passaria cega, que é pior que não existir.
   const normalizar = (arq, txt) =>
     (/\.ya?ml$/.test(arq) ? txt.replace(/^[ \t]*#[ \t]?/gm, ' ') : txt).replace(/\s+/g, ' ');
-  const num = s => parseFloat(String(s).replace(',', '.'));
+  // Números por extenso: a prosa de segurança escreve "os seis indicadores graves", não "os 6".
+  // Trocar a prosa por algarismo só para caber no gate seria deixar o gate mandar no texto —
+  // mais barato ensinar o gate a ler o texto que o repo já escreve.
+  const POR_EXTENSO = { um:1, dois:2, três:3, tres:3, quatro:4, cinco:5, seis:6, sete:7, oito:8,
+                        nove:9, dez:10, onze:11, doze:12 };
+  const num = s => {
+    const t = String(s).trim().toLowerCase();
+    return t in POR_EXTENSO ? POR_EXTENSO[t] : parseFloat(t.replace(',', '.'));
+  };
   const FATOS = [
     { doc:'docs/estrutura-frontend.md', o:'linhas do app.js',      re:/~([\d,.]+)k linhas — extraído do HTML/, real:linhasApp,   esc:'k' },
     { doc:'CLAUDE.md',                  o:'linhas do app.js',      re:/~([\d,.]+)k\s*linhas, num IIFE/,        real:linhasApp,   esc:'k' },
@@ -334,6 +348,10 @@ console.log('\n[2b] Deriva docs × código');
     // numa linha só — o `normalizar` não tira o `#` de `.sh`, então quebra de linha a esconde.
     { doc:['CLAUDE.md', '.claude/hooks/superpowers-session-start.sh'],
       o:'skills do Superpowers', re:/([\d]+) skills do Superpowers/, real:spSkills, esc:'exato' },
+    // A frase existe em doc vivo e em comentário do próprio script — a lista cobre os dois, e o
+    // regex aceita algarismo OU número por extenso (ver POR_EXTENSO acima).
+    { doc:['docs/seguranca.md', 'scripts/check_grants.mjs'],
+      o:'indicadores graves', re:/Os ([\wÀ-ÿ]+) indicadores graves/, real:gravesCount, esc:'exato' },
   ];
   // TODA ocorrência é conferida, não só a primeira. A 1ª versão parava no primeiro casamento, e
   // o `views.yml` afirma "23 views" em TRÊS linhas (1, 11 e 71): consertar uma e esquecer as

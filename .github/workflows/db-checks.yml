@@ -31,7 +31,7 @@
 # `env:` do passo que precisa dela e nunca em `run:`/argv. Service key continua PROIBIDA neste
 # workflow: nada aqui escreve no banco.
 #
-# ALVO (desde 05/08/2026, issue #74): nenhum gate daqui deriva mais o banco dos literais do
+# ALVO (desde 04/08/2026, issue #74): nenhum gate daqui deriva mais o banco dos literais do
 # app.js. Quem decide é DIVAT_ALVO, resolvido por scripts/lib/ambiente.mjs contra
 # scripts/ambientes.json — e quem decide DIVAT_ALVO é o GATILHO: `teste` em pull_request/push,
 # `producao` no cron e no dispatch (que é o monitoramento). A variável vai no `env:` de cada
@@ -99,7 +99,7 @@ jobs:
           node-version: '20'
       - name: RT_TABLES (app.js) x publicacao supabase_realtime
         env:
-          DIVAT_ALVO: ${{ github.event_name == 'schedule' && 'producao' || 'teste' }}
+          DIVAT_ALVO: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'producao' || 'teste' }}
         run: node scripts/check_realtime.mjs
 
   qualidade:
@@ -131,10 +131,11 @@ jobs:
       # contra o banco de TESTE, imprimindo `⚠ Auditor indisponivel (...)`. Isso e o
       # comportamento CORRETO, nao uma falha: a credencial de producao nao pode virar atalho para
       # um gate de PR falar com producao (issue #74). O ⚠ so desaparece quando existir o secret
-      # SUPABASE_TEST_AUDIT_DATABASE_URL — ate la, o caminho do auditor vale so no cron.
+      # SUPABASE_TEST_AUDIT_DATABASE_URL — ate la, o caminho do auditor vale so no cron e no
+      # dispatch, que sao os dois gatilhos que resolvem DIVAT_ALVO=producao.
       - name: Qualidade dos dados pos-ETL (orfaos referenciais, U+FFFD)
         env:
-          DIVAT_ALVO: ${{ github.event_name == 'schedule' && 'producao' || 'teste' }}
+          DIVAT_ALVO: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'producao' || 'teste' }}
           SUPABASE_PROD_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_PROD_AUDIT_DATABASE_URL }}
         run: node scripts/check_data_quality.mjs
 
@@ -159,7 +160,7 @@ jobs:
           node-version: '20'
       - name: RLS, grants, policies e privilegios de funcao
         env:
-          DIVAT_ALVO: ${{ github.event_name == 'schedule' && 'producao' || 'teste' }}
+          DIVAT_ALVO: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'producao' || 'teste' }}
         run: node scripts/check_grants.mjs
 
   prazos:

@@ -216,7 +216,7 @@ não existe mais.
 |---|---|---|---|---|
 | `check_grants` (digest) | **diária** (cron) | produção | **não** | digest + modo duplo (§ 5) + `ambiente.mjs` |
 | `check_grants` (digest) | PR / push | teste | **não** | mesmo script, `DIVAT_ALVO=teste` |
-| `check_deriva` | semanal + PR | cron: produção · PR: teste | não | só `ambiente.mjs` |
+| `check_deriva` | semanal (cron) + dispatch + PR / push | cron e dispatch: produção · PR/push: teste | não | só `ambiente.mjs` |
 | `check_realtime` | **diária** (cron) + PR / push | cron: produção · PR: teste | não | só `ambiente.mjs` |
 | `check_data_quality` | **diária** (cron) + PR / push | cron: produção · PR: teste | sim, no cron | portado para o auditor + `ambiente.mjs` |
 | `check_phase3_audit` | semanal / dispatch | por argumento | sim | matriz completa, aceita 2 refs |
