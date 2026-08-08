@@ -6,7 +6,7 @@
 
 ---
 
-## Estado da execução (atualizado em 08/08/2026, 2ª rodada)
+## Estado da execução (atualizado em 08/08/2026, 3ª rodada)
 
 | Tarefa | Estado | Onde |
 |---|---|---|
@@ -14,20 +14,43 @@
 | 2 — bancada projeta `select=` | ✅ **na `main`** | PR #106 (junto com a 3) |
 | 3 — três fixtures faltantes | ✅ **na `main`** | PR #106 |
 | 4 — `check_grants` e a visão perdida | ✅ **na `main`** | PR #106 |
-| 5 a 8 — Fase 2 (baseline de restauração, ADR-0002) | ⛔ **bloqueada** | precisa de medição no SQL Editor (ver Task 5) |
-| 9 — cache envenenado em `getEvLookups` | ✅ **em revisão** | PR #107, branch `claude/fase-3-bugs-frontend` |
-| 10 — três bypasses do seam | ✅ **em revisão** | PR #107 |
-| 11 — seis listas `select=` duplicadas | ✅ **em revisão** | PR #107 |
-| 12 — acessibilidade | ✅ **em revisão** | PR #107 |
-| 13 — estado vazio ("não localizado") | ✅ **em revisão** | PR #107 |
-| 21 — `marcarTrunc` e o teto do servidor | ✅ **em revisão** | PR #107 |
-| 14 a 20, 22 — Fase 4 e o aperto do laço de views | ⬜ **a fazer** | PR próprio |
+| 5 a 8 — Fase 2 (baseline de restauração, ADR-0002) | ⛔ **bloqueada** | precisa de duas medições no SQL Editor (ver Task 5 e Task 7) |
+| 9 — cache envenenado em `getEvLookups` | ✅ **na `main`** | PR #107 |
+| 10 — três bypasses do seam | ✅ **na `main`** | PR #107 |
+| 11 — seis listas `select=` duplicadas | ✅ **na `main`** | PR #107 |
+| 12 — acessibilidade | ✅ **na `main`** | PR #107 |
+| 13 — estado vazio ("não localizado") | ✅ **na `main`** | PR #107 |
+| 21 — `marcarTrunc` e o teto do servidor | ✅ **na `main`** | PR #107 |
+| 22 — contrato mínimo de conteúdo por view | ✅ **na `main`** | PR #108 |
+| 14 a 20 — Fase 4 (documentação, operação e guardas novas) | 🚧 **em execução** | PR próprio, a partir de `77ac72c` |
 
-**Para retomar:** a Fase 3 está fechada — o PR #107 traz as tasks 9, 10, 11, 12, 13 e 21. O
-próximo trabalho é a **Task 22** (aperto do laço de views) e a **Fase 4** (tasks 14 a 20), em PR
-próprio, a partir da `main` depois que o #107 entrar. A Fase 2 (tasks 5 a 8) continua bloqueada
-esperando medição no SQL Editor — ela não depende do #107 e pode andar em paralelo, na máquina do
-dono.
+O PR **#109** não é tarefa deste plano: sincronizou o `CLAUDE.md` com o que os #107 e #108
+mudaram.
+
+**Para retomar:** as Fases 1 e 3 e a Task 22 estão na `main` (`77ac72c`, tudo verde no CI e no
+deploy). O trabalho em curso é a **Fase 4** (tasks 14 a 20) — documentação, operação e as quatro
+guardas novas do `tests/check.js`. Três coisas apuradas na execução mudam o texto original das
+tarefas e valem mais que ele:
+
+1. **O Step 4 da Task 14 já está feito.** O `~62%` do cabeçalho do `scripts/check_views.mjs` virou
+   `~59%` no PR #108. Conferir e marcar, não refazer.
+2. **A Task 16 é a de maior risco da fase** — move 17 arquivos para `docs/historico/` e a seção
+   `[2b]` do `tests/check.js` confere links markdown (e tem duas guardas que citam dois desses
+   arquivos **pelo caminho**, com `if (!existe(doc)) continue`: mover sem ajustar o caminho
+   **apaga a guarda em silêncio**). Rodar o gate a cada passo, e não deixá-la por último.
+3. **A Task 18 não é execução autônoma.** O rebuild da staging (`evento_dados` + `evento_textos`
+   → `evento_teste`) não está escrito em lugar nenhum do repo: é conhecimento oral do dono.
+   Perguntar antes de escrever.
+
+A **Fase 2** (tasks 5 a 8) continua bloqueada esperando duas medições que só o dono pode rodar no
+SQL Editor — não depende da Fase 4 e pode andar em paralelo:
+
+```sql
+select rolname, rolconfig from pg_roles
+  where rolname in ('authenticator','anon');            -- Task 5
+select prosrc, proowner::regrole from pg_proc
+  where proname = 'rls_auto_enable';                    -- Task 7
+```
 
 ### Divergências entre o plano e o que a execução apurou
 

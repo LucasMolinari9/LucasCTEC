@@ -97,14 +97,20 @@ exibe e **atualiza ao vivo** (Realtime).
   Realtime).
 
 ## Tabelas → onde aparecem (cards)
+As **14** tabelas de `RT_TABLES`, sem exceção — a lista abaixo é conferida contra o código pelo
+`tests/check.js` §[2b]: tabela que entra no `RT_TABLES` e não aparece aqui reprova o gate.
 - `tabela_vista_teste` (cadastro de linhas) → busca, Ligações por Empresa, Empresas Regulares.
 - `itinerario_teste` (+ `municipio_teste`) → Itinerários, Ligações por Logradouro/Município.
 - `qh_intervalo_teste` / `qh_predeterminado_teste` (+ `origem_teste`) → Quadro de
   Horários, Ligações por Terminais.
-- `qh_teste` (frota_*) → Frota, Estrutura.
+- `qh_teste` (frota_*) → Frota, Estrutura, Frota por Empresa.
 - `tarifa_atual_teste` → Tarifas, Seções por Ligação/Empresa.
 - `evento_teste` (+ `evento_empresa_teste`, `evento_linha_teste`) → Histórico.
 - `localidades_teste` → Linhas por Localidade e Município.
+- `codempresa_teste` (cadastro de empresas) → lookup `getEmpresas`, usado por **quase todo card**
+  (o nome da empresa no banner e nas listas); é a fonte direta do Histórico da Empresa
+  (processo/data de publicação) e das Empresas Regulares.
+- `portaria_teste` → Portarias (lista + detalhe; único card que a lê).
 
 ## Como o Realtime funciona no código
 - Cada card abre uma "view": `runView({ title, tables:[...], lineFilter, loader })`.
@@ -359,8 +365,9 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   `paginateTable`/`paginateLines` (núcleo `paginate` + `pageBounds`). Como só a fatia atual
   entra no DOM, o fallback do `baixarPdf` exportaria só a página aberta — por isso os wrappers
   **escrevem `pdfHTML` (via `commitViewResult`) com a lista completa**. Quem tem PDF próprio mais
-  rico passa **`pdf:false`** (Quadro "por empresa"; Município; o bloco secundário do Localidade,
-  cujo PDF cobre os DOIS blocos e por isso não pode ser sobrescrito pelo paginador). Detalhes:
+  rico passa **`pdf:false`** — são **4 documentos**: Quadro "por empresa"; Município (dois call
+  sites, um por ramo do `scope`); Frota por Empresa; e o bloco secundário do Localidade, cujo PDF
+  cobre os DOIS blocos e por isso não pode ser sobrescrito pelo paginador. Detalhes:
   `docs/estrutura-frontend.md` §4. Em tela nova que lista muita coisa, **use esses helpers** em
   vez de `tableHTML` cru.
 - **NUNCA atribua `currentView.pdfHTML` direto — use o seam do ciclo de vida da view:**

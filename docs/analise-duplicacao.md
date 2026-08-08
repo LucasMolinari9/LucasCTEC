@@ -1,5 +1,10 @@
 # Análise de Duplicação de Código — Portal DIVAT
 
+> ⚠️ **Snapshot pré-split (anterior a 21-22/07/2026) — não atualizar.** Descreve o frontend quando
+> era um único `index.html` com CSS e JS embutidos; as ~50 citações `index.html:NNNN` **não se
+> traduzem direto** para o `app.js` atual. Mantido como registro do diagnóstico, não como guia. O
+> estado atual está no `CLAUDE.md` e em `docs/estrutura-frontend.md`.
+
 > **Tipo:** relatório de análise (somente leitura). Nenhuma linha do `index.html` foi alterada,
 > nenhuma operação de banco foi executada. As referências `index.html:NNN` são do estado atual
 > do arquivo; como o JS é um único bloco, os números podem deslocar a cada edição — confira

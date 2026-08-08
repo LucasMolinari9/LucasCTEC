@@ -153,14 +153,14 @@ paginação vive na seção `COMPONENTES AUXILIARES` (exceto `paginateEvents`, q
 ### O que é paginado e o que NÃO é
 
 - **Paginado (tela):** listas de linha (via `lineResults`), **Portarias**, **Seções por Empresa**,
-  **Empresas Regulares**, **Quadro "por empresa"** (`renderEmpresaQuadros`).
+  **Empresas Regulares**, **Quadro "por empresa"** (`renderEmpresaQuadros`, com `pdf:false`),
+  **Frota por Empresa** (com `pdf:false`) e **Localidade** (`renderLocalidadeSecoes`: o bloco
+  agrupado por `paginate` + `locComSecaoHTML`, o bloco secundário por `paginateLines` com
+  `pdf:false`).
 - **NÃO paginado — documento de 1 linha (leitura corrida + alimenta o PDF inteiro):**
   Itinerários, Quadro de Horários (modo linha), Tarifas, Frota, Estrutura,
   Seções por Ligação.
-- **NÃO paginado — relatório agregado (lido/impresso inteiro):** Frota por Empresa.
-- **Deixado para depois:** `munTable` (lista de municípios de uma região, ≤~92, pick-list curto) e
-  `localidades`/`renderLocalidadeSecoes` (estrutura **compósita** agrupada com sub-tabelas — paginar
-  exigiria achatar como o `grouped` das linhas).
+- **Deixado para depois:** `munTable` (lista de municípios de uma região, ≤~92, pick-list curto).
 
 ### Regra de ouro do PDF: sai SEMPRE a lista inteira
 
@@ -168,8 +168,12 @@ paginação vive na seção `COMPONENTES AUXILIARES` (exceto `paginateEvents`, q
 fallback clonando o `.doc` visível** — que, com paginação, teria só a página atual. Por isso
 `paginateTable` e `paginateLines` **definem `currentView.pdfHTML` com a lista COMPLETA**
 (`renderSlice(0,total)` + `docHead`). Quem já expõe um PDF próprio mais rico passa **`pdf:false`**
-para não ser sobrescrito: **Quadro "por empresa"** (PDF = todos os quadros) e **Município** (PDF
-determinístico = lista completa + meta/aviso). **Ao criar uma tela nova que pagina uma tabela,**
+para não ser sobrescrito — são **4 documentos**: **Quadro "por empresa"** (PDF = todos os quadros),
+**Município** (PDF determinístico = lista completa + meta/aviso; dois call sites, um por ramo do
+`scope`), **Frota por Empresa** (PDF = a lista filtrada, escrita pelo `commitViewResult` logo
+abaixo) e o **bloco secundário do Localidade** (o PDF de lá cobre os DOIS blocos, e deixar o
+`paginateLines` escrever o dele o sobrescreveria com só a lista secundária).
+**Ao criar uma tela nova que pagina uma tabela,**
 use estes helpers (o `pdf` cuida da completude) — não monte `tableHTML` cru sem paginar, nem
 dependa do fallback do `.doc` visível.
 
