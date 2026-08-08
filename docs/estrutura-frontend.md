@@ -6,8 +6,11 @@
 > **zero-build**: nada de bundler, framework ou `package.json`. Este doc registra (1) *por que*
 > essa forma, (2) *como navegar* no `app.js` sem se perder, e (3) as **regras de segurança** para
 > reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do `CLAUDE.md` (que lista as
-> seções e funções-chave) e os relatórios `analise-separacao.md` / `analise-duplicacao.md` (que são
-> diagnósticos de acoplamento/reuso, não guias de navegação).
+> seções e funções-chave). Os relatórios [`docs/historico/analise-separacao.md`](historico/analise-separacao.md)
+> e [`docs/historico/analise-duplicacao.md`](historico/analise-duplicacao.md) são diagnósticos de
+> acoplamento/reuso, **não** guias de navegação — e são **pré-split**: descrevem o frontend quando
+> era um único `index.html`, então as citações `index.html:NNN` deles não se traduzem para o
+> `app.js` atual.
 
 ## 1. Por que `index.html` + `styles.css` + `app.js` (e por que **não** fatiar mais)
 
