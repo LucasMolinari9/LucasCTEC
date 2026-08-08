@@ -1409,6 +1409,8 @@ Itens da auditoria que não viraram tarefa aqui, para não sumirem:
 | `CONTEXT.md` tem 2 termos; faltam `linha`, `ligação`, `seção`, `codlinha`, `vigente`, `cancelado` | §4 | Idem — e o vocabulário deve sair de conversa com o dono, não de inferência |
 | 13 seletores CSS órfãos; `.fd-*` é resíduo de código removido | §3 | BAIXA; limpeza sem risco, faça junto da próxima mexida em `styles.css` |
 | Canal de retorno para o usuário relatar dado errado | §5.3 | Precisa de decisão de endereço/processo do DIVAT |
+| **S2** — a heurística de dedup de empresa por RJ está **duplicada** e sem teste: `getEmpresas` (`app.js:536-546`) e `empresasRegulares` (`app.js:1918-1921`) implementam a MESMA regra de score (REGULAR/não-cassada) em código separado | `docs/historico/analise-separacao.md` §S2 | Virou a **issue #111** (o veredito lá era "✅ vale extrair" e nunca foi executado). Só o achado ficou fora deste plano — não é deriva de auditoria, é dívida de código anterior a ela |
+| **D7** — a closure `sentidoKey` continua duplicada em `app.js:1544` e `app.js:1620`, idênticas | `docs/historico/analise-duplicacao.md` §D7 | BAIXA; o próprio relatório a classifica como "Trivial" e a põe no tier "não recomendado — churn cosmético". Faça junto da próxima mexida no Quadro de Horários |
 | Confirmar se o `deploy-smoke` roda de fato | §5.7 | Checagem de 2 minutos na aba Actions: se não houve run recente com `deployment_status`, incluir `workflow_dispatch` no runbook de deploy |
 
 ## Fora deste plano (decisão do dono, não execução)
