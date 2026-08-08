@@ -155,25 +155,40 @@ e sem grant para `anon`/`authenticated` → invisíveis pela API pública, de pr
 
 ## Funções e trigger (schemas `public`, `private` e `audit`)
 
-A migração `20260729034018_phase3_moderate_hardening.sql`, aplicada primeiro no projeto de teste,
-separa produto, implementação e diagnóstico:
+Duas migrações, aplicadas primeiro no projeto de teste, separam produto, implementação e
+diagnóstico. A `20260729034018_phase3_moderate_hardening.sql` tirou os quatro diagnósticos de
+`public`; a `20260805000000_phase3_diagnosticos_anonimos.sql` devolveu **dois** deles, depois de
+separar diagnóstico por CUSTO e por PODER (ADR-0003):
 
-- `public`: duas RPCs de produto anônimas e a função de plataforma `rls_auto_enable()`;
-- `private`: `f_unaccent(text)` e `fn_vigor_auto()`, fora da Data API;
-- `audit`: quatro diagnósticos executáveis somente por `divat_auditor`.
+- `public`, anônimo, **produto**: duas RPCs de busca;
+- `public`, anônimo, **diagnóstico barato**: `divat_api_shape()`, `realtime_tables()` e
+  `divat_security_digest()` — só leem catálogo, são `SECURITY INVOKER` e não revelam nada além
+  do que este repositório já publica. É o que mantém os gates de `deriva`, `realtime` e
+  `seguranca` rodando **sem credencial e sem prazo de validade**;
+- `audit`, **diagnóstico caro ou perigoso**: `divat_security_shape()` (matriz de grants — recon
+  de verdade) e `divat_data_quality()` (59 varreduras completas por chamada, alavanca de
+  indisponibilidade se fosse anônima);
+- `private`: `f_unaccent(text)` e `fn_vigor_auto()`, fora da Data API.
 
 As funções de `audit` são `SECURITY DEFINER`, com `search_path` fixo e owner
 `divat_audit_owner` (`NOLOGIN`, sem bypass RLS e herdando só a leitura de `anon`). Isso permite
 ao auditor produzir o mesmo retrato público sem receber `SELECT` direto nas tabelas.
 
+**Consequência prática para os gates:** depois da migração 2, `check_data_quality.mjs` **não tem
+mais caminho anônimo** no banco migrado — `divat_data_quality()` deixa de ser alcançável por
+`anon` de propósito. Ele exige a credencial auditora do alvo
+(`SUPABASE_TEST_AUDIT_DATABASE_URL` / `SUPABASE_PROD_AUDIT_DATABASE_URL`); sem ela o gate falha,
+e isso é o desenho funcionando, não regressão.
+
 | Função | Schema | Quem chama |
 |---|---|---|
 | `divat_busca_logradouro(termo, p_ibge?)` | `public` | front anônimo — Ligações por Logradouro |
 | `divat_linhas_regiao(p_regiao, p_modo)` | `public` | front anônimo — Linhas por Região e Município |
+| `divat_api_shape()` | `public` | anônimo — gate `check_deriva.mjs` |
+| `realtime_tables()` | `public` | anônimo — gate `check_realtime.mjs` |
+| `divat_security_digest()` | `public` | anônimo — gate `check_grants.mjs` (diário) |
 | `divat_data_quality()` | `audit` | credencial PostgreSQL auditora |
-| `divat_api_shape()` | `audit` | credencial PostgreSQL auditora |
 | `divat_security_shape()` | `audit` | credencial PostgreSQL auditora |
-| `realtime_tables()` | `audit` | credencial PostgreSQL auditora |
 | `f_unaccent(text)` | `private` | implementação de `divat_busca_logradouro` |
 | `fn_vigor_auto()` | `private` | trigger `trg_vigor_auto` |
 | `rls_auto_enable()` | `public` | event trigger gerenciado que liga RLS em tabela pública nova |
