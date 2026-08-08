@@ -78,6 +78,17 @@ texto original** quando os dois discordarem:
     versionar esse valor **é a Task 5**, que está bloqueada. O comentário no `app.js` aponta para o
     `CLAUDE.md` (onde o teto está documentado) e registra a pendência. **Ao executar a Task 5,
     volte no `marcarTrunc` e acrescente o `backup_schema.sql` ao comentário.**
+11. **Task 22 — duas das três views que ela acusa NÃO estão vazias, e `<tbody> <tr>` é a régua
+    errada para elas.** Medido no navegador em 08/08/2026, contra as fixtures da bancada:
+    `historicoLinha` renderiza **4 `.ev-block`** (o Histórico não usa tabela, usa blocos) e `frota`
+    renderiza os **KPIs** da linha (`12 OPERACIONAL`, `4 COMUM (A)`, …), que também não são tabela.
+    As duas têm conteúdo de verdade; o `tabelas=0` do laço é a unidade de medida errada, não
+    defeito. Só `historicoEmpresa` está de fato só com a moldura (`DIVAT · HISTÓRICO DA EMPRESA` +
+    o campo Buscar), e por ser painel de busca — precisa de termo antes de mostrar qualquer coisa,
+    que é o que o campo `busca` da tarefa já prevê. **Consequência para quem executar: o mínimo por
+    view tem de ser expresso na unidade de cada uma** (linhas de tabela, blocos de evento, KPIs) —
+    uma contagem única de `<tbody> <tr>` reprovaria `historicoLinha` e `frota` por um defeito
+    inexistente, que é exatamente o tipo de vermelho que ensina a ignorar gate.
 
 ---
 
