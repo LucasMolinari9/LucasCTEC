@@ -594,6 +594,22 @@ function closeDropdown(){ dropdown.classList.remove('open'); searchInput.setAttr
 
 const LINE_FIELDS = 'codlinha,numero_ligacao,nome_ligacao,nome_lig_cresc,via,codempresa,tipo,caracteristica,licitado,cancelado,paralisado,sub_judice,transferido,data_criacao,processo_criacao';
 
+/* Listas de colunas pedidas por MAIS DE UM documento — o segundo é sempre a Estrutura
+   Operacional, que consolida os outros. Mantê-las em definição única é o que impede a
+   divergência silenciosa: coluna que muda num `select=` e não no gêmeo chega `undefined`
+   no render e a tela fica VAZIA SEM ERRO (o modo de falha que o CLAUDE.md chama de pior
+   possível). Desde 08/08/2026 a bancada headless também responde 400 para coluna que não
+   existe, então divergir passou a doer no gate em vez de doer no usuário.
+   NÃO use estas constantes em consultas que pedem MENOS colunas de propósito —
+   `getTerminais` (3 colunas de itinerario_teste) e `filtrarFrotaEmpresas` (4 de qh_teste)
+   são consultas de listagem, não de documento: pedir coluna a mais ali é regressão. */
+const ITINERARIO_FIELDS     = 'id,sentido,tipo_logradouro,nome_logradouro,cod_municipio_origem,codempresa';
+const QH_INTERVALO_FIELDS   = 'cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo';
+const QH_PREDET_FIELDS      = 'cod_origem,nome_origem,dia_semana,saida';
+const TARIFA_LINHA_FIELDS   = 'secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia';
+const FROTA_FIELDS          = 'codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e';
+const EVENTO_FIELDS         = 'data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao';
+
 // consultas (cards) cujo título casa o termo — a busca do topo também navega para os cards,
 // não só para linhas ("tarifa" acha o card Tarifas, "horário" acha Quadro de Horários).
 function matchViews(term){
@@ -1410,7 +1426,7 @@ async function renderLineHistory(host, line){
   const view = currentView, gen = beginGen(view);
   selectLine(line);   // sincroniza a linha ativa e o banner do topo
   const [rows, lk] = await Promise.all([
-    sbFetch('evento_teste', `codlinha=eq.${enc(line.codlinha)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.asc&limit=2000`),
+    sbFetch('evento_teste', `codlinha=eq.${enc(line.codlinha)}&select=${EVENTO_FIELDS}&order=data_registro.asc&limit=2000`),
     getEvLookups(), getEmpresas()
   ]);
   const head = docHead('Histórico da Linha');
@@ -1451,7 +1467,7 @@ async function renderItinerarios(host, line){
   const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   const [rows, ibge] = await Promise.all([
-    sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_municipio_origem,codempresa&order=id`),
+    sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=${ITINERARIO_FIELDS}&order=id`),
     getIbge(), getEmpresas()
   ]);
   if (!rows.length) { host.innerHTML = emptyBox('Nenhum itinerário encontrado para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
@@ -1549,10 +1565,10 @@ async function renderLinhaQuadro(host, line){
   host.innerHTML = loading();
   try {
     const [interv, predet, qh, secoes, orig] = await Promise.all([
-      sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(line.codlinha)}&select=cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
-      sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(line.codlinha)}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
+      sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(line.codlinha)}&select=${QH_INTERVALO_FIELDS}&order=id`),
+      sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(line.codlinha)}&select=${QH_PREDET_FIELDS}&order=id`),
       sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=ultima_alteracao&limit=1`),
-      sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`),
+      sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=${TARIFA_LINHA_FIELDS}&order=secao`),
       getOrigem(), getEmpresas()
     ]);
     if (!interv.length && !predet.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
@@ -1686,7 +1702,7 @@ function secoesTarifasHTML(rows){
 async function renderTarifas(host, line){
   const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
-  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`);
+  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=${TARIFA_LINHA_FIELDS}&order=secao`);
   if (!rows.length) { host.innerHTML = emptyBox('Nenhuma tarifa cadastrada para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]]);
   const inner = `${meta}${secoesTarifasHTML(rows)}`;            // documento completo (p/ PDF)
@@ -1796,7 +1812,7 @@ async function renderFrota(host, line){
   const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   const [rows] = await Promise.all([
-    sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e&limit=1`),
+    sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=${FROTA_FIELDS}&limit=1`),
     getEmpresas()
   ]);
   if (!rows.length) { host.innerHTML = emptyBox('Nenhuma frota cadastrada para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
@@ -1818,11 +1834,11 @@ async function renderEstrutura(host, line){
   const cod = enc(line.codlinha);
   const [lineRows, secoes, itin, interv, predet, qh, orig, ibge] = await Promise.all([
     sbFetch('tabela_vista_teste', `codlinha=eq.${cod}&select=${LINE_FIELDS}&limit=1`),
-    sbFetch('tarifa_atual_teste', `codlinha=eq.${cod}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`),
-    sbFetch('itinerario_teste', `codlinha=eq.${cod}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_municipio_origem,codempresa&order=id`),
-    sbFetch('qh_intervalo_teste', `codlinha=eq.${cod}&select=cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
-    sbFetch('qh_predeterminado_teste', `codlinha=eq.${cod}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
-    sbFetch('qh_teste', `codlinha=eq.${cod}&select=codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e&limit=1`),
+    sbFetch('tarifa_atual_teste', `codlinha=eq.${cod}&select=${TARIFA_LINHA_FIELDS}&order=secao`),
+    sbFetch('itinerario_teste', `codlinha=eq.${cod}&select=${ITINERARIO_FIELDS}&order=id`),
+    sbFetch('qh_intervalo_teste', `codlinha=eq.${cod}&select=${QH_INTERVALO_FIELDS}&order=id`),
+    sbFetch('qh_predeterminado_teste', `codlinha=eq.${cod}&select=${QH_PREDET_FIELDS}&order=id`),
+    sbFetch('qh_teste', `codlinha=eq.${cod}&select=${FROTA_FIELDS}&limit=1`),
     getOrigem(), getIbge(), getEmpresas()
   ]);
   const L = lineRows[0] || line;
@@ -1959,7 +1975,7 @@ LOADERS.secoesPorEmpresa = async () => {
 async function renderEmpresaHistory(host, cod, nome){
   const view = currentView, gen = beginGen(view);
   const [rows, lk, empRows] = await Promise.all([
-    sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.asc&limit=500`),
+    sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=${EVENTO_FIELDS}&order=data_registro.asc&limit=500`),
     getEvLookups(),
     sbFetch('codempresa_teste', `codempresa=eq.${enc(cod)}&select=nome_empresa,situacao,processo,data_publicacao,cassada,sob_intervencao&limit=1`)
   ]);
