@@ -22,28 +22,38 @@
 | 13 — estado vazio ("não localizado") | ✅ **na `main`** | PR #107 |
 | 21 — `marcarTrunc` e o teto do servidor | ✅ **na `main`** | PR #107 |
 | 22 — contrato mínimo de conteúdo por view | ✅ **na `main`** | PR #108 |
-| 14 a 20 — Fase 4 (documentação, operação e guardas novas) | 🚧 **em execução** | PR próprio, a partir de `77ac72c` |
+| 14, 15, 16, 17, 19, 20 — Fase 4 | ✅ **em revisão** | PR #110, branch `claude/divat-fase-4-correcoes-e00tgk` |
+| 18 — runbook de ETL | ⚠️ **entregue com um vazio declarado** | PR #110 — ver abaixo |
 
 O PR **#109** não é tarefa deste plano: sincronizou o `CLAUDE.md` com o que os #107 e #108
 mudaram.
 
-**Para retomar:** as Fases 1 e 3 e a Task 22 estão na `main` (`77ac72c`, tudo verde no CI e no
-deploy). O trabalho em curso é a **Fase 4** (tasks 14 a 20) — documentação, operação e as quatro
-guardas novas do `tests/check.js`. Três coisas apuradas na execução mudam o texto original das
-tarefas e valem mais que ele:
+**Para retomar:** as Fases 1, 3 e 4 e a Task 22 estão prontas — as três primeiras na `main`, a
+Fase 4 no PR #110. **Só duas coisas seguem abertas**, e nenhuma delas é escrita de código:
 
-1. **O Step 4 da Task 14 já está feito.** O `~62%` do cabeçalho do `scripts/check_views.mjs` virou
-   `~59%` no PR #108. Conferir e marcar, não refazer.
-2. **A Task 16 é a de maior risco da fase** — move 17 arquivos para `docs/historico/` e a seção
-   `[2b]` do `tests/check.js` confere links markdown (e tem duas guardas que citam dois desses
-   arquivos **pelo caminho**, com `if (!existe(doc)) continue`: mover sem ajustar o caminho
-   **apaga a guarda em silêncio**). Rodar o gate a cada passo, e não deixá-la por último.
-3. **A Task 18 não é execução autônoma.** O rebuild da staging (`evento_dados` + `evento_textos`
-   → `evento_teste`) não está escrito em lugar nenhum do repo: é conhecimento oral do dono.
-   Perguntar antes de escrever.
+1. **A Fase 2 (tasks 5 a 8)**, esperando as duas medições no SQL Editor logo abaixo.
+2. **O vazio declarado da Task 18.** O `docs/etl.md` foi escrito com o dono e registra o caminho
+   real do dado (banco do DETRO → CSV → Table Editor), mas **o rebuild da staging não foi
+   apurado: o dono não sabe descrevê-lo.** A junção por `id` documentada lá é *deduzida do
+   schema*, não observada, e está marcada como tal. O `docs/etl.md` §3 traz a consulta que fecha o
+   vazio (procura função/trigger que mencione a staging e compara as contagens das seis tabelas).
+   **Rode-a antes de escrever qualquer comando de rebuild** — um `TRUNCATE` errado ali apaga as 7
+   órfãs de `evento_teste`, que são atos reais de 1974–1996. Dois desfechos possíveis: ou existe
+   rebuild e o §3 do `etl.md` ganha o comando, ou não existe, a staging é resíduo, e o
+   `CLAUDE.md` é que precisa ser corrigido em vez de obedecido.
+
+O que a execução da Fase 4 apurou, e que contradiz o texto das tarefas:
+
+- **O Step 4 da Task 14 já estava feito** (o `~62%` virou `~59%` no PR #108). Medido de novo:
+  2.024/3.467 = **58,4%**.
+- **A Task 16 destapou um fail-open real.** A guarda do PR #73 no `tests/check.js` cita dois dos
+  arquivos movidos **pelo caminho** e pulava com `if (!existe(doc)) continue` — ao mover, ela
+  parou de imprimir sem uma linha de aviso, e o gate seguiu verde com dois checks a menos.
+  Corrigido junto: arquivo citado que some agora é falha.
+- **A Task 15 mediu certo:** 36 entradas em `.claude/skills/` (15 diretórios + 21 symlinks).
 
 A **Fase 2** (tasks 5 a 8) continua bloqueada esperando duas medições que só o dono pode rodar no
-SQL Editor — não depende da Fase 4 e pode andar em paralelo:
+SQL Editor:
 
 ```sql
 select rolname, rolconfig from pg_roles
