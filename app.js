@@ -817,7 +817,7 @@ const modalBodyWrap = document.getElementById('modalBodyWrap');
 // outro lugar. Todo `setBody`/`modalBody.querySelector(...)` lê o valor atual em tempo de
 // chamada, então helpers síncronos (baixarPdf, searchPanel, etc.) sempre acertam a aba certa.
 let modalBody    = modalBodyWrap.querySelector('.modal-body');
-tabs[0].paneEl   = modalBody;
+tabs[0].paneEl   = wirePane(modalBody, tabs[0].id);   // o pane da 1ª aba vem do index.html, não de createPane
 const mtTitle    = document.getElementById('mtTitle');
 const mtLive     = document.getElementById('mtLive');
 document.getElementById('btnPrint').addEventListener('click', () => window.print());
@@ -832,7 +832,14 @@ document.addEventListener('keydown', e => {
 // Mantém o foco preso dentro do modal enquanto ele está aberto (Tab/Shift+Tab)
 document.addEventListener('keydown', e => {
   if (e.key !== 'Tab' || !overlay.classList.contains('open')) return;
-  const f = overlay.querySelectorAll('button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])');
+  // Só o que está VISÍVEL entra no ciclo. Panes de abas em segundo plano continuam no DOM (é o
+  // que preserva paginação e rolagem delas), e sem este filtro o Tab passeava por dezenas de
+  // controles invisíveis — o foco sumia da tela sem sair do modal. `offsetParent === null` cobre
+  // os dois casos que ocorrem aqui, ambos `display:none`: pane sem `.active` e `.sp-drop` fechado.
+  // (Cuidado ao trocar o critério: `.sp-drop` ABERTO é `position:fixed`, e um teste de
+  // posicionamento o descartaria — seus botões, porém, têm offsetParent = o próprio .sp-drop.)
+  const f = [...overlay.querySelectorAll('button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')]
+    .filter(el => el.offsetParent !== null);
   if (!f.length) return;
   const first = f[0], last = f[f.length-1], a = document.activeElement;
   if (!overlay.contains(a)) { e.preventDefault(); first.focus(); return; }   // foco escapou → traz de volta
@@ -904,10 +911,23 @@ document.addEventListener('webkitfullscreenchange', onFsChange);
    `modalBody`/o botão Voltar/o banner/a URL com a aba recém-ativada — switchTab/openTabUI/
    closeTabUI só calculam QUAL aba deve ficar ativa (via openTabState/closeTabState, puras) e
    chamam activateTab pra aplicar. */
-function createPane(){
+/* Cada pane é o tabpanel da sua aba: `role="tabpanel"` + `aria-labelledby` apontando para o
+   `role="tab"` correspondente (que, do outro lado, ganha `aria-controls` em renderTabs). Sem esse
+   par, a faixa anuncia "aba 2 de 3" e o leitor de tela não tem como dizer QUAL região do documento
+   aquela aba controla. O id fica no PRÓPRIO elemento de propósito: stripIds/restoreIds varrem só
+   descendentes (querySelectorAll não casa o próprio nó), então a ligação sobrevive à aba ir para o
+   segundo plano — que é justamente quando os ids internos dela são recolhidos. */
+function wirePane(el, tabId){
+  el.id = `pane-${tabId}`;
+  el.setAttribute('role', 'tabpanel');
+  el.setAttribute('aria-labelledby', `tab-${tabId}`);
+  return el;
+}
+function createPane(tabId){
   const el = document.createElement('div');
   el.className = 'modal-body';
   el.innerHTML = loading();
+  wirePane(el, tabId);
   modalBodyWrap.appendChild(el);
   return el;
 }
@@ -937,7 +957,7 @@ function tabLabel(t){
 }
 function renderTabs(){
   const items = tabs.map(t => `
-    <div class="modal-tab${t.id===activeTabId?' active':''}${t.stale?' stale':''}" role="tab" aria-selected="${t.id===activeTabId}">
+    <div class="modal-tab${t.id===activeTabId?' active':''}${t.stale?' stale':''}" id="tab-${t.id}" role="tab" aria-selected="${t.id===activeTabId}" aria-controls="pane-${t.id}">
       <button type="button" class="mtab-select" data-select-tab="${t.id}" title="${esc(tabLabel(t))}${t.stale?' — dados desatualizados, atualiza ao abrir':''}">${
         t.stale ? `<span class="mtab-stale" role="img" aria-label="Dados desatualizados">●</span>` : ''}${esc(tabLabel(t))}</button>
       <button type="button" class="mtab-close" data-close-tab="${t.id}" title="Fechar aba" aria-label="Fechar aba: ${esc(tabLabel(t))}">✕</button>
@@ -994,7 +1014,7 @@ function addTab(){
   tabIdSeq = res.tabIdSeq;
   tabs = res.tabs;
   const newTab = tabs[tabs.length - 1];
-  newTab.paneEl = createPane();
+  newTab.paneEl = createPane(newTab.id);
   return newTab;
 }
 function openTabUI(){
@@ -1018,7 +1038,7 @@ function closeTabUI(id){
 function resetTabsToSingle(){
   tabs.forEach(t => { if (t.paneEl) t.paneEl.remove(); });
   const t = makeTab(++tabIdSeq);
-  t.paneEl = createPane();
+  t.paneEl = createPane(t.id);
   t.paneEl.classList.add('active');
   tabs = [t];
   activeTabId = t.id;
@@ -2484,10 +2504,10 @@ LOADERS.portarias = async () => {
   if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
   pane.innerHTML = `<div class="doc">${docHead('Portarias / Legislação')}
     <div class="ev-filters">
-      <div class="evf"><label>Número</label><input id="pNum" type="text" placeholder="ex.: 1975" autocomplete="off"></div>
-      <div class="evf"><label>Ano</label><select id="pAno"><option value="">Todos</option>${anos.map(a=>`<option value="${a}">${a}</option>`).join('')}</select></div>
-      <div class="evf"><label>Situação</label><select id="pVig"><option value="">Todas</option><option value="vigor">Em vigor</option><option value="revog">Revogadas</option></select></div>
-      <div class="evf evf-wide"><label>Texto (assunto / conteúdo)</label><input id="pTxt" type="text" placeholder="palavra no assunto ou no texto da portaria" autocomplete="off"></div>
+      <label class="evf">Número<input id="pNum" type="text" placeholder="ex.: 1975" autocomplete="off"></label>
+      <label class="evf">Ano<select id="pAno"><option value="">Todos</option>${anos.map(a=>`<option value="${a}">${a}</option>`).join('')}</select></label>
+      <label class="evf">Situação<select id="pVig"><option value="">Todas</option><option value="vigor">Em vigor</option><option value="revog">Revogadas</option></select></label>
+      <label class="evf evf-wide">Texto (assunto / conteúdo)<input id="pTxt" type="text" placeholder="palavra no assunto ou no texto da portaria" autocomplete="off"></label>
       <button class="evf-clear" id="pClear" type="button">Limpar</button>
     </div>
     <div id="pHost"></div></div>`;
