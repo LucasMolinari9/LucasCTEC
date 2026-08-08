@@ -57,6 +57,26 @@ const situacaoHTML = r => r.cancelado ? '<span class="chip chip-on">Cancelada</s
   : r.paralisado ? '<span class="chip chip-on">Paralisada</span>'
   : '<span class="chip chip-off">Ativa</span>';
 /* @endcanon */
+// app.js (seção STATE + CACHES) — desempate do cadastro de empresas quando o mesmo RJ aparece
+// duplicado (ex.: o 103). Definição única usada pelo getEmpresas (nome no banner) e pelo
+// LOADERS.empresasRegulares (o card) — antes da issue #111 eram duas cópias que podiam divergir.
+/* @canon scoreEmpresa */
+function scoreEmpresa(e){
+  if (!e || e.cassada) return 0;
+  return String(e.situacao||'').toUpperCase()==='REGULAR' ? 2 : 1;
+}
+/* @endcanon */
+/* @canon dedupEmpresasPorRJ */
+function dedupEmpresasPorRJ(lista){
+  const best = {};
+  (lista||[]).forEach(e => {
+    const k = e && e.codempresa;
+    if (k == null) return;
+    if (!Object.prototype.hasOwnProperty.call(best, k) || scoreEmpresa(e) > scoreEmpresa(best[k])) best[k] = e;
+  });
+  return Object.values(best);
+}
+/* @endcanon */
 // app.js:763 — linha ATIVA = operando (não cancelada e não paralisada). Sub judice e
 // transferida contam como ativas. Critério único de Empresas e Relatórios.
 /* @canon isLinhaAtiva */
@@ -329,7 +349,7 @@ function filtrarSituacao(rows, st){
 /* @endcanon */
 
 module.exports = {
-  filtrarSituacao,
+  filtrarSituacao, scoreEmpresa, dedupEmpresasPorRJ,
   fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, byCodlinha, boolChip, situacaoHTML, isLinhaAtiva, isVigente, norm,
   yearOf, matchEvent, groupBy, countBy, fmtMoney, classifyMunLines, terminaisDoMunicipio, localidadesQueCasam, orIlike, municipiosExatos,
   tabMatchesEvent, dispatchRealtime,

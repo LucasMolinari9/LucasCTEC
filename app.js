@@ -526,23 +526,38 @@ async function getTerminais() {
   terminalRows = await sbFetch('itinerario_teste', `tipo_logradouro=eq.Terminal&select=nome_logradouro,codlinha,cod_municipio_origem&limit=30000`);
   return terminalRows;
 }
+/* Alguns RJ aparecem DUPLICADOS no cadastro (o caso conhecido é o 103). Estas duas funções
+   decidem qual das entradas o portal exibe: score 2 = REGULAR e não-cassada, 1 = não-cassada,
+   0 = cassada; vence o maior, e EMPATE MANTÉM A PRIMEIRA VISTA (a comparação é `>`, não `>=`).
+   É definição ÚNICA de propósito. Até 08/08/2026 a mesma regra estava escrita duas vezes — aqui
+   e no LOADERS.empresasRegulares — e mudar uma sem a outra faria a razão social do BANNER
+   discordar da linha do CARD, para o mesmo RJ, na mesma tela e sem erro nenhum (issue #111).
+   Heurística de desempate quebra em silêncio: por isso tem teste em tests/pure.test.js. */
+function scoreEmpresa(e){
+  if (!e || e.cassada) return 0;
+  return String(e.situacao||'').toUpperCase()==='REGULAR' ? 2 : 1;
+}
+/* Uma entrada por codempresa. Devolve as linhas VENCEDORAS, sem mutar a lista recebida.
+   `hasOwnProperty` em vez de `in`: com `in`, um codempresa que colidisse com nome herdado de
+   Object.prototype ('constructor') pareceria "já visto" e a empresa sumiria da lista. */
+function dedupEmpresasPorRJ(lista){
+  const best = {};
+  (lista||[]).forEach(e => {
+    const k = e && e.codempresa;
+    if (k == null) return;
+    if (!Object.prototype.hasOwnProperty.call(best, k) || scoreEmpresa(e) > scoreEmpresa(best[k])) best[k] = e;
+  });
+  return Object.values(best);
+}
 async function getEmpresas() {
   if (empresas.map) return empresas.map;
   const rows = await sbFetch('codempresa_teste', 'select=codempresa,nome_empresa,situacao,cassada,sob_intervencao&limit=2000');
   empresas.list = rows;
   empresas.map = {};
   empresas.byCod = {};
-  // alguns RJ aparecem duplicados (ex.: 103) → prioriza a entrada REGULAR/não cassada
-  const melhor = r => (r && !r.cassada && String(r.situacao||'').toUpperCase()==='REGULAR') ? 2 : (r && !r.cassada ? 1 : 0);
-  const best = {};
-  rows.forEach(r => {
-    const k = r.codempresa;
-    if (k==null) return;
-    if (!(k in empresas.map) || melhor(r) > best[k]) {
-      empresas.map[k] = r.nome_empresa;
-      empresas.byCod[k] = r;
-      best[k] = melhor(r);
-    }
+  dedupEmpresasPorRJ(rows).forEach(r => {
+    empresas.map[r.codempresa] = r.nome_empresa;
+    empresas.byCod[r.codempresa] = r;
   });
   return empresas.map;
 }
@@ -1914,12 +1929,9 @@ LOADERS.empresasRegulares = async () => {
   ]);
   const cnt = {};
   lineRows.forEach(r=>{ const k=r.codempresa||'—'; cnt[k]=cnt[k]||{total:0,ativas:0}; cnt[k].total++; if(isLinhaAtiva(r))cnt[k].ativas++; });
-  // dedup do cadastro por RJ (prioriza a entrada REGULAR/não cassada — resolve o RJ 103)
-  const best = {};
-  (empresas.list||[]).forEach(e=>{ const k=e.codempresa; if(k==null) return;
-    const sc = (!e.cassada && String(e.situacao||'').toUpperCase()==='REGULAR')?2:(!e.cassada?1:0);
-    if(!(k in best) || sc>best[k]._s) best[k] = {...e, _s:sc}; });
-  const list = Object.values(best).map(e=>({ ...e, total:(cnt[e.codempresa]?.total)||0, ativas:(cnt[e.codempresa]?.ativas)||0 }));
+  // dedup do cadastro por RJ (uma entrada por codempresa) — mesma regra que o getEmpresas usa
+  // para o nome do banner, e por isso a MESMA função: ver dedupEmpresasPorRJ, seção STATE + CACHES
+  const list = dedupEmpresasPorRJ(empresas.list).map(e=>({ ...e, total:(cnt[e.codempresa]?.total)||0, ativas:(cnt[e.codempresa]?.ativas)||0 }));
   list.sort((a,b)=> b.total-a.total || String(a.nome_empresa||'').localeCompare(String(b.nome_empresa||'')));
   const semLinha = list.filter(e=>!e.total).length;
   const statusCol = e => [boolChip(e.cassada,'Cassada'), boolChip(e.sob_intervencao,'Interv.')].filter(Boolean).join(' ') || `<span class="chip chip-off">${esc(orDash(e.situacao))}</span>`;
