@@ -4,6 +4,57 @@
 > num commit e num entregável testável sozinho. Execute na ordem: a Fase 1 vem primeiro porque
 > **enquanto ela não estiver pronta, o verde das outras é inconclusivo.**
 
+---
+
+## Estado da execução (atualizado em 08/08/2026)
+
+| Tarefa | Estado | Onde |
+|---|---|---|
+| 1 — guarda anti-drift compara de verdade | ✅ **na `main`** | PR #106 |
+| 2 — bancada projeta `select=` | ✅ **na `main`** | PR #106 (junto com a 3) |
+| 3 — três fixtures faltantes | ✅ **na `main`** | PR #106 |
+| 4 — `check_grants` e a visão perdida | ✅ **na `main`** | PR #106 |
+| 5 a 8 — Fase 2 (baseline de restauração, ADR-0002) | ⛔ **bloqueada** | precisa de medição no SQL Editor (ver Task 5) |
+| 9 — cache envenenado em `getEvLookups` | ✅ **em revisão** | PR #107, branch `claude/fase-3-bugs-frontend` |
+| 10 — três bypasses do seam | ✅ **em revisão** | PR #107 |
+| 11 — seis listas `select=` duplicadas | ✅ **em revisão** | PR #107 |
+| 12 — acessibilidade | ⬜ **a fazer** | continuar no PR #107 |
+| 13 — estado vazio ("não localizado") | ⬜ **a fazer** | continuar no PR #107 |
+| 21 — `marcarTrunc` e o teto do servidor | ⬜ **a fazer** | continuar no PR #107 |
+| 14 a 20, 22 — Fases 4 e o aperto do laço de views | ⬜ **a fazer** | PR próprio |
+
+**Para retomar:** `git checkout claude/fase-3-bugs-frontend` e seguir pela Task 12. O PR #107
+está aberto contra a `main`; a Fase 1 já está mergeada, então não há rebase pendente.
+
+### Divergências entre o plano e o que a execução apurou
+
+Registradas porque contradizem o texto das tarefas abaixo — **acredite nesta lista, não no
+texto original** quando os dois discordarem:
+
+1. **Task 1 — são 4 adaptações declaradas, não 3, e só 1 importa.** `SB_TIMEOUT_MS` é `let` no
+   harness e `const` no `app.js` (o teste de timeout precisa encurtá-lo) — o levantamento não a
+   viu porque o regex só olhava `function` e `const`. Em compensação, `SB_URL`/`SB_KEY`/`SB`
+   **não são exportados** pelo harness, e a regra vale para exports: sobrou **uma** adaptação.
+2. **Task 1 — o inseridor de marcadores erra em dois casos**, e os dois falham alto (nunca em
+   silêncio): declaração sem nenhum bracket (`const MAX_TABS = 5;`) e declaração que termina com
+   comentário na mesma linha (`let SB_TIMEOUT_MS = 20000;   // …`). O literal de regex do `esc`
+   (`/[&<>"']/g`, com aspas dentro) quebra qualquer scanner ingênuo — marque à mão.
+3. **Tasks 2 e 3 foram um commit só.** Separadas, a Task 2 deixa o `check_views` vermelho até a 3
+   entrar — a ausência das 3 colunas era justamente o que passava invisível. O repo tem a regra
+   "só publique tudo verde"; commit que quebra a árvore a contraria.
+4. **Task 11 — as constantes do texto original estavam ERRADAS.** Foram escritas a partir da
+   tabela do relatório, não do código. Os valores corretos estão na versão atual da tarefa, e a
+   armadilha é real: as mesmas tabelas têm call sites com listas **deliberadamente menores**
+   (`getTerminais`, `filtrarFrotaEmpresas`) que **não** podem ser colapsadas.
+5. **O `deploy-smoke` roda de fato.** O backlog registrava como hipótese que ele talvez nunca
+   disparasse; um run verde em 08/08 às 10:13 desmentiu. Item encerrado.
+6. **O fail-open do `check_grants` era pior que o descrito.** Com `default_privileges` vazio, o
+   gate não passava só em silêncio: anunciava *"Resolvido desde o baseline — rode
+   `--atualizar-baseline`"*. Perder a visão do banco **parecia progresso**, e seguir a sugestão
+   apagaria o registro da exceção 9.1.
+
+---
+
 **Origem:** `docs/analise-2026-08-08-auditoria-completa.md` (snapshot da auditoria).
 
 **Objetivo:** fechar os dois furos no centro da rede de testes, tirar da baseline de restauração as
