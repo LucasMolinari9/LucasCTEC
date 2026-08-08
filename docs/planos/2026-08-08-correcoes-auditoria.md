@@ -6,7 +6,7 @@
 
 ---
 
-## Estado da execução (atualizado em 08/08/2026)
+## Estado da execução (atualizado em 08/08/2026, 2ª rodada)
 
 | Tarefa | Estado | Onde |
 |---|---|---|
@@ -18,13 +18,16 @@
 | 9 — cache envenenado em `getEvLookups` | ✅ **em revisão** | PR #107, branch `claude/fase-3-bugs-frontend` |
 | 10 — três bypasses do seam | ✅ **em revisão** | PR #107 |
 | 11 — seis listas `select=` duplicadas | ✅ **em revisão** | PR #107 |
-| 12 — acessibilidade | ⬜ **a fazer** | continuar no PR #107 |
-| 13 — estado vazio ("não localizado") | ⬜ **a fazer** | continuar no PR #107 |
-| 21 — `marcarTrunc` e o teto do servidor | ⬜ **a fazer** | continuar no PR #107 |
-| 14 a 20, 22 — Fases 4 e o aperto do laço de views | ⬜ **a fazer** | PR próprio |
+| 12 — acessibilidade | ✅ **em revisão** | PR #107 |
+| 13 — estado vazio ("não localizado") | ✅ **em revisão** | PR #107 |
+| 21 — `marcarTrunc` e o teto do servidor | ✅ **em revisão** | PR #107 |
+| 14 a 20, 22 — Fase 4 e o aperto do laço de views | ⬜ **a fazer** | PR próprio |
 
-**Para retomar:** `git checkout claude/fase-3-bugs-frontend` e seguir pela Task 12. O PR #107
-está aberto contra a `main`; a Fase 1 já está mergeada, então não há rebase pendente.
+**Para retomar:** a Fase 3 está fechada — o PR #107 traz as tasks 9, 10, 11, 12, 13 e 21. O
+próximo trabalho é a **Task 22** (aperto do laço de views) e a **Fase 4** (tasks 14 a 20), em PR
+próprio, a partir da `main` depois que o #107 entrar. A Fase 2 (tasks 5 a 8) continua bloqueada
+esperando medição no SQL Editor — ela não depende do #107 e pode andar em paralelo, na máquina do
+dono.
 
 ### Divergências entre o plano e o que a execução apurou
 
@@ -52,6 +55,29 @@ texto original** quando os dois discordarem:
    gate não passava só em silêncio: anunciava *"Resolvido desde o baseline — rode
    `--atualizar-baseline`"*. Perder a visão do banco **parecia progresso**, e seguir a sugestão
    apagaria o registro da exceção 9.1.
+7. **Task 12 — `.side-eyebrow` NÃO reprovava; a auditoria mediu contra o fundo errado.** O texto
+   `#7d93ab` mede **4,62:1** sobre o fundo real da coluna (`--navy-deep`, `#072a49`) e passa no AA.
+   Os 3,69:1 do relatório saem de medir contra `--navy` (`#0a3a63`), que não é o fundo dali. A cor
+   ficou como estava — clareá-la seria mexer na identidade visual à toa — e a medição virou
+   comentário no `styles.css`, para a próxima leitura do relatório não "consertar" de novo. **São
+   dois contrastes a corrigir, não três.**
+8. **Task 12 — `<select>` com label implícito é seguro.** A dúvida legítima era o nome acessível
+   herdar o texto das `<option>` (o `textContent` do `<label>` herda). Medido com o
+   `page.accessibility.snapshot()` do Chromium: `ANO` e `SITUAÇÃO`, limpos. Não foi preciso trocar
+   por `for=`/`id`, que nesta faixa custaria ids únicos por aba (os panes de segundo plano têm os
+   ids recolhidos por `stripIds`).
+9. **Task 13 — a segunda frase ficou de fora, e o escopo cresceu de 5 mensagens para 9.** A frase
+   proposta (*"informe o código da linha ao DIVAT"*) promete um canal de retorno que o **próprio
+   backlog deste plano** lista como decisão pendente de endereço/processo — escrevê-la seria
+   apontar o cidadão para uma porta que não existe. Em compensação, o critério "toda mensagem que
+   responde por linha **já escolhida**" pega 9 sites, não 5: entrou o **Histórico**, e
+   `evento_teste` é justamente a tabela com mais órfãs (7). As mensagens por **empresa** ficaram
+   de fora de propósito — `codempresa` órfã não é medida por gate nenhum hoje (está no backlog).
+10. **Task 21 — o comentário prescrito apontava para um arquivo que ainda não tem o valor.** O
+    texto manda `SB_MAX_ROWS` "bater com o valor versionado em `docs/backup_schema.sql`", mas
+    versionar esse valor **é a Task 5**, que está bloqueada. O comentário no `app.js` aponta para o
+    `CLAUDE.md` (onde o teto está documentado) e registra a pendência. **Ao executar a Task 5,
+    volte no `marcarTrunc` e acrescente o `backup_schema.sql` ao comentário.**
 
 ---
 
