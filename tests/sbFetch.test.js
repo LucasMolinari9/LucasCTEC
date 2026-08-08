@@ -188,6 +188,35 @@ function jsonRespBadBody(status){
     ok(Array.isArray(r5) && r5[0].id===5, 'i5 sinal ocioso nao interfere');
   }
 
+  // --- j) preencherLookup: falha transitória NÃO pode envenenar o cache ---
+  // Regressão do bug de 08/08/2026: `evLookups.emp={}` era gravado DEPOIS do `.catch(()=>[])`,
+  // e objeto vazio é truthy — o guard `if(!evLookups.emp)` nunca mais disparava. Uma falha de
+  // rede momentânea deixava o Histórico mostrando ids crus pela sessão inteira, sem erro.
+  console.log('j) preencherLookup não cacheia falha');
+  {
+    let n = 0;
+    const falhaUmaVez = async () => {
+      n++;
+      if (n === 1) throw new Error('rede caiu');
+      return [{ id: '1', evento_linha: 'ALTERACAO DE ITINERARIO' }];
+    };
+    const cache = {};
+    const r1 = await H.preencherLookup(cache, 'lin', falhaUmaVez, 'evento_linha');
+    ok(r1 === null,                'j1 falha devolve null');
+    ok(cache.lin === undefined,    'j2 falha NÃO grava no cache', 'cache='+JSON.stringify(cache.lin));
+    const r2 = await H.preencherLookup(cache, 'lin', falhaUmaVez, 'evento_linha');
+    ok(r2 && r2['1'] === 'ALTERACAO DE ITINERARIO', 'j3 segunda tentativa preenche');
+    ok(cache.lin && cache.lin['1'] === 'ALTERACAO DE ITINERARIO', 'j4 sucesso grava no cache');
+    ok(n === 2,                    'j5 refez o fetch depois da falha', 'chamadas='+n);
+    const r3 = await H.preencherLookup(cache, 'lin', falhaUmaVez, 'evento_linha');
+    ok(n === 2,                    'j6 cache quente não refaz o fetch', 'chamadas='+n);
+    ok(r3 === cache.lin,           'j7 devolve o cache');
+    // resposta vazia LEGÍTIMA (tabela sem linhas) é cacheável — não é falha
+    const vazio = {};
+    await H.preencherLookup(vazio, 'emp', async () => [], 'evento_empresa');
+    ok(vazio.emp && Object.keys(vazio.emp).length === 0, 'j8 lista vazia legítima é cacheada');
+  }
+
   console.log('\n==== PLACAR:', pass+'/'+(pass+fail), '====');
   if (fail){ console.log('FALHAS:'); fails.forEach(f=>console.log('  -',f)); process.exit(1); }
 })();

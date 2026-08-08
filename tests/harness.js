@@ -1,5 +1,7 @@
 'use strict';
-/* Harness reproducing the SUPABASE CONFIG functions from app.js (lines 618-684).
+/* Harness reproducing the SUPABASE CONFIG functions from app.js, plus `preencherLookup`
+   (seção STATE + CACHES) — o cache de lookup precisa de teste porque o bug que ele corrige
+   é silencioso: cachear a FALHA em vez do resultado.
    SB_TIMEOUT_MS is made mutable (let) so the timeout test can shrink it.
    Everything else is copied verbatim. */
 
@@ -128,9 +130,21 @@ function bannerTrunc(rows){
 }
 /* @endcanon */
 
+/* @canon preencherLookup */
+async function preencherLookup(cache, chave, buscar, coluna){
+  if (cache[chave]) return cache[chave];
+  const rows = await buscar().catch(() => null);   // null = falhou; [] = veio vazio de verdade
+  if (!rows) return null;                          // não cacheia falha
+  const m = {};
+  rows.forEach(x => { m[x.id] = x[coluna]; });
+  cache[chave] = m;
+  return m;
+}
+/* @endcanon */
+
 module.exports = {
   get SB_TIMEOUT_MS(){ return SB_TIMEOUT_MS; },
   set SB_TIMEOUT_MS(v){ SB_TIMEOUT_MS = v; },
   SB_RETRIES, selecionarSupabase, esperar, fetchComTimeout, sbFetch, marcarTrunc, bannerTrunc,
-  CANCELADO, ehCancelamento,
+  CANCELADO, ehCancelamento, preencherLookup,
 };

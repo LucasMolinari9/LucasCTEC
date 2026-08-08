@@ -547,9 +547,30 @@ function searchEmpresas(term, { limit = 40 } = {}){
     .slice(0, limit);
 }
 
+/* Preenche um cache de lookup {id → coluna}, gravando SÓ quando o fetch deu certo.
+   A forma anterior (`.catch(()=>[])` seguido de `evLookups.emp={}` incondicional) tinha
+   um bug silencioso: objeto vazio é TRUTHY, então o guard `if(!evLookups.emp)` nunca mais
+   disparava — uma falha transitória de rede deixava os lookups vazios pela sessão INTEIRA,
+   e o Histórico passava a mostrar ids crus no lugar dos nomes de evento, sem erro na tela.
+   Os outros caches (getEmpresas/getIbge/getOrigem) não têm o problema porque NÃO engolem o
+   erro: a exceção sobe e o cache continua null, então a próxima chamada refaz.
+   Aqui o erro continua engolido de propósito — o Histórico deve renderizar mesmo sem os
+   nomes de evento, caindo no '—' —, mas engolir não pode virar cachear. */
+async function preencherLookup(cache, chave, buscar, coluna){
+  if (cache[chave]) return cache[chave];
+  const rows = await buscar().catch(() => null);   // null = falhou; [] = veio vazio de verdade
+  if (!rows) return null;                          // não cacheia falha
+  const m = {};
+  rows.forEach(x => { m[x.id] = x[coluna]; });
+  cache[chave] = m;
+  return m;
+}
+
 async function getEvLookups() {
-  if (!evLookups.emp) { const r = await sbFetch('evento_empresa_teste','select=id,evento_empresa').catch(()=>[]); evLookups.emp={}; r.forEach(x=>evLookups.emp[x.id]=x.evento_empresa); }
-  if (!evLookups.lin) { const r = await sbFetch('evento_linha_teste','select=id,evento_linha').catch(()=>[]); evLookups.lin={}; r.forEach(x=>evLookups.lin[x.id]=x.evento_linha); }
+  await Promise.all([
+    preencherLookup(evLookups, 'emp', () => sbFetch('evento_empresa_teste','select=id,evento_empresa'), 'evento_empresa'),
+    preencherLookup(evLookups, 'lin', () => sbFetch('evento_linha_teste','select=id,evento_linha'), 'evento_linha'),
+  ]);
   return evLookups;
 }
 
@@ -1395,7 +1416,7 @@ async function renderLineHistory(host, line){
   const head = docHead('Histórico da Linha');
   const meta = metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(orDash(line.codempresa))],['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—'),true]]);
   if (!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento registrado para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  const build = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin[r.evento_linha] || lk.emp[r.evento_empresa] || '—', false) + evBlocksHTML(r);
+  const build = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin?.[r.evento_linha] || lk.emp?.[r.evento_empresa] || '—', false) + evBlocksHTML(r);
   // PDF/impressão: um evento por página (cabeçalho repetido); segue o filtro aplicado na tela
   const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
   paginateEvents(host, rows, build, meta, { view, gen, onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
@@ -1947,7 +1968,7 @@ async function renderEmpresaHistory(host, cod, nome){
   const empSit = [ boolChip(E.cassada,'Cassada'), boolChip(E.sob_intervencao,'Sob intervenção') ].filter(Boolean).join(' ') || '<span class="chip chip-off">Regular</span>';
   const meta = metaRows([['Empresa',esc(nome||E.nome_empresa||'—'),true],['Código da Empresa',esc(cod)],['Situação',esc(orDash(E.situacao))],['Processo',esc(orDash(E.processo))],['Publicação',fmtDate(E.data_publicacao)],['Situação cadastral',empSit,true],['Total',rows.length+' evento(s)']]);
   if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento para a empresa '+esc(cod)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  const build = r => evBandHTML(r, 'Tipo Evento Empresa', lk.emp[r.evento_empresa]||lk.lin[r.evento_linha]||'—', !!(r.codlinha)) + evBlocksHTML(r);
+  const build = r => evBandHTML(r, 'Tipo Evento Empresa', lk.emp?.[r.evento_empresa]||lk.lin?.[r.evento_linha]||'—', !!(r.codlinha)) + evBlocksHTML(r);
   const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
   paginateEvents(host, rows, build, meta, { view, gen, onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
   commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(rows) });
