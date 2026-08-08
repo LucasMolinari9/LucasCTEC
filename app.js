@@ -2201,7 +2201,12 @@ async function mostrarLinhasResultado(host, cods, titulo){
 // filtro "trafega pelos dois" (qualquer ordem). `inter` é o próprio resultado não-direcional;
 // o direcional refina `inter` consultando a sequência de trechos do itinerário.
 async function mostrarLinhasEntreMunicipios(host, aTerm, bTerm, directional){
+  // Mesmo contrato da irmã `mostrarLinhasPorLocalidade`, que já capturava: as duas são
+  // chamadas do MESMO run(), e uma capturar e a outra não era assimetria dentro do mesmo
+  // fluxo — a busca pode ser trocada enquanto esta está no ar.
+  const view = currentView, gen = beginGen(view);
   const ibge = await getIbge();
+  if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
   const nameOf = c => ibge[c]?.nome || c;
   const findCods = t => Object.entries(ibge).filter(([,v])=>norm(v.nome).includes(norm(t))).map(([c])=>c);
   const a = (aTerm||'').trim(), b = (bTerm||'').trim();
@@ -2326,8 +2331,13 @@ LOADERS.ligacoesPorTerminal = async () => {
   }});
 };
 LOADERS.secoesPorLigacao = async () => {
-  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
+  // Capturados ANTES do await. O `pane` já garantia escrever na ABA certa; faltava o `gen`,
+  // que garante escrever a tentativa mais NOVA: sem ele, trocar de linha enquanto a busca
+  // está no ar deixa a resposta atrasada sobrescrever o resultado da linha nova, no mesmo
+  // pane (contrato do seam em MODAL / SISTEMA DE VIEWS).
+  const view = currentView, pane = view._pane, gen = beginGen(view);
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,nome_ligacao,tarifa&order=secao`);
+  if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
   const meta = metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]]);
   if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyBox('Nenhuma seção cadastrada para esta linha.')}</div>`; return; }
   const cols = [{t:'Seção',w:'70px'},{t:'Descrição'},{t:'Tarifa',w:'90px'}];
@@ -2343,6 +2353,7 @@ LOADERS.secoesPorLigacao = async () => {
   };
   inp.addEventListener('input', debounce(paint));
   paint();
+  commitViewResult(view, gen, { pdfHTML:null });
 };
 
 // Agregação PURA da Frota por Empresa (testável em tests/): total geral + quebra por empresa e
@@ -2450,8 +2461,11 @@ async function getPortariaAnos(){
   return _portariaAnos;
 }
 LOADERS.portarias = async () => {
-  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
+  // O `run` interno já capturava view/gen; a CASCA (esta parte) não capturava, e escrevia
+  // depois do await de getPortariaAnos(). Trocar de aba nesse intervalo repintava o pane.
+  const view = currentView, pane = view._pane, gen = beginGen(view);
   const anos = await getPortariaAnos();
+  if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
   pane.innerHTML = `<div class="doc">${docHead('Portarias / Legislação')}
     <div class="ev-filters">
       <div class="evf"><label>Número</label><input id="pNum" type="text" placeholder="ex.: 1975" autocomplete="off"></div>
