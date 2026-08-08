@@ -1,9 +1,13 @@
 # Execução — validar a Fase 3 mergeada e fechar os itens de painel
 
+> **Snapshot de 31/07/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 > **Para que serve:** briefing autocontido para uma sessão nova executar dois itens do placar de
 > 31/07/2026 — o **item 2** (validar operacionalmente a Fase 3 já mergeada) e o **item 4**
 > (itens de painel).
-> Leia junto: `CLAUDE.md` (regras), `docs/contexto-proxima-sessao-2026-07-31.md` (o que está aberto).
+> Leia junto: `CLAUDE.md` (regras), `docs/historico/contexto-proxima-sessao-2026-07-31.md` (o que está aberto).
 >
 > **Quem executa:** o **dono**, em quase tudo. Um agente não alcança o Supabase nem a Vercel deste
 > ambiente (403 do proxy), não dispara workflow pela API e não lista secrets. O papel do agente
@@ -140,10 +144,10 @@ Um agente faz esta parte a partir do que você colar no chat:
 
 - **`docs/seguranca.md` § 5** — os itens 2 (Leaked Password Protection) e 3 (signup fechado) saem
   de "a fazer" para verificado, com data.
-- **`docs/contexto-proxima-sessao-2026-07-31.md`** — § 2.6 (painel) e § 3 (nunca verificado)
+- **`docs/historico/contexto-proxima-sessao-2026-07-31.md`** — § 2.6 (painel) e § 3 (nunca verificado)
   perdem os itens fechados. **§ 3 é o que mais importa**: ele lista o que é *desconhecido*, não o
   que é falso, e branch protection + signup saem de lá assim que você confirmar ao vivo.
-- **`docs/pendencias-2026-07-31-consolidado.md`** — § 2.2 e § 2.4.
+- **`docs/historico/pendencias-2026-07-31-consolidado.md`** — § 2.2 e § 2.4.
 - **Corpo do #73** — riscar as pendências cumpridas.
 
 ⚠️ Ao mexer nesses documentos, rode **`node tests/check.js`**: a seção `[2b]` cobra os fatos

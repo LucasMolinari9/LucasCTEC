@@ -402,8 +402,12 @@ console.log('\n[2b] Deriva docs × código');
   // --- status estável do PR #73 nos dois handoffs correntes ---
   // O merge é evento histórico estável. O que drifta é deixar o handoff continuar mandando
   // "decidir o draft" depois de ele já ter entrado na main.
-  for (const doc of ['docs/contexto-proxima-sessao-2026-07-31.md', 'docs/pendencias-2026-07-31-consolidado.md']) {
-    if (!existe(doc)) continue;
+  // `if (!existe) continue` era fail-open: ao mover estes dois para `docs/historico/` (08/08/2026)
+  // a guarda simplesmente PAROU DE IMPRIMIR, sem uma linha de aviso — o gate seguiu verde com dois
+  // checks a menos. Arquivo que a guarda cita por caminho e some é achado, não silêncio.
+  for (const doc of ['docs/historico/contexto-proxima-sessao-2026-07-31.md',
+                     'docs/historico/pendencias-2026-07-31-consolidado.md']) {
+    if (!existe(doc)) { fail(`[${doc}] sumiu — se o arquivo foi movido, atualize o caminho aqui (não apague a guarda)`); continue; }
     const src = ler(doc);
     if (!/0bfb38a/.test(src) || !/#73[^\n]*(mergeado|merge)/i.test(src)) {
       fail(`[${doc}] não registra o merge do #73 em 0bfb38a`);

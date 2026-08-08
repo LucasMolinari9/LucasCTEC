@@ -1,11 +1,15 @@
 # Verificação do ambiente de teste — estado em 29/07/2026 (handoff para o Codex)
 
+> **Snapshot de 29/07/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 Auditoria do que o plano de 28/07 prometeu contra o que está de fato no ar. **Veredito: o
 encanamento de código está pronto e verde; a verificação do deploy nunca passou uma única vez, e
 a branch `teste` — a que deveria ser o ambiente de teste — aponta para o banco de PRODUÇÃO.**
 
 O desenho vigente está em `docs/adr/0002-ambiente-de-teste-isolado.md`; o histórico do plano, em
-`docs/plano-ambiente-teste-2026-07-28.md`. Este documento é só o laudo + as tarefas que faltam.
+`docs/historico/plano-ambiente-teste-2026-07-28.md`. Este documento é só o laudo + as tarefas que faltam.
 
 ## O que está pronto (conferido, não presumido)
 

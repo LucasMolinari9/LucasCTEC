@@ -104,9 +104,16 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | Cronologia do projeto — como se chegou ao estado atual. |
 | [`docs/adr/`](docs/adr/) | Decisões arquiteturais registradas (ADRs). |
 | [`docs/agents/`](docs/agents/) | Convenções para agentes: issue tracker, labels de triagem, docs de domínio. |
-| [`docs/analise-duplicacao.md`](docs/analise-duplicacao.md) | Relatório histórico: análise de duplicação de código. |
-| [`docs/analise-separacao.md`](docs/analise-separacao.md) | Relatório histórico: separação lógica × apresentação. |
-| `docs/revisao-externa-*.md`, `docs/plano-endurecimento-*.md` | Relatórios históricos de revisão externa e o plano de endurecimento de 21/07. |
+| [`docs/planos/`](docs/planos/) | **Planos vivos** — trabalho combinado que ainda não terminou. Normativo enquanto estiver aberto; sai daqui quando fecha. |
+| [`docs/historico/`](docs/historico/) | **Retratos datados** — auditorias, revisões externas, handoffs de sessão e planos já executados. Cada um abre com `Snapshot de DD/MM/AAAA — não atualizar`. Registro, não guia. |
+
+> **O critério entre os dois:** plano vivo em [`docs/planos/`](docs/planos/), retrato datado em
+> [`docs/historico/`](docs/historico/). Um documento de `docs/historico/` descreve o repositório
+> como ele era naquele dia — números, caminhos de arquivo e pendências dele podem ter envelhecido
+> de propósito. Quando um doc histórico e o `CLAUDE.md` divergirem, o `CLAUDE.md` manda. Os
+> quatro anteriores a 21-22/07/2026 (as duas `analise-*` e as duas `revisao-externa-*`) são
+> **pré-split**: falam de um único `index.html` com CSS e JS embutidos, e suas citações
+> `index.html:NNN` não se traduzem para o `app.js` atual.
 
 > **Dados nunca vão para o git.** Os backups de dados (CSVs) ficam fora do repositório — ver
 > `docs/backup.md`. O `.gitignore` barra `*.csv` como rede de segurança.

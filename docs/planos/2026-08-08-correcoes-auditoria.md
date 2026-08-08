@@ -115,7 +115,7 @@ texto original** quando os dois discordarem:
 
 ---
 
-**Origem:** `docs/analise-2026-08-08-auditoria-completa.md` (snapshot da auditoria).
+**Origem:** `docs/historico/analise-2026-08-08-auditoria-completa.md` (snapshot da auditoria).
 
 **Objetivo:** fechar os dois furos no centro da rede de testes, tirar da baseline de restauração as
 três derivas que só doem no dia do desastre, corrigir os bugs confirmados do frontend e alinhar a
@@ -1104,7 +1104,7 @@ cadastrado' — indistinguível de linha que realmente não tem itinerário."
 ### Task 14: Corrigir as derivas de documentação
 
 **Files:** `docs/estrutura-frontend.md:160,161-163,170-172`, `CLAUDE.md:93-101,351`,
-`scripts/check_views.mjs:5`, `docs/analise-duplicacao.md:1`
+`scripts/check_views.mjs:5`, `docs/historico/analise-duplicacao.md:1`
 
 - [ ] **Step 1: D1** — `estrutura-frontend.md:160`: Frota por Empresa **é** paginada
   (`app.js:2407-2410`). Mover para a lista de paginados com `pdf:false`.
@@ -1116,7 +1116,7 @@ cadastrado' — indistinguível de linha que realmente não tem itinerário."
   1.981/3.377).
 - [ ] **Step 5: D4** — `CLAUDE.md:93-101` lista 12 tabelas; `RT_TABLES` tem 14. Acrescentar
   `codempresa_teste` e `portaria_teste`, **e o tópico Portarias**, que sumiu do mapa.
-- [ ] **Step 6: D7** — cabeçalho de `docs/analise-duplicacao.md`:
+- [ ] **Step 6: D7** — cabeçalho de `docs/historico/analise-duplicacao.md`:
 
 ```markdown
 > ⚠️ **Snapshot pré-split (anterior a 21-22/07/2026).** Descreve o frontend quando era um único
