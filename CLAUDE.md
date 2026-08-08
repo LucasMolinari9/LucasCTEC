@@ -79,7 +79,13 @@ exibe e **atualiza ao vivo** (Realtime).
   - **Como o dono alimenta:** direto pelo **painel do Supabase** (service role, ignora RLS).
   - **Teto do PostgREST:** `pgrst.db_max_rows = 30000` no role `authenticator` (igual ao maior
     `limit` do front). **Ao criar query com `limit` > 30000, suba o teto junto**
-    (`ALTER ROLE authenticator SET pgrst.db_max_rows = '<n>'; NOTIFY pgrst, 'reload config';`).
+    (`ALTER ROLE authenticator SET pgrst.db_max_rows = '<n>'; NOTIFY pgrst, 'reload config';`)
+    **e suba, na mesma tarefa, a constante `SB_MAX_ROWS` do `app.js`** (seção `SUPABASE CONFIG`):
+    o `marcarTrunc` a usa como segundo critério de truncagem — é o que impede uma resposta cortada
+    pelo SERVIDOR de passar sem banner, já que `data.length` nunca alcança um `limit` maior que o
+    teto. Deixá-la para trás faz o portal avisar "resultado parcial" num teto que não é mais o
+    real. O valor ainda **não** está versionado no `docs/backup_schema.sql` (Task 5 do plano de
+    08/08, bloqueada), então hoje estes dois pontos são os únicos lugares onde ele existe.
   - **Baseline de reconstrução** (RLS/policies/grants/índices/funções) versionada em
     `docs/backup_schema.sql`. Snapshot do estado atual (auditoria/DR):
     `scripts/gen_security_snapshot.sql` (salvar a saída **fora do git**).
@@ -207,7 +213,12 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    spinner, pintar só a moldura ou não achar nada com um termo que casa as fixtures. É a rede
    sob a seção `MODAL / SISTEMA DE VIEWS` (~58,8% do `app.js`), que o `check.js` **não** cobre —
    ele só testa a lógica pura copiada nos `*.harness.js`. Aceita filtro: `check_views.mjs frota`.
-   Ele **não** confere se o conteúdo está certo (isso é asserção por view, ainda não existe).
+   Desde 08/08/2026 ele cobra **quantidade mínima de conteúdo por view** — campo `minimo` na
+   lista `VIEWS`, na unidade de CADA documento (`tbody tr`; `.ev-block` no Histórico, que não usa
+   tabela; `.kpi` na Frota), com números medidos contra as fixtures e comparados por `>=`.
+   **View nova sem `minimo` fica no critério antigo** (`corpo != 0`), de propósito: meça o mínimo
+   dela e declare. O que ele **não** confere é se o VALOR está certo (a coluna traz o dado certo,
+   o total bate) — quem pega coluna trocada é o 400 da bancada (`scripts/lib/rig.mjs`).
    **View nova = uma entrada em `VIEWS` no script** — a checagem anti-drift do final compara a
    lista com os `data-view` do seletor e falha se você esquecer.
    Servidor + fixtures + Chromium moram em **`scripts/lib/rig.mjs`**, compartilhados com o
