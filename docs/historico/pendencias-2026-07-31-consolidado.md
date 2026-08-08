@@ -1,5 +1,9 @@
 # Estado consolidado — o que falta executar (31/07/2026)
 
+> **Snapshot de 31/07/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 Reúne, num lugar só, tudo que o **relatório de auditoria externa de 30/07** (gerado por outro
 modelo) apontou, tudo que a **verificação contra o repositório real** apurou depois, e tudo que
 apareceu nas sessões de 30 e 31/07. O objetivo é responder a uma pergunta: **o que ainda falta
@@ -7,8 +11,8 @@ executar.**
 
 - **Versão-base deste pacote:** `0bfb38a` (merge do #73). Gates do merge verdes; `test-auditor`
   ficou `skipped` por ser exclusivamente manual.
-- **Fontes:** `docs/handoff-2026-07-30-auditoria-verificacao.md` (verificação do relatório),
-  `docs/handoff-2026-07-31-prs-e-smoke.md`, `docs/handoff-2026-07-31-pr4-visibilidade.md`.
+- **Fontes:** `docs/historico/handoff-2026-07-30-auditoria-verificacao.md` (verificação do relatório),
+  `docs/historico/handoff-2026-07-31-prs-e-smoke.md`, `docs/historico/handoff-2026-07-31-pr4-visibilidade.md`.
 - ⚠️ **Nada aqui foi medido contra os bancos vivos.** O ambiente do agente não alcança o Supabase
   (403 do proxy). O que sustenta as afirmações sobre banco é o SQL versionado, os baselines e o
   histórico verde do `db-checks` — evidência forte, mas não medição própria.

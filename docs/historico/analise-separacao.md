@@ -1,5 +1,10 @@
 # Análise de Separação Lógica × Apresentação — Portal DIVAT
 
+> ⚠️ **Snapshot pré-split (anterior a 17/07/2026) — não atualizar.** Descreve o frontend quando
+> era um único `index.html` com CSS e JS embutidos; as citações `index.html:NNN` **não se traduzem
+> direto** para o `app.js` atual. O estado atual está no `CLAUDE.md` e em
+> `docs/estrutura-frontend.md`.
+
 > **Tipo:** relatório de análise. O diagnóstico é somente leitura; a **única exceção é o S1**, que
 > foi **corrigido a pedido do dono** (ver a marca ✅ na seção) — os demais itens seguem apenas
 > diagnóstico. Nenhuma operação de banco foi executada. As referências `index.html:NNN` são de antes

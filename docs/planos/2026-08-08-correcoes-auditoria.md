@@ -6,7 +6,7 @@
 
 ---
 
-## Estado da execução (atualizado em 08/08/2026, 2ª rodada)
+## Estado da execução (atualizado em 08/08/2026, 3ª rodada)
 
 | Tarefa | Estado | Onde |
 |---|---|---|
@@ -14,20 +14,53 @@
 | 2 — bancada projeta `select=` | ✅ **na `main`** | PR #106 (junto com a 3) |
 | 3 — três fixtures faltantes | ✅ **na `main`** | PR #106 |
 | 4 — `check_grants` e a visão perdida | ✅ **na `main`** | PR #106 |
-| 5 a 8 — Fase 2 (baseline de restauração, ADR-0002) | ⛔ **bloqueada** | precisa de medição no SQL Editor (ver Task 5) |
-| 9 — cache envenenado em `getEvLookups` | ✅ **em revisão** | PR #107, branch `claude/fase-3-bugs-frontend` |
-| 10 — três bypasses do seam | ✅ **em revisão** | PR #107 |
-| 11 — seis listas `select=` duplicadas | ✅ **em revisão** | PR #107 |
-| 12 — acessibilidade | ✅ **em revisão** | PR #107 |
-| 13 — estado vazio ("não localizado") | ✅ **em revisão** | PR #107 |
-| 21 — `marcarTrunc` e o teto do servidor | ✅ **em revisão** | PR #107 |
-| 14 a 20, 22 — Fase 4 e o aperto do laço de views | ⬜ **a fazer** | PR próprio |
+| 5 a 8 — Fase 2 (baseline de restauração, ADR-0002) | ⛔ **bloqueada** | precisa de duas medições no SQL Editor (ver Task 5 e Task 7) |
+| 9 — cache envenenado em `getEvLookups` | ✅ **na `main`** | PR #107 |
+| 10 — três bypasses do seam | ✅ **na `main`** | PR #107 |
+| 11 — seis listas `select=` duplicadas | ✅ **na `main`** | PR #107 |
+| 12 — acessibilidade | ✅ **na `main`** | PR #107 |
+| 13 — estado vazio ("não localizado") | ✅ **na `main`** | PR #107 |
+| 21 — `marcarTrunc` e o teto do servidor | ✅ **na `main`** | PR #107 |
+| 22 — contrato mínimo de conteúdo por view | ✅ **na `main`** | PR #108 |
+| 14, 15, 16, 17, 19, 20 — Fase 4 | ✅ **em revisão** | PR #110, branch `claude/divat-fase-4-correcoes-e00tgk` |
+| 18 — runbook de ETL | ⚠️ **entregue com um vazio declarado** | PR #110 — ver abaixo |
 
-**Para retomar:** a Fase 3 está fechada — o PR #107 traz as tasks 9, 10, 11, 12, 13 e 21. O
-próximo trabalho é a **Task 22** (aperto do laço de views) e a **Fase 4** (tasks 14 a 20), em PR
-próprio, a partir da `main` depois que o #107 entrar. A Fase 2 (tasks 5 a 8) continua bloqueada
-esperando medição no SQL Editor — ela não depende do #107 e pode andar em paralelo, na máquina do
-dono.
+O PR **#109** não é tarefa deste plano: sincronizou o `CLAUDE.md` com o que os #107 e #108
+mudaram.
+
+**Para retomar:** as Fases 1, 3 e 4 e a Task 22 estão prontas — as três primeiras na `main`, a
+Fase 4 no PR #110. **Só duas coisas seguem abertas**, e nenhuma delas é escrita de código:
+
+1. **A Fase 2 (tasks 5 a 8)**, esperando as duas medições no SQL Editor logo abaixo.
+2. **O vazio declarado da Task 18.** O `docs/etl.md` foi escrito com o dono e registra o caminho
+   real do dado (banco do DETRO → CSV → Table Editor), mas **o rebuild da staging não foi
+   apurado: o dono não sabe descrevê-lo.** A junção por `id` documentada lá é *deduzida do
+   schema*, não observada, e está marcada como tal. O `docs/etl.md` §3 traz a consulta que fecha o
+   vazio (procura função/trigger que mencione a staging e compara as contagens das seis tabelas).
+   **Rode-a antes de escrever qualquer comando de rebuild** — um `TRUNCATE` errado ali apaga as 7
+   órfãs de `evento_teste`, que são atos reais de 1974–1996. Dois desfechos possíveis: ou existe
+   rebuild e o §3 do `etl.md` ganha o comando, ou não existe, a staging é resíduo, e o
+   `CLAUDE.md` é que precisa ser corrigido em vez de obedecido.
+
+O que a execução da Fase 4 apurou, e que contradiz o texto das tarefas:
+
+- **O Step 4 da Task 14 já estava feito** (o `~62%` virou `~59%` no PR #108). Medido de novo:
+  2.024/3.467 = **58,4%**.
+- **A Task 16 destapou um fail-open real.** A guarda do PR #73 no `tests/check.js` cita dois dos
+  arquivos movidos **pelo caminho** e pulava com `if (!existe(doc)) continue` — ao mover, ela
+  parou de imprimir sem uma linha de aviso, e o gate seguiu verde com dois checks a menos.
+  Corrigido junto: arquivo citado que some agora é falha.
+- **A Task 15 mediu certo:** 36 entradas em `.claude/skills/` (15 diretórios + 21 symlinks).
+
+A **Fase 2** (tasks 5 a 8) continua bloqueada esperando duas medições que só o dono pode rodar no
+SQL Editor:
+
+```sql
+select rolname, rolconfig from pg_roles
+  where rolname in ('authenticator','anon');            -- Task 5
+select prosrc, proowner::regrole from pg_proc
+  where proname = 'rls_auto_enable';                    -- Task 7
+```
 
 ### Divergências entre o plano e o que a execução apurou
 
@@ -92,7 +125,7 @@ texto original** quando os dois discordarem:
 
 ---
 
-**Origem:** `docs/analise-2026-08-08-auditoria-completa.md` (snapshot da auditoria).
+**Origem:** `docs/historico/analise-2026-08-08-auditoria-completa.md` (snapshot da auditoria).
 
 **Objetivo:** fechar os dois furos no centro da rede de testes, tirar da baseline de restauração as
 três derivas que só doem no dia do desastre, corrigir os bugs confirmados do frontend e alinhar a
@@ -1081,7 +1114,7 @@ cadastrado' — indistinguível de linha que realmente não tem itinerário."
 ### Task 14: Corrigir as derivas de documentação
 
 **Files:** `docs/estrutura-frontend.md:160,161-163,170-172`, `CLAUDE.md:93-101,351`,
-`scripts/check_views.mjs:5`, `docs/analise-duplicacao.md:1`
+`scripts/check_views.mjs:5`, `docs/historico/analise-duplicacao.md:1`
 
 - [ ] **Step 1: D1** — `estrutura-frontend.md:160`: Frota por Empresa **é** paginada
   (`app.js:2407-2410`). Mover para a lista de paginados com `pdf:false`.
@@ -1093,7 +1126,7 @@ cadastrado' — indistinguível de linha que realmente não tem itinerário."
   1.981/3.377).
 - [ ] **Step 5: D4** — `CLAUDE.md:93-101` lista 12 tabelas; `RT_TABLES` tem 14. Acrescentar
   `codempresa_teste` e `portaria_teste`, **e o tópico Portarias**, que sumiu do mapa.
-- [ ] **Step 6: D7** — cabeçalho de `docs/analise-duplicacao.md`:
+- [ ] **Step 6: D7** — cabeçalho de `docs/historico/analise-duplicacao.md`:
 
 ```markdown
 > ⚠️ **Snapshot pré-split (anterior a 21-22/07/2026).** Descreve o frontend quando era um único
@@ -1376,6 +1409,8 @@ Itens da auditoria que não viraram tarefa aqui, para não sumirem:
 | `CONTEXT.md` tem 2 termos; faltam `linha`, `ligação`, `seção`, `codlinha`, `vigente`, `cancelado` | §4 | Idem — e o vocabulário deve sair de conversa com o dono, não de inferência |
 | 13 seletores CSS órfãos; `.fd-*` é resíduo de código removido | §3 | BAIXA; limpeza sem risco, faça junto da próxima mexida em `styles.css` |
 | Canal de retorno para o usuário relatar dado errado | §5.3 | Precisa de decisão de endereço/processo do DIVAT |
+| **S2** — a heurística de dedup de empresa por RJ está **duplicada** e sem teste: `getEmpresas` (`app.js:536-546`) e `empresasRegulares` (`app.js:1918-1921`) implementam a MESMA regra de score (REGULAR/não-cassada) em código separado | `docs/historico/analise-separacao.md` §S2 | Virou a **issue #111** (o veredito lá era "✅ vale extrair" e nunca foi executado). Só o achado ficou fora deste plano — não é deriva de auditoria, é dívida de código anterior a ela |
+| **D7** — a closure `sentidoKey` continua duplicada em `app.js:1544` e `app.js:1620`, idênticas | `docs/historico/analise-duplicacao.md` §D7 | BAIXA; o próprio relatório a classifica como "Trivial" e a põe no tier "não recomendado — churn cosmético". Faça junto da próxima mexida no Quadro de Horários |
 | Confirmar se o `deploy-smoke` roda de fato | §5.7 | Checagem de 2 minutos na aba Actions: se não houve run recente com `deployment_status`, incluir `workflow_dispatch` no runbook de deploy |
 
 ## Fora deste plano (decisão do dono, não execução)

@@ -9,7 +9,7 @@
 // que quase entrou (tratar `undefined` como `[]` e sair 0 exatamente ao perder a visão do banco).
 //
 // Técnica do stub (fakeroot + app.js falso apontando para 127.0.0.1) registrada em
-// docs/handoff-2026-07-27-auditoria-externa.md — a rede até o Supabase é bloqueada no ambiente
+// docs/historico/handoff-2026-07-27-auditoria-externa.md — a rede até o Supabase é bloqueada no ambiente
 // do Claude, então a alternativa seria não testar.
 import { createServer } from 'node:http';
 import { mkdir, writeFile, copyFile, rm } from 'node:fs/promises';

@@ -1,6 +1,10 @@
 # Ambiente de teste — o que falta e o prompt para o Codex (29/07/2026)
 
-Complemento operacional de `docs/plano-verificacao-ambiente-2026-07-29.md`, escrito para um
+> **Snapshot de 29/07/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
+Complemento operacional de `docs/historico/plano-verificacao-ambiente-2026-07-29.md`, escrito para um
 agente com **acesso ao repositório e nada mais** — sem painel da Vercel, sem painel do Supabase.
 
 ## A descoberta que reorganiza a lista
@@ -73,7 +77,7 @@ ele já estava fora do alcance de qualquer agente, porque é um segredo de paine
 Você trabalha no repositório `LucasMolinari9/LucasCTEC` (Portal DIVAT, zero-build: `index.html` +
 `styles.css` + `app.js`). Leia o `CLAUDE.md` antes de começar — ele tem regras que sobrepõem seus
 padrões. Leia também `docs/adr/0002-ambiente-de-teste-isolado.md` e
-`docs/plano-verificacao-ambiente-2026-07-29.md`.
+`docs/historico/plano-verificacao-ambiente-2026-07-29.md`.
 
 Você tem acesso ao repositório e ao GitHub. **Não tem acesso ao painel da Vercel nem ao painel do
 Supabase, e não vai precisar.** Sua rede não alcança o Supabase — os verificadores que você vai

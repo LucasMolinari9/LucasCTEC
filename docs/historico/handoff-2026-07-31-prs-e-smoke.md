@@ -1,5 +1,9 @@
 # Handoff — execução dos PRs do plano de 30/07 + o `deploy-smoke` funcionando
 
+> **Snapshot de 31/07/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 > **Para a sessão nova:** leia este arquivo e o `CLAUDE.md`. Este descreve **o que aconteceu numa
 > sessão específica e o que ficou aberto**; o `CLAUDE.md` é a fonte das regras do projeto. Se os
 > dois divergirem, o `CLAUDE.md` manda.
@@ -107,7 +111,7 @@ documentação como defeito — candidato natural a entrar junto do PR 4.
 
 ### 4. O handoff de 30/07 está preso numa branch
 
-`docs/handoff-2026-07-30-auditoria-verificacao.md` só existe em `claude/ask-matt-u6cwf8`, sem PR.
+`docs/historico/handoff-2026-07-30-auditoria-verificacao.md` só existe em `claude/ask-matt-u6cwf8`, sem PR.
 O `docs/CHANGELOG.md` desta sessão **cita esse caminho**: enquanto aquela branch não entrar na
 `main`, a referência aponta para arquivo ausente.
 

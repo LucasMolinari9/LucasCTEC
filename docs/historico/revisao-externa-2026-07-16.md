@@ -1,5 +1,9 @@
 # Revisão externa do projeto — 16/07/2026
 
+> **Snapshot de 16/07/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 Registro de uma **avaliação externa** do portal DIVAT (feita pelo modelo **Kimi K3**) e do que
 foi decidido a partir dela. Serve de histórico: cada apontamento foi **conferido contra o código
 real** antes de virar (ou não) uma mudança. Não é uma lista de tarefas em aberto — é o placar do

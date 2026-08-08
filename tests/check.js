@@ -211,10 +211,18 @@ console.log('\n[2b] Deriva docs × código');
   const ler = p => fs.readFileSync(path.join(RAIZ, p), 'utf8');
   const existe = p => fs.existsSync(path.join(RAIZ, p));
 
+  // `docs/adr/` e `docs/planos/` entram por DESCOBERTA, não por lista escrita à mão: ADR novo e
+  // plano novo passam a ser cobrados sozinhos. Foi por estarem fora do alcance que o ADR-0002
+  // pôde afirmar por 10 dias que "somente divatdetro.vercel.app usa produção" enquanto o app.js
+  // tinha três hosts — e ADR é NORMATIVO: quem o seguisse recriava o bug. `docs/historico/` fica
+  // de fora de propósito (retrato datado envelhece por desenho), como o CHANGELOG.
+  const varrerDocs = dir => existe(dir)
+    ? fs.readdirSync(path.join(RAIZ, dir)).filter(f => f.endsWith('.md')).sort().map(f => `${dir}/${f}`)
+    : [];
   const DOCS_VIVOS = ['CLAUDE.md', 'README.md', 'CONTEXT.md', 'docs/estrutura-frontend.md',
-    'docs/schema.md', 'docs/backup.md', 'docs/seguranca.md', 'docs/semgrep.md',
+    'docs/schema.md', 'docs/backup.md', 'docs/etl.md', 'docs/seguranca.md', 'docs/semgrep.md',
     'docs/agents/domain.md', 'docs/agents/issue-tracker.md', 'docs/agents/triage-labels.md',
-    'tests/README.md'].filter(existe);
+    'tests/README.md', ...varrerDocs('docs/adr'), ...varrerDocs('docs/planos')].filter(existe);
 
   // Comentário de workflow é prosa viva como qualquer outra — e prosa que ninguém relê, porque
   // não abre em leitor de markdown. A 1ª versão desta guarda varria só `.md`, e por isso o
@@ -225,6 +233,17 @@ console.log('\n[2b] Deriva docs × código');
     ? fs.readdirSync(path.join(RAIZ, '.github/workflows')).filter(f => /\.ya?ml$/.test(f)).sort()
         .map(f => `.github/workflows/${f}`)
     : [];
+
+  // Cabeçalho de script é prosa viva pelo mesmo motivo — e pior: é o primeiro texto que alguém lê
+  // ao abrir a ferramenta, então um número errado ali é lido como medição. O `check_views.mjs`
+  // afirmou "~62% do app.js" (medido: ~58%) até 08/08/2026, e nenhuma guarda alcançava o arquivo.
+  // Como os `.yml`, os `.mjs` entram SÓ na conferência de fatos numéricos: link markdown e
+  // `SB_URL` não são a linguagem deles.
+  const SCRIPTS = existe('scripts')
+    ? fs.readdirSync(path.join(RAIZ, 'scripts')).filter(f => f.endsWith('.mjs')).sort()
+        .map(f => `scripts/${f}`)
+    : [];
+  const PROSA_VIVA = [...WORKFLOWS, ...SCRIPTS];
 
   // --- fatos computados do CÓDIGO (a fonte da verdade) ---
   const linhasApp = js.split('\n').length;
@@ -259,8 +278,12 @@ console.log('\n[2b] Deriva docs × código');
   // Em `.yml` o marcador `#` do comentário é removido ANTES de normalizar o espaço: um comentário
   // longo quebra em várias linhas, cada uma recomeçando com `#`, e sem tirá-lo a frase "Abre as 23
   // \n#  views" nunca casa o regex — a guarda passaria cega, que é pior que não existir.
+  // Em `.mjs` o marcador é `//` e vale o mesmo raciocínio: um cabeçalho de 20 linhas recomeça
+  // com `//` a cada linha, e sem tirá-lo a frase quebrada nunca casa o regex — guarda cega.
   const normalizar = (arq, txt) =>
-    (/\.ya?ml$/.test(arq) ? txt.replace(/^[ \t]*#[ \t]?/gm, ' ') : txt).replace(/\s+/g, ' ');
+    (/\.ya?ml$/.test(arq) ? txt.replace(/^[ \t]*#[ \t]?/gm, ' ')
+      : /\.mjs$/.test(arq) ? txt.replace(/^[ \t]*\/\/[ \t]?/gm, ' ')
+      : txt).replace(/\s+/g, ' ');
   const num = s => parseFloat(String(s).replace(',', '.'));
   const FATOS = [
     { doc:'docs/estrutura-frontend.md', o:'linhas do app.js',      re:/~([\d,.]+)k linhas — extraído do HTML/, real:linhasApp,   esc:'k' },
@@ -280,8 +303,12 @@ console.log('\n[2b] Deriva docs × código');
     // `doc` pode ser uma LISTA de arquivos: o fato tem de aparecer em pelo menos um deles, e toda
     // ocorrência em qualquer um é conferida. Nos workflows a lista é o diretório inteiro, de
     // propósito — se a frase migrar do `views.yml` para outro workflow, continua coberta.
-    { doc:WORKFLOWS, o:'views do check_views (workflows)', re:/([\d]+)\s*views\b/, real:views,   esc:'exato' },
-    { doc:WORKFLOWS, o:'% da seção MODAL (workflows)',     re:/~([\d,.]+)% do app\.js/, real:modalPct, esc:'pct' },
+    { doc:PROSA_VIVA, o:'views do check_views (workflows/scripts)', re:/([\d]+)\s*views\b/, real:views,   esc:'exato' },
+    { doc:PROSA_VIVA, o:'% da seção MODAL (workflows/scripts)',     re:/~([\d,.]+)% do app\.js/, real:modalPct, esc:'pct' },
+    // O `backup_rest.mjs` anuncia no próprio cabeçalho quantas tabelas baixa em modo público. O
+    // `*{0,2}` deixa o mesmo regex servir ao markdown (`**14**`) e ao comentário de script.
+    { doc:['docs/backup.md', ...SCRIPTS], o:'tabelas públicas (docs/scripts)',
+      re:/as \*{0,2}([\d]+)\*{0,2} tabelas públicas/, real:bkPublicas, esc:'exato' },
     // O comentário do hook entra na lista pelo mesmo motivo dos workflows: é prosa viva que
     // ninguém relê (não abre em leitor de markdown) e que afirma um número. Mantenha a frase
     // numa linha só — o `normalizar` não tira o `#` de `.sh`, então quebra de linha a esconde.
@@ -316,6 +343,43 @@ console.log('\n[2b] Deriva docs × código');
     else { ocorrencias += achou; if (!divergiu) fatosOk++; }
   }
   okline(`fatos numéricos conferidos (${fatosOk}/${FATOS.length - fatosPulados} afirmações, ${ocorrencias} ocorrências)`);
+
+  // --- toda tabela de RT_TABLES aparece no mapa tabela→card do CLAUDE.md ---
+  // A contagem sozinha não bastava: o CLAUDE.md dizia "as 14 tabelas lidas pelo portal" logo acima
+  // de um mapa que listava 12 (faltavam `codempresa_teste` e `portaria_teste`, e com elas o tópico
+  // Portarias inteiro). O número certo ao lado da lista errada é pior que os dois errados, porque
+  // parece conferido. Aqui a comparação é NOMINAL, tabela a tabela — a única forma de a lista não
+  // poder ficar para trás quando um card novo lê tabela nova.
+  {
+    const claude = ler('CLAUDE.md');
+    const mapa = /## Tabelas → onde aparecem \(cards\)\n([\s\S]*?)\n## /.exec(claude)?.[1];
+    const rt = (/RT_TABLES\s*=\s*\[([\s\S]*?)\]/.exec(js)?.[1] || '').match(/'([a-z_]+)'/g) || [];
+    if (!mapa) fail('[CLAUDE.md] não achei a seção "Tabelas → onde aparecem (cards)" — se ela mudou de título, atualize o regex (não apague a guarda)');
+    else if (!rt.length) fail('[app.js] não consegui ler RT_TABLES — a guarda ficou cega, conserte o extrator');
+    else {
+      const faltando = rt.map(t => t.slice(1, -1)).filter(t => !mapa.includes(`\`${t}\``));
+      if (faltando.length) fail(`[CLAUDE.md] o mapa tabela→card não cita ${faltando.length} tabela(s) de RT_TABLES: ${faltando.join(', ')} — card que lê tabela nova entra no mapa junto`);
+      else okline(`mapa tabela→card cobre as ${rt.length} tabelas de RT_TABLES`);
+    }
+  }
+
+  // --- a contagem de entradas de .claude/skills/ bate com o que o CLAUDE.md afirma ---
+  // O manifesto do Superpowers já era conferido, mas ele só conhece a leva DELE: `.claude/skills/`
+  // tinha 36 entradas (15 diretórios reais + 21 symlinks para `.agents/skills/`, de
+  // `mattpocock/skills`) e nenhum `.md` do repo mencionava o segundo conjunto, o lockfile ou a
+  // origem. Contar do disco é o que impede a prosa de descrever metade da pasta.
+  if (existe('.claude/skills')) {
+    const ent = fs.readdirSync(path.join(RAIZ, '.claude/skills'), { withFileTypes:true })
+      .filter(e => !e.name.startsWith('.'));
+    const links = ent.filter(e => e.isSymbolicLink()).length;
+    const dirs = ent.length - links;
+    const claude = normalizar('CLAUDE.md', ler('CLAUDE.md'));
+    const m = /\*\*(\d+) diretórios reais \+ (\d+) symlinks = (\d+) entradas\*\*/.exec(claude);
+    if (!m) fail('[CLAUDE.md] não afirma a composição de `.claude/skills/` — escreva "**N diretórios reais + N symlinks = N entradas**" (não apague a guarda)');
+    else if (+m[1] !== dirs || +m[2] !== links || +m[3] !== ent.length) {
+      fail(`[CLAUDE.md] composição de .claude/skills/: doc diz ${m[1]}+${m[2]}=${m[3]}, disco diz ${dirs}+${links}=${ent.length}`);
+    } else okline(`.claude/skills/: ${dirs} diretórios + ${links} symlinks = ${ent.length} entradas, como o CLAUDE.md afirma`);
+  }
 
   // --- todo LINK markdown aponta para algo que existe ---
   // Deliberadamente só links `[texto](caminho)`, não qualquer token em backtick: a primeira
@@ -402,8 +466,12 @@ console.log('\n[2b] Deriva docs × código');
   // --- status estável do PR #73 nos dois handoffs correntes ---
   // O merge é evento histórico estável. O que drifta é deixar o handoff continuar mandando
   // "decidir o draft" depois de ele já ter entrado na main.
-  for (const doc of ['docs/contexto-proxima-sessao-2026-07-31.md', 'docs/pendencias-2026-07-31-consolidado.md']) {
-    if (!existe(doc)) continue;
+  // `if (!existe) continue` era fail-open: ao mover estes dois para `docs/historico/` (08/08/2026)
+  // a guarda simplesmente PAROU DE IMPRIMIR, sem uma linha de aviso — o gate seguiu verde com dois
+  // checks a menos. Arquivo que a guarda cita por caminho e some é achado, não silêncio.
+  for (const doc of ['docs/historico/contexto-proxima-sessao-2026-07-31.md',
+                     'docs/historico/pendencias-2026-07-31-consolidado.md']) {
+    if (!existe(doc)) { fail(`[${doc}] sumiu — se o arquivo foi movido, atualize o caminho aqui (não apague a guarda)`); continue; }
     const src = ler(doc);
     if (!/0bfb38a/.test(src) || !/#73[^\n]*(mergeado|merge)/i.test(src)) {
       fail(`[${doc}] não registra o merge do #73 em 0bfb38a`);

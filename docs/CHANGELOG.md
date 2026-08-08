@@ -154,7 +154,7 @@ mandando o contrário.
 - **ADR-0002 saiu do papel, e a ADR passou a dizer isso:** a verificação de 31/07 às 01:03 UTC está
   registrada no Status. Entre 28/07 e essa data a ADR afirmava a propriedade sem que nenhum gate a
   exercesse em preview.
-- **`docs/handoff-2026-07-30-auditoria-verificacao.md` resgatado:** existia só na branch
+- **`docs/historico/handoff-2026-07-30-auditoria-verificacao.md` resgatado:** existia só na branch
   `claude/ask-matt-u6cwf8`, sem PR, e o CHANGELOG **já citava o caminho** — referência apontando
   para arquivo ausente na `main` desde a entrada anterior.
 
@@ -203,7 +203,7 @@ bastavam**. Agora o `push` é `branches: [main]` nos cinco; `pull_request`, os c
 ## 30/07/2026 — A guarda `[2b]` passou a varrer os comentários dos workflows
 
 PRs 3 e 2 do plano acordado na auditoria preliminar de 30/07/2026
-(`docs/handoff-2026-07-30-auditoria-verificacao.md`, achado **D**). Feitos **nesta ordem** de
+(`docs/historico/handoff-2026-07-30-auditoria-verificacao.md`, achado **D**). Feitos **nesta ordem** de
 propósito: primeiro a guarda, para provar contra o caso real que ela pega; depois a correção.
 
 - **A guarda (PR 3).** A seção `[2b]` do `tests/check.js` varria só `.md`. Comentário de workflow
@@ -293,7 +293,7 @@ propósito: primeiro a guarda, para provar contra o caso real que ela pega; depo
   baixo via lookups (bug: mudança em lookup não recarregava a tela).
 - Runbook **`docs/backup.md`** + baseline **`docs/backup_schema.sql`** + script
   **`scripts/backup_rest.mjs`** (o projeto está no plano Free, sem PITR).
-- Relatório: `docs/revisao-externa-2026-07-16.md`.
+- Relatório: `docs/historico/revisao-externa-2026-07-16.md`.
 
 ## 17/07/2026 — Vendoring do supabase-js + renames de schema
 
@@ -303,7 +303,7 @@ propósito: primeiro a guarda, para provar contra o caso real que ela pega; depo
   `itinerario_teste`; antes se chamava `cod_origem`) e typo `cod_origen` corrigido em
   `qh_intervalo_teste`. Índices e `divat_linhas_regiao` acompanharam (`docs/schema.md`).
 - Args `tables:[...]` mortos removidos das chamadas de `searchPanel`.
-- Relatório: `docs/revisao-externa-2026-07-17.md`.
+- Relatório: `docs/historico/revisao-externa-2026-07-17.md`.
 
 ## 18/07/2026 — Paginação de tela + PDF inteiro
 
@@ -313,7 +313,7 @@ propósito: primeiro a guarda, para provar contra o caso real que ela pega; depo
 
 ## 21/07/2026 — Endurecimento final (revisão de arquitetura)
 
-Plano completo em `docs/plano-endurecimento-2026-07-21.md`. Em resumo:
+Plano completo em `docs/historico/plano-endurecimento-2026-07-21.md`. Em resumo:
 
 1. **Backup automático**: workflow `.github/workflows/backup.yml` (semanal + manual) roda o
    `backup_rest.mjs` em **modo público** (anon key, 14 tabelas, sem staging), artifact 90 dias.

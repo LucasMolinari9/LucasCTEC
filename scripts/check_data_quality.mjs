@@ -26,6 +26,37 @@
 // no instante em que aparecer um achado NOVO ou um conhecido PIORAR. O baseline é dívida
 // registrada, não perdão — cada linha dele é dado para consertar, e ao consertar rode
 // --atualizar-baseline para o gate voltar a apertar.
+//
+// A DÍVIDA, EM DETALHE (medida em 27/07/2026, contra o banco vivo). Estava no CLAUDE.md, que é
+// lido no início de TODA sessão; mora aqui porque é runbook de quem opera este gate, não contexto
+// de quem mexe no portal:
+//
+//   - 17 codlinhas órfãs — filhos apontando para `codlinha` que não existe em
+//     `tabela_vista_teste`: itinerario_teste (2), qh_teste (3), qh_predeterminado_teste (5),
+//     evento_teste (7). Mais 4 linhas de qh_predeterminado_teste com `cod_origem` inexistente em
+//     origem_teste. `146016000` e `191020001` aparecem órfãos em TRÊS tabelas cada.
+//     Consequência prática: as views dessas linhas renderizam VAZIAS, sem erro — exatamente o
+//     modo de falha da issue #63, já acontecendo. (U+FFFD e `codempresa` inválida: zero achados.)
+//
+//   - Órfã NÃO quer dizer a mesma coisa em toda tabela. As 7 de evento_teste são atos reais de
+//     1974–1996, da época do DTC/RJ, de linhas anteriores ao cadastro atual — e linha extinta não
+//     some do cadastro (o hub tem a coluna `cancelado`, com 500 linhas marcadas assim), então
+//     órfã em evento_teste não é rastro de exclusão: é história mais velha que o cadastro. Por
+//     isso REBAIXADOS_A_AVISO (abaixo) rebaixa evento_teste a aviso e mantém as demais como erro
+//     — a RPC MEDE o fato, a POLÍTICA de severidade fica versionada aqui, no repo.
+//     NÃO APAGAR os filhos órfãos de evento_teste: é arquivo institucional insubstituível.
+//     O preço do rebaixamento é conhecido e aceito: achado NOVO em evento_teste também sai como
+//     aviso e não derruba o gate — inclusive `186006400`, evento de 2021 com sufixo anômalo (o
+//     hub tem `186006000`/`186006001`), suspeito de digitação.
+//
+//   - O gate compara CONTAGEM, não a lista. Uma órfã corrigida e outra criada mantêm o número e
+//     passam despercebidas. As 12 codlinhas órfãs estão listadas uma a uma e classificadas em
+//     `orfaos_conhecidos`, dentro do data_quality_baseline.json (a RPC agrega e não diz QUAIS; o
+//     campo é mantido à mão e o --atualizar-baseline o preserva). Ao mexer nesses dados, confira
+//     a LISTA, não só o número.
+//
+//   - `qtd` não tem unidade única: em `codlinha_orfa` é count(distinct codlinha); nas outras
+//     verificações é count(*) de linhas. A saída rotula qual é qual.
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';

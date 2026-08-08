@@ -1,5 +1,9 @@
 # Plano — Endurecimento final do Portal DIVAT
 
+> **Snapshot de 21/07/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 > **Para o agente executor:** este plano foi elaborado e aprovado pelo dono em 21/07/2026, a partir
 > de uma revisão de arquitetura. Antes de começar, leia o `CLAUDE.md` (regras do projeto) e
 > `docs/estrutura-frontend.md` (regras de segurança para mexer no JS). Execute as fases **na ordem**,

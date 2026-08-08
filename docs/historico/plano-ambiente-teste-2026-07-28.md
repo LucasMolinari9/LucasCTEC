@@ -1,5 +1,9 @@
 # Plano — ambiente de teste isolado (handoff para agente com acesso ao git)
 
+> **Snapshot de 28/07/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 > **Status em 28/07/2026: executado.** O projeto `divat - TESTE`
 > (`gontnlfmothfglssbyyk`) está ativo, `divatdetro.vercel.app` é a allowlist de produção e
 > hostnames de preview usam teste. O fallback inerte descrito abaixo foi substituído por
