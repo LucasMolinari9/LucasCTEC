@@ -64,6 +64,90 @@ liberado na configuração de rede do ambiente, o passo do `seguranca` passa a s
 Claude; o do `qualidade` **não**, porque depende de credencial administrativa do banco e de escrita
 em Actions Secrets, que nenhum token da sessão alcança.
 
+## Runbook do que é do dono (celular basta)
+
+Escrito porque o `scripts/bootstrap_phase3_auditor.sql` versionado **não roda no SQL Editor**: ele
+usa meta-comandos do `psql` (`\set`, `\if`, `\gexec`). O bloco abaixo é a variante equivalente para
+o painel. É operação de uma vez só — se um dia o script versionado mudar, esta cópia aqui é
+snapshot datado e não acompanha; confira contra ele antes de reusar.
+
+### 1. Criar o login auditor no projeto de TESTE
+
+A senha é gerada **dentro do banco**: o texto da query não carrega segredo (o SQL Editor guarda o
+texto das queries), só o resultado na tela.
+
+```sql
+create temp table _cred as
+  select replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '') as senha;
+
+do $$
+declare s text;
+begin
+  select senha into s from _cred;
+  if exists (select 1 from pg_roles where rolname = 'divat_auditor_ci') then
+    execute format('alter role divat_auditor_ci with login inherit nosuperuser nocreatedb '
+      || 'nocreaterole noreplication nobypassrls password %L valid until %L',
+      s, '2026-10-31 23:59:59+00');
+  else
+    execute format('create role divat_auditor_ci login inherit nosuperuser nocreatedb '
+      || 'nocreaterole noreplication nobypassrls password %L valid until %L',
+      s, '2026-10-31 23:59:59+00');
+  end if;
+end $$;
+
+grant divat_auditor to divat_auditor_ci;
+
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'divat_auditor_ci'
+             and (not rolcanlogin or rolsuper or rolcreatedb or rolcreaterole
+                  or rolreplication or rolbypassrls)) then
+    raise exception 'divat_auditor_ci terminou com atributos invalidos';
+  end if;
+  if has_table_privilege('divat_auditor_ci', 'public.tabela_vista_teste', 'select') then
+    raise exception 'divat_auditor_ci nao pode ler tabelas diretamente';
+  end if;
+  if not has_function_privilege('divat_auditor_ci', 'audit.divat_security_shape()', 'execute') then
+    raise exception 'divat_auditor_ci nao herdou as funcoes de audit';
+  end if;
+end $$;
+
+select senha from _cred;
+```
+
+As três asserções são as mesmas do script versionado: login sem poder administrativo, sem leitura
+direta de tabela, herdando só as funções de `audit`.
+
+### 2. Montar a URL — tem que ser a do POOLER
+
+**Não use a conexão direta.** O runner do GitHub é IPv4 e a conexão direta do Supabase é IPv6; o
+`scripts/lib/auditor.mjs` aceita as duas formas, mas só o pooler funciona no CI (está dito em
+comentário lá, `auditor.mjs:47-48`).
+
+No painel: *Project Settings → Database → Connection string → **Session pooler***. Ela vem como
+
+```
+postgresql://postgres.gontnlfmothfglssbyyk:[SENHA]@<host>.pooler.supabase.com:5432/postgres
+```
+
+Troque **duas** coisas e acrescente uma:
+
+- `postgres.gontnlfmothfglssbyyk` → `divat_auditor_ci.gontnlfmothfglssbyyk`
+- `[SENHA]` → a senha que a query devolveu
+- `?sslmode=require` no fim
+
+O host do pooler fica como o painel deu. A guarda do `auditor.mjs` exige que o usuário comece com
+`divat_auditor_ci` **e** termine com `.gontnlfmothfglssbyyk` — errar um dos dois faz o gate recusar
+a conexão, e a mensagem cita o nome da variável, nunca o valor.
+
+### 3. Gravar o secret e o prazo
+
+*Settings → Secrets and variables → Actions → New repository secret*, nome exato
+**`SUPABASE_TEST_AUDIT_DATABASE_URL`**.
+
+Depois, `vence_em: 2026-10-31` na entrada da credencial em `scripts/prazos.json` — é o que faz o
+`check_prazos` cobrar a rotação antes de vencer.
+
 ## O que esta sessão fez
 
 1. **Corrigiu a cegueira silenciosa do `check_data_quality`** (`7cae926`), item mais urgente da
