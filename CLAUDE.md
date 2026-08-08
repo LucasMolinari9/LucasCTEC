@@ -76,7 +76,9 @@ exibe e **atualiza ao vivo** (Realtime).
   - **Manual de segurança do dono + auditoria/pentest** (linguagem direta, modelo de ameaça,
     checklist trimestral e resposta a incidente): **`docs/seguranca.md`**. Auditoria completa +
     teste de invasão ao vivo em 23/07/2026 (sem achados de segredo; sem caminho de escrita).
-  - **Como o dono alimenta:** direto pelo **painel do Supabase** (service role, ignora RLS).
+  - **Como o dono alimenta:** o banco do **DETRO** é a fonte; o dono exporta em **CSV** e importa
+    pelo **Table Editor** do painel do Supabase (service role, ignora RLS). Runbook completo —
+    encoding obrigatório, staging, o que rodar depois: **`docs/etl.md`**.
   - **Teto do PostgREST:** `pgrst.db_max_rows = 30000` no role `authenticator` (igual ao maior
     `limit` do front). **Ao criar query com `limit` > 30000, suba o teto junto**
     (`ALTER ROLE authenticator SET pgrst.db_max_rows = '<n>'; NOTIFY pgrst, 'reload config';`)
@@ -302,12 +304,18 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   município** (`itinerario_teste`). Detalhe + diagrama em `docs/schema.md`. **Atenção ETL:** o
   import precisa escrever nesses nomes — se escrever nos antigos (`cod_origen`, `cod_origem` em
   `itinerario_teste`), **recria as colunas velhas**.
-- **Staging do ETL (não lidas pelo portal):** `evento_dados` + `evento_textos` montam
-  `evento_teste`; `portaria_data` + `portaria_texto_teste` montam `portaria_teste`. RLS ligado
+- **Staging do ETL (não lidas pelo portal):** `evento_dados` + `evento_textos` casam por `id` com
+  `evento_teste`; `portaria_data` + `portaria_texto_teste`, com `portaria_teste`. RLS ligado
   **sem policy** e **sem grant** → invisíveis pela API pública, de propósito (o lint
   `rls_enabled_no_policy` nelas é **esperado**). Alimentação via service role (painel).
-  **Correção de dado em tabela final deve ser replicada na staging correspondente** (senão o
-  rebuild do ETL desfaz).
+  **Por precaução, replique na staging toda correção feita em tabela final** (casando pelo `id`):
+  se houver rebuild, correção que só existe na final é desfeita em silêncio.
+  ⚠️ **O rebuild em si não está descrito em lugar nenhum e não foi possível apurar** — a junção
+  acima é **deduzida do schema**, não de procedimento observado. Até 08/08/2026 esta linha
+  afirmava que "o rebuild do ETL desfaz", como se o mecanismo fosse conhecido; ele não é.
+  `docs/etl.md` §3 traz a consulta que fecha o vazio (procura função/trigger e compara as
+  contagens) — **rode-a antes de escrever qualquer comando de rebuild**: um `TRUNCATE` errado
+  aqui apaga arquivo institucional insubstituível.
 - **Truncagem silenciosa:** a maioria dos loaders avisa via `marcarTrunc`/`bannerTrunc`, mas
   cortes por `slice(0,N)` no cliente **perdem** a flag não-enumerável `_trunc` (o `slice` não a
   copia). Ao criar/editar view que faz `slice` no cliente, **reponha a flag** (ou avise o

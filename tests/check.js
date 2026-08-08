@@ -220,7 +220,7 @@ console.log('\n[2b] Deriva docs × código');
     ? fs.readdirSync(path.join(RAIZ, dir)).filter(f => f.endsWith('.md')).sort().map(f => `${dir}/${f}`)
     : [];
   const DOCS_VIVOS = ['CLAUDE.md', 'README.md', 'CONTEXT.md', 'docs/estrutura-frontend.md',
-    'docs/schema.md', 'docs/backup.md', 'docs/seguranca.md', 'docs/semgrep.md',
+    'docs/schema.md', 'docs/backup.md', 'docs/etl.md', 'docs/seguranca.md', 'docs/semgrep.md',
     'docs/agents/domain.md', 'docs/agents/issue-tracker.md', 'docs/agents/triage-labels.md',
     'tests/README.md', ...varrerDocs('docs/adr'), ...varrerDocs('docs/planos')].filter(existe);
 

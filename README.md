@@ -99,6 +99,7 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 | [`docs/schema.md`](docs/schema.md) | Mapa **relacional** das tabelas (como se ligam, por qual chave) + funções e trigger. |
 | [`docs/seguranca.md`](docs/seguranca.md) | Manual de segurança do dono: modelo de ameaça, checklist e resposta a incidente. |
 | [`docs/backup.md`](docs/backup.md) | Runbook de backup e recuperação do banco. |
+| [`docs/etl.md`](docs/etl.md) | Como o dono alimenta o banco: DETRO → CSV → Table Editor, encoding obrigatório, staging e o que rodar depois. |
 | [`docs/backup_schema.sql`](docs/backup_schema.sql) | Script que recria a estrutura do banco (tabelas, PK/FK, índices, RLS, grants, funções). |
 | [`docs/semgrep.md`](docs/semgrep.md) | Runbook da análise estática e como escrever regra nova. |
 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | Cronologia do projeto — como se chegou ao estado atual. |
