@@ -2,7 +2,7 @@
 
 > **Por que este arquivo existe:** o frontend são **três arquivos**: `index.html` (HTML),
 > `styles.css` (todo o CSS — extraído do HTML em 22/07/2026) e **`app.js`** (todo o JS,
-> ~3,2k linhas — extraído do HTML em 21/07/2026, envolto num IIFE desde 22/07/2026). Continua
+> ~3,5k linhas — extraído do HTML em 21/07/2026, envolto num IIFE desde 22/07/2026). Continua
 > **zero-build**: nada de bundler, framework ou `package.json`. Este doc registra (1) *por que*
 > essa forma, (2) *como navegar* no `app.js` sem se perder, e (3) as **regras de segurança** para
 > reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do `CLAUDE.md` (que lista as
