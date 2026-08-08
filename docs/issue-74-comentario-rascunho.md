@@ -1,9 +1,15 @@
-# Rascunho do comentário para a issue #74 — NÃO POSTADO
+# Comentário da issue #74 — POSTADO em 08/08/2026
 
-> Texto pronto e revisado, versionado aqui para sobreviver ao fim da sessão.
-> **Não foi postado**: publicar é ação para fora e depende do dono.
-> **Não fechar a issue** — o desenho não cumpre duas cláusulas dela (ver abaixo), e quem
-> aceita ou recusa essa troca é quem a escreveu.
+> Publicado em [#74 (comment)](https://github.com/LucasMolinari9/LucasCTEC/issues/74#issuecomment-5223486677),
+> a pedido do dono. A issue **continua aberta**: o desenho não cumpre duas cláusulas dela (ver
+> abaixo), e quem aceita ou recusa essa troca é quem a escreveu.
+>
+> **O texto publicado difere deste em um ponto**, corrigido na hora de postar: o parágrafo que
+> previa o `check_data_quality` caindo no fallback anônimo com um `⚠` deixou de valer quando a
+> migração `20260805000000` entrou no banco de teste — `divat_data_quality()` não é mais
+> alcançável por `anon` ali, então o gate `qualidade` passa a exigir o secret
+> `SUPABASE_TEST_AUDIT_DATABASE_URL` em vez de degradar com aviso. O comentário publicado diz
+> isso; o rascunho abaixo é mantido como estava, como registro do que se sabia em 06/08.
 
 ---
 
