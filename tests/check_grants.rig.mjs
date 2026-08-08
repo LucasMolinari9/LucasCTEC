@@ -93,6 +93,13 @@ caso('função sem search_path fixo', f => { f.funcoes[0].search_path_fixo = fal
 caso('default do postgres reaberto', f => { f.default_privileges[0].anon_privs = ['SELECT']; return f; }, 1);
 caso('RPC devolve lista vazia (visão perdida)', f => { f.tabelas = []; return f; }, 1);
 caso('RPC sem o campo funcoes', f => { delete f.funcoes; return f; }, 1);
+// Os dois abaixo são o achado E da auditoria de 08/08/2026: o guard de "lista vazia não é
+// tudo certo, é visão perdida" existia SÓ para `tabelas`. Lista vazia em `funcoes` ou em
+// `default_privileges` passava no Array.isArray, o laço simplesmente não iterava, e o gate
+// imprimia "nenhum achado" — justo nos dois eixos onde mora o risco 9.1 (os defaults do
+// supabase_admin, que não são fecháveis). Perder visão ali e sair 0 é o pior resultado.
+caso('funcoes vem vazia (visão perdida)', f => { f.funcoes = []; return f; }, 1);
+caso('default_privileges vem vazio (visão perdida)', f => { f.default_privileges = []; return f; }, 1);
 
 await writeFile(`${RAIZ}/scripts/security_baseline.json`, JSON.stringify(baseline, null, 2));
 

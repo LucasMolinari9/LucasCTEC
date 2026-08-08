@@ -98,9 +98,12 @@ const frotaCols = cod => ({
   frota_micro_a: 0, frota_micro_sa: 0, frota_micro_ac: 0, frota_micro_sac: 0, frota_micro_e: 0,
 });
 
+// `nome_ligacao_cresc` (nome no sentido crescente) é pedida pelo card de Localidade
+// (app.js:2609), tanto no filtro `orIlike` quanto na exibição, e faltava aqui.
 const tarifa = (codlinha, codempresa, secao, tarifa_v) => ({
   codlinha, codempresa, secao, numero_linha: codlinha === '549000001' ? '549M' : '740D',
   nome_ligacao: codlinha === '549000001' ? 'RIO DE JANEIRO X NITEROI' : 'PETROPOLIS X TERESOPOLIS',
+  nome_ligacao_cresc: codlinha === '549000001' ? 'NITEROI X RIO DE JANEIRO' : 'TERESOPOLIS X PETROPOLIS',
   via: codlinha === '549000001' ? 'PONTE' : 'BR-495', caracteristica: 'CONVENCIONAL',
   tipo_ligacao: 'INTERMUNICIPAL', rm: codlinha === '549000001' ? 'SIM' : 'NAO',
   tarifa: tarifa_v, piso_i: null, situacao: 'REGULAR',
@@ -118,9 +121,14 @@ export const FIXTURES = {
     // situação nenhuma funcionando. É a fixture do check_selecao_linha.mjs.
     { ...linha('999000001', '999C', 'NITEROI X SAO GONCALO', '102', 'ALAMEDA'), cancelado: '2020-03-01' },
   ],
+  // `processo` e `data_publicacao` são pedidas pelo Histórico da Empresa (app.js:1943) e
+  // faltavam aqui: a view renderizava `undefined` nos dois campos e passava verde. Enquanto o
+  // `serve()` ignorava o `select=`, a ausência era invisível; com a projeção, vira 400.
   codempresa_teste: [
-    { codempresa: '101', nome_empresa: 'VIACAO ALFA', situacao: 'REGULAR', cassada: false, sob_intervencao: false },
-    { codempresa: '102', nome_empresa: 'VIACAO BETA', situacao: 'REGULAR', cassada: false, sob_intervencao: false },
+    { codempresa: '101', nome_empresa: 'VIACAO ALFA', situacao: 'REGULAR', cassada: false, sob_intervencao: false,
+      processo: 'E-10/004/1998', data_publicacao: '1998-11-20' },
+    { codempresa: '102', nome_empresa: 'VIACAO BETA', situacao: 'REGULAR', cassada: false, sob_intervencao: false,
+      processo: 'E-10/005/2005', data_publicacao: '2005-03-14' },
   ],
   // `dia_semana` (não `dia`) — é o nome que o select= do app.js pede.
   qh_intervalo_teste: [
@@ -192,18 +200,18 @@ function serveRpc(fn, params) {
   if (fn === 'divat_busca_logradouro') {
     const termo = txt(params.get('termo')).replace(/\*/g, '');
     const ibge = params.get('p_ibge');
-    return FIXTURES.itinerario_teste.filter(r =>
+    return { status: 200, body: FIXTURES.itinerario_teste.filter(r =>
       (!termo || txt(`${r.tipo_logradouro} ${r.nome_logradouro}`).includes(termo)) &&
-      (!ibge || String(r.cod_municipio_origem) === ibge));
+      (!ibge || String(r.cod_municipio_origem) === ibge)) };
   }
   if (fn === 'divat_linhas_regiao') {
     const regiao = txt(params.get('p_regiao'));
     const ibges = FIXTURES.municipio_teste
       .filter(m => !regiao || txt(m.regiao_municipio) === regiao || txt(m.regiao_novo) === regiao)
       .map(m => String(m.cod_ibge));
-    return FIXTURES.itinerario_teste.filter(r => ibges.includes(String(r.cod_municipio_origem)));
+    return { status: 200, body: FIXTURES.itinerario_teste.filter(r => ibges.includes(String(r.cod_municipio_origem))) };
   }
-  return [];
+  return { status: 200, body: [] };
 }
 
 export function serve(table, qs) {
@@ -242,7 +250,30 @@ export function serve(table, qs) {
   }
 
   const limit = Number(params.get('limit'));
-  return limit > 0 ? rows.slice(0, limit) : rows;
+  if (limit > 0) rows = rows.slice(0, limit);
+
+  /* Projeção do `select=`. O PostgREST responde 400 para coluna inexistente, e a bancada
+     precisa fazer o mesmo: até 08/08/2026 este parâmetro era PULADO, a fixture voltava
+     inteira, e trocar um nome de coluna no app.js mantinha as 17 views verdes enquanto a
+     tela quebrava em produção — o modo de falha que o CLAUDE.md chama de "o pior possível".
+     Todo `select=` do app.js é lista simples de colunas: zero `*`, zero agregação, zero
+     embed (conferido). Se um dia entrar uma dessas formas, esta função precisa saber. */
+  const select = params.get('select');
+  if (!select) return { status: 200, body: rows };
+
+  const pedidas = decodeURIComponent(select).split(',').map(s => s.trim()).filter(Boolean);
+  // A forma da fixture é a união das chaves de TODAS as linhas: uma linha pode ter `null`
+  // omitido e ainda assim a coluna existir na tabela real.
+  const conhecidas = new Set((FIXTURES[table] || []).flatMap(r => Object.keys(r)));
+  const ausentes = pedidas.filter(c => !conhecidas.has(c));
+  if (ausentes.length) {
+    return {
+      status: 400,
+      body: { code: '42703', message: `column "${ausentes[0]}" does not exist`,
+              hint: `a fixture de ${table} (scripts/lib/rig.mjs) não tem: ${ausentes.join(', ')}` },
+    };
+  }
+  return { status: 200, body: rows.map(r => Object.fromEntries(pedidas.map(c => [c, r[c]]))) };
 }
 
 /* ================================================================
@@ -253,9 +284,10 @@ export async function launchPage(chromium) {
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
   await page.route('**/rest/v1/**', route => {
     const u = new URL(route.request().url());
+    const res = serve(u.pathname.split('/rest/v1/')[1], u.search.slice(1));
     route.fulfill({
-      status: 200, contentType: 'application/json',
-      body: JSON.stringify(serve(u.pathname.split('/rest/v1/')[1], u.search.slice(1))),
+      status: res.status, contentType: 'application/json',
+      body: JSON.stringify(res.body),
     });
   });
   return { browser, page };
