@@ -1237,6 +1237,15 @@ btnBack.addEventListener('click', () => {
 function setBody(html){ modalBody.innerHTML = html; }
 function loading(msg='Carregando…'){ return `<div class="m-loading"><div class="spin"></div>${esc(msg)}</div>`; }
 function emptyBox(msg){ return `<div class="m-loading">${esc(msg)}</div>`; }
+/* Estado vazio de DOCUMENTO DE LINHA: o usuário já escolheu a linha e a consulta voltou vazia.
+   O texto não pode afirmar que o dado NÃO EXISTE, porque o portal não sabe disso. As codlinhas
+   órfãs medidas contra o banco em 27/07/2026 (filhos em itinerario_teste, qh_teste,
+   qh_predeterminado_teste e evento_teste apontando para codlinha ausente do cadastro) fazem a
+   view renderizar vazia SEM erro nenhum — e "nenhum itinerário cadastrado para esta linha" é,
+   para o cidadão, indistinguível de linha que realmente não tem itinerário. Definição única
+   para não divergir mensagem a mensagem; use em toda tela que responde por linha já escolhida.
+   Ver docs/planos/2026-08-08-correcoes-auditoria.md (Task 13) e CLAUDE.md (2e). */
+function emptyLinha(oQue){ return emptyBox(`Nenhum registro de ${oQue} foi localizado para esta linha.`); }
 function errorBox(msg){ return `<div class="m-loading err">Erro ao carregar: ${esc(msg)}</div>`; }
 
 /* --- Dispatcher — runView ---------------------------------------- */
@@ -1451,7 +1460,7 @@ async function renderLineHistory(host, line){
   ]);
   const head = docHead('Histórico da Linha');
   const meta = metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(orDash(line.codempresa))],['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—'),true]]);
-  if (!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento registrado para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+  if (!rows.length){ host.innerHTML = meta + emptyLinha('evento'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const build = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin?.[r.evento_linha] || lk.emp?.[r.evento_empresa] || '—', false) + evBlocksHTML(r);
   // PDF/impressão: um evento por página (cabeçalho repetido); segue o filtro aplicado na tela
   const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
@@ -1470,7 +1479,7 @@ const SENTIDO_ORDER = { 'Ida':1, 'Volta':2, 'Circular':3 };
 const normSentido = s => { const t=String(s||'').trim().toLowerCase(); if(t.startsWith('ida'))return'Ida'; if(t.startsWith('volta'))return'Volta'; if(t.startsWith('circ'))return'Circular'; return s?String(s):'—'; };
 
 function itinerarioTableHTML(rows, ibge){
-  if(!rows.length) return emptyBox('Nenhum itinerário cadastrado para esta linha.');
+  if(!rows.length) return emptyLinha('itinerário');
   rows.forEach(r=>r._sn=normSentido(r.sentido));
   rows.sort((a,b)=>{ const oa=SENTIDO_ORDER[a._sn]||9, ob=SENTIDO_ORDER[b._sn]||9; return oa!==ob?oa-ob:(a.id-b.id); });
   let last=null;
@@ -1490,7 +1499,7 @@ async function renderItinerarios(host, line){
     sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=${ITINERARIO_FIELDS}&order=id`),
     getIbge(), getEmpresas()
   ]);
-  if (!rows.length) { host.innerHTML = emptyBox('Nenhum itinerário encontrado para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+  if (!rows.length) { host.innerHTML = emptyLinha('itinerário'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const codEmp = rows[0]?.codempresa || line.codempresa || '';
   const meta = metaRows([['Empresa',esc(empNome(codEmp)),true],['Registro','RJ-'+esc(codEmp)],
       ['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
@@ -1518,7 +1527,7 @@ LOADERS.itinerarios = () => lineDocView({ subtitle:'Cadastro de Linhas: Itinerá
 
 /* --- DOC · Quadro de Horários --------------------------------- */
 function quadroHorariosBodyHTML(interv, predet, orig){
-  if(!interv.length && !predet.length) return emptyBox('Nenhum quadro de horários cadastrado para esta linha.');
+  if(!interv.length && !predet.length) return emptyLinha('quadro de horários');
   // Rótulo do SENTIDO: a origem AUTORITATIVA (origem_teste, via `orig`) tem prioridade sobre o
   // nome_origem denormalizado das tabelas de QH (que vem inconsistente/trocado na base). Agrupa
   // pelo rótulo resolvido → códigos diferentes com a mesma origem não geram blocos repetidos.
@@ -1591,7 +1600,7 @@ async function renderLinhaQuadro(host, line){
       sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=${TARIFA_LINHA_FIELDS}&order=secao`),
       getOrigem(), getEmpresas()
     ]);
-    if (!interv.length && !predet.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+    if (!interv.length && !predet.length){ host.innerHTML = emptyLinha('quadro de horários'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const ultima = qh[0]?.ultima_alteracao;
     // bloco de Seções e Tarifas da linha (mesma tabela/builder da Estrutura), fora do #qhResult
     const h3sec = `<h3 class="doc-h3">Seções e Tarifas</h3>`;
@@ -1715,7 +1724,7 @@ function tarifaRowHTML(r){
   <td class="td-tipo">${esc(orDash(r.situacao))}</td><td class="td-num">${fmtDate(r.data_criacao)}</td><td>${st}</td></tr>`;
 }
 function secoesTarifasHTML(rows){
-  if(!rows.length) return emptyBox('Nenhuma seção/tarifa cadastrada para esta linha.');
+  if(!rows.length) return emptyLinha('seção ou tarifa');
   return tableHTML(TARIFA_COLS, rows.map(tarifaRowHTML).join(''), rows.length+' seção(ões)');
 }
 
@@ -1723,7 +1732,7 @@ async function renderTarifas(host, line){
   const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=${TARIFA_LINHA_FIELDS}&order=secao`);
-  if (!rows.length) { host.innerHTML = emptyBox('Nenhuma tarifa cadastrada para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+  if (!rows.length) { host.innerHTML = emptyLinha('tarifa'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]]);
   const inner = `${meta}${secoesTarifasHTML(rows)}`;            // documento completo (p/ PDF)
   commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Tarifas Vigentes')}${inner}</div>` });
@@ -1835,7 +1844,7 @@ async function renderFrota(host, line){
     sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=${FROTA_FIELDS}&limit=1`),
     getEmpresas()
   ]);
-  if (!rows.length) { host.innerHTML = emptyBox('Nenhuma frota cadastrada para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+  if (!rows.length) { host.innerHTML = emptyLinha('frota'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const f = rows[0];
   const inner = `${metaRows([['Empresa',esc(empNome(f.codempresa)),true],['Registro','RJ-'+esc(orDash(f.codempresa))],
       ['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
@@ -2375,7 +2384,7 @@ LOADERS.secoesPorLigacao = async () => {
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,nome_ligacao,tarifa&order=secao`);
   if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
   const meta = metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]]);
-  if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyBox('Nenhuma seção cadastrada para esta linha.')}</div>`; return; }
+  if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyLinha('seção')}</div>`; return; }
   const cols = [{t:'Seção',w:'70px'},{t:'Descrição'},{t:'Tarifa',w:'90px'}];
   const rowHTML = r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td></tr>`;
   pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}
