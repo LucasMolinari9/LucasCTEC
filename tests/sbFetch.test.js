@@ -121,6 +121,24 @@ function jsonRespBadBody(status){
   const r50 = H.marcarTrunc(a50, 'limit=50');
   ok(r50._trunc===true && r50._limite===50, 'g limit=50 boundary marked', '_trunc='+r50._trunc);
 
+  // g4) corte feito pelo SERVIDOR: pedimos 50000 e o PostgREST devolveu o teto dele
+  // (pgrst.db_max_rows do role `authenticator`). Sem este segundo critério a lista sai
+  // truncada sem banner e sem toast, porque data.length (30000) nunca alcança lim (50000).
+  const aTeto = Array.from({length:H.SB_MAX_ROWS},(_,i)=>i);
+  const rTeto = H.marcarTrunc(aTeto, 'limit=50000');
+  ok(rTeto._trunc===true, 'g4 corte do servidor é marcado', '_trunc='+rTeto._trunc);
+  ok(rTeto._limite===H.SB_MAX_ROWS, 'g4 limite relatado é o do servidor', '_limite='+rTeto._limite);
+
+  // …e abaixo do teto continua sem marca: pedir mais do que o servidor dá não basta,
+  // a resposta precisa ter CHEGADO no teto.
+  const aQuase = Array.from({length:H.SB_MAX_ROWS-1},(_,i)=>i);
+  ok(H.marcarTrunc(aQuase,'limit=50000')._trunc===undefined, 'g4 abaixo do teto não é marcado');
+
+  // regressão: com limit MENOR que o teto, quem manda continua sendo o limit pedido.
+  const a80b = Array.from({length:80},(_,i)=>i);
+  const r80b = H.marcarTrunc(a80b, 'limit=80');
+  ok(r80b._limite===80, 'g4 limit abaixo do teto reporta o limit pedido', '_limite='+r80b._limite);
+
   // h) bannerTrunc
   console.log('h) bannerTrunc');
   const banner = H.bannerTrunc(r80);
@@ -186,6 +204,35 @@ function jsonRespBadBody(status){
     setFetch(() => jsonResp(200, [{id:5}]));
     const r5 = await H.sbFetch('t','select=*', c.signal);
     ok(Array.isArray(r5) && r5[0].id===5, 'i5 sinal ocioso nao interfere');
+  }
+
+  // --- j) preencherLookup: falha transitória NÃO pode envenenar o cache ---
+  // Regressão do bug de 08/08/2026: `evLookups.emp={}` era gravado DEPOIS do `.catch(()=>[])`,
+  // e objeto vazio é truthy — o guard `if(!evLookups.emp)` nunca mais disparava. Uma falha de
+  // rede momentânea deixava o Histórico mostrando ids crus pela sessão inteira, sem erro.
+  console.log('j) preencherLookup não cacheia falha');
+  {
+    let n = 0;
+    const falhaUmaVez = async () => {
+      n++;
+      if (n === 1) throw new Error('rede caiu');
+      return [{ id: '1', evento_linha: 'ALTERACAO DE ITINERARIO' }];
+    };
+    const cache = {};
+    const r1 = await H.preencherLookup(cache, 'lin', falhaUmaVez, 'evento_linha');
+    ok(r1 === null,                'j1 falha devolve null');
+    ok(cache.lin === undefined,    'j2 falha NÃO grava no cache', 'cache='+JSON.stringify(cache.lin));
+    const r2 = await H.preencherLookup(cache, 'lin', falhaUmaVez, 'evento_linha');
+    ok(r2 && r2['1'] === 'ALTERACAO DE ITINERARIO', 'j3 segunda tentativa preenche');
+    ok(cache.lin && cache.lin['1'] === 'ALTERACAO DE ITINERARIO', 'j4 sucesso grava no cache');
+    ok(n === 2,                    'j5 refez o fetch depois da falha', 'chamadas='+n);
+    const r3 = await H.preencherLookup(cache, 'lin', falhaUmaVez, 'evento_linha');
+    ok(n === 2,                    'j6 cache quente não refaz o fetch', 'chamadas='+n);
+    ok(r3 === cache.lin,           'j7 devolve o cache');
+    // resposta vazia LEGÍTIMA (tabela sem linhas) é cacheável — não é falha
+    const vazio = {};
+    await H.preencherLookup(vazio, 'emp', async () => [], 'evento_empresa');
+    ok(vazio.emp && Object.keys(vazio.emp).length === 0, 'j8 lista vazia legítima é cacheada');
   }
 
   console.log('\n==== PLACAR:', pass+'/'+(pass+fail), '====');

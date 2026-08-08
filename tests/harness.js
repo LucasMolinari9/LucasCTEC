@@ -1,5 +1,7 @@
 'use strict';
-/* Harness reproducing the SUPABASE CONFIG functions from app.js (lines 618-684).
+/* Harness reproducing the SUPABASE CONFIG functions from app.js, plus `preencherLookup`
+   (seção STATE + CACHES) — o cache de lookup precisa de teste porque o bug que ele corrige
+   é silencioso: cachear a FALHA em vez do resultado.
    SB_TIMEOUT_MS is made mutable (let) so the timeout test can shrink it.
    Everything else is copied verbatim. */
 
@@ -106,15 +108,18 @@ async function sbFetch(table, qs = '', sinal) {
 }
 /* @endcanon */
 
+/* @canon SB_MAX_ROWS */
+const SB_MAX_ROWS = 30000;
+/* @endcanon */
 /* @canon marcarTrunc */
 function marcarTrunc(data, qs){
   if (!Array.isArray(data)) return data;
   const m = /(?:^|&)limit=(\d+)/.exec(qs || '');
   if (m){
-    const lim = +m[1];
-    if (lim >= 50 && data.length >= lim){
+    const teto = Math.min(+m[1], SB_MAX_ROWS);
+    if (teto >= 50 && data.length >= teto){
       Object.defineProperty(data, '_trunc',  { value:true, enumerable:false });
-      Object.defineProperty(data, '_limite', { value:lim,  enumerable:false });
+      Object.defineProperty(data, '_limite', { value:teto, enumerable:false });
     }
   }
   return data;
@@ -128,9 +133,21 @@ function bannerTrunc(rows){
 }
 /* @endcanon */
 
+/* @canon preencherLookup */
+async function preencherLookup(cache, chave, buscar, coluna){
+  if (cache[chave]) return cache[chave];
+  const rows = await buscar().catch(() => null);   // null = falhou; [] = veio vazio de verdade
+  if (!rows) return null;                          // não cacheia falha
+  const m = {};
+  rows.forEach(x => { m[x.id] = x[coluna]; });
+  cache[chave] = m;
+  return m;
+}
+/* @endcanon */
+
 module.exports = {
   get SB_TIMEOUT_MS(){ return SB_TIMEOUT_MS; },
   set SB_TIMEOUT_MS(v){ SB_TIMEOUT_MS = v; },
-  SB_RETRIES, selecionarSupabase, esperar, fetchComTimeout, sbFetch, marcarTrunc, bannerTrunc,
-  CANCELADO, ehCancelamento,
+  SB_RETRIES, SB_MAX_ROWS, selecionarSupabase, esperar, fetchComTimeout, sbFetch, marcarTrunc, bannerTrunc,
+  CANCELADO, ehCancelamento, preencherLookup,
 };

@@ -4,6 +4,94 @@
 > num commit e num entregável testável sozinho. Execute na ordem: a Fase 1 vem primeiro porque
 > **enquanto ela não estiver pronta, o verde das outras é inconclusivo.**
 
+---
+
+## Estado da execução (atualizado em 08/08/2026, 2ª rodada)
+
+| Tarefa | Estado | Onde |
+|---|---|---|
+| 1 — guarda anti-drift compara de verdade | ✅ **na `main`** | PR #106 |
+| 2 — bancada projeta `select=` | ✅ **na `main`** | PR #106 (junto com a 3) |
+| 3 — três fixtures faltantes | ✅ **na `main`** | PR #106 |
+| 4 — `check_grants` e a visão perdida | ✅ **na `main`** | PR #106 |
+| 5 a 8 — Fase 2 (baseline de restauração, ADR-0002) | ⛔ **bloqueada** | precisa de medição no SQL Editor (ver Task 5) |
+| 9 — cache envenenado em `getEvLookups` | ✅ **em revisão** | PR #107, branch `claude/fase-3-bugs-frontend` |
+| 10 — três bypasses do seam | ✅ **em revisão** | PR #107 |
+| 11 — seis listas `select=` duplicadas | ✅ **em revisão** | PR #107 |
+| 12 — acessibilidade | ✅ **em revisão** | PR #107 |
+| 13 — estado vazio ("não localizado") | ✅ **em revisão** | PR #107 |
+| 21 — `marcarTrunc` e o teto do servidor | ✅ **em revisão** | PR #107 |
+| 14 a 20, 22 — Fase 4 e o aperto do laço de views | ⬜ **a fazer** | PR próprio |
+
+**Para retomar:** a Fase 3 está fechada — o PR #107 traz as tasks 9, 10, 11, 12, 13 e 21. O
+próximo trabalho é a **Task 22** (aperto do laço de views) e a **Fase 4** (tasks 14 a 20), em PR
+próprio, a partir da `main` depois que o #107 entrar. A Fase 2 (tasks 5 a 8) continua bloqueada
+esperando medição no SQL Editor — ela não depende do #107 e pode andar em paralelo, na máquina do
+dono.
+
+### Divergências entre o plano e o que a execução apurou
+
+Registradas porque contradizem o texto das tarefas abaixo — **acredite nesta lista, não no
+texto original** quando os dois discordarem:
+
+1. **Task 1 — são 4 adaptações declaradas, não 3, e só 1 importa.** `SB_TIMEOUT_MS` é `let` no
+   harness e `const` no `app.js` (o teste de timeout precisa encurtá-lo) — o levantamento não a
+   viu porque o regex só olhava `function` e `const`. Em compensação, `SB_URL`/`SB_KEY`/`SB`
+   **não são exportados** pelo harness, e a regra vale para exports: sobrou **uma** adaptação.
+2. **Task 1 — o inseridor de marcadores erra em dois casos**, e os dois falham alto (nunca em
+   silêncio): declaração sem nenhum bracket (`const MAX_TABS = 5;`) e declaração que termina com
+   comentário na mesma linha (`let SB_TIMEOUT_MS = 20000;   // …`). O literal de regex do `esc`
+   (`/[&<>"']/g`, com aspas dentro) quebra qualquer scanner ingênuo — marque à mão.
+3. **Tasks 2 e 3 foram um commit só.** Separadas, a Task 2 deixa o `check_views` vermelho até a 3
+   entrar — a ausência das 3 colunas era justamente o que passava invisível. O repo tem a regra
+   "só publique tudo verde"; commit que quebra a árvore a contraria.
+4. **Task 11 — as constantes do texto original estavam ERRADAS.** Foram escritas a partir da
+   tabela do relatório, não do código. Os valores corretos estão na versão atual da tarefa, e a
+   armadilha é real: as mesmas tabelas têm call sites com listas **deliberadamente menores**
+   (`getTerminais`, `filtrarFrotaEmpresas`) que **não** podem ser colapsadas.
+5. **O `deploy-smoke` roda de fato.** O backlog registrava como hipótese que ele talvez nunca
+   disparasse; um run verde em 08/08 às 10:13 desmentiu. Item encerrado.
+6. **O fail-open do `check_grants` era pior que o descrito.** Com `default_privileges` vazio, o
+   gate não passava só em silêncio: anunciava *"Resolvido desde o baseline — rode
+   `--atualizar-baseline`"*. Perder a visão do banco **parecia progresso**, e seguir a sugestão
+   apagaria o registro da exceção 9.1.
+7. **Task 12 — `.side-eyebrow` NÃO reprovava; a auditoria mediu contra o fundo errado.** O texto
+   `#7d93ab` mede **4,62:1** sobre o fundo real da coluna (`--navy-deep`, `#072a49`) e passa no AA.
+   Os 3,69:1 do relatório saem de medir contra `--navy` (`#0a3a63`), que não é o fundo dali. A cor
+   ficou como estava — clareá-la seria mexer na identidade visual à toa — e a medição virou
+   comentário no `styles.css`, para a próxima leitura do relatório não "consertar" de novo. **São
+   dois contrastes a corrigir, não três.**
+8. **Task 12 — `<select>` com label implícito é seguro.** A dúvida legítima era o nome acessível
+   herdar o texto das `<option>` (o `textContent` do `<label>` herda). Medido com o
+   `page.accessibility.snapshot()` do Chromium: `ANO` e `SITUAÇÃO`, limpos. Não foi preciso trocar
+   por `for=`/`id`, que nesta faixa custaria ids únicos por aba (os panes de segundo plano têm os
+   ids recolhidos por `stripIds`).
+9. **Task 13 — a segunda frase ficou de fora, e o escopo cresceu de 5 mensagens para 9.** A frase
+   proposta (*"informe o código da linha ao DIVAT"*) promete um canal de retorno que o **próprio
+   backlog deste plano** lista como decisão pendente de endereço/processo — escrevê-la seria
+   apontar o cidadão para uma porta que não existe. Em compensação, o critério "toda mensagem que
+   responde por linha **já escolhida**" pega 9 sites, não 5: entrou o **Histórico**, e
+   `evento_teste` é justamente a tabela com mais órfãs (7). As mensagens por **empresa** ficaram
+   de fora de propósito — `codempresa` órfã não é medida por gate nenhum hoje (está no backlog).
+10. **Task 21 — o comentário prescrito apontava para um arquivo que ainda não tem o valor.** O
+    texto manda `SB_MAX_ROWS` "bater com o valor versionado em `docs/backup_schema.sql`", mas
+    versionar esse valor **é a Task 5**, que está bloqueada. O comentário no `app.js` aponta para o
+    `CLAUDE.md` (onde o teto está documentado) e registra a pendência. **Ao executar a Task 5,
+    volte no `marcarTrunc` e acrescente o `backup_schema.sql` ao comentário.**
+11. **Task 22 — duas das três views que ela acusa NÃO estão vazias, e `<tbody> <tr>` é a régua
+    errada para elas.** Medido no navegador em 08/08/2026, contra as fixtures da bancada:
+    `historicoLinha` renderiza **4 `.ev-block`** (o Histórico não usa tabela, usa blocos) e `frota`
+    renderiza os **KPIs** da linha (`12 OPERACIONAL`, `4 COMUM (A)`, …), que também não são tabela.
+    As duas têm conteúdo de verdade; o `tabelas=0` do laço é a unidade de medida errada, não
+    defeito. Só `historicoEmpresa` está de fato só com a moldura (`DIVAT · HISTÓRICO DA EMPRESA` +
+    o campo Buscar), e por ser painel de busca — precisa de termo antes de mostrar qualquer coisa,
+    que é o que o campo `busca` da tarefa já prevê. **Consequência para quem executar: o mínimo por
+    view tem de ser expresso na unidade de cada uma** (linhas de tabela, blocos de evento, KPIs) —
+    uma contagem única de `<tbody> <tr>` reprovaria `historicoLinha` e `frota` por um defeito
+    inexistente, que é exatamente o tipo de vermelho que ensina a ignorar gate.
+
+---
+
 **Origem:** `docs/analise-2026-08-08-auditoria-completa.md` (snapshot da auditoria).
 
 **Objetivo:** fechar os dois furos no centro da rede de testes, tirar da baseline de restauração as

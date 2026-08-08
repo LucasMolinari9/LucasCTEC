@@ -14,6 +14,11 @@
     --navy-deep:#072a49;
     --blue:#1466a6;
     --green:#1f9d57;
+    /* O verde da identidade só alcança 3,49:1 sobre branco — reprovado no AA da WCAG (4,5:1)
+       para TEXTO. Continua valendo para o que é decoração (faixa do topo, bordas, marcadores),
+       onde não há critério de contraste de texto; texto verde sobre fundo claro usa este,
+       que mede 5,38:1. Ao criar texto verde novo, use --green-txt, não --green. */
+    --green-txt:#177a43;
     --ink:#14202b;
     --muted:#5d6f80;
     --bg:#eef2f6;
@@ -194,6 +199,10 @@
   .side-brand-txt{display:flex;flex-direction:column;line-height:1.2;min-width:0}
   .side-brand-txt b{font-family:'Archivo';font-size:14px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .side-brand-txt span{font-size:10.5px;color:#7d93ab}
+  /* #7d93ab mede 4,62:1 sobre o fundo REAL desta coluna (--navy-deep, #072a49) e passa no AA.
+     A auditoria de 08/08/2026 registrou 3,69:1 porque mediu contra --navy (#0a3a63), que não é o
+     fundo daqui — ver docs/planos/2026-08-08-correcoes-auditoria.md. Se um dia o fundo da `.side`
+     clarear para --navy, este texto passa a reprovar: meça de novo antes de mexer. */
   .side-eyebrow{font-family:'IBM Plex Mono';font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#7d93ab;padding:6px 12px 10px}
 
   /* card "Buscar" — abre/fecha a barra de busca dentro do painel (toggleSearchCard).
@@ -438,7 +447,7 @@
   .doc-head{display:flex;align-items:center;gap:18px;border-bottom:2px solid var(--green);box-shadow:0 3px 0 -1px var(--line);padding-bottom:14px;flex-wrap:wrap}
   .doc-head-titles{border-left:2px solid var(--line);padding-left:18px}
   .doc-head h1{font-family:'Archivo';font-weight:800;font-size:18px;line-height:1.15;color:#0a3a63;letter-spacing:-.01em}
-  .doc-head .sub{font-family:'Archivo';font-weight:700;font-size:14px;color:#1f9d57;
+  .doc-head .sub{font-family:'Archivo';font-weight:700;font-size:14px;color:var(--green-txt);
     letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
   /* metadata block */
   .doc-meta{
@@ -541,7 +550,8 @@
   .trunc-aviso{margin:0 0 10px;border:1px solid #f0d9a8;border-left:3px solid #d9930b;border-radius:8px;
     padding:9px 13px;font-size:13px;color:#7a5407;background:#fff8ec}
   .trunc-aviso b{color:#7a5407}
-  .doc-foot{margin-top:16px;text-align:right;font-size:12px;color:#888;
+  /* #888 media 3,54:1 sobre branco e reprovava no AA; #6b6b6b mede 5,33:1 */
+  .doc-foot{margin-top:16px;text-align:right;font-size:12px;color:#6b6b6b;
     border-top:1px solid #e4e9ee;padding-top:8px}
   /* paginação de documentos longos (ex.: Histórico da Linha) */
   .doc-table tbody tr.hid{display:none}
