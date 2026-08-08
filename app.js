@@ -141,17 +141,27 @@ async function sbFetch(table, qs = '', sinal) {
   throw ultimoErro;
 }
 
+// Teto do PostgREST: `pgrst.db_max_rows` do role `authenticator`, hoje documentado no CLAUDE.md
+// (seção Supabase). Ao subir o teto no banco, suba esta constante NA MESMA TAREFA — e vice-versa.
+// O valor ainda NÃO está em docs/backup_schema.sql: um restore pela baseline devolve o banco sem
+// teto nenhum, e sem sintoma. É a Task 5 do plano de 08/08, bloqueada esperando medição no SQL
+// Editor; quando ela entrar, este comentário passa a apontar para lá também.
+const SB_MAX_ROWS = 30000;
 // Marca (sem alterar o conteúdo) um array de resultados que provavelmente foi CORTADO:
 // só sinaliza quando a consulta tinha um limit "de lista" (>=50) e veio cheio até o teto.
 // A flag é não-enumerável → JSON.stringify/map/spread ignoram; só quem checa rows._trunc vê.
+// O teto efetivo é o MENOR entre o limit pedido e o do servidor: um `limit` maior que
+// SB_MAX_ROWS sairia cortado em silêncio pelo critério antigo, porque data.length (30000)
+// nunca alcança lim (50000) — sem banner e sem toast. Hoje não dispara (os 5 maiores limits
+// do app.js são exatamente 30000); é armadilha armada para a próxima consulta grande.
 function marcarTrunc(data, qs){
   if (!Array.isArray(data)) return data;
   const m = /(?:^|&)limit=(\d+)/.exec(qs || '');
   if (m){
-    const lim = +m[1];
-    if (lim >= 50 && data.length >= lim){
+    const teto = Math.min(+m[1], SB_MAX_ROWS);
+    if (teto >= 50 && data.length >= teto){
       Object.defineProperty(data, '_trunc',  { value:true, enumerable:false });
-      Object.defineProperty(data, '_limite', { value:lim,  enumerable:false });
+      Object.defineProperty(data, '_limite', { value:teto, enumerable:false });
     }
   }
   return data;

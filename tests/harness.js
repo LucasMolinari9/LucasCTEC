@@ -108,15 +108,18 @@ async function sbFetch(table, qs = '', sinal) {
 }
 /* @endcanon */
 
+/* @canon SB_MAX_ROWS */
+const SB_MAX_ROWS = 30000;
+/* @endcanon */
 /* @canon marcarTrunc */
 function marcarTrunc(data, qs){
   if (!Array.isArray(data)) return data;
   const m = /(?:^|&)limit=(\d+)/.exec(qs || '');
   if (m){
-    const lim = +m[1];
-    if (lim >= 50 && data.length >= lim){
+    const teto = Math.min(+m[1], SB_MAX_ROWS);
+    if (teto >= 50 && data.length >= teto){
       Object.defineProperty(data, '_trunc',  { value:true, enumerable:false });
-      Object.defineProperty(data, '_limite', { value:lim,  enumerable:false });
+      Object.defineProperty(data, '_limite', { value:teto, enumerable:false });
     }
   }
   return data;
@@ -145,6 +148,6 @@ async function preencherLookup(cache, chave, buscar, coluna){
 module.exports = {
   get SB_TIMEOUT_MS(){ return SB_TIMEOUT_MS; },
   set SB_TIMEOUT_MS(v){ SB_TIMEOUT_MS = v; },
-  SB_RETRIES, selecionarSupabase, esperar, fetchComTimeout, sbFetch, marcarTrunc, bannerTrunc,
+  SB_RETRIES, SB_MAX_ROWS, selecionarSupabase, esperar, fetchComTimeout, sbFetch, marcarTrunc, bannerTrunc,
   CANCELADO, ehCancelamento, preencherLookup,
 };

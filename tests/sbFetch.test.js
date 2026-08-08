@@ -121,6 +121,24 @@ function jsonRespBadBody(status){
   const r50 = H.marcarTrunc(a50, 'limit=50');
   ok(r50._trunc===true && r50._limite===50, 'g limit=50 boundary marked', '_trunc='+r50._trunc);
 
+  // g4) corte feito pelo SERVIDOR: pedimos 50000 e o PostgREST devolveu o teto dele
+  // (pgrst.db_max_rows do role `authenticator`). Sem este segundo critério a lista sai
+  // truncada sem banner e sem toast, porque data.length (30000) nunca alcança lim (50000).
+  const aTeto = Array.from({length:H.SB_MAX_ROWS},(_,i)=>i);
+  const rTeto = H.marcarTrunc(aTeto, 'limit=50000');
+  ok(rTeto._trunc===true, 'g4 corte do servidor é marcado', '_trunc='+rTeto._trunc);
+  ok(rTeto._limite===H.SB_MAX_ROWS, 'g4 limite relatado é o do servidor', '_limite='+rTeto._limite);
+
+  // …e abaixo do teto continua sem marca: pedir mais do que o servidor dá não basta,
+  // a resposta precisa ter CHEGADO no teto.
+  const aQuase = Array.from({length:H.SB_MAX_ROWS-1},(_,i)=>i);
+  ok(H.marcarTrunc(aQuase,'limit=50000')._trunc===undefined, 'g4 abaixo do teto não é marcado');
+
+  // regressão: com limit MENOR que o teto, quem manda continua sendo o limit pedido.
+  const a80b = Array.from({length:80},(_,i)=>i);
+  const r80b = H.marcarTrunc(a80b, 'limit=80');
+  ok(r80b._limite===80, 'g4 limit abaixo do teto reporta o limit pedido', '_limite='+r80b._limite);
+
   // h) bannerTrunc
   console.log('h) bannerTrunc');
   const banner = H.bannerTrunc(r80);
