@@ -9,9 +9,10 @@
 # e um pode ficar vermelho sem esconder o resultado do outro — mesma disciplina do semgrep.yml.
 #
 # O que cada script responde:
-#   scripts/check_views.mjs — "existe alguma tela que EXPLODE ou fica em branco?" Abre as 17
-#     views por deep link com o PostgREST stubado e falha se alguma lançar erro, ficar presa no
-#     spinner, pintar só a moldura ou não achar nada. É a rede sob a seção MODAL / SISTEMA DE
+#   scripts/check_views.mjs — "existe alguma tela que EXPLODE, fica em branco ou pinta MENOS do
+#     que as fixtures dão?" Abre as 17 views por deep link com o PostgREST stubado e falha se
+#     alguma lançar erro, ficar presa no spinner, pintar só a moldura, não achar nada ou ficar
+#     abaixo do `minimo` declarado para ela. É a rede sob a seção MODAL / SISTEMA DE
 #     VIEWS (~59,5% do app.js), que o tests/check.js não cobre — ele só testa a lógica pura.
 #     Estes dois números são cobrados pela seção [2b] do tests/check.js, que desde 30/07/2026
 #     varre também os comentários deste arquivo — atualize o número, não apague a frase.
