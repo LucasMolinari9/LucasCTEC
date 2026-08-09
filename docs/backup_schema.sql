@@ -312,6 +312,14 @@ $function$;
 -- Sem EXECUTE para PUBLIC (SEC-05 da auditoria de 27/07/2026 — esta e as duas funções abaixo
 -- ficaram de fora do ticket 06 de 26/07 e continuavam com o `=X/postgres` herdado do default do
 -- PostgreSQL). Assinatura completa de propósito: sem ela o REVOKE erra a sobrecarga.
+-- As três funções de PRODUTO concedem EXECUTE só a `anon` (esta, divat_busca_logradouro e
+-- divat_linhas_regiao). O banco VIVO ainda tem `TO anon, authenticated` nelas: esta baseline é
+-- PRESCRITIVA, não um espelho — descreve o banco que queremos reconstruir, e a regra (e) do
+-- scripts/check_migrations.mjs (que o repo aplica a toda migração) reprova
+-- `GRANT EXECUTE ... TO anon, authenticated`. Sair `authenticated` não tira nada de ninguém: ela
+-- não tem policy alguma `TO authenticated` e o signup do Auth está fechado.
+-- ⚠️ Se você comparar esta baseline com o banco vivo e achar as 3 divergências, elas são
+-- INTENCIONAIS — não "conserte" de volta.
 REVOKE ALL ON FUNCTION public.f_unaccent(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.f_unaccent(text) TO anon;
 
