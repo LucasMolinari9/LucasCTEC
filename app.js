@@ -141,11 +141,11 @@ async function sbFetch(table, qs = '', sinal) {
   throw ultimoErro;
 }
 
-// Teto do PostgREST: `pgrst.db_max_rows` do role `authenticator`, hoje documentado no CLAUDE.md
-// (seção Supabase). Ao subir o teto no banco, suba esta constante NA MESMA TAREFA — e vice-versa.
-// O valor ainda NÃO está em docs/backup_schema.sql: um restore pela baseline devolve o banco sem
-// teto nenhum, e sem sintoma. É a Task 5 do plano de 08/08, bloqueada esperando medição no SQL
-// Editor; quando ela entrar, este comentário passa a apontar para lá também.
+// Teto do PostgREST: `pgrst.db_max_rows` do role `authenticator`. Confirmado contra o banco vivo
+// em 09/08/2026 e versionado em docs/backup_schema.sql (bloco LIMITES DE ROLE), além de descrito
+// no CLAUDE.md (seção Supabase). Subir o teto exige mudar os TRÊS na mesma tarefa: o banco, esta
+// constante e a baseline — a baseline porque um restore sem ela devolve o banco sem teto nenhum,
+// e sem sintoma; esta constante porque o marcarTrunc a usa como segundo critério de truncagem.
 const SB_MAX_ROWS = 30000;
 // Marca (sem alterar o conteúdo) um array de resultados que provavelmente foi CORTADO:
 // só sinaliza quando a consulta tinha um limit "de lista" (>=50) e veio cheio até o teto.
