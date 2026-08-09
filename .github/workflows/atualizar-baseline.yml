@@ -1,0 +1,160 @@
+# atualizar-baseline.yml — MEDE um banco e abre um PR com o diff do baseline.
+#
+# Por que existe: os baselines guardam MEDIÇÃO por ambiente (issue #99), e medir exige rede até o
+# Supabase. Até 09/08/2026 o único caminho era `--atualizar-baseline` numa máquina com o repo
+# clonado — o que exclui quem opera pelo celular, que é o caso do dono. Sem este workflow, um slot
+# vazio só era preenchível por quem tivesse terminal, e um gate que ninguém consegue destravar é um
+# gate que se aprende a ignorar.
+#
+# NÃO CONTRADIZ a regra "nunca rodar --atualizar-baseline no CI" (db-checks.yml, CLAUDE.md). O que
+# aquela regra protege é o REFLEXO: gate fica vermelho, alguém roda o comando, o alarme vira
+# carimbo. Ela se enuncia inteira como "baseline se atualiza com diff revisável em PR" — e é
+# exatamente isso que aqui acontece:
+#   * o gatilho é SÓ `workflow_dispatch`. Nenhum push, PR, cron ou chamada de outro workflow o
+#     dispara. A decisão humana continua sendo a condição de partida, como era localmente;
+#   * ele NUNCA escreve na branch. Abre um PR, e o merge é um segundo ato deliberado;
+#   * o gate `seguranca` do db-checks.yml continua rodando contra o resultado, como sempre.
+# O que muda é o teclado de onde a decisão sai, não quem decide.
+#
+# O QUE ELE NÃO PODE FAZER, por desenho do próprio script: baselinar um dos SEIS indicadores
+# graves. `check_grants.mjs` recusa e sai 1 antes de escrever — a resposta certa ali é revogar o
+# privilégio, não registrar exceção. Este workflow não tem como contornar isso, e é de propósito.
+#
+# ARMADILHA CONHECIDA — `seguranca` + `producao`: produção ainda não tem as migrações da Fase 3,
+# então `divat_security_digest` não existe lá e o script cai no caminho antigo
+# (`divat_security_shape`). Esse ramo mede `achados` — a POLÍTICA — e não preenche slot de medição
+# nenhum. Ou seja, a combinação existe, roda e faz uma coisa diferente da que o nome sugere. O PR
+# vai dizer isso no corpo; leia antes de dar merge. Depois da promoção descrita em
+# docs/planos/fase-3-hardening-moderado.md ela passa a se comportar como o teste.
+#
+# COMO USAR (pelo navegador, celular inclusive): aba Actions → "Atualizar baseline" → "Run
+# workflow" → escolha a branch, o baseline e o alvo → Run. Ao fim, um PR aparece com o diff.
+name: Atualizar baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: 'Qual baseline medir'
+        type: choice
+        required: true
+        options:
+          - seguranca
+          - qualidade
+      alvo:
+        description: 'Banco a medir (governa DIVAT_ALVO e o slot escrito)'
+        type: choice
+        required: true
+        default: teste
+        options:
+          - teste
+          - producao
+
+# `contents: write` e `pull-requests: write` são o mínimo para abrir o PR, e existem SÓ aqui —
+# os outros oito workflows seguem com `contents: read` (achado SEC-07). Escrita na branch não
+# acontece: o push é sempre numa branch nova, criada pelo run.
+permissions:
+  contents: write
+  pull-requests: write
+
+# Duas medições simultâneas do mesmo alvo produziriam dois PRs disputando o mesmo slot.
+concurrency:
+  group: atualizar-baseline-${{ inputs.baseline }}-${{ inputs.alvo }}
+  cancel-in-progress: false
+
+jobs:
+  medir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+
+      # Só o caminho da qualidade usa psql (login auditor). Instalar sempre custaria ~20s a cada
+      # run da segurança, que não o usa.
+      - name: Instalar cliente PostgreSQL
+        if: inputs.baseline == 'qualidade'
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      # TODA entrada passa por `env:` e é lida como "$VAR" no shell — nunca `${{ }}` dentro do
+      # `run:`. A interpolação acontece ANTES do shell existir: o valor vira texto no meio do
+      # script, e um valor com `;` ou `$(...)` viraria comando. Aqui os inputs são `choice`, então
+      # o conjunto é fechado e o risco é teórico — mas a regra vale pelo hábito, não pelo caso:
+      # o dia em que alguém trocar `choice` por `string` não vem com um aviso. É a
+      # `yaml.github-actions.security.run-shell-injection` do ruleset completo (116 regras, que só
+      # roda no CI — o ./scripts/semgrep.sh local tem 5 e não pega isto).
+      - name: Medir e escrever o slot
+        env:
+          DIVAT_ALVO: ${{ inputs.alvo }}
+          BASELINE: ${{ inputs.baseline }}
+          SUPABASE_PROD_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_PROD_AUDIT_DATABASE_URL }}
+          SUPABASE_TEST_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_TEST_AUDIT_DATABASE_URL }}
+        run: |
+          if [ "$BASELINE" = "seguranca" ]; then
+            node scripts/check_grants.mjs --atualizar-baseline
+          else
+            node scripts/check_data_quality.mjs --atualizar-baseline
+          fi
+
+      # Sem mudança não há PR. O caso é comum e legítimo: medir de novo um banco que não mudou.
+      # Dizer isso em voz alta evita o operador procurar um PR que nunca vai existir.
+      - name: Houve mudança?
+        id: diff
+        env:
+          ALVO: ${{ inputs.alvo }}
+        run: |
+          if git diff --quiet -- scripts/; then
+            echo "mudou=nao" >> "$GITHUB_OUTPUT"
+            echo "O baseline já estava igual ao banco — nada a propor." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "mudou=sim" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Diff medido em \`$ALVO\`"
+              echo '```diff'
+              git diff -- scripts/
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # O diff vai para o RESUMO do run além do PR: no celular, ler o summary é um toque, e abrir
+      # o PR são vários. Quem quiser aprovar sem sair da tela do Actions já viu o que vai aprovar.
+      - name: Abrir o PR com o diff
+        if: steps.diff.outputs.mudou == 'sim'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE: ${{ github.ref_name }}
+          BASELINE: ${{ inputs.baseline }}
+          ALVO: ${{ inputs.alvo }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          RAMO="baseline/$BASELINE-$ALVO-$RUN_ID"
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout -b "$RAMO"
+          git add scripts/
+          git commit -m "chore(baseline): mede $BASELINE em $ALVO" -m "Medição feita pelo workflow 'Atualizar baseline' (run $RUN_ID), disparada à mão. Só o slot de '$ALVO' foi escrito; a política do topo e o slot do outro banco seguem intactos — confira no diff."
+          git push -u origin "$RAMO"
+          AVISO=''
+          if [ "$BASELINE" = "seguranca" ] && [ "$ALVO" = "producao" ]; then
+            AVISO=$'\n> **Atenção:** produção ainda não tem as migrações da Fase 3, então isto rodou pelo caminho antigo (`divat_security_shape`), que mede `achados` — a **política** — e não preenche slot de medição. Confira se é isso mesmo que você queria.\n'
+          fi
+          gh pr create \
+            --base "$BASE" \
+            --head "$RAMO" \
+            --title "chore(baseline): $BASELINE medido em $ALVO" \
+            --body "Medição disparada à mão pelo workflow \`Atualizar baseline\` ([run]($RUN_URL)).
+          $AVISO
+          **O que conferir antes do merge**
+
+          - o diff toca **só** o slot de \`$ALVO\`; a política do topo (\`achados\` / \`orfaos_conhecidos\`) e o slot do outro banco não podem ter mudado;
+          - contagem que **subiu** é privilégio novo — investigue antes de aceitar, não é rotina;
+          - \`digest\` diferente é mudança estrutural (tabela, policy, função). Se você não fez nenhuma, não dê merge: descubra o que mudou.
+
+          Os seis indicadores graves não passam por aqui — o script recusa baseliná-los e sai 1 antes de escrever.
+
+          ---
+          _Generated by [Claude Code](https://claude.ai/code)_"
