@@ -4,6 +4,63 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 08–09/08/2026 — A auditoria completa vira 22 correções, e o gate passa a ver o que não via
+
+Uma auditoria de código, arquitetura, engenharia e documentação
+(`docs/historico/analise-2026-08-08-auditoria-completa.md`) virou o plano
+`docs/planos/2026-08-08-correcoes-auditoria.md`, executado em seis PRs (#106, #107, #108, #110,
+#112, #113). O achado que organiza todos os outros: **a rede de testes tinha dois furos no
+centro**, e enquanto eles existissem o verde de todo o resto era inconclusivo.
+
+**Os dois furos (PR #106).** A guarda anti-drift era `js.includes(snippet)` com trechos escritos à
+mão, e 15 das 50 entradas eram só a assinatura da função — com o corpo de `matchEvent` trocado por
+`return false`, o gate imprimia "tudo verde". E a bancada headless **pulava o `select=`**,
+devolvendo a fixture inteira: trocar um nome de coluna no `app.js` mantinha as 17 views verdes
+enquanto o PostgREST responderia 400 em produção. Hoje os marcadores `@canon` delimitam cada cópia
+e a comparação é do texto inteiro; a bancada projeta as colunas pedidas e devolve 400 para coluna
+ausente. As duas sabotagens foram reproduzidas para provar que agora reprovam.
+
+**Bugs do frontend (PRs #107, #108).** `getEvLookups` gravava `evLookups.emp = {}` **depois** do
+`.catch`, e objeto vazio é *truthy*: uma falha transitória de rede deixava os lookups vazios pela
+sessão inteira e o Histórico passava a mostrar ids crus, sem erro na tela. Três loaders escreviam
+`innerHTML` pós-`await` sem passar pelo seam do ciclo de vida da view. `marcarTrunc` só marcava
+corte quando `data.length >= limit` **pedido** — um `limit` maior que o teto do servidor sairia
+cortado em silêncio. O laço de views deixou de aceitar "corpo ≠ 0" e passou a exigir conteúdo
+mínimo **na unidade de cada documento** (linhas de tabela, `.ev-block` no Histórico, `.kpi` na
+Frota), porque uma régua única reprovaria duas views por um defeito inexistente.
+
+**Documentação e as guardas novas (PR #110).** 17 retratos datados saíram de `docs/` para
+`docs/historico/`, cada um abrindo com `Snapshot de DD/MM — não atualizar`, e o README ganhou o
+critério: plano vivo em `docs/planos/`, retrato datado em `docs/historico/`. O bloco de runbook de
+gates do `CLAUDE.md` encolheu 49 linhas — o detalhe da dívida de qualidade de dados foi para o
+cabeçalho do `check_data_quality.mjs`, que é onde quem opera o gate vai olhar. E a seção `[2b]`
+ganhou **quatro guardas**, cada uma provada falhando com a deriva reintroduzida de propósito antes
+de passar: `docs/adr/` e `docs/planos/` entram em `DOCS_VIVOS` por descoberta; `scripts/*.mjs`
+entram na varredura de fatos numéricos; toda tabela de `RT_TABLES` precisa aparecer no mapa
+tabela→card (comparação **nominal** — o doc dizia "as 14 tabelas" logo acima de um mapa com 12, e
+número certo ao lado de lista errada é pior que os dois errados); e a composição de
+`.claude/skills/` é contada do disco.
+
+**A baseline de restauração (PR #113), e por que ela esperou.** Três tarefas dependiam de medição
+no banco vivo, que só o dono alcança. Valeu a espera: o rascunho propunha versionar
+`statement_timeout = 8s` para o `anon`, e a medição mostrou **3s** — os 8s são do `authenticated`.
+Versionar o palpite teria triplicado, num restore, o tempo que uma consulta anônima pode segurar o
+banco, sem sintoma nenhum. Junto entraram `pgrst.db_max_rows = 30000` e o `lock_timeout`, que não
+vinham no dump por não serem objetos de schema — um restore devolvia o banco **sem teto**, e o que
+se perdia era o SEC-02.
+
+**Duas afirmações dos docs caíram por medição.** `rls_auto_enable()`, descrita em `docs/schema.md`
+como função de plataforma que liga RLS em tabela nova, **não existe** — logo **não há automatismo
+ligando RLS**, e tabela pública nova exige `ENABLE ROW LEVEL SECURITY` explícito. E o `CLAUDE.md`
+mandava replicar correção na staging "senão o rebuild do ETL desfaz", sem que nenhum doc
+descrevesse o rebuild: medido, **não existe rebuild automatizado**, mas as contagens de staging e
+final batem exatamente (20.753 e 2.100), porque o import de CSV alimenta as duas cópias. A regra
+continua valendo — pelo motivo certo, agora escrito em `docs/etl.md`, que nasceu nesta rodada.
+
+Fecharam as issues **#50** (abas do modal), **#63** (qualidade de dados pós-ETL) e **#111**
+(`dedupEmpresasPorRJ`, a heurística de desempate de empresa que estava escrita em dois lugares e
+podia fazer o banner discordar do card para o mesmo RJ).
+
 ## 03/08/2026 — Superpowers vendorizado: as skills de processo passam a sobreviver à sessão
 
 O objetivo era ter as skills do **Superpowers** (`obra/superpowers` — `brainstorming`,
