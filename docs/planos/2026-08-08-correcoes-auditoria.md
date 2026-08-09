@@ -14,7 +14,7 @@
 | 2 — bancada projeta `select=` | ✅ **na `main`** | PR #106 (junto com a 3) |
 | 3 — três fixtures faltantes | ✅ **na `main`** | PR #106 |
 | 4 — `check_grants` e a visão perdida | ✅ **na `main`** | PR #106 |
-| 5 a 8 — Fase 2 (baseline de restauração, ADR-0002) | ✅ **em revisão** | PR #113 — desbloqueada pelas medições de 09/08 |
+| 5 a 8 — Fase 2 (baseline de restauração, ADR-0002) | ✅ **na `main`** | PR #113 — desbloqueada pelas medições de 09/08 |
 | 9 — cache envenenado em `getEvLookups` | ✅ **na `main`** | PR #107 |
 | 10 — três bypasses do seam | ✅ **na `main`** | PR #107 |
 | 11 — seis listas `select=` duplicadas | ✅ **na `main`** | PR #107 |
@@ -22,8 +22,12 @@
 | 13 — estado vazio ("não localizado") | ✅ **na `main`** | PR #107 |
 | 21 — `marcarTrunc` e o teto do servidor | ✅ **na `main`** | PR #107 |
 | 22 — contrato mínimo de conteúdo por view | ✅ **na `main`** | PR #108 |
-| 14, 15, 16, 17, 19, 20 — Fase 4 | ✅ **em revisão** | PR #110, branch `claude/divat-fase-4-correcoes-e00tgk` |
-| 18 — runbook de ETL | ⚠️ **entregue com um vazio declarado** | PR #110 — ver abaixo |
+| 14, 15, 16, 17, 19, 20 — Fase 4 | ✅ **na `main`** | PR #110 |
+| 18 — runbook de ETL | ✅ **na `main`** | PR #110 criou o `docs/etl.md`; o vazio do §3 foi fechado pelo #113 |
+
+> **Plano encerrado em 09/08/2026 — 22 de 22 tarefas na `main`.** Este arquivo deixa de ser
+> normativo: o que continua valendo é a tabela de **backlog** no fim. Quando quiser saber o estado
+> atual do projeto, leia o `CLAUDE.md`; a cronologia está em `docs/CHANGELOG.md`.
 
 O PR **#109** não é tarefa deste plano: sincronizou o `CLAUDE.md` com o que os #107 e #108
 mudaram.
@@ -1422,6 +1426,7 @@ Itens da auditoria que não viraram tarefa aqui, para não sumirem:
 | Canal de retorno para o usuário relatar dado errado | §5.3 | Precisa de decisão de endereço/processo do DIVAT |
 | **S2** — a heurística de dedup de empresa por RJ está **duplicada** e sem teste: `getEmpresas` (`app.js:536-546`) e `empresasRegulares` (`app.js:1918-1921`) implementam a MESMA regra de score (REGULAR/não-cassada) em código separado | `docs/historico/analise-separacao.md` §S2 | Virou a **issue #111** (o veredito lá era "✅ vale extrair" e nunca foi executado). Só o achado ficou fora deste plano — não é deriva de auditoria, é dívida de código anterior a ela |
 | **D7** — a closure `sentidoKey` continua duplicada em `app.js:1544` e `app.js:1620`, idênticas | `docs/historico/analise-duplicacao.md` §D7 | BAIXA; o próprio relatório a classifica como "Trivial" e a põe no tier "não recomendado — churn cosmético". Faça junto da próxima mexida no Quadro de Horários |
+| **`searchEmpresas` busca sobre a lista CRUA** (`app.js:567`, sobre `empresas.list`), então um RJ duplicado pode aparecer **duas vezes no seletor de empresa** — enquanto o banner e o card Empresas Regulares mostram só a vencedora do `dedupEmpresasPorRJ` | notado ao revisar o PR #112 | **Precisa de decisão do dono, não de conserto.** Pré-existente; ficou visível quando a dedup ganhou nome. A pergunta é de produto: na busca, ver as duas entradas de um RJ duplicado é ruído ou é informação útil (sinal de que o cadastro tem duplicata)? Deduplicar sem essa resposta seria o agente decidir pelo dono |
 | Confirmar se o `deploy-smoke` roda de fato | §5.7 | Checagem de 2 minutos na aba Actions: se não houve run recente com `deployment_status`, incluir `workflow_dispatch` no runbook de deploy |
 
 ## Fora deste plano (decisão do dono, não execução)
@@ -1438,15 +1443,21 @@ Três itens da auditoria **não** viraram tarefa porque são decisão de produto
   SW: instalado, o app morre offline. Ou entra um SW mínimo (a CSP permite; o `.vercelignore` é
   allowlist e precisaria abrir o arquivo), ou sai o `display: standalone`.
 
-## Ordem sugerida de PRs
+## Ordem dos PRs — planejada × executada
 
-| PR | Tarefas | Por quê junto |
+A ordem planejada foi respeitada em espírito, com **uma inversão**: a Fase 2 dependia de medição
+no banco e por isso saiu **por último**, não em segundo. As demais mantiveram a sequência.
+
+| PR real | Tarefas | Planejado como |
 |---|---|---|
-| 1 | 1–4 | A rede de testes. **Precisa ir primeiro** — sem ela, o verde dos outros não significa nada. |
-| 2 | 5–8 | Baseline de restauração + ADR. Só arquivo versionado, zero risco de runtime. |
-| 3 | 9–11, 21 | Bugs do `app.js`. Task 11 depende da Task 2 estar pronta para provar que nada quebrou; Task 21 mexe numa cópia do harness e por isso vem depois da Task 1. |
-| 4 | 12–13, 22 | Acessibilidade, texto de estado vazio e o aperto do laço de views. |
-| 5 | 14–20 | Documentação e guardas novas. A Task 20 vem por último: ela cobra os números que as tarefas anteriores mudaram. |
+| **#106** | 1–4 | PR 1 — a rede de testes. Foi primeiro mesmo: sem ela, o verde das outras não significa nada. |
+| **#107** | 9–13, 21 | PRs 3 e 4 juntos (bugs do `app.js`, a11y e estado vazio) |
+| **#108** | 22 | parte do PR 4 — o aperto do laço de views |
+| **#110** | 14–20 | PR 5 — documentação, operação e as guardas novas |
+| **#112** | — | não estava no plano: fecha a issue #111, saída do backlog |
+| **#113** | 5–8 | PR 2 — **saiu por último**, porque dependia de duas medições no SQL Editor que só o dono podia rodar |
+
+O #109 sincronizou o `CLAUDE.md` com o que os #107 e #108 mudaram; o #114 fechou o plano.
 
 ## Registro da auto-revisão
 
