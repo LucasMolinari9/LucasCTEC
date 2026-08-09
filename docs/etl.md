@@ -68,51 +68,51 @@ A divisão é **metadado × texto longo**: `evento_dados` carrega `codempresa`, 
 As quatro têm **RLS ligado, sem policy e sem grant** — invisíveis pela API pública, de propósito.
 O lint `rls_enabled_no_policy` nelas é **esperado**, não é achado.
 
-> ⚠️ **Vazio conhecido: como as staging viram as tabelas finais não está descrito em lugar nenhum
-> deste repositório, e não foi possível apurar.** A junção acima é **deduzida do schema** (as
-> colunas de cada par somam exatamente as colunas da tabela final, e as três compartilham `id`) —
-> não de um procedimento observado. **Não invente o comando**: escrever um `TRUNCATE` errado aqui
-> apaga arquivo institucional insubstituível (ver §5).
->
-> **Como fechar este vazio** — no SQL Editor do Supabase, uma consulta responde se existe algum
-> objeto no banco que faça esse rebuild:
->
-> ```sql
-> -- funções e triggers que mencionam a staging
-> select p.proname, pg_get_functiondef(p.oid)
->   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
->  where n.nspname not in ('pg_catalog','information_schema')
->    and pg_get_functiondef(p.oid) ilike any (array['%evento_dados%','%portaria_data%']);
->
-> select tgname, tgrelid::regclass from pg_trigger where not tgisinternal;
->
-> -- e se a staging está sequer populada, ou é resíduo de uma tentativa antiga
-> select 'evento_dados' t, count(*) from public.evento_dados
-> union all select 'evento_textos', count(*) from public.evento_textos
-> union all select 'portaria_data', count(*) from public.portaria_data
-> union all select 'portaria_texto_teste', count(*) from public.portaria_texto_teste
-> union all select 'evento_teste (final)', count(*) from public.evento_teste
-> union all select 'portaria_teste (final)', count(*) from public.portaria_teste;
-> ```
->
-> **Se a consulta não achar função nem trigger, e as staging estiverem vazias ou desatualizadas em
-> relação às finais**, então não existe rebuild: as tabelas finais são alimentadas direto por CSV,
-> a staging é resíduo, e a regra do §4 abaixo deixa de valer — corrija o `CLAUDE.md` em vez de
-> obedecê-lo. Registre o resultado aqui, nos dois casos.
+### O rebuild: medido em 09/08/2026
+
+A pergunta em aberto era se algum objeto do banco monta as tabelas finais a partir da staging.
+**Medido, contra o banco vivo:**
+
+| Verificação | Resultado |
+|---|---|
+| Funções que mencionam `evento_dados`/`evento_textos`/`portaria_data`/`portaria_texto_teste` | **nenhuma** |
+| Triggers do projeto | **um só** — `trg_vigor_auto` em `portaria_teste` (regra de `vigor`, nada a ver com staging) |
+| Event triggers | 6, **todos do Supabase** (`pgrst_ddl_watch`, `grant_pg_cron_access`, …) |
+
+| Tabela | Linhas |
+|---|---|
+| `evento_dados` (staging) · `evento_textos` (staging) · `evento_teste` (**final**) | **20.753** cada |
+| `portaria_data` (staging) · `portaria_texto_teste` (staging) · `portaria_teste` (**final**) | **2.100** cada |
+
+**Conclusão: não existe rebuild automatizado — e a staging não é resíduo.** As contagens batem
+exatamente, ou seja, staging e final são mantidas **em paralelo, pelo import de CSV**. O "rebuild"
+é manual: é você, na etapa 3 do §1.
+
+Isso tem duas consequências que valem mais que a curiosidade:
+
+1. **A regra do §4 (replicar correção na staging) está certa e é necessária** — não por causa de um
+   automatismo que desfaria a correção, mas porque as duas cópias precisam continuar concordando.
+   Se elas divergirem, a próxima vez que alguém reconstruir a final a partir da staging (à mão,
+   sem saber da correção) reintroduz o dado velho.
+2. **A junção `id ⋈ id` da tabela acima continua sendo dedução do schema**, não procedimento
+   observado — as colunas de cada par somam exatamente as da final, mas ninguém no projeto
+   descreveu o comando. **Se um dia for automatizar, escreva o SQL do zero e teste num projeto de
+   teste antes.** Um `TRUNCATE` errado aqui apaga arquivo institucional insubstituível (ver §5).
 
 ---
 
 ## 4. Correção de dado: replicar na staging
 
-**Enquanto o vazio do §3 não for fechado, trate a regra abaixo como válida** — o custo de segui-la
-à toa é baixo, o de ignorá-la (se o rebuild existir) é perder a correção sem aviso.
-
 > Corrigiu uma linha em `evento_teste` ou `portaria_teste`? **Faça a mesma correção na staging
-> correspondente**, casando pelo `id`. Se um rebuild rodar depois, ele reconstrói a final a partir
-> da staging — e uma correção que só existe na final é desfeita, em silêncio.
+> correspondente**, casando pelo `id`.
 
-O mesmo raciocínio vale para o sentido inverso: dado novo que entre só na staging não aparece no
-portal até o rebuild rodar.
+Staging e final são **duas cópias do mesmo fato**, mantidas em dia pelo mesmo import (§3). Corrigir
+só uma deixa as duas discordando — e a discordância é invisível, porque o portal lê apenas a final.
+O preço aparece depois: na próxima vez que alguém reconstruir a final a partir da staging, o dado
+velho volta.
+
+O inverso também vale: dado que entre só na staging **não aparece no portal**, porque nenhum card
+lê essas tabelas.
 
 ---
 

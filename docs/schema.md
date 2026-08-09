@@ -158,7 +158,7 @@ e sem grant para `anon`/`authenticated` → invisíveis pela API pública, de pr
 A migração `20260729034018_phase3_moderate_hardening.sql`, aplicada primeiro no projeto de teste,
 separa produto, implementação e diagnóstico:
 
-- `public`: duas RPCs de produto anônimas e a função de plataforma `rls_auto_enable()`;
+- `public`: duas RPCs de produto anônimas;
 - `private`: `f_unaccent(text)` e `fn_vigor_auto()`, fora da Data API;
 - `audit`: quatro diagnósticos executáveis somente por `divat_auditor`.
 
@@ -176,10 +176,23 @@ ao auditor produzir o mesmo retrato público sem receber `SELECT` direto nas tab
 | `realtime_tables()` | `audit` | credencial PostgreSQL auditora |
 | `f_unaccent(text)` | `private` | implementação de `divat_busca_logradouro` |
 | `fn_vigor_auto()` | `private` | trigger `trg_vigor_auto` |
-| `rls_auto_enable()` | `public` | event trigger gerenciado que liga RLS em tabela pública nova |
+
+> ⚠️ **`rls_auto_enable()` NÃO EXISTE — esta tabela a listava por engano.** Até 09/08/2026 havia
+> aqui uma linha descrevendo-a como "função de plataforma em `public`, chamada por event trigger
+> gerenciado que liga RLS em tabela pública nova". **Medido contra o banco vivo: não existe função
+> com esse nome**, e nenhum dos 6 event triggers do banco (`pgrst_ddl_watch`, `pgrst_drop_watch`,
+> `grant_pg_cron_access`, `grant_pg_graphql_access`, `grant_pg_net_access`,
+> `set_graphql_placeholder` — todos do Supabase) tem relação com RLS.
+>
+> **Consequência prática, e o motivo de o registro ficar aqui em vez de a linha só sumir:** não há
+> automatismo ligando RLS em tabela nova. **Tabela pública nova precisa de `ENABLE ROW LEVEL
+> SECURITY` explícito**, além do `GRANT SELECT` e da policy que o default-deny já exige (skill
+> `db-change`). Quem lesse a linha antiga concluiria que o banco se protege sozinho.
 
 **Trigger:** `trg_vigor_auto` em `portaria_teste` — `BEFORE INSERT OR UPDATE`, executa
-`private.fn_vigor_auto()`.
+`private.fn_vigor_auto()`. É o **único** trigger do projeto: os demais que aparecem no catálogo
+(`tr_check_filters` em `realtime.subscription`, e os de `storage.buckets`/`storage.objects`) são
+infraestrutura do Supabase e não entram na baseline.
 
 Produção permanece no layout anterior até uma promoção separadamente autorizada. O DDL de
 recuperação em `docs/backup_schema.sql` continua sendo a baseline pré-Fase 3; numa reconstrução,

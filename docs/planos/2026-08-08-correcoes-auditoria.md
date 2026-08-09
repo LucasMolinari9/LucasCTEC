@@ -14,7 +14,7 @@
 | 2 — bancada projeta `select=` | ✅ **na `main`** | PR #106 (junto com a 3) |
 | 3 — três fixtures faltantes | ✅ **na `main`** | PR #106 |
 | 4 — `check_grants` e a visão perdida | ✅ **na `main`** | PR #106 |
-| 5 a 8 — Fase 2 (baseline de restauração, ADR-0002) | ⛔ **bloqueada** | precisa de duas medições no SQL Editor (ver Task 5 e Task 7) |
+| 5 a 8 — Fase 2 (baseline de restauração, ADR-0002) | ✅ **em revisão** | PR #113 — desbloqueada pelas medições de 09/08 |
 | 9 — cache envenenado em `getEvLookups` | ✅ **na `main`** | PR #107 |
 | 10 — três bypasses do seam | ✅ **na `main`** | PR #107 |
 | 11 — seis listas `select=` duplicadas | ✅ **na `main`** | PR #107 |
@@ -28,19 +28,27 @@
 O PR **#109** não é tarefa deste plano: sincronizou o `CLAUDE.md` com o que os #107 e #108
 mudaram.
 
-**Para retomar:** as Fases 1, 3 e 4 e a Task 22 estão prontas — as três primeiras na `main`, a
-Fase 4 no PR #110. **Só duas coisas seguem abertas**, e nenhuma delas é escrita de código:
+**Para retomar:** **este plano acabou.** Todas as 22 tarefas estão entregues — as Fases 1, 3 e 4 e
+a Task 22 na `main`; a Fase 2 no PR #113, desbloqueada pelas medições que o dono rodou no SQL
+Editor em 09/08/2026. O que sobrou está na tabela de **backlog** no fim do arquivo, não aqui.
 
-1. **A Fase 2 (tasks 5 a 8)**, esperando as duas medições no SQL Editor logo abaixo.
-2. **O vazio declarado da Task 18.** O `docs/etl.md` foi escrito com o dono e registra o caminho
-   real do dado (banco do DETRO → CSV → Table Editor), mas **o rebuild da staging não foi
-   apurado: o dono não sabe descrevê-lo.** A junção por `id` documentada lá é *deduzida do
-   schema*, não observada, e está marcada como tal. O `docs/etl.md` §3 traz a consulta que fecha o
-   vazio (procura função/trigger que mencione a staging e compara as contagens das seis tabelas).
-   **Rode-a antes de escrever qualquer comando de rebuild** — um `TRUNCATE` errado ali apaga as 7
-   órfãs de `evento_teste`, que são atos reais de 1974–1996. Dois desfechos possíveis: ou existe
-   rebuild e o §3 do `etl.md` ganha o comando, ou não existe, a staging é resíduo, e o
-   `CLAUDE.md` é que precisa ser corrigido em vez de obedecido.
+**O que as medições revelaram, e que nenhum rascunho tinha acertado:**
+
+1. **O `anon` roda com `statement_timeout = 3s`, não 8s.** O rascunho da Task 5 propunha versionar
+   `8s` — que é o valor do `authenticated`. Versionar o palpite teria triplicado, num restore, o
+   tempo que uma consulta anônima pode segurar o banco, sem sintoma nenhum. A ordem do plano
+   ("confirme os dois valores contra o banco vivo antes de commitar") é o que evitou isso.
+2. **`rls_auto_enable()` simplesmente não existe.** A Task 7 previa dois desfechos — colar o DDL
+   ou marcar como objeto de plataforma. Nenhum dos dois: não há função com esse nome, e nenhum dos
+   6 event triggers do banco (todos do Supabase) tem relação com RLS. **Consequência real: não há
+   automatismo ligando RLS em tabela nova** — quem lesse o `schema.md` concluiria o contrário.
+3. **A staging NÃO é resíduo.** Contagens idênticas (20.753 nos três de evento, 2.100 nos três de
+   portaria) com zero funções ou triggers mencionando-a: não existe rebuild automatizado, mas as
+   duas cópias são mantidas em paralelo **pelo próprio import de CSV**. Ou seja, a regra do
+   `CLAUDE.md` sobre replicar correção na staging está certa — só que o mecanismo é o dono, não
+   uma função. Isso fecha o vazio declarado da Task 18.
+4. **`tr_check_filters` é do Supabase** (`realtime.subscription`), não nosso. O único trigger do
+   projeto é o `trg_vigor_auto`, já versionado.
 
 O que a execução da Fase 4 apurou, e que contradiz o texto das tarefas:
 
@@ -52,14 +60,17 @@ O que a execução da Fase 4 apurou, e que contradiz o texto das tarefas:
   Corrigido junto: arquivo citado que some agora é falha.
 - **A Task 15 mediu certo:** 36 entradas em `.claude/skills/` (15 diretórios + 21 symlinks).
 
-A **Fase 2** (tasks 5 a 8) continua bloqueada esperando duas medições que só o dono pode rodar no
-SQL Editor:
+**As medições, para quem quiser repetir** (somente leitura; rodadas em 09/08/2026 pelo dono):
 
 ```sql
-select rolname, rolconfig from pg_roles
-  where rolname in ('authenticator','anon');            -- Task 5
-select prosrc, proowner::regrole from pg_proc
-  where proname = 'rls_auto_enable';                    -- Task 7
+select rolname, unnest(rolconfig) from pg_roles
+  where rolname in ('authenticator','anon','authenticated');   -- Task 5
+select proname, prokind, pronamespace::regnamespace from pg_proc
+  where proname ilike '%rls%';                                  -- Task 7
+select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname not in ('pg_catalog','information_schema') and p.prokind = 'f'
+    and pg_get_functiondef(p.oid) ilike any (array['%evento_dados%','%portaria_data%']);
+select tgname, tgrelid::regclass from pg_trigger where not tgisinternal;  -- Task 18
 ```
 
 ### Divergências entre o plano e o que a execução apurou

@@ -313,7 +313,7 @@ $function$;
 -- ficaram de fora do ticket 06 de 26/07 e continuavam com o `=X/postgres` herdado do default do
 -- PostgreSQL). Assinatura completa de propósito: sem ela o REVOKE erra a sobrecarga.
 REVOKE ALL ON FUNCTION public.f_unaccent(text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.f_unaccent(text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.f_unaccent(text) TO anon;
 
 -- índice que depende de f_unaccent — criar só agora que a função existe
 -- casa TIPO + NOME do logradouro (ex. "Rua Acre") — nome_logradouro sozinho não tem o tipo
@@ -338,7 +338,7 @@ AS $function$
     and (p_ibge is null or i.cod_municipio_origem = p_ibge)
 $function$;
 REVOKE ALL ON FUNCTION public.divat_busca_logradouro(text, integer) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.divat_busca_logradouro(text, integer) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.divat_busca_logradouro(text, integer) TO anon;
 
 CREATE OR REPLACE FUNCTION public.divat_linhas_regiao(p_regiao text, p_modo text)
  RETURNS TABLE(codlinha character varying)
@@ -361,7 +361,7 @@ AS $function$
      or (p_modo = 'origem' and a.origem_ibge in (select cod_ibge from muns))
 $function$;
 REVOKE ALL ON FUNCTION public.divat_linhas_regiao(text, text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.divat_linhas_regiao(text, text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.divat_linhas_regiao(text, text) TO anon;
 
 -- Zera "vigor" automaticamente quando uma portaria é marcada como REVOGADA
 -- (não estava documentado no CLAUDE.md — achado ao gerar este backup).
@@ -467,6 +467,9 @@ begin
 end;
 $function$;
 REVOKE ALL ON FUNCTION public.divat_data_quality() FROM public;
+-- TRANSITÓRIO: esta RPC de diagnóstico sai de `public` quando a fase 3 for promovida
+-- (ver docs/planos/fase-3-hardening-moderado.md). Enquanto os gates diários a chamarem
+-- como anon, ela precisa continuar aqui. Remover JUNTO com a migração dos gates.
 GRANT EXECUTE ON FUNCTION public.divat_data_quality() TO anon, authenticated;
 
 -- divat_api_shape(): o que a API pública enxerga — tabelas/colunas (information_schema,
@@ -501,6 +504,9 @@ select jsonb_build_object(
 );
 $function$;
 REVOKE ALL ON FUNCTION public.divat_api_shape() FROM public;
+-- TRANSITÓRIO: esta RPC de diagnóstico sai de `public` quando a fase 3 for promovida
+-- (ver docs/planos/fase-3-hardening-moderado.md). Enquanto os gates diários a chamarem
+-- como anon, ela precisa continuar aqui. Remover JUNTO com a migração dos gates.
 GRANT EXECUTE ON FUNCTION public.divat_api_shape() TO anon, authenticated;
 
 -- realtime_tables(): lista as tabelas da publicação supabase_realtime, read-only. Usada por
@@ -519,6 +525,9 @@ AS $function$
   order by tablename
 $function$;
 REVOKE ALL ON FUNCTION public.realtime_tables() FROM public;
+-- TRANSITÓRIO: esta RPC de diagnóstico sai de `public` quando a fase 3 for promovida
+-- (ver docs/planos/fase-3-hardening-moderado.md). Enquanto os gates diários a chamarem
+-- como anon, ela precisa continuar aqui. Remover JUNTO com a migração dos gates.
 GRANT EXECUTE ON FUNCTION public.realtime_tables() TO anon, authenticated;
 
 -- divat_security_shape(): postura de segurança do schema public em fatos DERIVADOS. Usada pelo
@@ -599,6 +608,9 @@ AS $function$
   );
 $function$;
 REVOKE ALL ON FUNCTION public.divat_security_shape() FROM public;
+-- TRANSITÓRIO: esta RPC de diagnóstico sai de `public` quando a fase 3 for promovida
+-- (ver docs/planos/fase-3-hardening-moderado.md). Enquanto os gates diários a chamarem
+-- como anon, ela precisa continuar aqui. Remover JUNTO com a migração dos gates.
 GRANT EXECUTE ON FUNCTION public.divat_security_shape() TO anon, authenticated;
 
 -- ============================================================
@@ -745,6 +757,35 @@ ALTER TABLE public.origem_teste         REPLICA IDENTITY FULL;
 ALTER TABLE public.portaria_teste       REPLICA IDENTITY FULL;
 -- as demais tabelas usam REPLICA IDENTITY DEFAULT (via PK) — suficiente
 -- desde a auditoria de PKs de 15/07/2026.
+
+-- ============================================================
+-- LIMITES DE ROLE (teto do PostgREST + timeouts)
+--
+-- Não são objetos de schema, então NÃO vinham no dump — e por isso sumiam num
+-- restore sem sintoma nenhum: o portal continua funcionando (todo `limit` do
+-- app.js é <= 30000) e o que se perde é a proteção contra varredura da base
+-- pela chave pública, que é o item SEC-02 de docs/seguranca.md.
+--
+-- Os valores abaixo foram MEDIDOS contra o banco vivo em 09/08/2026
+-- (`select rolname, unnest(rolconfig) from pg_roles`), não copiados de memória.
+-- O rascunho do plano propunha `anon = 8s` e estava ERRADO: 8s é do
+-- `authenticated`; o `anon` roda com 3s. Versionar o palpite teria triplicado,
+-- num restore, o tempo que uma consulta anônima pode segurar o banco.
+--
+-- ⚠️ Ao criar consulta com `limit` maior que 30000, suba o teto NA MESMA TAREFA
+-- — aqui, no banco, e na constante SB_MAX_ROWS do app.js (ver CLAUDE.md).
+--
+-- NÃO versionado de propósito: `session_preload_libraries=supautils, safeupdate`
+-- no `authenticator`. É configuração da plataforma Supabase, posta por ela em
+-- todo projeto; reimpô-la à mão num restore é assumir um detalhe interno que não
+-- é nosso e que pode mudar sem aviso.
+-- ============================================================
+ALTER ROLE authenticator  SET pgrst.db_max_rows   = '30000';
+ALTER ROLE authenticator  SET statement_timeout   = '8s';
+ALTER ROLE authenticator  SET lock_timeout        = '8s';
+ALTER ROLE anon           SET statement_timeout   = '3s';
+ALTER ROLE authenticated  SET statement_timeout   = '8s';
+NOTIFY pgrst, 'reload config';
 
 -- ============================================================
 -- FIM. Próximo passo: importar os CSVs (Table Editor → Import data)

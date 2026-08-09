@@ -86,8 +86,11 @@ exibe e **atualiza ao vivo** (Realtime).
     o `marcarTrunc` a usa como segundo critério de truncagem — é o que impede uma resposta cortada
     pelo SERVIDOR de passar sem banner, já que `data.length` nunca alcança um `limit` maior que o
     teto. Deixá-la para trás faz o portal avisar "resultado parcial" num teto que não é mais o
-    real. O valor ainda **não** está versionado no `docs/backup_schema.sql` (Task 5 do plano de
-    08/08, bloqueada), então hoje estes dois pontos são os únicos lugares onde ele existe.
+    real. **São TRÊS lugares a mudar juntos:** o banco, o `SB_MAX_ROWS` do `app.js` e o
+    `docs/backup_schema.sql` (onde os `ALTER ROLE` passaram a ser versionados em 09/08/2026).
+  - **Timeouts por role** (medidos em 09/08/2026, versionados na baseline): `anon` = **3s**,
+    `authenticated` = **8s**, `authenticator` = 8s + `lock_timeout` 8s. Não são iguais de
+    propósito — o caminho anônimo é o exposto, e tem o teto mais curto.
   - **Baseline de reconstrução** (RLS/policies/grants/índices/funções) versionada em
     `docs/backup_schema.sql`. Snapshot do estado atual (auditoria/DR):
     `scripts/gen_security_snapshot.sql` (salvar a saída **fora do git**).
@@ -308,14 +311,14 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   `evento_teste`; `portaria_data` + `portaria_texto_teste`, com `portaria_teste`. RLS ligado
   **sem policy** e **sem grant** → invisíveis pela API pública, de propósito (o lint
   `rls_enabled_no_policy` nelas é **esperado**). Alimentação via service role (painel).
-  **Por precaução, replique na staging toda correção feita em tabela final** (casando pelo `id`):
-  se houver rebuild, correção que só existe na final é desfeita em silêncio.
-  ⚠️ **O rebuild em si não está descrito em lugar nenhum e não foi possível apurar** — a junção
-  acima é **deduzida do schema**, não de procedimento observado. Até 08/08/2026 esta linha
-  afirmava que "o rebuild do ETL desfaz", como se o mecanismo fosse conhecido; ele não é.
-  `docs/etl.md` §3 traz a consulta que fecha o vazio (procura função/trigger e compara as
-  contagens) — **rode-a antes de escrever qualquer comando de rebuild**: um `TRUNCATE` errado
-  aqui apaga arquivo institucional insubstituível.
+  **Replique na staging toda correção feita em tabela final** (casando pelo `id`): são duas cópias
+  do mesmo fato, e o portal só lê a final — a discordância é invisível até alguém reconstruir a
+  final a partir da staging e o dado velho voltar.
+  **Não existe rebuild automatizado** (medido em 09/08/2026: nenhuma função ou trigger menciona a
+  staging, e as contagens batem exatamente — 20.753 nos três de evento, 2.100 nos três de
+  portaria). As duas cópias andam juntas porque **o import de CSV alimenta as duas**. Até
+  08/08/2026 esta linha afirmava que "o rebuild do ETL desfaz", como se houvesse um mecanismo
+  automático; não há. Detalhe em `docs/etl.md` §3.
 - **Truncagem silenciosa:** a maioria dos loaders avisa via `marcarTrunc`/`bannerTrunc`, mas
   cortes por `slice(0,N)` no cliente **perdem** a flag não-enumerável `_trunc` (o `slice` não a
   copia). Ao criar/editar view que faz `slice` no cliente, **reponha a flag** (ou avise o
