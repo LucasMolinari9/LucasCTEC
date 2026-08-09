@@ -542,6 +542,25 @@ console.log('\n[2b] Deriva docs × código');
     else okline(`sequências: ${comIdentity.length} tabela(s) IDENTITY com setval, e o Caminho B aponta para o passo`);
   }
 
+  // Os nomes de ambiente que os DOIS baselines precisam ter saem de `scripts/ambientes.json` — a
+  // mesma fonte que o `DIVAT_ALVO` consulta por `scripts/lib/ambiente.mjs`. Escritos à mão aqui,
+  // eles seriam uma terceira lista: ambiente novo no ambientes.json nasceria sem slot em nenhum
+  // baseline, os gates seguiriam verdes, e a falta só apareceria quando alguém rodasse contra ele
+  // — no cron, um dia depois, com mensagem que fala de banco quando o defeito está num JSON.
+  // O fallback literal existe só para a guarda não sumir se o ambientes.json for removido.
+  const ambientesConhecidos = existe('scripts/ambientes.json')
+    ? Object.keys(JSON.parse(ler('scripts/ambientes.json')).ambientes || {})
+    : ['teste', 'producao'];
+  // Slot a MAIS também é defeito, e do tipo que passa despercebido: um ambiente que o
+  // ambientes.json não conhece nunca é escrito nem lido por gate nenhum — vira medição fóssil,
+  // com cara de dado vivo.
+  const cobrarNomes = b => {
+    const faltando = ambientesConhecidos.filter(a => !(a in b.ambientes));
+    if (faltando.length) throw new Error(`"ambientes" sem o slot do(s) ambiente(s): ${faltando.join(', ')}`);
+    const sobrando = Object.keys(b.ambientes).filter(a => !ambientesConhecidos.includes(a));
+    if (sobrando.length) throw new Error(`slot de ambiente que scripts/ambientes.json não conhece: ${sobrando.join(', ')}`);
+  };
+
   // --- o baseline de qualidade dos dados é legível offline ---
   // O check_data_quality.mjs só roda no cron semanal (precisa de rede). Um baseline malformado
   // ou com entrada incompleta só apareceria uma semana depois, e o gate semanal falharia por
@@ -558,11 +577,12 @@ console.log('\n[2b] Deriva docs × código');
       if ('achados' in b) {
         throw new Error('dívida medida no TOPO ("achados") — é a forma anterior à issue #99; ela mora em "ambientes.<alvo>.achados"');
       }
+      cobrarNomes(b);
       let medidos = 0;
-      for (const alvo of ['teste', 'producao']){
+      for (const alvo of ambientesConhecidos){
         const slot = b.ambientes[alvo];
         if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
-          throw new Error(`"ambientes" sem o slot do ambiente '${alvo}'`);
+          throw new Error(`o slot do ambiente '${alvo}' não é um objeto`);
         }
         if (!('achados' in slot)) throw new Error(`ambientes.${alvo} sem o campo "achados"`);
         // `null` é legítimo: é o slot ainda não medido, à espera do --atualizar-baseline daquele
@@ -579,7 +599,7 @@ console.log('\n[2b] Deriva docs × código');
       if (mDq[1].replace(/\\'/g, "'") !== b.nota) {
         throw new Error('a "nota" do JSON não bate com a constante NOTA do check_data_quality.mjs (o --atualizar-baseline sobrescreveria uma pela outra)');
       }
-      okline(`baseline de qualidade dos dados válido (${medidos} de 2 ambiente(s) medido(s))`);
+      okline(`baseline de qualidade dos dados válido (${medidos} de ${ambientesConhecidos.length} ambiente(s) medido(s))`);
     } catch (e){
       fail(`scripts/data_quality_baseline.json inválido: ${e.message}`);
     }
@@ -603,10 +623,11 @@ console.log('\n[2b] Deriva docs × código');
       if (!b.ambientes || typeof b.ambientes !== 'object' || Array.isArray(b.ambientes)) {
         throw new Error('sem o bloco "ambientes" — a medição por ambiente é a forma desde a issue #99');
       }
-      for (const alvo of ['teste', 'producao']){
+      cobrarNomes(b);
+      for (const alvo of ambientesConhecidos){
         const slot = b.ambientes[alvo];
         if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
-          throw new Error(`"ambientes" sem o slot do ambiente '${alvo}'`);
+          throw new Error(`o slot do ambiente '${alvo}' não é um objeto`);
         }
         // Chave AUSENTE é o defeito; valor `null` é legítimo — é como o slot ainda não medido
         // espera pelo --atualizar-baseline daquele banco.
