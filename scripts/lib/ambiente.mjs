@@ -9,7 +9,7 @@
 //   schedule (cron) / dispatch → DIVAT_ALVO=producao  (o monitoramento)
 //
 // NÃO existe default. Ausência de DIVAT_ALVO é erro, porque um default silencioso é exatamente
-// como um gate de PR acaba falando com produção. Ver docs/superpowers/specs/
+// como um gate de PR acaba falando com produção. Ver docs/planos/
 // 2026-08-04-fase3-diagnosticos-anonimos-design.md § 3.3.
 
 import { readFile } from 'node:fs/promises';

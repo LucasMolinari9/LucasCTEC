@@ -86,7 +86,7 @@ for (const file of files) {
         fail(file, `${target} não está na allowlist anônima. Para entrar como PRODUTO, precisa ser `
           + `chamada pelo portal em runtime; como DIAGNÓSTICO, precisa ler só catálogo, ser `
           + `SECURITY INVOKER e não revelar além do que o repositório já publica (ADR-0003). `
-          + `Ver docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md §8.`);
+          + `Ver docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md §8.`);
       }
     }
   }

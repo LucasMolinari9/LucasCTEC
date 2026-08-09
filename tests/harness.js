@@ -1,5 +1,7 @@
 'use strict';
-/* Harness reproducing the SUPABASE CONFIG functions from app.js (lines 618-684).
+/* Harness reproducing the SUPABASE CONFIG functions from app.js, plus `preencherLookup`
+   (seção STATE + CACHES) — o cache de lookup precisa de teste porque o bug que ele corrige
+   é silencioso: cachear a FALHA em vez do resultado.
    SB_TIMEOUT_MS is made mutable (let) so the timeout test can shrink it.
    Everything else is copied verbatim. */
 
@@ -7,6 +9,7 @@ const SB_URL = 'https://example.invalid';
 const SB_KEY = 'fake-anon-key';
 const SB = { url: SB_URL, key: SB_KEY };
 
+/* @canon selecionarSupabase */
 function selecionarSupabase(hostname, config){
   const host = String(hostname || '').trim().toLowerCase().replace(/\.$/, '');
   const hostsProd = (config.hostsProd || []).map(h => String(h).trim().toLowerCase().replace(/\.$/, ''));
@@ -19,20 +22,32 @@ function selecionarSupabase(hostname, config){
   }
   return Object.freeze({ ...alvo, hostname: host });
 }
+/* @endcanon */
 
+/* @canon esperar */
 const esperar = ms => new Promise(r => setTimeout(r, ms));
+/* @endcanon */
 
+/* @canon-adaptado SB_TIMEOUT_MS — `let` em vez de `const`: o teste de timeout precisa encurtá-lo */
 let SB_TIMEOUT_MS = 20000;   // copied; made `let` to allow shrinking in timeout test
+/* @endcanon */
+/* @canon SB_RETRIES */
 const SB_RETRIES    = 2;
+/* @endcanon */
 
+/* @canon CANCELADO */
 const CANCELADO = 'RequisicaoCancelada';
+/* @endcanon */
+/* @canon ehCancelamento */
 const ehCancelamento = e => e && e.name === CANCELADO;
+/* @endcanon */
 
 // fetch com timeout via AbortController — cancela a requisição se passar do teto.
 // `sinal` (opcional) é um AbortSignal EXTERNO, de quem quer cancelar antes disso (busca obsoleta).
 // Os dois são compostos, e a distinção entre eles é preservada: timeout vira mensagem para o
 // usuário, cancelamento externo é engolido. Sem essa distinção, trocar de termo de busca pintaria
 // "Tempo de resposta esgotado" na tela.
+/* @canon fetchComTimeout */
 async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal){
   if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
   const ctrl = new AbortController();
@@ -50,7 +65,9 @@ async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal)
     if (sinal) sinal.removeEventListener('abort', repassar);
   }
 }
+/* @endcanon */
 
+/* @canon sbFetch */
 async function sbFetch(table, qs = '', sinal) {
   const url = `${SB.url}/rest/v1/${table}?${qs}`;
   let ultimoErro;
@@ -89,28 +106,48 @@ async function sbFetch(table, qs = '', sinal) {
   }
   throw ultimoErro;
 }
+/* @endcanon */
 
+/* @canon SB_MAX_ROWS */
+const SB_MAX_ROWS = 30000;
+/* @endcanon */
+/* @canon marcarTrunc */
 function marcarTrunc(data, qs){
   if (!Array.isArray(data)) return data;
   const m = /(?:^|&)limit=(\d+)/.exec(qs || '');
   if (m){
-    const lim = +m[1];
-    if (lim >= 50 && data.length >= lim){
+    const teto = Math.min(+m[1], SB_MAX_ROWS);
+    if (teto >= 50 && data.length >= teto){
       Object.defineProperty(data, '_trunc',  { value:true, enumerable:false });
-      Object.defineProperty(data, '_limite', { value:lim,  enumerable:false });
+      Object.defineProperty(data, '_limite', { value:teto, enumerable:false });
     }
   }
   return data;
 }
+/* @endcanon */
+/* @canon bannerTrunc */
 function bannerTrunc(rows){
   return (rows && rows._trunc)
     ? `<div class="trunc-aviso"><b>Resultado parcial:</b> mostrando os primeiros ${rows._limite}. Refine a busca para encontrar itens mais específicos.</div>`
     : '';
 }
+/* @endcanon */
+
+/* @canon preencherLookup */
+async function preencherLookup(cache, chave, buscar, coluna){
+  if (cache[chave]) return cache[chave];
+  const rows = await buscar().catch(() => null);   // null = falhou; [] = veio vazio de verdade
+  if (!rows) return null;                          // não cacheia falha
+  const m = {};
+  rows.forEach(x => { m[x.id] = x[coluna]; });
+  cache[chave] = m;
+  return m;
+}
+/* @endcanon */
 
 module.exports = {
   get SB_TIMEOUT_MS(){ return SB_TIMEOUT_MS; },
   set SB_TIMEOUT_MS(v){ SB_TIMEOUT_MS = v; },
-  SB_RETRIES, selecionarSupabase, esperar, fetchComTimeout, sbFetch, marcarTrunc, bannerTrunc,
-  CANCELADO, ehCancelamento,
+  SB_RETRIES, SB_MAX_ROWS, selecionarSupabase, esperar, fetchComTimeout, sbFetch, marcarTrunc, bannerTrunc,
+  CANCELADO, ehCancelamento, preencherLookup,
 };

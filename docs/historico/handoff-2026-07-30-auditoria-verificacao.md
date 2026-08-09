@@ -1,5 +1,9 @@
 # Handoff — verificação da auditoria preliminar de 30/07/2026
 
+> **Snapshot de 30/07/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 > **Para a sessão nova:** leia este arquivo e o `CLAUDE.md`. Este descreve **o que aconteceu numa
 > sessão específica e o que ficou combinado**; o `CLAUDE.md` é a fonte das regras do projeto. Se os
 > dois divergirem, o `CLAUDE.md` manda.

@@ -1,10 +1,14 @@
 # Handoff — PR 4 (visibilidade) e o fim da fila de PRs do plano de 30/07
 
+> **Snapshot de 31/07/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 > **Para a sessão nova:** leia este arquivo e o `CLAUDE.md`. Este descreve **o que aconteceu numa
 > sessão específica e o que ficou aberto**; o `CLAUDE.md` é a fonte das regras do projeto. Se os
 > dois divergirem, o `CLAUDE.md` manda.
 >
-> Handoff anterior: `docs/handoff-2026-07-31-prs-e-smoke.md`. ⚠️ **Ele contém uma afirmação
+> Handoff anterior: `docs/historico/handoff-2026-07-31-prs-e-smoke.md`. ⚠️ **Ele contém uma afirmação
 > errada** — ver "Correções ao handoff anterior", abaixo.
 
 ## Estado
@@ -94,7 +98,7 @@ resgatado por cherry-pick no #88 e está na `main`; o arquivo é byte-idêntico 
 
 ### 1. PR #84 — fechar (redundante)
 
-`docs/handoff-2026-07-30-auditoria-verificacao.md` já está na `main`, idêntico. O PR só ocupa
+`docs/historico/handoff-2026-07-30-auditoria-verificacao.md` já está na `main`, idêntico. O PR só ocupa
 espaço. Fechar sem merge; a branch `claude/ask-matt-u6cwf8` pode ir junto. **Não mergear** — a
 branch está 4 merges atrás da `main` e o merge reverteria trabalho.
 
@@ -159,4 +163,4 @@ rodam normalmente — medido nesta sessão, sem `paths` filtrando nenhum deles.
    segunda o engano foi meu: **`get_job_logs` com HTTP 404 não prova que o job está rodando.**
    Nem `mergeable_state: unstable`. O que resolve é
    `actions_get(method: 'get_workflow_job')`, que traz `started_at`/`completed_at` **por passo**.
-   Detalhe completo em `docs/contexto-proxima-sessao-2026-07-31.md` § 4, item 5.
+   Detalhe completo em `docs/historico/contexto-proxima-sessao-2026-07-31.md` § 4, item 5.

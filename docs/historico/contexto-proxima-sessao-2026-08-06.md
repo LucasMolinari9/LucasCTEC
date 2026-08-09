@@ -1,5 +1,9 @@
 # Contexto para a próxima sessão — 06/08/2026
 
+> **Snapshot de 06/08/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 Handoff da sessão que implementou as tarefas 4–10 da **Fase 3 — diagnósticos anônimos**.
 Não é doc vivo (fica fora do `DOCS_VIVOS` do `tests/check.js`): é um instantâneo datado.
 
@@ -10,9 +14,9 @@ Não é doc vivo (fica fora do `DOCS_VIVOS` do `tests/check.js`): é um instant�
 - **Branch:** `claude/divat-fase3-diagnosticos-y7ry57`, empurrada. HEAD em `157f9f8`.
 - **PR:** [#98](https://github.com/LucasMolinari9/LucasCTEC/pull/98), **aberto**, não mergeado.
 - **Issue #74:** **aberta**, **não comentada**. Rascunho pronto e revisado, **versionado** em
-  [`docs/issue-74-comentario-rascunho.md`](issue-74-comentario-rascunho.md).
-- **Plano:** `docs/superpowers/plans/2026-08-04-fase3-diagnosticos-anonimos.md`
-- **Spec:** `docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md`
+  [`docs/historico/issue-74-comentario-rascunho.md`](issue-74-comentario-rascunho.md).
+- **Plano:** `docs/planos/2026-08-04-fase3-diagnosticos-anonimos.md`
+- **Spec:** `docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md`
 
 ## Estado do CI no PR #98
 

@@ -1,5 +1,9 @@
 # Revisão externa do projeto — 17/07/2026
 
+> **Snapshot de 17/07/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 Registro de uma **avaliação externa** do portal DIVAT (banco + repositório, feita pelo modelo
 **Qwen**) e do que foi decidido a partir dela. Segue o mesmo espírito do registro anterior
 (`revisao-externa-2026-07-16.md`, do Kimi K3): cada apontamento foi **conferido contra o código e o
@@ -14,7 +18,7 @@ resolvidos nesta** (o dono pediu explicitamente "resolver tudo, não só documen
 | # | Apontamento | Confere? | Status | Onde |
 |---|---|---|---|---|
 | 1 | `cod_origem` com 2 significados (e 2 tipos) | ✅ (pior: +2 tipos) | ✅ resolvido | banco + `index.html` + docs |
-| 2 | Placares de teste desatualizados na doc | ✅ | ✅ resolvido | `tests/README.md`, `docs/analise-separacao.md` |
+| 2 | Placares de teste desatualizados na doc | ✅ | ✅ resolvido | `tests/README.md`, `docs/historico/analise-separacao.md` |
 | 3 | `tables:[]` ignorado pelo `searchPanel` (API enganosa) | ✅ | ✅ resolvido | `index.html` |
 | 4 | `supabase-js` da CDN sem versão fixa/SRI | ✅ | ✅ resolvido | `vendor/`, `index.html`, `vercel.json` |
 | 5 | Truncagem silenciosa | 🟡 (1 furo, não "vários") | ✅ resolvido | `index.html` |
@@ -57,7 +61,7 @@ pontos do `index.html`. Depois de #1 e #7, `cod_origem` = terminal e `cod_munici
 > função, realtime). Reversível por rename de volta.
 
 ### ✅ 2 · Placares de teste
-`tests/README.md` dizia `56/56` (real 115) e `docs/analise-separacao.md` dizia `69/69` (real 237).
+`tests/README.md` dizia `56/56` (real 115) e `docs/historico/analise-separacao.md` dizia `69/69` (real 237).
 Em vez de só corrigir os números (que voltam a driftar a cada teste novo), **removeram-se as contagens
 fixas da prosa** — a contagem autoritativa sai de `node tests/check.js`. `realtime.test.js` passou a
 ser citado no README.

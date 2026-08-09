@@ -1,5 +1,9 @@
 # Handoff — Fase 3, diagnósticos anônimos (04/08/2026)
 
+> **Snapshot de 04/08/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 > **Para quem retoma numa sessão nova.** Leia este arquivo e depois a spec. O ledger de execução
 > vivia em `.superpowers/sdd/…`, que é **git-ignored** e morre com o container — por isso tudo que
 > importa está aqui.
@@ -18,8 +22,8 @@ verde. Nenhum DDL foi aplicado em banco nenhum.
 | T5–T10 | allowlist, `check_grants`, auditor, `check_data_quality`, deriva/realtime, docs | ⬜ planejadas | — |
 
 **Documentos que mandam:**
-- Desenho: `docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md`
-- Plano executável, 10 tarefas: `docs/superpowers/plans/2026-08-04-fase3-diagnosticos-anonimos.md`
+- Desenho: `docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md`
+- Plano executável, 10 tarefas: `docs/planos/2026-08-04-fase3-diagnosticos-anonimos.md`
 
 ## O próximo passo, exatamente
 

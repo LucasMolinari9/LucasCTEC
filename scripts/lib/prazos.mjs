@@ -3,7 +3,7 @@
 // Por que existe: neste repositório, o que cabe num `git push` acontece e o que depende de
 // lembrar não acontece. Um compromisso com data (rotação de credencial, remoção de caminho
 // temporário, revisão trimestral) só é real se um gate o cobrar ANTES do vencimento, num canal
-// que já se lê. Ver docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md §6.
+// que já se lê. Ver docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md §6.
 
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';

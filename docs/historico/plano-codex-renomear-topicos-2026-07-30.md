@@ -1,5 +1,9 @@
 # Renomear os tópicos da sidebar — plano para o Codex (30/07/2026)
 
+> **Snapshot de 30/07/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 > **EXECUTADO E CORRIGIDO — leia isto antes do resto.** O plano abaixo foi cumprido pelo PR #80,
 > mas com o **mapeamento errado**: ele pôs `Itinerários` no tópico `doc` e `Ligações` no `lig`,
 > invertendo os dois. O dono corrigiu no PR #81. **Os nomes finais são:**

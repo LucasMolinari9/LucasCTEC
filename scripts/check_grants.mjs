@@ -260,9 +260,25 @@ for (const campo of ['tabelas', 'funcoes', 'default_privileges']) {
     process.exit(1);
   }
 }
-if (!forma.tabelas.length) {
-  console.error('A RPC não devolveu nenhuma tabela. Isso não é "tudo certo", é visão perdida — abortando.');
-  process.exit(1);
+// Lista VAZIA é o mesmo fail-open do campo ausente, com outra roupa: passa no Array.isArray
+// acima, o laço da regra simplesmente não itera, e o gate imprime "nenhum achado".
+//
+// Até 08/08/2026 esta conferência existia só para `tabelas` — e `funcoes`/`default_privileges`
+// são justamente os dois eixos onde mora o risco 9.1 (os defaults do `supabase_admin`, que não
+// são fecháveis porque `postgres` não é superusuário aqui). Pior que passar em silêncio: com
+// `default_privileges` vazio o script anunciava "Resolvido desde o baseline — rode
+// --atualizar-baseline", ou seja, convidava a APAGAR do baseline o registro da exceção
+// conhecida. Perder a visão passaria a parecer progresso.
+const MINIMO = {
+  tabelas: 'nenhuma tabela',
+  funcoes: 'nenhuma função',
+  default_privileges: 'nenhum default privilege',
+};
+for (const [campo, oQue] of Object.entries(MINIMO)) {
+  if (!forma[campo].length) {
+    console.error(`A RPC não devolveu ${oQue} ('${campo}'). Isso não é "tudo certo", é visão perdida — abortando.`);
+    process.exit(1);
+  }
 }
 
 // ---------------------------------------------------------------------------------------------

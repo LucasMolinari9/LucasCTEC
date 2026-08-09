@@ -7,10 +7,22 @@ especialmente arriscada porque induz quem testa a acreditar que produção está
 
 **Decisão:** o Portal DIVAT usa o projeto Supabase `divat - TESTE`
 (`gontnlfmothfglssbyyk`) para previews e desenvolvimento. O `app.js` escolhe o projeto pelo
-hostname: somente `divatdetro.vercel.app`, explicitamente registrado em `HOSTS_PROD`, usa
-produção; qualquer outro host usa teste. A seleção é fail-closed: se a configuração do ambiente
-escolhido estiver incompleta, a aplicação interrompe a inicialização em vez de recorrer ao banco
-de produção.
+hostname: os **três** domínios registrados em `HOSTS_PROD` — o canônico
+(`divatdetro.vercel.app`), o alias do time e o alias da branch `main` — usam produção; qualquer
+outro host usa teste. A seleção é fail-closed: se a configuração do ambiente escolhido estiver
+incompleta, a aplicação interrompe a inicialização em vez de recorrer ao banco de produção.
+
+**`HOSTS_PROD` precisa listar TODOS os domínios que o projeto Vercel serve como produção, e
+adicionar domínio no painel da Vercel obriga a adicioná-lo aqui na mesma tarefa.** Até
+29/07/2026 só o canônico estava lá, e os outros dois **serviam conteúdo de produção lendo o banco
+de TESTE**. O sintoma é o pior possível: dado errado na tela, sem erro nenhum, porque o banco de
+teste é uma cópia e a página parece perfeitamente normal.
+
+> Até 09/08/2026 este ADR dizia "somente `divatdetro.vercel.app` … usa produção", congelado na
+> versão anterior àquele achado. Um ADR é **normativo**: quem o seguisse removeria os outros dois
+> de `HOSTS_PROD` e recriaria o bug. A guarda que impede isto de acontecer de novo é o
+> `tests/check.js` §[2b], que desde 08/08/2026 varre `docs/adr/` e `docs/planos/` — foi por
+> estarem fora do alcance dela que esta frase sobreviveu dez dias.
 
 **Por quê:** produção é uma allowlist porque os endereços de preview do Vercel incluem valores
 gerados a cada deploy e não podem ser enumerados antecipadamente. Tratar como produção somente

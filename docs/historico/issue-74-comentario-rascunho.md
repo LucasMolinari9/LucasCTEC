@@ -1,5 +1,9 @@
 # Comentário da issue #74 — POSTADO em 08/08/2026
 
+> **Snapshot de 06/08/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 > Publicado em [#74 (comment)](https://github.com/LucasMolinari9/LucasCTEC/issues/74#issuecomment-5223486677),
 > a pedido do dono. A issue **continua aberta**: o desenho não cumpre duas cláusulas dela (ver
 > abaixo), e quem aceita ou recusa essa troca é quem a escreveu.
@@ -71,7 +75,7 @@ O escopo dessa garantia: ela cobre o comportamento dos scripts e a fiação atua
 (`db-checks.yml`, `deriva.yml`). Não há guarda automatizada impedindo que um workflow **futuro**
 declare `DIVAT_ALVO: producao` num passo de `pull_request` — isso hoje depende de revisão humana.
 
-**Ponteiro:** `docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md` § 3.3
+**Ponteiro:** `docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md` § 3.3
 (regra do alvo) e § 4 (onde cada gate fica, com a cadência real de cada um). O código está no
 PR #98.
 

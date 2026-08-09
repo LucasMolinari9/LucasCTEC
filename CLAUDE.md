@@ -10,7 +10,7 @@ empresas, relatórios). Os dados são **alimentados pelo dono direto no Supabase
 exibe e **atualiza ao vivo** (Realtime).
 
 ## Arquitetura (importante)
-- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (todo o JS, ~3,2k
+- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (todo o JS, ~3,5k
   linhas, num IIFE)** — zero-build: sem framework, sem `package.json`, `<script src>` clássico no
   fim do `<body>`. Todo JS novo vai no `app.js` (o `tests/check.js` **falha** se aparecer
   `<script>` inline no `index.html` — a CSP publica `script-src 'self'` e bloquearia) e todo CSS
@@ -83,10 +83,21 @@ exibe e **atualiza ao vivo** (Realtime).
   - **Manual de segurança do dono + auditoria/pentest** (linguagem direta, modelo de ameaça,
     checklist trimestral e resposta a incidente): **`docs/seguranca.md`**. Auditoria completa +
     teste de invasão ao vivo em 23/07/2026 (sem achados de segredo; sem caminho de escrita).
-  - **Como o dono alimenta:** direto pelo **painel do Supabase** (service role, ignora RLS).
+  - **Como o dono alimenta:** o banco do **DETRO** é a fonte; o dono exporta em **CSV** e importa
+    pelo **Table Editor** do painel do Supabase (service role, ignora RLS). Runbook completo —
+    encoding obrigatório, staging, o que rodar depois: **`docs/etl.md`**.
   - **Teto do PostgREST:** `pgrst.db_max_rows = 30000` no role `authenticator` (igual ao maior
     `limit` do front). **Ao criar query com `limit` > 30000, suba o teto junto**
-    (`ALTER ROLE authenticator SET pgrst.db_max_rows = '<n>'; NOTIFY pgrst, 'reload config';`).
+    (`ALTER ROLE authenticator SET pgrst.db_max_rows = '<n>'; NOTIFY pgrst, 'reload config';`)
+    **e suba, na mesma tarefa, a constante `SB_MAX_ROWS` do `app.js`** (seção `SUPABASE CONFIG`):
+    o `marcarTrunc` a usa como segundo critério de truncagem — é o que impede uma resposta cortada
+    pelo SERVIDOR de passar sem banner, já que `data.length` nunca alcança um `limit` maior que o
+    teto. Deixá-la para trás faz o portal avisar "resultado parcial" num teto que não é mais o
+    real. **São TRÊS lugares a mudar juntos:** o banco, o `SB_MAX_ROWS` do `app.js` e o
+    `docs/backup_schema.sql` (onde os `ALTER ROLE` passaram a ser versionados em 09/08/2026).
+  - **Timeouts por role** (medidos em 09/08/2026, versionados na baseline): `anon` = **3s**,
+    `authenticated` = **8s**, `authenticator` = 8s + `lock_timeout` 8s. Não são iguais de
+    propósito — o caminho anônimo é o exposto, e tem o teto mais curto.
   - **Baseline de reconstrução** (RLS/policies/grants/índices/funções) versionada em
     `docs/backup_schema.sql`. Snapshot do estado atual (auditoria/DR):
     `scripts/gen_security_snapshot.sql` (salvar a saída **fora do git**).
@@ -98,14 +109,20 @@ exibe e **atualiza ao vivo** (Realtime).
   Realtime).
 
 ## Tabelas → onde aparecem (cards)
+As **14** tabelas de `RT_TABLES`, sem exceção — a lista abaixo é conferida contra o código pelo
+`tests/check.js` §[2b]: tabela que entra no `RT_TABLES` e não aparece aqui reprova o gate.
 - `tabela_vista_teste` (cadastro de linhas) → busca, Ligações por Empresa, Empresas Regulares.
 - `itinerario_teste` (+ `municipio_teste`) → Itinerários, Ligações por Logradouro/Município.
 - `qh_intervalo_teste` / `qh_predeterminado_teste` (+ `origem_teste`) → Quadro de
   Horários, Ligações por Terminais.
-- `qh_teste` (frota_*) → Frota, Estrutura.
+- `qh_teste` (frota_*) → Frota, Estrutura, Frota por Empresa.
 - `tarifa_atual_teste` → Tarifas, Seções por Ligação/Empresa.
 - `evento_teste` (+ `evento_empresa_teste`, `evento_linha_teste`) → Histórico.
 - `localidades_teste` → Linhas por Localidade e Município.
+- `codempresa_teste` (cadastro de empresas) → lookup `getEmpresas`, usado por **quase todo card**
+  (o nome da empresa no banner e nas listas); é a fonte direta do Histórico da Empresa
+  (processo/data de publicação) e das Empresas Regulares.
+- `portaria_teste` → Portarias (lista + detalhe; único card que a lê).
 
 ## Como o Realtime funciona no código
 - Cada card abre uma "view": `runView({ title, tables:[...], lineFilter, loader })`.
@@ -209,128 +226,76 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    das listas de linha**, rode `node scripts/check_selecao_linha.mjs` — mesma bancada, guarda
    o bug em que o `history.back()` do `closeModal` apagava a linha recém-selecionada dentro do
    modal (ver Armadilhas) e a barra Todas/Ativas/Canceladas do card de Localidade.
-2a. **Ao mexer em qualquer render/loader, rode `node scripts/check_views.mjs`** — abre as **17
-   views** num navegador headless e falha se alguma explodir (`errorBox`), ficar presa no
-   spinner, pintar só a moldura ou não achar nada com um termo que casa as fixtures. É a rede
-   sob a seção `MODAL / SISTEMA DE VIEWS` (~58,8% do `app.js`), que o `check.js` **não** cobre —
-   ele só testa a lógica pura copiada nos `*.harness.js`. Aceita filtro: `check_views.mjs frota`.
-   Ele **não** confere se o conteúdo está certo (isso é asserção por view, ainda não existe).
-   **View nova = uma entrada em `VIEWS` no script** — a checagem anti-drift do final compara a
-   lista com os `data-view` do seletor e falha se você esquecer.
-   Servidor + fixtures + Chromium moram em **`scripts/lib/rig.mjs`**, compartilhados com o
-   `check_abas.mjs`. **Ao mudar um `select=` do `app.js`, ajuste a fixture junto**: nome de
-   coluna divergente chega `undefined` no render e a tela fica vazia *sem erro* — falso verde.
-   Caminho de dado novo por **RPC** (`rpc/…`) precisa de stub em `serveRpc`, senão a view
-   responde vazio e o laço acusa defeito que é da bancada, não do portal.
-   **No CI:** o workflow **`.github/workflows/views.yml`** roda os dois scripts de navegador em
-   todo push/PR (job separado do `check`, que continua leve e sem dependências; Playwright em
-   **versão fixa** — subir é decisão, não efeito colateral). Rodar localmente antes do push
-   continua valendo: dá o veredito em ~40 s, sem esperar o runner instalar o Chromium.
-2b. **Análise estática — `./scripts/semgrep.sh`** (Semgrep). Complementa o `check.js`, não
-   substitui: o `check.js` pergunta "faz o que deve?" (compila o `app.js` e roda a lógica
-   pura), o Semgrep pergunta "contém padrão proibido?". Pega o que só quebraria no navegador
-   do usuário — `eval`/`new Function` (a CSP é `script-src 'self'`, sem `'unsafe-eval'`, e o
-   `check.js` só COMPILA, não executa), CDN externo em runtime e atribuição direta a
-   `currentView.pdfHTML` (fora do seam). O modo padrão usa só as regras locais
-   (`.semgrep/rules/`) e roda **offline**; `--full` soma os rulesets do registry e **precisa
-   de rede** (bloqueada no ambiente do Claude — igual ao `vercel` CLI; lá rode sem `--full`).
-   O CI (`.github/workflows/semgrep.yml`) roda as duas metades. Nas **sessões web** o binário é
-   instalado sozinho pelo hook `SessionStart` (`.claude/hooks/session-start.sh`, ligado pelo
-   `.claude/settings.json`), que lê a versão do próprio workflow — o container de lá é efêmero e
-   a venv não sobrevive entre sessões. Runbook e como escrever regra nova: **`docs/semgrep.md`**.
-2c. **Deriva docs×banco — `node scripts/check_deriva.mjs`** (precisa de rede; irmão do
-   `check_realtime.mjs`). **Desde 04/08/2026 ele não lê mais chave nenhuma do `app.js`:** o banco
-   com quem fala vem de `DIVAT_ALVO` (`teste` em PR/push, `producao` no cron) resolvido contra
-   `scripts/ambientes.json` — sem a variável ele falha fechado, de propósito (issue #74). Vale para
-   os quatro gates de banco: este, o `check_realtime.mjs`, o `check_grants.mjs` e o
-   `check_data_quality.mjs`. Compara a visão de `anon` do banco
-   (RPC `divat_api_shape()` — o OpenAPI do PostgREST deste projeto é restrito à service_role)
-   com o que o repo afirma: toda tabela citada no `CLAUDE.md`/`docs/schema.md` existe no banco;
-   toda coluna do diagrama mermaid do `docs/schema.md` existe na tabela real; toda RPC chamada
-   no `app.js` existe e responde a `anon`; toda RPC exposta está documentada no `schema.md`.
-   Nasceu da auditoria de 26/07/2026 (8 divergências, todas de fato copiado à mão e nunca mais
-   conferido). Roda no CI (workflow `deriva.yml`): **semanal + sob demanda + push/PR** que
-   toque esses arquivos — o cron existe porque deriva também nasce de mudança NO BANCO, que
-   não gera push. Do ambiente do Claude não roda (rede até o Supabase bloqueada); é para a
-   máquina do dono e o CI. Fica **fora** do `tests/check.js` (contrato dele: offline).
+> Os **seis** gates abaixo (2a–2f) têm **runbook no cabeçalho do próprio script**. Aqui fica só
+> quando rodar e **o que quebra se você esquecer** — o detalhe mora junto da ferramenta, que é
+> onde quem a opera vai olhar. Este arquivo é lido no início de toda sessão; runbook de gate não.
+
+2a. **Mexeu em render/loader? `node scripts/check_views.mjs`** — abre as **17 views** num
+   navegador headless e falha se alguma explodir, ficar no spinner ou pintar menos que o
+   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~59% do `app.js`), que o
+   `check.js` **não** cobre. Aceita filtro: `check_views.mjs frota`.
+   **O que quebra se esquecer:** view nova sem entrada em `VIEWS` (a checagem anti-drift do final
+   pega); `select=` alterado sem ajustar a fixture em `scripts/lib/rig.mjs` — nome de coluna
+   divergente chega `undefined` no render e a tela fica vazia *sem erro*, falso verde; caminho de
+   dado por **RPC** sem stub em `serveRpc`, e aí o laço acusa defeito que é da bancada.
+   Roda no CI (`views.yml`), junto do `check_abas.mjs`.
+2b. **Análise estática — `./scripts/semgrep.sh`.** Complementa o `check.js`, não substitui: o
+   `check.js` pergunta "faz o que deve?", o Semgrep pergunta "contém padrão proibido?". Pega o
+   que só quebraria no navegador do usuário — `eval`/`new Function`, CDN externo em runtime,
+   `style=` em markup e atribuição direta a `currentView.pdfHTML` fora do seam.
+   **O que quebra se esquecer:** nada no gate offline — é justamente o que ele não vê.
+   Modo padrão é offline; `--full` precisa de rede (bloqueada no ambiente do Claude).
+   Runbook e como escrever regra nova: **`docs/semgrep.md`**.
+2c. **Deriva docs×banco — `node scripts/check_deriva.mjs`** (precisa de rede). Confere que toda
+   tabela/coluna/RPC que o repo afirma existe mesmo, na visão de `anon`.
+   **De qual banco os gates falam:** desde 04/08/2026 nenhum dos **quatro** gates de banco
+   (`check_deriva`, `check_realtime`, `check_grants`, `check_data_quality`) lê chave do `app.js`.
+   O alvo vem de **`DIVAT_ALVO`** — `teste` em PR/push, `producao` no cron — resolvido contra
+   `scripts/ambientes.json`, e **sem a variável eles falham fechado**, de propósito (issue #74).
+   **O que quebra se esquecer:** nada imediato — por isso o workflow `deriva.yml` roda **semanal**
+   além de push/PR: deriva também nasce de mudança NO BANCO, que não gera push. Do ambiente do
+   Claude não roda; é para a máquina do dono e o CI. Fica **fora** do `check.js` (contrato dele:
+   offline).
 2d. **Deriva docs×código — seção `[2b]` do `tests/check.js`** (offline, roda no gate de sempre).
-   Irmã do `check_deriva.mjs`: ele guarda docs×**banco**, esta guarda docs×**código** — o eixo
-   que ficava descoberto. Nasceu da auditoria externa de 27/07/2026, que achou 6 derivas
-   plantadas pela extração de 21-22/07 (o README ainda anunciava "um único arquivo `index.html`
-   com CSS e JS embutidos" e `supabase-js` vindo de CDN; o runbook de restauração mandava editar
-   `SB_URL`/`SB_KEY` no `index.html`; <!-- deriva-ok: reconta o bug --> duas contagens erradas; dois docs terminando com
-   `</content>` vazado). **Extração de arquivo é exatamente o tipo de mudança que esquece a
-   prosa que menciona o arquivo antigo** — e nenhuma ferramenta do repo era capaz de ver isso.
-   Ela cobra 4 coisas nos **docs vivos** (o `CHANGELOG`, os `analise-*.md` e os
-   `revisao-externa-*.md` ficam fora de propósito: são snapshots datados): (1) **fatos numéricos**
-   declarados na prosa batem com o código — linhas do `app.js`, tamanho/percentual da seção
-   `MODAL`, nº de views do `check_views.mjs`, `RT_TABLES`, tabelas do `backup_rest.mjs` (tolerância
-   de 8% nos "~Nk" e 1,5 ponto nos "~N%", para arredondamento não virar alarme). **Desde
-   30/07/2026 essa conferência varre também os comentários de `.github/workflows/*.yml`** — só
-   ela, não as outras três: comentário de workflow é prosa viva que ninguém relê (não abre em
-   leitor de markdown), e foi por isso que o `views.yml` pôde afirmar "23 views" e "~62% do
-   app.js" com o gate verde (achado D da auditoria de 30/07). **Toda ocorrência é conferida, não
-   só a primeira** — a frase das views aparecia em três linhas do mesmo arquivo, e consertar uma
-   delas não pode bastar para o gate passar; (2) todo **link
-   markdown** resolve; (3) `SB_URL`/`SB_KEY` **nunca** aparecem na mesma linha que `index.html` <!-- deriva-ok: enuncia a regra -->;
-   (4) nenhum arquivo termina com **tag de ferramenta de IA vazada**. Se você mudar uma frase que
-   carrega número, o gate cobra o número — **atualize o número, não apague a guarda** (se a frase
+   Irmã do `check_deriva.mjs`: ele guarda docs×**banco**, esta guarda docs×**código**. Cobra, nos
+   **docs vivos** (`CLAUDE.md`, `README.md`, `docs/*.md` de topo, `docs/adr/`, `docs/planos/` —
+   o `CHANGELOG` e `docs/historico/` ficam fora de propósito, são snapshots datados): fatos
+   numéricos batendo com o código, links markdown resolvendo, `SB_URL`/`SB_KEY` nunca associadas
+   ao `index.html` <!-- deriva-ok: enuncia a regra -->, mapa tabela→card cobrindo `RT_TABLES`,
+   composição de `.claude/skills/`, e nenhum arquivo terminando com tag de ferramenta de IA
+   vazada. Os fatos numéricos varrem também os comentários de `.github/workflows/*.yml` e os
+   cabeçalhos de `scripts/*.mjs` — prosa viva que ninguém relê porque não abre em leitor de
+   markdown, e foi assim que o `views.yml` pôde afirmar "23 views" e o `check_views.mjs` "~62% do
+   app.js" com o gate verde.
+   **O que quebra se esquecer:** você não esquece — ela roda sozinha. O que importa é a reação:
+   se mudou uma frase que carrega número, **atualize o número, não apague a guarda** (se a frase
    mudou de forma, ajuste o regex na tabela `FATOS`). Ela é deliberadamente estreita: a 1ª versão
    varria todo token em backtick e deu 61 falsos positivos contra 0 verdadeiros.
 2e. **Qualidade dos dados pós-ETL — `node scripts/check_data_quality.mjs`** (precisa de rede).
-   Fecha a issue #63. Roda **diariamente** no workflow `db-checks.yml` (e em `pull_request`/`push`
-   que toquem os arquivos dele), que **também passou a rodar o `check_realtime.mjs`** — ele existia
-   desde sempre e não estava em nenhum workflow, só rodava se alguém lembrasse.
+   Fecha a issue #63. Roda **diariamente** no `db-checks.yml`, junto do `check_realtime.mjs`, do
+   `check_grants.mjs` e do `check_prazos.mjs`.
    **Modo duplo desde 04/08/2026:** o caminho principal é `audit.divat_data_quality()` pelo login
-   auditor via `psql` (`scripts/lib/auditor.mjs`); só se ele estiver indisponível é que o gate cai
-   na RPC anônima `divat_data_quality()`, avisando por quê e até quando (o fallback tem validade em
-   `scripts/prazos.json`). O banco alvo dos DOIS caminhos vem de `DIVAT_ALVO` — nunca de literal do
-   `app.js`.
-   **A integridade hub-and-spoke JÁ ESTÁ VIOLADA no banco** (medido em 27/07/2026): há **17
-   codlinhas órfãs** — filhos em `itinerario_teste` (2), `qh_teste` (3),
-   `qh_predeterminado_teste` (5) e `evento_teste` (7) apontando para `codlinha` que não existe
-   em `tabela_vista_teste` — mais **4 linhas** de `qh_predeterminado_teste` com `cod_origem`
-   inexistente em `origem_teste`. `146016000` e `191020001` aparecem órfãos em **três** tabelas
-   cada. **Consequência prática: as views dessas linhas renderizam VAZIAS, sem erro** — é
-   exatamente o modo de falha que a issue #63 descreve, já acontecendo.
-   (U+FFFD e `codempresa` inválida: zero achados, os dois limpos.)
-   **Órfã não quer dizer a mesma coisa em toda tabela** (apurado em 27/07/2026, contra o banco):
-   as 7 de `evento_teste` são **atos reais de 1974–1996**, da época do DTC/RJ, de linhas
-   anteriores ao cadastro atual — e linha extinta **não some** do cadastro (o hub tem a coluna
-   `cancelado`, com **500 linhas** marcadas assim), então órfã em `evento_teste` não é rastro de
-   exclusão, é história mais velha que o cadastro. Por isso o `check_data_quality.mjs`
-   **rebaixa `evento_teste` órfã a aviso** (`REBAIXADOS_A_AVISO`, no próprio script — a RPC
-   *mede* o fato, a *política* de severidade fica versionada no repo) e mantém as demais como
-   erro. **NÃO apagar os filhos órfãos de `evento_teste`: é arquivo institucional
-   insubstituível.** O preço do rebaixamento é conhecido e aceito: achado **novo** em
-   `evento_teste` também sai como aviso e não derruba o gate — inclusive `186006400`, evento de
-   2021 com sufixo anômalo (o hub tem `186006000`/`186006001`), **suspeito de digitação**.
-   As 12 codlinhas órfãs estão listadas **uma a uma e classificadas** em `orfaos_conhecidos`
-   dentro do `data_quality_baseline.json` (a RPC agrega e não diz *quais*; o campo é mantido à
-   mão e o `--atualizar-baseline` o preserva). **O gate compara CONTAGEM, não a lista** — uma
-   órfã corrigida e outra criada mantêm o número e passam despercebidas; ao mexer nesses dados,
-   confira a lista, não só o número.
-   Por isso o script tem **baseline** (`scripts/data_quality_baseline.json`): gate vermelho desde
-   o primeiro dia é gate que se aprende a ignorar, e apagar achado seria mentir. Ele passa com a
-   dívida conhecida e falha no instante em que aparece achado **novo** ou um conhecido **piora**.
-   O baseline é dívida registrada, não perdão — ao consertar dado, rode
-   `--atualizar-baseline` para o gate voltar a apertar; para ver o estado cru, `--sem-baseline`.
-   **Terceira condição de falha, desde 06/08/2026: zero achados com baseline não vazio.** A
-   verificação só emite linha quando a contagem é > 0, então `[]` significa duas coisas que o
-   script não distingue — dívida corrigida ou **fonte cega** (permissão/RLS/schema/migração pela
-   metade) sobre banco sujo. Antes ele escolhia sozinho a leitura otimista: imprimia "✓ Resolvido
-   desde o baseline" e saía **0** — a única falha deste gate que saía verde. Agora aborta e manda
-   confirmar com `--atualizar-baseline`, que grava mas **avisa alto** quando a dívida vai a zero.
-   **Alcance:** com o baseline já zerado, `[]` volta a ser indistinguível de tudo certo; fechar
-   esse resto exige a verificação devolver uma linha por varredura (com `qtd = 0`), o que é
-   migração, não conserto no script.
-   **Atenção:** `qtd` não tem unidade única — em `codlinha_orfa` é `count(distinct codlinha)`,
-   nas outras verificações é `count(*)` de linhas (a saída rotula qual é qual).
-2f. **Compromissos com data — `node scripts/check_prazos.mjs`** (offline, diário no `db-checks.yml`).
-   Cobra `scripts/prazos.json`: rotação da credencial auditora, remoção dos caminhos de fallback e
-   a revisão trimestral de segurança. Fica **fora** do `tests/check.js` porque o contrato dele é ser
-   determinístico, e um gate que muda de veredito com o calendário não é. Nasceu da constatação de
-   que, neste repo, o que cabe num `git push` acontece e o que depende de lembrar não acontece.
+   auditor via `psql` (`scripts/lib/auditor.mjs`); só se ele estiver indisponível o gate cai na RPC
+   anônima, avisando por quê e **até quando** — o fallback tem validade em `scripts/prazos.json`.
+   **A integridade hub-and-spoke JÁ ESTÁ VIOLADA no banco:** 17 codlinhas órfãs em 4 tabelas + 4
+   linhas com `cod_origem` inexistente, medidas em 27/07/2026. **As views dessas linhas renderizam
+   VAZIAS, sem erro.** A dívida está registrada em `scripts/data_quality_baseline.json` — o gate
+   passa com ela e falha no instante em que aparece achado **novo** ou um conhecido **piora**.
+   **O que quebra se esquecer:** ao consertar dado, rode `--atualizar-baseline`, senão o gate
+   segue frouxo; e **confira a lista `orfaos_conhecidos`, não só o número** — o gate compara
+   contagem, então uma órfã corrigida e outra criada passam despercebidas.
+   **NÃO apagar os filhos órfãos de `evento_teste`:** são atos reais de 1974–1996, arquivo
+   institucional insubstituível, e por isso rebaixados a aviso.
+   Detalhe completo (quais tabelas, por que o rebaixamento, a unidade de `qtd`, e a terceira
+   condição de falha — zero achados com baseline não vazio, que é fonte cega e não dívida
+   resolvida): cabeçalho do `scripts/check_data_quality.mjs`.
+2f. **Compromissos com data — `node scripts/check_prazos.mjs`** (offline, diário no
+   `db-checks.yml`). Cobra `scripts/prazos.json`: rotação da credencial auditora, remoção dos
+   caminhos de fallback e a revisão trimestral de segurança.
+   **O que quebra se esquecer:** você não esquece — ele avisa. Fica **fora** do `tests/check.js`
+   porque o contrato dele é ser determinístico, e um gate que muda de veredito com o calendário
+   não é. Nasceu da constatação de que, neste repo, o que cabe num `git push` acontece e o que
+   depende de lembrar não acontece.
 3. Merge na `main` → republica sozinho (ou MCP `deploy_to_vercel`). As telas dos usuários se
    atualizam via detector de versão. Bumpe o carimbo se quiser confirmar a chegada.
 4. Mudanças de **dados** NÃO exigem deploy — o site lê o Supabase ao vivo.
@@ -364,12 +329,18 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   município** (`itinerario_teste`). Detalhe + diagrama em `docs/schema.md`. **Atenção ETL:** o
   import precisa escrever nesses nomes — se escrever nos antigos (`cod_origen`, `cod_origem` em
   `itinerario_teste`), **recria as colunas velhas**.
-- **Staging do ETL (não lidas pelo portal):** `evento_dados` + `evento_textos` montam
-  `evento_teste`; `portaria_data` + `portaria_texto_teste` montam `portaria_teste`. RLS ligado
+- **Staging do ETL (não lidas pelo portal):** `evento_dados` + `evento_textos` casam por `id` com
+  `evento_teste`; `portaria_data` + `portaria_texto_teste`, com `portaria_teste`. RLS ligado
   **sem policy** e **sem grant** → invisíveis pela API pública, de propósito (o lint
   `rls_enabled_no_policy` nelas é **esperado**). Alimentação via service role (painel).
-  **Correção de dado em tabela final deve ser replicada na staging correspondente** (senão o
-  rebuild do ETL desfaz).
+  **Replique na staging toda correção feita em tabela final** (casando pelo `id`): são duas cópias
+  do mesmo fato, e o portal só lê a final — a discordância é invisível até alguém reconstruir a
+  final a partir da staging e o dado velho voltar.
+  **Não existe rebuild automatizado** (medido em 09/08/2026: nenhuma função ou trigger menciona a
+  staging, e as contagens batem exatamente — 20.753 nos três de evento, 2.100 nos três de
+  portaria). As duas cópias andam juntas porque **o import de CSV alimenta as duas**. Até
+  08/08/2026 esta linha afirmava que "o rebuild do ETL desfaz", como se houvesse um mecanismo
+  automático; não há. Detalhe em `docs/etl.md` §3.
 - **Truncagem silenciosa:** a maioria dos loaders avisa via `marcarTrunc`/`bannerTrunc`, mas
   cortes por `slice(0,N)` no cliente **perdem** a flag não-enumerável `_trunc` (o `slice` não a
   copia). Ao criar/editar view que faz `slice` no cliente, **reponha a flag** (ou avise o
@@ -378,8 +349,9 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   `paginateTable`/`paginateLines` (núcleo `paginate` + `pageBounds`). Como só a fatia atual
   entra no DOM, o fallback do `baixarPdf` exportaria só a página aberta — por isso os wrappers
   **escrevem `pdfHTML` (via `commitViewResult`) com a lista completa**. Quem tem PDF próprio mais
-  rico passa **`pdf:false`** (Quadro "por empresa"; Município; o bloco secundário do Localidade,
-  cujo PDF cobre os DOIS blocos e por isso não pode ser sobrescrito pelo paginador). Detalhes:
+  rico passa **`pdf:false`** — são **4 documentos**: Quadro "por empresa"; Município (dois call
+  sites, um por ramo do `scope`); Frota por Empresa; e o bloco secundário do Localidade, cujo PDF
+  cobre os DOIS blocos e por isso não pode ser sobrescrito pelo paginador. Detalhes:
   `docs/estrutura-frontend.md` §4. Em tela nova que lista muita coisa, **use esses helpers** em
   vez de `tableHTML` cru.
 - **NUNCA atribua `currentView.pdfHTML` direto — use o seam do ciclo de vida da view:**
@@ -482,6 +454,14 @@ domínio deste repo (`db-change`), que **não** é do Superpowers e não é toca
   de rede (github.com). Confira o diff antes de commitar.
 - A contagem acima é conferida pelo `tests/check.js` §[2b] contra o manifesto: ao mudar a leva
   de skills, o gate cobra o número aqui e no comentário do hook.
+- **Há um segundo conjunto de skills, de outra origem.** Além das 14 do Superpowers e da
+  `db-change`, `.claude/skills/` contém **21 symlinks** para `.agents/skills/`, que hospeda
+  skills vindas de `mattpocock/skills` e travadas por hash em `skills-lock.json` (raiz; 95
+  arquivos versionados sob `.agents/`). Os dois conjuntos são independentes: o
+  `update_superpowers.sh` remove só o que o manifesto do Superpowers lista, então nunca toca
+  nestas — e o instalador delas (a skill `setup-matt-pocock-skills`) não toca nas do Superpowers.
+  `.claude/skills/` tem, no total, **15 diretórios reais + 21 symlinks = 36 entradas** — número
+  conferido pelo `tests/check.js` §[2b] contra o disco.
 
 ### Mudanças de banco
 

@@ -141,17 +141,27 @@ async function sbFetch(table, qs = '', sinal) {
   throw ultimoErro;
 }
 
+// Teto do PostgREST: `pgrst.db_max_rows` do role `authenticator`. Confirmado contra o banco vivo
+// em 09/08/2026 e versionado em docs/backup_schema.sql (bloco LIMITES DE ROLE), além de descrito
+// no CLAUDE.md (seção Supabase). Subir o teto exige mudar os TRÊS na mesma tarefa: o banco, esta
+// constante e a baseline — a baseline porque um restore sem ela devolve o banco sem teto nenhum,
+// e sem sintoma; esta constante porque o marcarTrunc a usa como segundo critério de truncagem.
+const SB_MAX_ROWS = 30000;
 // Marca (sem alterar o conteúdo) um array de resultados que provavelmente foi CORTADO:
 // só sinaliza quando a consulta tinha um limit "de lista" (>=50) e veio cheio até o teto.
 // A flag é não-enumerável → JSON.stringify/map/spread ignoram; só quem checa rows._trunc vê.
+// O teto efetivo é o MENOR entre o limit pedido e o do servidor: um `limit` maior que
+// SB_MAX_ROWS sairia cortado em silêncio pelo critério antigo, porque data.length (30000)
+// nunca alcança lim (50000) — sem banner e sem toast. Hoje não dispara (os 5 maiores limits
+// do app.js são exatamente 30000); é armadilha armada para a próxima consulta grande.
 function marcarTrunc(data, qs){
   if (!Array.isArray(data)) return data;
   const m = /(?:^|&)limit=(\d+)/.exec(qs || '');
   if (m){
-    const lim = +m[1];
-    if (lim >= 50 && data.length >= lim){
+    const teto = Math.min(+m[1], SB_MAX_ROWS);
+    if (teto >= 50 && data.length >= teto){
       Object.defineProperty(data, '_trunc',  { value:true, enumerable:false });
-      Object.defineProperty(data, '_limite', { value:lim,  enumerable:false });
+      Object.defineProperty(data, '_limite', { value:teto, enumerable:false });
     }
   }
   return data;
@@ -516,23 +526,38 @@ async function getTerminais() {
   terminalRows = await sbFetch('itinerario_teste', `tipo_logradouro=eq.Terminal&select=nome_logradouro,codlinha,cod_municipio_origem&limit=30000`);
   return terminalRows;
 }
+/* Alguns RJ aparecem DUPLICADOS no cadastro (o caso conhecido é o 103). Estas duas funções
+   decidem qual das entradas o portal exibe: score 2 = REGULAR e não-cassada, 1 = não-cassada,
+   0 = cassada; vence o maior, e EMPATE MANTÉM A PRIMEIRA VISTA (a comparação é `>`, não `>=`).
+   É definição ÚNICA de propósito. Até 08/08/2026 a mesma regra estava escrita duas vezes — aqui
+   e no LOADERS.empresasRegulares — e mudar uma sem a outra faria a razão social do BANNER
+   discordar da linha do CARD, para o mesmo RJ, na mesma tela e sem erro nenhum (issue #111).
+   Heurística de desempate quebra em silêncio: por isso tem teste em tests/pure.test.js. */
+function scoreEmpresa(e){
+  if (!e || e.cassada) return 0;
+  return String(e.situacao||'').toUpperCase()==='REGULAR' ? 2 : 1;
+}
+/* Uma entrada por codempresa. Devolve as linhas VENCEDORAS, sem mutar a lista recebida.
+   `hasOwnProperty` em vez de `in`: com `in`, um codempresa que colidisse com nome herdado de
+   Object.prototype ('constructor') pareceria "já visto" e a empresa sumiria da lista. */
+function dedupEmpresasPorRJ(lista){
+  const best = {};
+  (lista||[]).forEach(e => {
+    const k = e && e.codempresa;
+    if (k == null) return;
+    if (!Object.prototype.hasOwnProperty.call(best, k) || scoreEmpresa(e) > scoreEmpresa(best[k])) best[k] = e;
+  });
+  return Object.values(best);
+}
 async function getEmpresas() {
   if (empresas.map) return empresas.map;
   const rows = await sbFetch('codempresa_teste', 'select=codempresa,nome_empresa,situacao,cassada,sob_intervencao&limit=2000');
   empresas.list = rows;
   empresas.map = {};
   empresas.byCod = {};
-  // alguns RJ aparecem duplicados (ex.: 103) → prioriza a entrada REGULAR/não cassada
-  const melhor = r => (r && !r.cassada && String(r.situacao||'').toUpperCase()==='REGULAR') ? 2 : (r && !r.cassada ? 1 : 0);
-  const best = {};
-  rows.forEach(r => {
-    const k = r.codempresa;
-    if (k==null) return;
-    if (!(k in empresas.map) || melhor(r) > best[k]) {
-      empresas.map[k] = r.nome_empresa;
-      empresas.byCod[k] = r;
-      best[k] = melhor(r);
-    }
+  dedupEmpresasPorRJ(rows).forEach(r => {
+    empresas.map[r.codempresa] = r.nome_empresa;
+    empresas.byCod[r.codempresa] = r;
   });
   return empresas.map;
 }
@@ -547,9 +572,30 @@ function searchEmpresas(term, { limit = 40 } = {}){
     .slice(0, limit);
 }
 
+/* Preenche um cache de lookup {id → coluna}, gravando SÓ quando o fetch deu certo.
+   A forma anterior (`.catch(()=>[])` seguido de `evLookups.emp={}` incondicional) tinha
+   um bug silencioso: objeto vazio é TRUTHY, então o guard `if(!evLookups.emp)` nunca mais
+   disparava — uma falha transitória de rede deixava os lookups vazios pela sessão INTEIRA,
+   e o Histórico passava a mostrar ids crus no lugar dos nomes de evento, sem erro na tela.
+   Os outros caches (getEmpresas/getIbge/getOrigem) não têm o problema porque NÃO engolem o
+   erro: a exceção sobe e o cache continua null, então a próxima chamada refaz.
+   Aqui o erro continua engolido de propósito — o Histórico deve renderizar mesmo sem os
+   nomes de evento, caindo no '—' —, mas engolir não pode virar cachear. */
+async function preencherLookup(cache, chave, buscar, coluna){
+  if (cache[chave]) return cache[chave];
+  const rows = await buscar().catch(() => null);   // null = falhou; [] = veio vazio de verdade
+  if (!rows) return null;                          // não cacheia falha
+  const m = {};
+  rows.forEach(x => { m[x.id] = x[coluna]; });
+  cache[chave] = m;
+  return m;
+}
+
 async function getEvLookups() {
-  if (!evLookups.emp) { const r = await sbFetch('evento_empresa_teste','select=id,evento_empresa').catch(()=>[]); evLookups.emp={}; r.forEach(x=>evLookups.emp[x.id]=x.evento_empresa); }
-  if (!evLookups.lin) { const r = await sbFetch('evento_linha_teste','select=id,evento_linha').catch(()=>[]); evLookups.lin={}; r.forEach(x=>evLookups.lin[x.id]=x.evento_linha); }
+  await Promise.all([
+    preencherLookup(evLookups, 'emp', () => sbFetch('evento_empresa_teste','select=id,evento_empresa'), 'evento_empresa'),
+    preencherLookup(evLookups, 'lin', () => sbFetch('evento_linha_teste','select=id,evento_linha'), 'evento_linha'),
+  ]);
   return evLookups;
 }
 
@@ -572,6 +618,22 @@ function openDropdown(){ dropdown.classList.add('open'); searchInput.setAttribut
 function closeDropdown(){ dropdown.classList.remove('open'); searchInput.setAttribute('aria-expanded','false'); }
 
 const LINE_FIELDS = 'codlinha,numero_ligacao,nome_ligacao,nome_lig_cresc,via,codempresa,tipo,caracteristica,licitado,cancelado,paralisado,sub_judice,transferido,data_criacao,processo_criacao';
+
+/* Listas de colunas pedidas por MAIS DE UM documento — o segundo é sempre a Estrutura
+   Operacional, que consolida os outros. Mantê-las em definição única é o que impede a
+   divergência silenciosa: coluna que muda num `select=` e não no gêmeo chega `undefined`
+   no render e a tela fica VAZIA SEM ERRO (o modo de falha que o CLAUDE.md chama de pior
+   possível). Desde 08/08/2026 a bancada headless também responde 400 para coluna que não
+   existe, então divergir passou a doer no gate em vez de doer no usuário.
+   NÃO use estas constantes em consultas que pedem MENOS colunas de propósito —
+   `getTerminais` (3 colunas de itinerario_teste) e `filtrarFrotaEmpresas` (4 de qh_teste)
+   são consultas de listagem, não de documento: pedir coluna a mais ali é regressão. */
+const ITINERARIO_FIELDS     = 'id,sentido,tipo_logradouro,nome_logradouro,cod_municipio_origem,codempresa';
+const QH_INTERVALO_FIELDS   = 'cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo';
+const QH_PREDET_FIELDS      = 'cod_origem,nome_origem,dia_semana,saida';
+const TARIFA_LINHA_FIELDS   = 'secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia';
+const FROTA_FIELDS          = 'codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e';
+const EVENTO_FIELDS         = 'data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao';
 
 // consultas (cards) cujo título casa o termo — a busca do topo também navega para os cards,
 // não só para linhas ("tarifa" acha o card Tarifas, "horário" acha Quadro de Horários).
@@ -780,7 +842,7 @@ const modalBodyWrap = document.getElementById('modalBodyWrap');
 // outro lugar. Todo `setBody`/`modalBody.querySelector(...)` lê o valor atual em tempo de
 // chamada, então helpers síncronos (baixarPdf, searchPanel, etc.) sempre acertam a aba certa.
 let modalBody    = modalBodyWrap.querySelector('.modal-body');
-tabs[0].paneEl   = modalBody;
+tabs[0].paneEl   = wirePane(modalBody, tabs[0].id);   // o pane da 1ª aba vem do index.html, não de createPane
 const mtTitle    = document.getElementById('mtTitle');
 const mtLive     = document.getElementById('mtLive');
 document.getElementById('btnPrint').addEventListener('click', () => window.print());
@@ -795,7 +857,14 @@ document.addEventListener('keydown', e => {
 // Mantém o foco preso dentro do modal enquanto ele está aberto (Tab/Shift+Tab)
 document.addEventListener('keydown', e => {
   if (e.key !== 'Tab' || !overlay.classList.contains('open')) return;
-  const f = overlay.querySelectorAll('button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])');
+  // Só o que está VISÍVEL entra no ciclo. Panes de abas em segundo plano continuam no DOM (é o
+  // que preserva paginação e rolagem delas), e sem este filtro o Tab passeava por dezenas de
+  // controles invisíveis — o foco sumia da tela sem sair do modal. `offsetParent === null` cobre
+  // os dois casos que ocorrem aqui, ambos `display:none`: pane sem `.active` e `.sp-drop` fechado.
+  // (Cuidado ao trocar o critério: `.sp-drop` ABERTO é `position:fixed`, e um teste de
+  // posicionamento o descartaria — seus botões, porém, têm offsetParent = o próprio .sp-drop.)
+  const f = [...overlay.querySelectorAll('button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')]
+    .filter(el => el.offsetParent !== null);
   if (!f.length) return;
   const first = f[0], last = f[f.length-1], a = document.activeElement;
   if (!overlay.contains(a)) { e.preventDefault(); first.focus(); return; }   // foco escapou → traz de volta
@@ -867,10 +936,23 @@ document.addEventListener('webkitfullscreenchange', onFsChange);
    `modalBody`/o botão Voltar/o banner/a URL com a aba recém-ativada — switchTab/openTabUI/
    closeTabUI só calculam QUAL aba deve ficar ativa (via openTabState/closeTabState, puras) e
    chamam activateTab pra aplicar. */
-function createPane(){
+/* Cada pane é o tabpanel da sua aba: `role="tabpanel"` + `aria-labelledby` apontando para o
+   `role="tab"` correspondente (que, do outro lado, ganha `aria-controls` em renderTabs). Sem esse
+   par, a faixa anuncia "aba 2 de 3" e o leitor de tela não tem como dizer QUAL região do documento
+   aquela aba controla. O id fica no PRÓPRIO elemento de propósito: stripIds/restoreIds varrem só
+   descendentes (querySelectorAll não casa o próprio nó), então a ligação sobrevive à aba ir para o
+   segundo plano — que é justamente quando os ids internos dela são recolhidos. */
+function wirePane(el, tabId){
+  el.id = `pane-${tabId}`;
+  el.setAttribute('role', 'tabpanel');
+  el.setAttribute('aria-labelledby', `tab-${tabId}`);
+  return el;
+}
+function createPane(tabId){
   const el = document.createElement('div');
   el.className = 'modal-body';
   el.innerHTML = loading();
+  wirePane(el, tabId);
   modalBodyWrap.appendChild(el);
   return el;
 }
@@ -900,7 +982,7 @@ function tabLabel(t){
 }
 function renderTabs(){
   const items = tabs.map(t => `
-    <div class="modal-tab${t.id===activeTabId?' active':''}${t.stale?' stale':''}" role="tab" aria-selected="${t.id===activeTabId}">
+    <div class="modal-tab${t.id===activeTabId?' active':''}${t.stale?' stale':''}" id="tab-${t.id}" role="tab" aria-selected="${t.id===activeTabId}" aria-controls="pane-${t.id}">
       <button type="button" class="mtab-select" data-select-tab="${t.id}" title="${esc(tabLabel(t))}${t.stale?' — dados desatualizados, atualiza ao abrir':''}">${
         t.stale ? `<span class="mtab-stale" role="img" aria-label="Dados desatualizados">●</span>` : ''}${esc(tabLabel(t))}</button>
       <button type="button" class="mtab-close" data-close-tab="${t.id}" title="Fechar aba" aria-label="Fechar aba: ${esc(tabLabel(t))}">✕</button>
@@ -957,7 +1039,7 @@ function addTab(){
   tabIdSeq = res.tabIdSeq;
   tabs = res.tabs;
   const newTab = tabs[tabs.length - 1];
-  newTab.paneEl = createPane();
+  newTab.paneEl = createPane(newTab.id);
   return newTab;
 }
 function openTabUI(){
@@ -981,7 +1063,7 @@ function closeTabUI(id){
 function resetTabsToSingle(){
   tabs.forEach(t => { if (t.paneEl) t.paneEl.remove(); });
   const t = makeTab(++tabIdSeq);
-  t.paneEl = createPane();
+  t.paneEl = createPane(t.id);
   t.paneEl.classList.add('active');
   tabs = [t];
   activeTabId = t.id;
@@ -1180,6 +1262,15 @@ btnBack.addEventListener('click', () => {
 function setBody(html){ modalBody.innerHTML = html; }
 function loading(msg='Carregando…'){ return `<div class="m-loading"><div class="spin"></div>${esc(msg)}</div>`; }
 function emptyBox(msg){ return `<div class="m-loading">${esc(msg)}</div>`; }
+/* Estado vazio de DOCUMENTO DE LINHA: o usuário já escolheu a linha e a consulta voltou vazia.
+   O texto não pode afirmar que o dado NÃO EXISTE, porque o portal não sabe disso. As codlinhas
+   órfãs medidas contra o banco em 27/07/2026 (filhos em itinerario_teste, qh_teste,
+   qh_predeterminado_teste e evento_teste apontando para codlinha ausente do cadastro) fazem a
+   view renderizar vazia SEM erro nenhum — e "nenhum itinerário cadastrado para esta linha" é,
+   para o cidadão, indistinguível de linha que realmente não tem itinerário. Definição única
+   para não divergir mensagem a mensagem; use em toda tela que responde por linha já escolhida.
+   Ver docs/planos/2026-08-08-correcoes-auditoria.md (Task 13) e CLAUDE.md (2e). */
+function emptyLinha(oQue){ return emptyBox(`Nenhum registro de ${oQue} foi localizado para esta linha.`); }
 function errorBox(msg){ return `<div class="m-loading err">Erro ao carregar: ${esc(msg)}</div>`; }
 
 /* --- Dispatcher — runView ---------------------------------------- */
@@ -1389,13 +1480,13 @@ async function renderLineHistory(host, line){
   const view = currentView, gen = beginGen(view);
   selectLine(line);   // sincroniza a linha ativa e o banner do topo
   const [rows, lk] = await Promise.all([
-    sbFetch('evento_teste', `codlinha=eq.${enc(line.codlinha)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.asc&limit=2000`),
+    sbFetch('evento_teste', `codlinha=eq.${enc(line.codlinha)}&select=${EVENTO_FIELDS}&order=data_registro.asc&limit=2000`),
     getEvLookups(), getEmpresas()
   ]);
   const head = docHead('Histórico da Linha');
   const meta = metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(orDash(line.codempresa))],['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—'),true]]);
-  if (!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento registrado para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  const build = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin[r.evento_linha] || lk.emp[r.evento_empresa] || '—', false) + evBlocksHTML(r);
+  if (!rows.length){ host.innerHTML = meta + emptyLinha('evento'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+  const build = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin?.[r.evento_linha] || lk.emp?.[r.evento_empresa] || '—', false) + evBlocksHTML(r);
   // PDF/impressão: um evento por página (cabeçalho repetido); segue o filtro aplicado na tela
   const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
   paginateEvents(host, rows, build, meta, { view, gen, onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
@@ -1413,7 +1504,7 @@ const SENTIDO_ORDER = { 'Ida':1, 'Volta':2, 'Circular':3 };
 const normSentido = s => { const t=String(s||'').trim().toLowerCase(); if(t.startsWith('ida'))return'Ida'; if(t.startsWith('volta'))return'Volta'; if(t.startsWith('circ'))return'Circular'; return s?String(s):'—'; };
 
 function itinerarioTableHTML(rows, ibge){
-  if(!rows.length) return emptyBox('Nenhum itinerário cadastrado para esta linha.');
+  if(!rows.length) return emptyLinha('itinerário');
   rows.forEach(r=>r._sn=normSentido(r.sentido));
   rows.sort((a,b)=>{ const oa=SENTIDO_ORDER[a._sn]||9, ob=SENTIDO_ORDER[b._sn]||9; return oa!==ob?oa-ob:(a.id-b.id); });
   let last=null;
@@ -1430,10 +1521,10 @@ async function renderItinerarios(host, line){
   const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   const [rows, ibge] = await Promise.all([
-    sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_municipio_origem,codempresa&order=id`),
+    sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=${ITINERARIO_FIELDS}&order=id`),
     getIbge(), getEmpresas()
   ]);
-  if (!rows.length) { host.innerHTML = emptyBox('Nenhum itinerário encontrado para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+  if (!rows.length) { host.innerHTML = emptyLinha('itinerário'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const codEmp = rows[0]?.codempresa || line.codempresa || '';
   const meta = metaRows([['Empresa',esc(empNome(codEmp)),true],['Registro','RJ-'+esc(codEmp)],
       ['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
@@ -1461,7 +1552,7 @@ LOADERS.itinerarios = () => lineDocView({ subtitle:'Cadastro de Linhas: Itinerá
 
 /* --- DOC · Quadro de Horários --------------------------------- */
 function quadroHorariosBodyHTML(interv, predet, orig){
-  if(!interv.length && !predet.length) return emptyBox('Nenhum quadro de horários cadastrado para esta linha.');
+  if(!interv.length && !predet.length) return emptyLinha('quadro de horários');
   // Rótulo do SENTIDO: a origem AUTORITATIVA (origem_teste, via `orig`) tem prioridade sobre o
   // nome_origem denormalizado das tabelas de QH (que vem inconsistente/trocado na base). Agrupa
   // pelo rótulo resolvido → códigos diferentes com a mesma origem não geram blocos repetidos.
@@ -1528,13 +1619,13 @@ async function renderLinhaQuadro(host, line){
   host.innerHTML = loading();
   try {
     const [interv, predet, qh, secoes, orig] = await Promise.all([
-      sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(line.codlinha)}&select=cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
-      sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(line.codlinha)}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
+      sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(line.codlinha)}&select=${QH_INTERVALO_FIELDS}&order=id`),
+      sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(line.codlinha)}&select=${QH_PREDET_FIELDS}&order=id`),
       sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=ultima_alteracao&limit=1`),
-      sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`),
+      sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=${TARIFA_LINHA_FIELDS}&order=secao`),
       getOrigem(), getEmpresas()
     ]);
-    if (!interv.length && !predet.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+    if (!interv.length && !predet.length){ host.innerHTML = emptyLinha('quadro de horários'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const ultima = qh[0]?.ultima_alteracao;
     // bloco de Seções e Tarifas da linha (mesma tabela/builder da Estrutura), fora do #qhResult
     const h3sec = `<h3 class="doc-h3">Seções e Tarifas</h3>`;
@@ -1658,15 +1749,15 @@ function tarifaRowHTML(r){
   <td class="td-tipo">${esc(orDash(r.situacao))}</td><td class="td-num">${fmtDate(r.data_criacao)}</td><td>${st}</td></tr>`;
 }
 function secoesTarifasHTML(rows){
-  if(!rows.length) return emptyBox('Nenhuma seção/tarifa cadastrada para esta linha.');
+  if(!rows.length) return emptyLinha('seção ou tarifa');
   return tableHTML(TARIFA_COLS, rows.map(tarifaRowHTML).join(''), rows.length+' seção(ões)');
 }
 
 async function renderTarifas(host, line){
   const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
-  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`);
-  if (!rows.length) { host.innerHTML = emptyBox('Nenhuma tarifa cadastrada para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=${TARIFA_LINHA_FIELDS}&order=secao`);
+  if (!rows.length) { host.innerHTML = emptyLinha('tarifa'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]]);
   const inner = `${meta}${secoesTarifasHTML(rows)}`;            // documento completo (p/ PDF)
   commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Tarifas Vigentes')}${inner}</div>` });
@@ -1775,10 +1866,10 @@ async function renderFrota(host, line){
   const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   const [rows] = await Promise.all([
-    sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e&limit=1`),
+    sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=${FROTA_FIELDS}&limit=1`),
     getEmpresas()
   ]);
-  if (!rows.length) { host.innerHTML = emptyBox('Nenhuma frota cadastrada para esta linha.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
+  if (!rows.length) { host.innerHTML = emptyLinha('frota'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const f = rows[0];
   const inner = `${metaRows([['Empresa',esc(empNome(f.codempresa)),true],['Registro','RJ-'+esc(orDash(f.codempresa))],
       ['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
@@ -1797,11 +1888,11 @@ async function renderEstrutura(host, line){
   const cod = enc(line.codlinha);
   const [lineRows, secoes, itin, interv, predet, qh, orig, ibge] = await Promise.all([
     sbFetch('tabela_vista_teste', `codlinha=eq.${cod}&select=${LINE_FIELDS}&limit=1`),
-    sbFetch('tarifa_atual_teste', `codlinha=eq.${cod}&select=secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=secao`),
-    sbFetch('itinerario_teste', `codlinha=eq.${cod}&select=id,sentido,tipo_logradouro,nome_logradouro,cod_municipio_origem,codempresa&order=id`),
-    sbFetch('qh_intervalo_teste', `codlinha=eq.${cod}&select=cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id`),
-    sbFetch('qh_predeterminado_teste', `codlinha=eq.${cod}&select=cod_origem,nome_origem,dia_semana,saida&order=id`),
-    sbFetch('qh_teste', `codlinha=eq.${cod}&select=codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e&limit=1`),
+    sbFetch('tarifa_atual_teste', `codlinha=eq.${cod}&select=${TARIFA_LINHA_FIELDS}&order=secao`),
+    sbFetch('itinerario_teste', `codlinha=eq.${cod}&select=${ITINERARIO_FIELDS}&order=id`),
+    sbFetch('qh_intervalo_teste', `codlinha=eq.${cod}&select=${QH_INTERVALO_FIELDS}&order=id`),
+    sbFetch('qh_predeterminado_teste', `codlinha=eq.${cod}&select=${QH_PREDET_FIELDS}&order=id`),
+    sbFetch('qh_teste', `codlinha=eq.${cod}&select=${FROTA_FIELDS}&limit=1`),
     getOrigem(), getIbge(), getEmpresas()
   ]);
   const L = lineRows[0] || line;
@@ -1838,12 +1929,9 @@ LOADERS.empresasRegulares = async () => {
   ]);
   const cnt = {};
   lineRows.forEach(r=>{ const k=r.codempresa||'—'; cnt[k]=cnt[k]||{total:0,ativas:0}; cnt[k].total++; if(isLinhaAtiva(r))cnt[k].ativas++; });
-  // dedup do cadastro por RJ (prioriza a entrada REGULAR/não cassada — resolve o RJ 103)
-  const best = {};
-  (empresas.list||[]).forEach(e=>{ const k=e.codempresa; if(k==null) return;
-    const sc = (!e.cassada && String(e.situacao||'').toUpperCase()==='REGULAR')?2:(!e.cassada?1:0);
-    if(!(k in best) || sc>best[k]._s) best[k] = {...e, _s:sc}; });
-  const list = Object.values(best).map(e=>({ ...e, total:(cnt[e.codempresa]?.total)||0, ativas:(cnt[e.codempresa]?.ativas)||0 }));
+  // dedup do cadastro por RJ (uma entrada por codempresa) — mesma regra que o getEmpresas usa
+  // para o nome do banner, e por isso a MESMA função: ver dedupEmpresasPorRJ, seção STATE + CACHES
+  const list = dedupEmpresasPorRJ(empresas.list).map(e=>({ ...e, total:(cnt[e.codempresa]?.total)||0, ativas:(cnt[e.codempresa]?.ativas)||0 }));
   list.sort((a,b)=> b.total-a.total || String(a.nome_empresa||'').localeCompare(String(b.nome_empresa||'')));
   const semLinha = list.filter(e=>!e.total).length;
   const statusCol = e => [boolChip(e.cassada,'Cassada'), boolChip(e.sob_intervencao,'Interv.')].filter(Boolean).join(' ') || `<span class="chip chip-off">${esc(orDash(e.situacao))}</span>`;
@@ -1938,7 +2026,7 @@ LOADERS.secoesPorEmpresa = async () => {
 async function renderEmpresaHistory(host, cod, nome){
   const view = currentView, gen = beginGen(view);
   const [rows, lk, empRows] = await Promise.all([
-    sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao&order=data_registro.asc&limit=500`),
+    sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=${EVENTO_FIELDS}&order=data_registro.asc&limit=500`),
     getEvLookups(),
     sbFetch('codempresa_teste', `codempresa=eq.${enc(cod)}&select=nome_empresa,situacao,processo,data_publicacao,cassada,sob_intervencao&limit=1`)
   ]);
@@ -1947,7 +2035,7 @@ async function renderEmpresaHistory(host, cod, nome){
   const empSit = [ boolChip(E.cassada,'Cassada'), boolChip(E.sob_intervencao,'Sob intervenção') ].filter(Boolean).join(' ') || '<span class="chip chip-off">Regular</span>';
   const meta = metaRows([['Empresa',esc(nome||E.nome_empresa||'—'),true],['Código da Empresa',esc(cod)],['Situação',esc(orDash(E.situacao))],['Processo',esc(orDash(E.processo))],['Publicação',fmtDate(E.data_publicacao)],['Situação cadastral',empSit,true],['Total',rows.length+' evento(s)']]);
   if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento para a empresa '+esc(cod)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  const build = r => evBandHTML(r, 'Tipo Evento Empresa', lk.emp[r.evento_empresa]||lk.lin[r.evento_linha]||'—', !!(r.codlinha)) + evBlocksHTML(r);
+  const build = r => evBandHTML(r, 'Tipo Evento Empresa', lk.emp?.[r.evento_empresa]||lk.lin?.[r.evento_linha]||'—', !!(r.codlinha)) + evBlocksHTML(r);
   const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
   paginateEvents(host, rows, build, meta, { view, gen, onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
   commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(rows) });
@@ -2180,7 +2268,12 @@ async function mostrarLinhasResultado(host, cods, titulo){
 // filtro "trafega pelos dois" (qualquer ordem). `inter` é o próprio resultado não-direcional;
 // o direcional refina `inter` consultando a sequência de trechos do itinerário.
 async function mostrarLinhasEntreMunicipios(host, aTerm, bTerm, directional){
+  // Mesmo contrato da irmã `mostrarLinhasPorLocalidade`, que já capturava: as duas são
+  // chamadas do MESMO run(), e uma capturar e a outra não era assimetria dentro do mesmo
+  // fluxo — a busca pode ser trocada enquanto esta está no ar.
+  const view = currentView, gen = beginGen(view);
   const ibge = await getIbge();
+  if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
   const nameOf = c => ibge[c]?.nome || c;
   const findCods = t => Object.entries(ibge).filter(([,v])=>norm(v.nome).includes(norm(t))).map(([c])=>c);
   const a = (aTerm||'').trim(), b = (bTerm||'').trim();
@@ -2305,10 +2398,15 @@ LOADERS.ligacoesPorTerminal = async () => {
   }});
 };
 LOADERS.secoesPorLigacao = async () => {
-  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
+  // Capturados ANTES do await. O `pane` já garantia escrever na ABA certa; faltava o `gen`,
+  // que garante escrever a tentativa mais NOVA: sem ele, trocar de linha enquanto a busca
+  // está no ar deixa a resposta atrasada sobrescrever o resultado da linha nova, no mesmo
+  // pane (contrato do seam em MODAL / SISTEMA DE VIEWS).
+  const view = currentView, pane = view._pane, gen = beginGen(view);
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,nome_ligacao,tarifa&order=secao`);
+  if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
   const meta = metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]]);
-  if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyBox('Nenhuma seção cadastrada para esta linha.')}</div>`; return; }
+  if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyLinha('seção')}</div>`; return; }
   const cols = [{t:'Seção',w:'70px'},{t:'Descrição'},{t:'Tarifa',w:'90px'}];
   const rowHTML = r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td></tr>`;
   pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}
@@ -2322,6 +2420,7 @@ LOADERS.secoesPorLigacao = async () => {
   };
   inp.addEventListener('input', debounce(paint));
   paint();
+  commitViewResult(view, gen, { pdfHTML:null });
 };
 
 // Agregação PURA da Frota por Empresa (testável em tests/): total geral + quebra por empresa e
@@ -2429,14 +2528,17 @@ async function getPortariaAnos(){
   return _portariaAnos;
 }
 LOADERS.portarias = async () => {
-  const pane = currentView._pane;   // capturado ANTES do await — ver comentário em runView()
+  // O `run` interno já capturava view/gen; a CASCA (esta parte) não capturava, e escrevia
+  // depois do await de getPortariaAnos(). Trocar de aba nesse intervalo repintava o pane.
+  const view = currentView, pane = view._pane, gen = beginGen(view);
   const anos = await getPortariaAnos();
+  if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
   pane.innerHTML = `<div class="doc">${docHead('Portarias / Legislação')}
     <div class="ev-filters">
-      <div class="evf"><label>Número</label><input id="pNum" type="text" placeholder="ex.: 1975" autocomplete="off"></div>
-      <div class="evf"><label>Ano</label><select id="pAno"><option value="">Todos</option>${anos.map(a=>`<option value="${a}">${a}</option>`).join('')}</select></div>
-      <div class="evf"><label>Situação</label><select id="pVig"><option value="">Todas</option><option value="vigor">Em vigor</option><option value="revog">Revogadas</option></select></div>
-      <div class="evf evf-wide"><label>Texto (assunto / conteúdo)</label><input id="pTxt" type="text" placeholder="palavra no assunto ou no texto da portaria" autocomplete="off"></div>
+      <label class="evf">Número<input id="pNum" type="text" placeholder="ex.: 1975" autocomplete="off"></label>
+      <label class="evf">Ano<select id="pAno"><option value="">Todos</option>${anos.map(a=>`<option value="${a}">${a}</option>`).join('')}</select></label>
+      <label class="evf">Situação<select id="pVig"><option value="">Todas</option><option value="vigor">Em vigor</option><option value="revog">Revogadas</option></select></label>
+      <label class="evf evf-wide">Texto (assunto / conteúdo)<input id="pTxt" type="text" placeholder="palavra no assunto ou no texto da portaria" autocomplete="off"></label>
       <button class="evf-clear" id="pClear" type="button">Limpar</button>
     </div>
     <div id="pHost"></div></div>`;

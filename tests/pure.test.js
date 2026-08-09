@@ -565,5 +565,63 @@ console.log('dispatchRealtime (#54 — recarrega a aba ativa, marca as de 2º pl
   }
 }
 
+// --- dedupEmpresasPorRJ (heurística de desempate do cadastro de empresas) ---
+// Regra sutil e de efeito visível: escolhe qual entrada de um RJ duplicado aparece no portal.
+// Errar aqui troca a razão social exibida, SEM erro na tela — por isso ela tem teste e é
+// definição única. Até 08/08/2026 a mesma regra estava escrita duas vezes (getEmpresas e
+// empresasRegulares) e podia divergir entre o banner e o card.
+console.log('dedupEmpresasPorRJ');
+{
+  const emp = (cod, nome, extra) => ({ codempresa: cod, nome_empresa: nome, ...extra });
+  const nomes = l => P.dedupEmpresasPorRJ(l).map(e => e.nome_empresa).join(',');
+  const cods  = l => P.dedupEmpresasPorRJ(l).map(e => e.codempresa).join(',');
+
+  // score: REGULAR e não-cassada = 2 · não-cassada = 1 · cassada = 0
+  eq(P.scoreEmpresa(emp('1','A',{situacao:'REGULAR'})),           2, 'score REGULAR não-cassada = 2');
+  eq(P.scoreEmpresa(emp('1','A',{situacao:'regular'})),           2, 'score é insensível a caixa');
+  eq(P.scoreEmpresa(emp('1','A',{situacao:'SUSPENSA'})),          1, 'score não-REGULAR não-cassada = 1');
+  eq(P.scoreEmpresa(emp('1','A',{})),                             1, 'score sem situacao = 1');
+  eq(P.scoreEmpresa(emp('1','A',{situacao:'REGULAR',cassada:true})), 0, 'cassada zera mesmo REGULAR');
+  eq(P.scoreEmpresa(null),                                        0, 'score de null = 0');
+
+  eq(nomes([emp('1','ALFA')]),                        'ALFA', 'RJ sem duplicata passa inteiro');
+  eq(nomes([]),                                           '', 'lista vazia devolve vazio');
+  eq(nomes(null),                                         '', 'lista nula não explode');
+
+  // O caso que motiva a regra: a REGULAR chega DEPOIS. A ordem não pode decidir.
+  eq(nomes([emp('103','VELHA',{situacao:'SUSPENSA'}), emp('103','BOA',{situacao:'REGULAR'})]),
+     'BOA', 'REGULAR vence mesmo chegando depois');
+  eq(nomes([emp('103','BOA',{situacao:'REGULAR'}), emp('103','VELHA',{situacao:'SUSPENSA'})]),
+     'BOA', 'REGULAR vence chegando antes');
+  eq(nomes([emp('103','CASSADA',{situacao:'REGULAR',cassada:true}), emp('103','VIVA',{situacao:'SUSPENSA'})]),
+     'VIVA', 'não-cassada vence cassada, mesmo a cassada sendo REGULAR');
+
+  // Empate mantém o PRIMEIRO visto — a comparação é `>`, não `>=`.
+  eq(nomes([emp('103','PRIMEIRA',{cassada:true}), emp('103','SEGUNDA',{cassada:true})]),
+     'PRIMEIRA', 'empate entre duas cassadas mantém a primeira');
+  eq(nomes([emp('103','PRIMEIRA',{situacao:'REGULAR'}), emp('103','SEGUNDA',{situacao:'REGULAR'})]),
+     'PRIMEIRA', 'empate entre duas REGULARES mantém a primeira');
+
+  // codempresa ausente é descartado, não vira um grupo "undefined".
+  eq(nomes([emp(null,'SEM RJ'), emp(undefined,'SEM RJ 2'), emp('7','COM RJ')]),
+     'COM RJ', 'codempresa nulo/indefinido é descartado');
+  eq(nomes([emp('0','ZERO')]), 'ZERO', 'codempresa "0" NÃO é descartado (falsy, mas não nulo)');
+
+  // RJs distintos não se misturam, e a ordem de saída é a de Object.values (chave numérica).
+  eq(cods([emp('105','E'), emp('101','A'), emp('103','C')]), '101,103,105',
+     'RJs distintos preservados, na ordem de chave numérica');
+
+  // Herança de Object.prototype não pode ser confundida com "RJ já visto".
+  eq(nomes([emp('constructor','HERDADA')]), 'HERDADA', 'chave que colide com Object.prototype não some');
+
+  // Não muta a lista recebida nem as entradas.
+  {
+    const orig = [emp('103','A',{situacao:'SUSPENSA'}), emp('103','B',{situacao:'REGULAR'})];
+    const antes = JSON.stringify(orig);
+    P.dedupEmpresasPorRJ(orig);
+    eq(JSON.stringify(orig), antes, 'não muta a lista de entrada');
+  }
+}
+
 console.log('\n==== PLACAR:', pass + '/' + (pass + fail), '====');
 if (fail){ console.log('FALHAS:'); fails.forEach(f => console.log('  -', f)); process.exit(1); }

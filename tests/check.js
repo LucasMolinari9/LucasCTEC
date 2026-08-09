@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { spawnSync } = require('child_process');
+const { extrairCanon, conferirCanon } = require('./canon.js');
 
 const TESTS_DIR = __dirname;
 const INDEX = path.join(__dirname, '..', 'index.html');
@@ -140,106 +141,58 @@ console.log('\n[1c] Workflows: nenhum env: com chave duplicada ignorando maiúsc
 
 // ---------- [2] guarda anti-drift ----------
 console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
-// trecho distintivo de cada função copiada nos harness; se sumir do app.js,
-// a cópia no harness provavelmente ficou desatualizada.
-const canon = [
-  ['fmtCode',              's.slice(3,6)'],
-  ['fmtTime',             'm[1]}:${m[2]}'],
-  ['fmtDate',       'm[3]}/${m[2]}/${m[1]}'],
-  ['esc',                  "'&':'&amp;'"],
-  ['enc',                  'const enc = s => encodeURIComponent(s);'],
-  // ilikeTerm é o saneador que neutraliza ( ) * antes de entrar no filtro or=() do
-  // PostgREST — os testes dele rodam contra a CÓPIA, então o trecho vigiado é a
-  // declaração INTEIRA: qualquer mudança no saneador tem de derrubar este gate.
-  ['ilikeTerm',            "const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));"],
-  ['orDash',               "==='') ? '—'"],
-  ['fmtLineName',          "split(' - ').map(p => p.replace(/ /g, '&nbsp;'))"],
-  ['byCodlinha',           "localeCompare(String(b.codlinha||''), undefined, { numeric:true })"],
-  ['boolChip',             'chip chip-on'],
-  ['situacaoHTML',         'const situacaoHTML = r => r.cancelado'],
-  ['isLinhaAtiva',         'const isLinhaAtiva = r => !r.cancelado && !r.paralisado;'],
-  // filtrarSituacao é a definição ÚNICA do "Ativas/Canceladas" das barras de situação —
-  // duas telas dependem dela concordarem, então o trecho vigiado é o corpo inteiro.
-  ['filtrarSituacao',      "st==='canceladas' ? rows.filter(r=>!!r.cancelado)"],
-  ['isVigente',            'const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;'],
-  ['norm',                 "normalize('NFD')"],
-  ['yearOf',               'parseInt(String(d).slice(0,4),10)'],
-  ['matchEvent',           'function matchEvent(r, c){'],
-  ['groupBy',              'if(!m.has(k))m.set(k,[])'],
-  ['countBy',              '(m.get(k)||0)+1'],
-  ['fmtMoney',             'minimumFractionDigits:2,maximumFractionDigits:2'],
-  ['classifyMunLines',     'function classifyMunLines('],
-  ['terminaisDoMunicipio', 'function terminaisDoMunicipio(itRows, codibge){'],
-  ['localidadesQueCasam',  'function localidadesQueCasam('],
-  ['orIlike',              "const orIlike = (cols, termos) => 'or=('"],
-  ['municipiosExatos',     'function municipiosExatos(ibge, termos){'],
-  ['tabMatchesEvent',      'function tabMatchesEvent(tab, table, payload){'],
-  ['dispatchRealtime',     'function dispatchRealtime(tabs, activeTabId, table, payload){'],
-  ['beginGen',              'view._gen = (view._gen || 0) + 1;'],
-  ['isCurrentGen',          'return !!view && gen === view._gen;'],
-  ['commitViewResult',      "if (!isCurrentGen(view, gen)) return false;"],
-  ['pushDetail',            "view._detail = { pdfHTML: view.pdfHTML };"],
-  ['popDetail',             "view.pdfHTML = view._detail.pdfHTML;"],
-  // --- cópias do harness.js (seção SUPABASE CONFIG) ---
-  // Estavam SEM guarda até 27/07/2026: a auditoria anterior fechou o laço para o
-  // pure.harness.js e o harness.js ficou de fora — 8 dos 9 exports descobertos, incluindo
-  // marcarTrunc/bannerTrunc, com 28 testes rodando contra cópias que nada garantia estarem
-  // atualizadas. Mesmo bug do `ilikeTerm`, um arquivo ao lado.
-  ['sbFetch',              "async function sbFetch(table, qs = '', sinal) {"],
-  ['selecionarSupabase',   'function selecionarSupabase(hostname, config){'],
-  ['SB_RETRIES',           'const SB_RETRIES    = 2;'],
-  ['esperar',              'const esperar = ms => new Promise'],
-  ['fetchComTimeout',      'async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal){'],
-  ['SB_TIMEOUT_MS',        'const SB_TIMEOUT_MS = 20000;'],
-  ['marcarTrunc',          'function marcarTrunc(data, qs){'],
-  ['bannerTrunc',          'function bannerTrunc(rows){'],
-  // CANCELADO/ehCancelamento sustentam o cancelamento de busca obsoleta (SEC-02): se a
-  // distinção entre "cancelei" e "deu timeout" sumir do app.js, os testes que a provam
-  // continuariam verdes contra a cópia.
-  ['CANCELADO',            "const CANCELADO = 'RequisicaoCancelada';"],
-  ['ehCancelamento',       'const ehCancelamento = e => e && e.name === CANCELADO;'],
-  ['rjOrder',              'function rjOrder(a, b){'],
-  ['resumoFrota',          'function resumoFrota(rows){'],
-  ['filtrarFrotaEmpresas', "function filtrarFrotaEmpresas(items, status='ativas', termo=''){"],
-  ['pageBounds',           'const p = Math.min(Math.max(1, (page|0) || 1), totalPages);'],
-  ['MAX_TABS',             'const MAX_TABS = 5;'],
-  ['makeTab',              'function makeTab(id){ return { id, line: null, view: null, navStack: [], stale: false }; }'],
-  ['openTabState',         'function openTabState(tabs, tabIdSeq){'],
-  ['closeTabState',        'function closeTabState(tabs, activeTabId, id){'],
-];
-for (const [name, snippet] of canon){
-  if (js.includes(snippet)) okline(`${name}`);
-  else fail(`harness DESATUALIZADO p/ "${name}": não achei no app.js → ${snippet}`);
-}
-
-// A guarda acima só vale para quem está no `canon`. Uma cópia exportada pelo harness SEM
-// entrada aqui passa batido — foi o que aconteceu com `ilikeTerm` e `MAX_TABS` (37 cópias
-// exportadas × 36 guardas; descoberto na auditoria externa de 27/07/2026, contando à mão).
-// Esta checagem fecha o laço: cada símbolo exportado por um harness tem de ter guarda.
+// Compara o TEXTO INTEIRO de cada cópia marcada nos harness contra o app.js.
 //
-// Varre os DOIS harness. Na primeira versão varria só o pure.harness.js, e o harness.js ficou
-// descoberto — 8 dos 9 exports sem guarda, achado em 27/07/2026 ao mexer no sbFetch. Fechar o
-// laço num arquivo e deixar o irmão aberto é o mesmo bug, adiado. Harness NOVO entra aqui.
+// Até 08/08/2026 isto era `js.includes(snippet)` com o trecho escrito à mão, e em 15 das 50
+// entradas o trecho era só a ASSINATURA da função. A guarda perguntava se existia uma linha
+// `function matchEvent(r, c){` no app.js — o corpo era irrelevante. Medido: trocando o corpo
+// de matchEvent por `return false`, o gate saía "tudo verde", os 213 testes puros passavam e
+// as 17 views também. Como os testes rodam sobre a CÓPIA, e a guarda era a única coisa ligando
+// a cópia ao original, a rede inteira ficava verde com o portal quebrado.
+//
+// A fronteira da cópia agora é declarada por marcador (`/* @canon <nome> */` … `/* @endcanon */`),
+// não inferida por contagem de chaves — contar chaves é a armadilha: ao sondar isto, um extrator
+// ingênuo deu 6 falsos negativos só em funções de UMA LINHA, que fecham sem `\n}\n`.
 {
   const HARNESSES = ['pure.harness.js', 'harness.js'];
-  const guardados = new Set(canon.map(([n]) => n));
+  const copias = new Map();
+  const fontes = new Map();
+  for (const arquivo of HARNESSES){
+    const src = fs.readFileSync(path.join(TESTS_DIR, arquivo), 'utf8');
+    for (const [nome, dados] of extrairCanon(src)){ copias.set(nome, dados); fontes.set(nome, arquivo); }
+  }
+  const fora = new Set(conferirCanon(copias, js));
+  for (const [nome, { adaptado }] of copias){
+    if (fora.has(nome)){
+      fail(`cópia DIVERGE do app.js: "${nome}" (${fontes.get(nome)}) — o harness testa código que o `
+         + 'app.js não tem mais. Reponha o texto do app.js entre os marcadores @canon, ou, se a '
+         + 'mudança for intencional, atualize a cópia E confira se o teste dela ainda faz sentido.');
+    } else okline(adaptado ? `${nome} (adaptada de propósito)` : nome);
+  }
+
+  // Cópia exportada SEM marcador passaria batida — foi o que aconteceu com `ilikeTerm` e
+  // `MAX_TABS` na auditoria externa de 27/07/2026 (37 cópias exportadas × 36 guardas, contadas
+  // à mão). Esta checagem fecha o laço: todo símbolo exportado por um harness tem de estar
+  // entre marcadores. Varre os DOIS harness — varrer só um e deixar o irmão aberto é o mesmo
+  // bug, adiado (o harness.js ficou descoberto assim até 27/07/2026). Harness NOVO entra aqui.
   let totalExportados = 0, falhou = false;
   for (const arquivo of HARNESSES){
     const src = fs.readFileSync(path.join(TESTS_DIR, arquivo), 'utf8');
     const m = src.match(/module\.exports\s*=\s*\{([\s\S]*?)\}\s*;/);
-    if (!m){ fail(`não achei o module.exports do ${arquivo} (a cobertura do canon não pôde ser conferida)`); falhou = true; continue; }
+    if (!m){ fail(`não achei o module.exports do ${arquivo} (a cobertura não pôde ser conferida)`); falhou = true; continue; }
     const exportados = m[1].split(',').map(s => s.trim()).filter(Boolean)
       // `get X(){…}` / `set X(v){…}`: o nome é o 2º token, não o 1º.
       .map(s => s.replace(/^(?:get|set)\s+/, '').split(/[:(]/)[0].trim())
       .filter(Boolean);
     totalExportados += new Set(exportados).size;
-    const semGuarda = [...new Set(exportados)].filter(n => !guardados.has(n));
-    if (semGuarda.length){
-      fail(`[${arquivo}] cópia exportada sem guarda anti-drift: ${semGuarda.join(', ')} — adicione ao \`canon\` do check.js`);
+    const semMarcador = [...new Set(exportados)].filter(n => !copias.has(n));
+    if (semMarcador.length){
+      fail(`[${arquivo}] cópia exportada sem marcador @canon: ${semMarcador.join(', ')} — `
+         + 'envolva o bloco em /* @canon <nome> */ … /* @endcanon */');
       falhou = true;
     }
   }
-  if (!falhou) okline(`cobertura do canon (${totalExportados} cópias exportadas nos ${HARNESSES.length} harness, todas com guarda)`);
+  if (!falhou && !fora.size) okline(`cobertura (${totalExportados} cópias exportadas nos ${HARNESSES.length} harness, todas marcadas e conferidas)`);
 }
 
 // ---------- [2b] guarda docs × código ----------
@@ -258,10 +211,18 @@ console.log('\n[2b] Deriva docs × código');
   const ler = p => fs.readFileSync(path.join(RAIZ, p), 'utf8');
   const existe = p => fs.existsSync(path.join(RAIZ, p));
 
+  // `docs/adr/` e `docs/planos/` entram por DESCOBERTA, não por lista escrita à mão: ADR novo e
+  // plano novo passam a ser cobrados sozinhos. Foi por estarem fora do alcance que o ADR-0002
+  // pôde afirmar por 10 dias que "somente divatdetro.vercel.app usa produção" enquanto o app.js
+  // tinha três hosts — e ADR é NORMATIVO: quem o seguisse recriava o bug. `docs/historico/` fica
+  // de fora de propósito (retrato datado envelhece por desenho), como o CHANGELOG.
+  const varrerDocs = dir => existe(dir)
+    ? fs.readdirSync(path.join(RAIZ, dir)).filter(f => f.endsWith('.md')).sort().map(f => `${dir}/${f}`)
+    : [];
   const DOCS_VIVOS = ['CLAUDE.md', 'README.md', 'CONTEXT.md', 'docs/estrutura-frontend.md',
-    'docs/schema.md', 'docs/backup.md', 'docs/seguranca.md', 'docs/semgrep.md',
+    'docs/schema.md', 'docs/backup.md', 'docs/etl.md', 'docs/seguranca.md', 'docs/semgrep.md',
     'docs/agents/domain.md', 'docs/agents/issue-tracker.md', 'docs/agents/triage-labels.md',
-    'tests/README.md'].filter(existe);
+    'tests/README.md', ...varrerDocs('docs/adr'), ...varrerDocs('docs/planos')].filter(existe);
 
   // Comentário de workflow é prosa viva como qualquer outra — e prosa que ninguém relê, porque
   // não abre em leitor de markdown. A 1ª versão desta guarda varria só `.md`, e por isso o
@@ -272,6 +233,17 @@ console.log('\n[2b] Deriva docs × código');
     ? fs.readdirSync(path.join(RAIZ, '.github/workflows')).filter(f => /\.ya?ml$/.test(f)).sort()
         .map(f => `.github/workflows/${f}`)
     : [];
+
+  // Cabeçalho de script é prosa viva pelo mesmo motivo — e pior: é o primeiro texto que alguém lê
+  // ao abrir a ferramenta, então um número errado ali é lido como medição. O `check_views.mjs`
+  // afirmou "~62% do app.js" (medido: ~58%) até 08/08/2026, e nenhuma guarda alcançava o arquivo.
+  // Como os `.yml`, os `.mjs` entram SÓ na conferência de fatos numéricos: link markdown e
+  // `SB_URL` não são a linguagem deles.
+  const SCRIPTS = existe('scripts')
+    ? fs.readdirSync(path.join(RAIZ, 'scripts')).filter(f => f.endsWith('.mjs')).sort()
+        .map(f => `scripts/${f}`)
+    : [];
+  const PROSA_VIVA = [...WORKFLOWS, ...SCRIPTS];
 
   // --- fatos computados do CÓDIGO (a fonte da verdade) ---
   const linhasApp = js.split('\n').length;
@@ -312,8 +284,12 @@ console.log('\n[2b] Deriva docs × código');
   // Em `.yml` o marcador `#` do comentário é removido ANTES de normalizar o espaço: um comentário
   // longo quebra em várias linhas, cada uma recomeçando com `#`, e sem tirá-lo a frase "Abre as 23
   // \n#  views" nunca casa o regex — a guarda passaria cega, que é pior que não existir.
+  // Em `.mjs` o marcador é `//` e vale o mesmo raciocínio: um cabeçalho de 20 linhas recomeça
+  // com `//` a cada linha, e sem tirá-lo a frase quebrada nunca casa o regex — guarda cega.
   const normalizar = (arq, txt) =>
-    (/\.ya?ml$/.test(arq) ? txt.replace(/^[ \t]*#[ \t]?/gm, ' ') : txt).replace(/\s+/g, ' ');
+    (/\.ya?ml$/.test(arq) ? txt.replace(/^[ \t]*#[ \t]?/gm, ' ')
+      : /\.mjs$/.test(arq) ? txt.replace(/^[ \t]*\/\/[ \t]?/gm, ' ')
+      : txt).replace(/\s+/g, ' ');
   // Números por extenso: a prosa de segurança escreve "os seis indicadores graves", não "os 6".
   // Trocar a prosa por algarismo só para caber no gate seria deixar o gate mandar no texto —
   // mais barato ensinar o gate a ler o texto que o repo já escreve.
@@ -341,8 +317,12 @@ console.log('\n[2b] Deriva docs × código');
     // `doc` pode ser uma LISTA de arquivos: o fato tem de aparecer em pelo menos um deles, e toda
     // ocorrência em qualquer um é conferida. Nos workflows a lista é o diretório inteiro, de
     // propósito — se a frase migrar do `views.yml` para outro workflow, continua coberta.
-    { doc:WORKFLOWS, o:'views do check_views (workflows)', re:/([\d]+)\s*views\b/, real:views,   esc:'exato' },
-    { doc:WORKFLOWS, o:'% da seção MODAL (workflows)',     re:/~([\d,.]+)% do app\.js/, real:modalPct, esc:'pct' },
+    { doc:PROSA_VIVA, o:'views do check_views (workflows/scripts)', re:/([\d]+)\s*views\b/, real:views,   esc:'exato' },
+    { doc:PROSA_VIVA, o:'% da seção MODAL (workflows/scripts)',     re:/~([\d,.]+)% do app\.js/, real:modalPct, esc:'pct' },
+    // O `backup_rest.mjs` anuncia no próprio cabeçalho quantas tabelas baixa em modo público. O
+    // `*{0,2}` deixa o mesmo regex servir ao markdown (`**14**`) e ao comentário de script.
+    { doc:['docs/backup.md', ...SCRIPTS], o:'tabelas públicas (docs/scripts)',
+      re:/as \*{0,2}([\d]+)\*{0,2} tabelas públicas/, real:bkPublicas, esc:'exato' },
     // O comentário do hook entra na lista pelo mesmo motivo dos workflows: é prosa viva que
     // ninguém relê (não abre em leitor de markdown) e que afirma um número. Mantenha a frase
     // numa linha só — o `normalizar` não tira o `#` de `.sh`, então quebra de linha a esconde.
@@ -381,6 +361,43 @@ console.log('\n[2b] Deriva docs × código');
     else { ocorrencias += achou; if (!divergiu) fatosOk++; }
   }
   okline(`fatos numéricos conferidos (${fatosOk}/${FATOS.length - fatosPulados} afirmações, ${ocorrencias} ocorrências)`);
+
+  // --- toda tabela de RT_TABLES aparece no mapa tabela→card do CLAUDE.md ---
+  // A contagem sozinha não bastava: o CLAUDE.md dizia "as 14 tabelas lidas pelo portal" logo acima
+  // de um mapa que listava 12 (faltavam `codempresa_teste` e `portaria_teste`, e com elas o tópico
+  // Portarias inteiro). O número certo ao lado da lista errada é pior que os dois errados, porque
+  // parece conferido. Aqui a comparação é NOMINAL, tabela a tabela — a única forma de a lista não
+  // poder ficar para trás quando um card novo lê tabela nova.
+  {
+    const claude = ler('CLAUDE.md');
+    const mapa = /## Tabelas → onde aparecem \(cards\)\n([\s\S]*?)\n## /.exec(claude)?.[1];
+    const rt = (/RT_TABLES\s*=\s*\[([\s\S]*?)\]/.exec(js)?.[1] || '').match(/'([a-z_]+)'/g) || [];
+    if (!mapa) fail('[CLAUDE.md] não achei a seção "Tabelas → onde aparecem (cards)" — se ela mudou de título, atualize o regex (não apague a guarda)');
+    else if (!rt.length) fail('[app.js] não consegui ler RT_TABLES — a guarda ficou cega, conserte o extrator');
+    else {
+      const faltando = rt.map(t => t.slice(1, -1)).filter(t => !mapa.includes(`\`${t}\``));
+      if (faltando.length) fail(`[CLAUDE.md] o mapa tabela→card não cita ${faltando.length} tabela(s) de RT_TABLES: ${faltando.join(', ')} — card que lê tabela nova entra no mapa junto`);
+      else okline(`mapa tabela→card cobre as ${rt.length} tabelas de RT_TABLES`);
+    }
+  }
+
+  // --- a contagem de entradas de .claude/skills/ bate com o que o CLAUDE.md afirma ---
+  // O manifesto do Superpowers já era conferido, mas ele só conhece a leva DELE: `.claude/skills/`
+  // tinha 36 entradas (15 diretórios reais + 21 symlinks para `.agents/skills/`, de
+  // `mattpocock/skills`) e nenhum `.md` do repo mencionava o segundo conjunto, o lockfile ou a
+  // origem. Contar do disco é o que impede a prosa de descrever metade da pasta.
+  if (existe('.claude/skills')) {
+    const ent = fs.readdirSync(path.join(RAIZ, '.claude/skills'), { withFileTypes:true })
+      .filter(e => !e.name.startsWith('.'));
+    const links = ent.filter(e => e.isSymbolicLink()).length;
+    const dirs = ent.length - links;
+    const claude = normalizar('CLAUDE.md', ler('CLAUDE.md'));
+    const m = /\*\*(\d+) diretórios reais \+ (\d+) symlinks = (\d+) entradas\*\*/.exec(claude);
+    if (!m) fail('[CLAUDE.md] não afirma a composição de `.claude/skills/` — escreva "**N diretórios reais + N symlinks = N entradas**" (não apague a guarda)');
+    else if (+m[1] !== dirs || +m[2] !== links || +m[3] !== ent.length) {
+      fail(`[CLAUDE.md] composição de .claude/skills/: doc diz ${m[1]}+${m[2]}=${m[3]}, disco diz ${dirs}+${links}=${ent.length}`);
+    } else okline(`.claude/skills/: ${dirs} diretórios + ${links} symlinks = ${ent.length} entradas, como o CLAUDE.md afirma`);
+  }
 
   // --- todo LINK markdown aponta para algo que existe ---
   // Deliberadamente só links `[texto](caminho)`, não qualquer token em backtick: a primeira
@@ -467,8 +484,12 @@ console.log('\n[2b] Deriva docs × código');
   // --- status estável do PR #73 nos dois handoffs correntes ---
   // O merge é evento histórico estável. O que drifta é deixar o handoff continuar mandando
   // "decidir o draft" depois de ele já ter entrado na main.
-  for (const doc of ['docs/contexto-proxima-sessao-2026-07-31.md', 'docs/pendencias-2026-07-31-consolidado.md']) {
-    if (!existe(doc)) continue;
+  // `if (!existe) continue` era fail-open: ao mover estes dois para `docs/historico/` (08/08/2026)
+  // a guarda simplesmente PAROU DE IMPRIMIR, sem uma linha de aviso — o gate seguiu verde com dois
+  // checks a menos. Arquivo que a guarda cita por caminho e some é achado, não silêncio.
+  for (const doc of ['docs/historico/contexto-proxima-sessao-2026-07-31.md',
+                     'docs/historico/pendencias-2026-07-31-consolidado.md']) {
+    if (!existe(doc)) { fail(`[${doc}] sumiu — se o arquivo foi movido, atualize o caminho aqui (não apague a guarda)`); continue; }
     const src = ler(doc);
     if (!/0bfb38a/.test(src) || !/#73[^\n]*(mergeado|merge)/i.test(src)) {
       fail(`[${doc}] não registra o merge do #73 em 0bfb38a`);

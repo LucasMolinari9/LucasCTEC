@@ -1,5 +1,9 @@
 # Contexto para a próxima sessão — 08/08/2026
 
+> **Snapshot de 08/08/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 Sucessor do [handoff de 06/08](contexto-proxima-sessao-2026-08-06.md), que ficou desatualizado
 assim que a migração 2 entrou no banco de teste. Não é doc vivo: é um instantâneo datado.
 

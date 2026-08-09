@@ -4,7 +4,7 @@
 > (recomendado) ou `executing-plans` para executar tarefa a tarefa. Os passos usam checkbox
 > (`- [ ]`) para acompanhamento.
 
-**Spec:** `docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md`
+**Spec:** `docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md`
 
 **Goal:** Preparar o repositório para que a migração da Fase 3 possa ser aplicada em produção sem
 cegar os quatro gates que hoje leem RPCs diagnósticas como `anon`.
@@ -177,7 +177,7 @@ Esperado: falha com `Cannot find module` apontando para `scripts/lib/prazos.mjs`
 // Por que existe: neste repositório, o que cabe num `git push` acontece e o que depende de
 // lembrar não acontece. Um compromisso com data (rotação de credencial, remoção de caminho
 // temporário, revisão trimestral) só é real se um gate o cobrar ANTES do vencimento, num canal
-// que já se lê. Ver docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md §6.
+// que já se lê. Ver docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md §6.
 
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -285,7 +285,7 @@ Esperado: `==== PLACAR: 14/14 ====`, saída 0.
       "vence_em": "2026-11-30",
       "aviso_dias": 30,
       "erro_dias": 0,
-      "referencia": "docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md secao 5"
+      "referencia": "docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md secao 5"
     },
     {
       "id": "check_data_quality_fallback",
@@ -293,7 +293,7 @@ Esperado: `==== PLACAR: 14/14 ====`, saída 0.
       "vence_em": "2026-11-30",
       "aviso_dias": 30,
       "erro_dias": 0,
-      "referencia": "docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md secao 9.3"
+      "referencia": "docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md secao 9.3"
     },
     {
       "id": "revisao_seguranca_trimestral",
@@ -562,7 +562,7 @@ Esperado: `Cannot find module` apontando `scripts/lib/ambiente.mjs`.
 //   schedule (cron) / dispatch → DIVAT_ALVO=producao  (o monitoramento)
 //
 // NÃO existe default. Ausência de DIVAT_ALVO é erro, porque um default silencioso é exatamente
-// como um gate de PR acaba falando com produção. Ver docs/superpowers/specs/
+// como um gate de PR acaba falando com produção. Ver docs/planos/
 // 2026-08-04-fase3-diagnosticos-anonimos-design.md § 3.3.
 
 import { readFile } from 'node:fs/promises';
@@ -1201,7 +1201,7 @@ troque a mensagem para dizer **qual faixa** o candidato teria de satisfazer:
         fail(file, `${target} não está na allowlist anônima. Para entrar como PRODUTO, precisa ser `
           + `chamada pelo portal em runtime; como DIAGNÓSTICO, precisa ler só catálogo, ser `
           + `SECURITY INVOKER e não revelar além do que o repositório já publica (ADR-0003). `
-          + `Ver docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md §8.`);
+          + `Ver docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md §8.`);
       }
 ```
 
@@ -2123,14 +2123,14 @@ Na seção "Pré-requisito da promoção a produção — os quatro gates vivos 
 > indisponibilidade como RPC anônima; `check_phase3_audit.mjs` confere forma, não substância, e
 > portanto não é substituto dos quatro; e a credencial vence em 31/10/2026, o que daria ao
 > alarme diário uma data de validade. O desenho vigente está em
-> `docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md`.
+> `docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md`.
 ```
 
 Na lista "Critérios antes de qualquer promoção", troque o item 7 por:
 
 ```markdown
 7. **Antes de tocar produção:** ter aplicado o plano
-   `docs/superpowers/plans/2026-08-04-fase3-diagnosticos-anonimos.md` — em especial a migração 2
+   `docs/planos/2026-08-04-fase3-diagnosticos-anonimos.md` — em especial a migração 2
    e o modo duplo dos gates. Aplicar a migração 1 sozinha em produção cega o gate diário.
 ```
 

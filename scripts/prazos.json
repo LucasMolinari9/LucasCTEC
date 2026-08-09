@@ -15,7 +15,7 @@
       "vence_em": "2026-11-30",
       "aviso_dias": 30,
       "erro_dias": 0,
-      "referencia": "docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md secao 5"
+      "referencia": "docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md secao 5"
     },
     {
       "id": "check_data_quality_fallback",
@@ -23,7 +23,7 @@
       "vence_em": "2026-11-30",
       "aviso_dias": 30,
       "erro_dias": 0,
-      "referencia": "docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md secao 9.3"
+      "referencia": "docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md secao 9.3"
     },
     {
       "id": "revisao_seguranca_trimestral",

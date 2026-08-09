@@ -1,10 +1,14 @@
 # Contexto para a próxima sessão — o que falta, em detalhe
 
+> **Snapshot de 31/07/2026 — não atualizar.** O estado atual do projeto vive no `CLAUDE.md`;
+> a cronologia, no `docs/CHANGELOG.md`. Este arquivo é o retrato de uma sessão e envelhece
+> de propósito.
+
 > **Leia primeiro:** este arquivo e o `CLAUDE.md`. O `CLAUDE.md` é a fonte das **regras**; este
 > descreve **o que está aberto e como atacar cada coisa**. Se divergirem, o `CLAUDE.md` manda.
 >
-> Complementares: `docs/pendencias-2026-07-31-consolidado.md` (o placar dos achados),
-> `docs/handoff-2026-07-31-pr4-visibilidade.md` (o que a sessão de 31/07 fez e decidiu).
+> Complementares: `docs/historico/pendencias-2026-07-31-consolidado.md` (o placar dos achados),
+> `docs/historico/handoff-2026-07-31-pr4-visibilidade.md` (o que a sessão de 31/07 fez e decidiu).
 
 ## 0. Estado do repositório
 

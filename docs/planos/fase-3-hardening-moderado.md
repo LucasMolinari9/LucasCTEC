@@ -117,7 +117,7 @@ de alcance é parte da decisão, não um detalhe de implementação.
 > indisponibilidade como RPC anônima; `check_phase3_audit.mjs` confere forma, não substância, e
 > portanto não é substituto dos quatro; e a credencial vence em 31/10/2026, o que daria ao
 > alarme diário uma data de validade. O desenho vigente está em
-> `docs/superpowers/specs/2026-08-04-fase3-diagnosticos-anonimos-design.md`.
+> `docs/planos/2026-08-04-fase3-diagnosticos-anonimos-design.md`.
 >
 > Duas consequências que a tabela acima não antecipa: (1) os quatro gates deixaram de derivar
 > `SB_URL`/`SB_KEY` do `app.js` — o alvo agora vem de `DIVAT_ALVO` + `scripts/ambientes.json`,
@@ -133,5 +133,5 @@ de alcance é parte da decisão, não um detalhe de implementação.
 5. Confirmar no GitHub que os checks obrigatórios bloqueiam alteração da `main`.
 6. Manter a PR em rascunho e solicitar autorização separada para qualquer ação em produção.
 7. **Antes de tocar produção:** ter aplicado o plano
-   `docs/superpowers/plans/2026-08-04-fase3-diagnosticos-anonimos.md` — em especial a migração 2
+   `docs/planos/2026-08-04-fase3-diagnosticos-anonimos.md` — em especial a migração 2
    e o modo duplo dos gates. Aplicar a migração 1 sozinha em produção cega o gate diário.
