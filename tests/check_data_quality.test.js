@@ -62,14 +62,24 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
     // este teste vermelho por um motivo que nada tem a ver com o que ele guarda (a ORDEM dos dois
     // caminhos). O achado abaixo é o mesmo que o `psql` falso devolve — é o par que faz o caso do
     // auditor sair 0 "com dívida já conhecida".
-    fs.writeFileSync(path.join(raiz, 'scripts', 'data_quality_baseline.json'), JSON.stringify({
+    // Desde a issue #99 a dívida MEDIDA mora em `ambientes.<alvo>.achados` (a política —
+    // `orfaos_conhecidos` — é que fica no topo). Os dois slots levam o mesmo achado porque os
+    // casos abaixo rodam ora com alvo `teste`, ora com `producao`, e o que eles guardam é a
+    // ORDEM dos dois caminhos, não a diferença entre os bancos.
+    const ACHADO = {
+      verificacao: 'codlinha_orfa', severidade: 'erro', qtd: 2,
+      detalhe: 'itinerario_teste sem match em tabela_vista_teste',
+    };
+    const fixtureBaseline = {
       gerado_em: '2026-08-05',
       nota: 'fixture do teste — dívida inventada, não é o baseline do repo',
-      achados: [{
-        verificacao: 'codlinha_orfa', severidade: 'erro', qtd: 2,
-        detalhe: 'itinerario_teste sem match em tabela_vista_teste',
-      }],
-    }, null, 2) + '\n');
+      ambientes: {
+        teste:    { gerado_em: '2026-08-05', achados: [ACHADO] },
+        producao: { gerado_em: '2026-08-05', achados: [ACHADO] },
+      },
+    };
+    fs.writeFileSync(path.join(raiz, 'scripts', 'data_quality_baseline.json'),
+                     JSON.stringify(fixtureBaseline, null, 2) + '\n');
     // Alvo vem de DIVAT_ALVO + scripts/ambientes.json (issue #74), não mais de um app.js falso —
     // nada mais lê o app.js aqui, por isso ele saiu do fakeroot. Os dois endereços são mortos de
     // propósito (ver o cabeçalho): nem em caso de regressão este teste alcança um Supabase real.
@@ -216,8 +226,53 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
        'avisa que a dívida registrada foi a ZERO, dizendo quantos sumiram', zerou.saida.slice(0, 500));
     ok(/cegou|cegueira/.test(zerou.saida),
        'nomeia a hipótese da fonte cega — não trata como vitória', zerou.saida.slice(0, 500));
-    ok(JSON.parse(fs.readFileSync(baselinePath, 'utf8')).achados.length === 0, 'o baseline foi mesmo reescrito');
+    const reescrito = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
+    ok(reescrito.ambientes.producao.achados.length === 0, 'o slot do alvo foi mesmo reescrito');
+    // A escrita é POR AMBIENTE (issue #99): rodar --atualizar-baseline no cron (alvo `producao`)
+    // não pode zerar a dívida medida em TESTE. Antes da #99 havia uma lista só e o cron diário
+    // reescrevia o arquivo inteiro — dívida do outro banco apagada sem ninguém ver.
+    ok(JSON.stringify(reescrito.ambientes.teste) === JSON.stringify(antes.ambientes.teste),
+       'o slot do OUTRO ambiente ficou intacto', JSON.stringify(reescrito.ambientes.teste));
     fs.writeFileSync(baselinePath, JSON.stringify(antes, null, 2) + '\n');   // devolve a fixture
+
+    console.log('baseline por ambiente — falha fechado em vez de comparar contra o banco errado');
+    // As três formas de o slot do alvo não existir mandam para lugares diferentes, e por isso têm
+    // mensagens diferentes: reformar o arquivo, corrigir o DIVAT_ALVO, ou medir aquele banco. Uma
+    // mensagem só faria o operador rodar --atualizar-baseline no alvo errado — e sobrescrever a
+    // medição boa do outro ambiente com a deste, que é o dano que a #99 fecha.
+    fs.writeFileSync(path.join(bin, 'psql'),
+      `#!${process.execPath}\nprocess.stdout.write('\\n[' + ${JSON.stringify(JSON.stringify(ACHADO))} + ']\\n');\n`,
+      { mode: 0o755 });
+    const comCred = { ...comPath, SUPABASE_TEST_AUDIT_DATABASE_URL: urlDe('teste') };
+    const comBaseline = (obj, alvo = 'teste') => {
+      fs.writeFileSync(baselinePath, JSON.stringify(obj, null, 2) + '\n');
+      const r = rodar(comCred, alvo);
+      fs.writeFileSync(baselinePath, JSON.stringify(antes, null, 2) + '\n');
+      return r;
+    };
+
+    const formaAntiga = comBaseline({ gerado_em: '2026-08-05', nota: 'x', achados: [ACHADO] });
+    ok(formaAntiga.status === 1, 'formato antigo (dívida no topo) sai 1', String(formaAntiga.status));
+    ok(/formato ANTIGO/.test(formaAntiga.saida) && /ambientes/.test(formaAntiga.saida),
+       'diz que a forma mudou, em vez de comparar contra `undefined` e passar', formaAntiga.saida.slice(0, 300));
+
+    const semSlot = comBaseline({ ...fixtureBaseline, ambientes: { producao: { gerado_em: '2026-08-05', achados: [ACHADO] } } });
+    ok(semSlot.status === 1, 'slot do alvo ausente sai 1', String(semSlot.status));
+    ok(/slot do ambiente 'teste'/.test(semSlot.saida),
+       'a mensagem NOMEIA o ambiente que falta', semSlot.saida.slice(0, 300));
+
+    const naoMedido = comBaseline({ ...fixtureBaseline,
+      ambientes: { teste: { gerado_em: null, achados: null }, producao: { gerado_em: '2026-08-05', achados: [ACHADO] } } });
+    ok(naoMedido.status === 1, 'slot não medido (achados: null) sai 1', String(naoMedido.status));
+    ok(/ainda não foi medido/.test(naoMedido.saida) && /DIVAT_ALVO=teste/.test(naoMedido.saida),
+       'diz que falta medir ESTE ambiente e como fazê-lo', naoMedido.saida.slice(0, 300));
+    ok(!/✓ Qualidade dos dados/.test(naoMedido.saida),
+       'NÃO cai na dívida do outro banco e declara qualidade em dia', naoMedido.saida.slice(0, 300));
+
+    // O outro lado: com o slot do alvo medido, o gate volta a passar com a dívida conhecida.
+    const medido = comBaseline(fixtureBaseline);
+    ok(medido.status === 0, 'com o slot medido, passa com a dívida conhecida',
+       `exit ${medido.status}: ${medido.saida.slice(0, 300)}`);
 
     console.log('sem DIVAT_ALVO — morre na resolução do alvo, antes do auditor, do prazo e da rede');
     // A ausência é erro por desenho (issue #74): um default silencioso é exatamente como um gate

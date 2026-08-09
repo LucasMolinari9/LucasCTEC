@@ -549,10 +549,37 @@ console.log('\n[2b] Deriva docs × código');
   if (existe('scripts/data_quality_baseline.json')){
     try {
       const b = JSON.parse(ler('scripts/data_quality_baseline.json'));
-      if (!Array.isArray(b.achados)) throw new Error('campo "achados" não é um array');
-      const ruim = b.achados.filter(a => !a.verificacao || !a.detalhe || !a.severidade || !Number.isFinite(a.qtd));
-      if (ruim.length) throw new Error(`${ruim.length} entrada(s) sem verificacao/detalhe/severidade/qtd`);
-      okline(`baseline de qualidade dos dados válido (${b.achados.length} achado(s) de dívida registrada)`);
+      // FORMA POR AMBIENTE (issue #99), igual à do security_baseline: `orfaos_conhecidos` é
+      // política e fica no topo; a dívida MEDIDA mora em `ambientes.<alvo>.achados`, porque é
+      // propriedade daquele banco e o gate roda contra dois.
+      if (!b.ambientes || typeof b.ambientes !== 'object' || Array.isArray(b.ambientes)) {
+        throw new Error('sem o bloco "ambientes" — a medição por ambiente é a forma desde a issue #99');
+      }
+      if ('achados' in b) {
+        throw new Error('dívida medida no TOPO ("achados") — é a forma anterior à issue #99; ela mora em "ambientes.<alvo>.achados"');
+      }
+      let medidos = 0;
+      for (const alvo of ['teste', 'producao']){
+        const slot = b.ambientes[alvo];
+        if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
+          throw new Error(`"ambientes" sem o slot do ambiente '${alvo}'`);
+        }
+        if (!('achados' in slot)) throw new Error(`ambientes.${alvo} sem o campo "achados"`);
+        // `null` é legítimo: é o slot ainda não medido, à espera do --atualizar-baseline daquele
+        // banco. O que não pode é ser outra coisa que não lista.
+        if (slot.achados === null) continue;
+        if (!Array.isArray(slot.achados)) throw new Error(`ambientes.${alvo}.achados não é um array nem null`);
+        const ruim = slot.achados.filter(a => !a.verificacao || !a.detalhe || !a.severidade || !Number.isFinite(a.qtd));
+        if (ruim.length) throw new Error(`ambientes.${alvo}: ${ruim.length} entrada(s) sem verificacao/detalhe/severidade/qtd`);
+        medidos++;
+      }
+      const fonteDq = ler('scripts/check_data_quality.mjs');
+      const mDq = fonteDq.match(/^const NOTA = '((?:[^'\\]|\\.)*)';$/m);
+      if (!mDq) throw new Error('não achei a constante NOTA em scripts/check_data_quality.mjs');
+      if (mDq[1].replace(/\\'/g, "'") !== b.nota) {
+        throw new Error('a "nota" do JSON não bate com a constante NOTA do check_data_quality.mjs (o --atualizar-baseline sobrescreveria uma pela outra)');
+      }
+      okline(`baseline de qualidade dos dados válido (${medidos} de 2 ambiente(s) medido(s))`);
     } catch (e){
       fail(`scripts/data_quality_baseline.json inválido: ${e.message}`);
     }

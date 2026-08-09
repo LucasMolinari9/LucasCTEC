@@ -47,6 +47,14 @@
 // registrada, não perdão — cada linha dele é dado para consertar, e ao consertar rode
 // --atualizar-baseline para o gate voltar a apertar.
 //
+// FORMA DO BASELINE (issue #99): as duas naturezas do arquivo ficam separadas. `orfaos_conhecidos`
+// é POLÍTICA — o levantamento mantido à mão, que vale para os dois bancos e fica no topo, uma
+// cópia só. `ambientes.<alvo>.achados` é MEDIÇÃO — a dívida contada NAQUELE banco. Antes da #99
+// havia uma lista só, medida em produção e comparada contra teste a cada PR: o mesmo defeito do
+// digest do check_grants.mjs, ainda sem sintoma porque os dois bancos carregam a mesma carga.
+// `achados: null` num slot quer dizer "ainda não medido aqui", e o gate falha FECHADO até alguém
+// medir — comparar contra a dívida do outro banco é justamente o que se está corrigindo.
+//
 // A DÍVIDA, EM DETALHE (medida em 27/07/2026, contra o banco vivo). Estava no CLAUDE.md, que é
 // lido no início de TODA sessão; mora aqui porque é runbook de quem opera este gate, não contexto
 // de quem mexe no portal:
@@ -87,6 +95,12 @@ import { carregarAmbiente } from './lib/ambiente.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BASELINE = join(ROOT, 'scripts', 'data_quality_baseline.json');
+
+// A `nota` do baseline é lida por HUMANO — é onde a forma do arquivo se explica para quem o abre
+// sem abrir este script. O ramo `--atualizar-baseline` a REGRAVA, então ela precisa de definição
+// única: uma cópia aqui e outra no JSON divergem na primeira regravação, e passa a existir uma
+// nota que descreve a forma anterior. tests/check.js §[2b] cobra que as duas batam.
+const NOTA = 'Dívida de integridade conhecida. Cada entrada é dado para consertar; ao consertar, rode --atualizar-baseline. Só entra aqui o que pode DERRUBAR o gate — erro DEPOIS da reclassificação por natureza feita no check_data_quality.mjs (evento_teste órfã é aviso, não erro; o porquê está no comentário REBAIXADOS_A_AVISO do script). FORMA (issue #99): `orfaos_conhecidos` é POLÍTICA — o levantamento mantido à mão, que vale para os dois bancos e fica no topo, uma vez só; `ambientes.<alvo>.achados` é MEDIÇÃO, escrita pela máquina no --atualizar-baseline e SEPARADA por banco, porque dívida de dado é propriedade DAQUELE banco e este gate roda contra dois. `achados: null` significa "ainda não medido neste ambiente" — o gate falha fechado até alguém medir, em vez de comparar contra a dívida do outro.';
 
 const args = new Set(process.argv.slice(2));
 const semBaseline = args.has('--sem-baseline') || args.has('--all');
@@ -204,17 +218,22 @@ if (atualizar) {
   // `orfaos_conhecidos` é escrito À MÃO (a RPC agrega e não devolve QUAIS codlinhas). Sem este
   // resgate, o primeiro --atualizar-baseline montaria um objeto novo e apagaria em silêncio o
   // levantamento inteiro — que custou uma sessão para reconstruir.
-  let herdado = null, achadosAntes = 0;
+  //
+  // O mesmo resgate vale, desde a issue #99, para o slot do OUTRO ambiente: a medição é por
+  // banco, e quem mediu produção não sabe nada sobre teste. Sem isto, o cron diário reescreveria
+  // o arquivo e apagaria a dívida medida do outro — dano cruzado, exatamente o que a #99 fecha.
+  let herdado = null, ambientes = {}, achadosAntes = 0;
   try {
     const anterior = JSON.parse(await readFile(BASELINE, 'utf8'));
     herdado = anterior.orfaos_conhecidos ?? null;
-    achadosAntes = (anterior.achados || []).length;
+    ambientes = { ...(anterior.ambientes || {}) };
+    achadosAntes = (anterior.ambientes?.[ALVO]?.achados || []).length;
   } catch (e) {
     if (e.code !== 'ENOENT') console.error(`Aviso: não consegui reler o baseline atual (${e.message}); orfaos_conhecidos não será preservado.`);
   }
   const registro = {
     gerado_em: new Date().toISOString().slice(0, 10),
-    nota: 'Dívida de integridade conhecida. Cada entrada é dado para consertar; ao consertar, rode --atualizar-baseline. Só entra aqui o que pode DERRUBAR o gate — erro DEPOIS da reclassificação por natureza feita no check_data_quality.mjs (evento_teste órfã é aviso, não erro; o porquê está no comentário REBAIXADOS_A_AVISO do script).',
+    nota: NOTA,
     // A função agrega. Para agir é preciso saber QUAIS codlinhas — esta query devolve as
     // órfãs uma por uma, e fica aqui para não se perder a cada regeneração do baseline.
     como_listar_os_orfaos:
@@ -224,24 +243,34 @@ if (atualizar) {
     // Reinserido AQUI, e não no fim, para a regeneração não reordenar o arquivo e produzir um
     // diff gigante que esconde a única linha que de fato mudou.
     ...(herdado ? { orfaos_conhecidos: herdado } : {}),
-    // Só entra no baseline o que pode DERRUBAR o gate, isto é, erro DEPOIS da reclassificação
-    // por natureza. Sem este filtro, o primeiro `--atualizar-baseline` reintroduziria as
-    // rebaixadas (a RPC continua devolvendo `erro` para elas) e o arquivo passaria a carregar
-    // entradas que nunca são consultadas — dívida de mentira, ruído no diff.
-    achados: achados
-      .filter(a => severidadeDe(a) === 'erro')
-      .map(a => ({ verificacao: a.verificacao, severidade: severidadeDe(a), qtd: Number(a.qtd), detalhe: a.detalhe })),
+    // A MEDIÇÃO vai para o slot do ALVO (issue #99). Só entra no baseline o que pode DERRUBAR o
+    // gate, isto é, erro DEPOIS da reclassificação por natureza. Sem este filtro, o primeiro
+    // `--atualizar-baseline` reintroduziria as rebaixadas (a RPC continua devolvendo `erro` para
+    // elas) e o arquivo passaria a carregar entradas que nunca são consultadas — dívida de
+    // mentira, ruído no diff.
+    ambientes: {
+      ...ambientes,
+      [ALVO]: {
+        gerado_em: new Date().toISOString().slice(0, 10),
+        achados: achados
+          .filter(a => severidadeDe(a) === 'erro')
+          .map(a => ({ verificacao: a.verificacao, severidade: severidadeDe(a), qtd: Number(a.qtd), detalhe: a.detalhe })),
+      },
+    },
   };
   await writeFile(BASELINE, JSON.stringify(registro, null, 2) + '\n', 'utf8');
-  console.log(`✓ Baseline reescrito com ${registro.achados.length} achado(s) → scripts/data_quality_baseline.json`);
+  const gravados = registro.ambientes[ALVO].achados;
+  console.log(`✓ Baseline [${ALVO}] reescrito com ${gravados.length} achado(s) → scripts/data_quality_baseline.json`);
+  const outros = Object.keys(ambientes).filter(a => a !== ALVO);
+  if (outros.length) console.log(`  · O slot de ${outros.join(', ')} foi PRESERVADO — a medição é por banco.`);
   // A saída de emergência da guarda de cegueira (mais abaixo) não pode ser ela mesma um caminho
   // cego: é para cá que o gate manda o operador quando a fonte devolve zero achados, e obedecer
   // sem desconfiar apaga a dívida REGISTRADA — que é o oposto do que o baseline existe para
   // fazer. Gravar continua sendo legítimo (o `--atualizar-baseline` é a confirmação humana), mas
   // ir de N para ZERO é a assinatura da cegueira e fica dito em voz alta. A segunda camada é o
   // diff: o baseline é versionado e alguém ainda precisa commitar este arquivo.
-  if (!registro.achados.length && achadosAntes) {
-    console.log(`\n⚠ ATENÇÃO: o baseline tinha ${achadosAntes} achado(s) e agora tem ZERO.`);
+  if (!gravados.length && achadosAntes) {
+    console.log(`\n⚠ ATENÇÃO: o slot '${ALVO}' tinha ${achadosAntes} achado(s) e agora tem ZERO.`);
     console.log('  Se a dívida foi mesmo corrigida no banco, ótimo — é o desfecho esperado.');
     console.log('  Se a fonte cegou (permissão/RLS/schema/migração pela metade), você acabou de');
     console.log('  apagar dívida real, e o gate passará a sair verde sobre um banco sujo.');
@@ -251,13 +280,42 @@ if (atualizar) {
   process.exit(0);
 }
 
+// A MEDIÇÃO É POR AMBIENTE (issue #99). Até aqui o arquivo tinha uma lista `achados` só, mas ela
+// registra dívida DE UM BANCO e este gate roda contra dois: a dívida medida em produção era
+// comparada contra teste a cada PR. As três mensagens abaixo são distintas de propósito — mandam
+// para lugares diferentes (reformar o arquivo / corrigir o DIVAT_ALVO / medir aquele banco), e
+// uma mensagem só faria o operador rodar --atualizar-baseline no alvo errado, sobrescrevendo a
+// medição boa do outro ambiente com a deste.
 let base = new Map();
 if (!semBaseline) {
+  let b = null;
   try {
-    const b = JSON.parse(await readFile(BASELINE, 'utf8'));
-    base = new Map((b.achados || []).map(a => [chave(a), Number(a.qtd)]));
+    b = JSON.parse(await readFile(BASELINE, 'utf8'));
   } catch (e) {
     if (e.code !== 'ENOENT') { console.error(`Baseline ilegível (${BASELINE}): ${e.message}`); process.exit(1); }
+  }
+  if (b) {
+    if (!b.ambientes || typeof b.ambientes !== 'object' || Array.isArray(b.ambientes)) {
+      console.error('✗ Baseline no formato ANTIGO: a dívida está no topo, sem o bloco `ambientes`.');
+      console.error('  Desde a issue #99 ela mora em `ambientes.<alvo>.achados`, porque este gate roda');
+      console.error('  contra DOIS bancos e dívida de dado é propriedade daquele banco.');
+      console.error('  Migre a forma do scripts/data_quality_baseline.json antes de comparar.');
+      process.exit(1);
+    }
+    const slot = b.ambientes[ALVO];
+    if (!slot || typeof slot !== 'object') {
+      console.error(`✗ Baseline sem o slot do ambiente '${ALVO}' (tem: ${Object.keys(b.ambientes).join(', ') || 'nenhum'}).`);
+      console.error('  Slot ausente NÃO é "primeiro run": criá-lo em silêncio é como um gate passa a');
+      console.error('  comparar contra nada. Acrescente o slot ao scripts/data_quality_baseline.json.');
+      process.exit(1);
+    }
+    if (!Array.isArray(slot.achados)) {
+      console.error(`✗ O ambiente '${ALVO}' ainda não foi medido (\`achados\` não é uma lista).`);
+      console.error(`  Rode com DIVAT_ALVO=${ALVO} --atualizar-baseline. Comparar contra a dívida do`);
+      console.error('  OUTRO banco é o defeito que a issue #99 fechou — o gate prefere ficar vermelho.');
+      process.exit(1);
+    }
+    base = new Map(slot.achados.map(a => [chave(a), Number(a.qtd)]));
   }
 }
 

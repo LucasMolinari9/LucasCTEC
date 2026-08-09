@@ -284,9 +284,11 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    linhas com `cod_origem` inexistente, medidas em 27/07/2026. **As views dessas linhas renderizam
    VAZIAS, sem erro.** A dívida está registrada em `scripts/data_quality_baseline.json` — o gate
    passa com ela e falha no instante em que aparece achado **novo** ou um conhecido **piora**.
-   **O que quebra se esquecer:** ao consertar dado, rode `--atualizar-baseline`, senão o gate
-   segue frouxo; e **confira a lista `orfaos_conhecidos`, não só o número** — o gate compara
-   contagem, então uma órfã corrigida e outra criada passam despercebidas.
+   **O que quebra se esquecer:** ao consertar dado, rode `--atualizar-baseline` **com o
+   `DIVAT_ALVO` daquele banco** (a dívida medida mora em `ambientes.<alvo>.achados` desde a
+   issue #99; slot não medido derruba o gate de propósito, em vez de comparar com o outro banco),
+   senão o gate segue frouxo; e **confira a lista `orfaos_conhecidos`, não só o número** — o gate
+   compara contagem, então uma órfã corrigida e outra criada passam despercebidas.
    **NÃO apagar os filhos órfãos de `evento_teste`:** são atos reais de 1974–1996, arquivo
    institucional insubstituível, e por isso rebaixados a aviso.
    Detalhe completo (quais tabelas, por que o rebaixamento, a unidade de `qtd`, e a terceira
