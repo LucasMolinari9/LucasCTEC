@@ -210,6 +210,45 @@ O slot de `producao` fica `null` de propósito até a janela de promoção descr
 
 ---
 
+## O que a execução acrescentou ao plano
+
+Três coisas que o plano não previa e que a implementação cobrou. Ficam registradas porque quem
+reler o diff vai encontrá-las e merece saber que foram deliberadas.
+
+1. **O `--atualizar-baseline` do caminho ANTIGO também precisava do resgate.** O plano cuidou do
+   ramo do digest; o ramo do `divat_security_shape` — que é onde **produção** ainda está —
+   reescreve o arquivo do zero, então apagaria os **dois** slots em silêncio. Ganhou o mesmo
+   resgate explícito que o `orfaos_conhecidos` já tinha no `check_data_quality.mjs`, com caso
+   próprio na bancada. É a mesma armadilha do Step 4, no ramo que o plano não olhou.
+2. **`achados: null` ≠ `achados: []` no baseline de qualidade.** `null` é *ainda não medido aqui* e
+   derruba o gate nomeando o ambiente; `[]` é *medido e limpo* e passa. Sem a distinção, o slot de
+   `teste` — que nasce vazio — faria o gate sair verde sobre um banco que ninguém mediu.
+3. **A `nota` de cada JSON virou constante única no script que a regrava,** conferida pelo
+   `check.js`. Ela é a única explicação da forma para quem abre o arquivo sem abrir o script, e o
+   `--atualizar-baseline` a reescreve: duas cópias divergem no primeiro uso, e passa a existir uma
+   nota que descreve a forma anterior. Era a armadilha registrada no fim deste plano, resolvida
+   por guarda em vez de por disciplina.
+4. **A guarda offline cobra os nomes de ambiente contra `scripts/ambientes.json`,** não contra a
+   dupla literal `teste`/`producao`. Escritos à mão, eles seriam uma **terceira** lista ao lado do
+   `ambientes.json` e dos próprios baselines — e ambiente novo ali nasceria sem slot com os gates
+   verdes, aparecendo só quando alguém rodasse contra ele. Cobrado nos dois sentidos: slot
+   faltando e slot que o `ambientes.json` não conhece.
+
+**Sobre a duplicação entre os dois scripts.** A resolução do slot ficou *inline* em cada um, não
+extraída para `lib/`. São poucas linhas, os dois gates são deliberadamente autônomos (cada um roda
+sozinho, com runbook no próprio cabeçalho) e a mensagem de erro de cada um fala do seu arquivo.
+Extrair trocaria duplicação boba por acoplamento entre dois gates que precisam poder falhar
+independentes. O que **não** pode duplicar — e por isso ganhou guarda — é a `nota`: aquela tem duas
+cópias obrigatórias (JSON e script), e é o `check.js` que as mantém iguais.
+
+> **Nota de procedência.** As Tasks 1–4 foram implementadas duas vezes, em paralelo, por duas
+> sessões que não se viam — os commits `f423c78` e `6bb7123` de um lado, e uma implementação
+> equivalente do outro. As duas convergiram na mesma forma de JSON, no mesmo resgate do caminho
+> antigo e na mesma distinção `null` × `[]`, o que é alguma evidência de que o plano estava
+> escrito com precisão suficiente. Ficou a primeira leva; da segunda foram aproveitados o item 4
+> acima e este registro. Duas sessões na mesma branch é desperdício — vale conferir `git fetch`
+> antes de começar.
+
 ## Armadilhas registradas
 
 - **`scripts/check_grants.mjs` é tratado como binário pelo git** em merge — não gera marcadores de

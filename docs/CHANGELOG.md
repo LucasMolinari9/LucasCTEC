@@ -4,6 +4,59 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 09/08/2026 — Os baselines se partem na costura entre política e medição (issue #99)
+
+`scripts/security_baseline.json` tinha **um** conjunto de campos medidos — `digest` e as três
+contagens — mas o `check_grants.mjs` roda contra **dois bancos**, decididos por `DIVAT_ALVO`
+(`teste` em PR/push, `producao` no cron). Não doía porque produção não tem as migrações da Fase 3
+e cai no caminho antigo, que nem lê o digest. Doeria **no dia da promoção**: a partir dali os dois
+bancos produzem digest e disputam o mesmo campo — ou o cron de produção acusa mudança estrutural
+que não houve, ou todo PR fica vermelho pelo motivo invertido. E digests **não convergem
+sozinhos**: qualquer diferença de postura muda o hash.
+
+A saída oferecida pela própria issue — *comparar digest só em produção* — não servia, e o motivo é
+o que decidiu a forma: **o digest não é o único campo por banco**. As três contagens também são, e
+`anon_rpcs` já diverge hoje **por desenho** (a migração 2 tira duas RPCs de `public` e acrescenta
+uma; produção não tem nenhuma das duas migrações). Contagem diferente não cabe num campo só.
+
+Os dois baselines misturavam **duas naturezas**, e é nessa costura que foram partidos:
+`achados` / `orfaos_conhecidos` são **política** — exceção aceita, dívida classificada, mantidas à
+mão, verdadeiras em qualquer banco — e ficam no topo; digest, contagens e dívida medida são
+**medição**, escrita pela máquina, e passam a viver em `ambientes.<alvo>`, na mesma forma de
+`scripts/ambientes.json`. **Dois arquivos por ambiente resolveriam a medição e duplicariam a
+política** — e lista mantida à mão e duplicada é lista que diverge, que é a classe de bug que o
+plano de 08/08 passou inteiro combatendo.
+
+O `data_quality_baseline.json` levou a mesma forma, e ali o defeito já estava consumado sem
+sintoma: a dívida registrada foi medida em **produção** e era comparada contra **teste** em PR. Um
+detalhe novo mora nele — `achados: null` significa **nunca medido** e derruba o gate; `[]`
+significa medido e limpo. Colapsar os dois faria banco que ninguém mediu passar como banco limpo.
+
+Nenhum dos seis indicadores graves entrou em baseline algum, em ambiente nenhum: eles ficam no
+código de propósito, porque *um gate cujo conserto habitual é `--atualizar-baseline` ensina o
+reflexo de apagar o alarme*. Esta mudança é só sobre onde a **medição** mora.
+
+Casos `[ambiente]` novos nas duas bancadas offline, todos provados por mutação antes de serem
+aceitos: ler o campo de topo, escrever perdendo o slot do outro banco, esquecer o resgate no ramo
+`--atualizar-baseline` do caminho antigo (que reescreve o arquivo do zero e apagaria a medição dos
+dois) e colapsar `null` em lista vazia — cada um derruba os casos que existem para pegá-lo. As duas
+bancadas seguem offline de verdade: `psql` falso em diretório temporário e fixtures numa porta que
+o `fetch` recusa antes de abrir socket.
+
+A guarda offline do `check.js` §[2b] cobra a forma nos dois arquivos e mais duas coisas que só se
+veem de fora: que a `nota` do JSON bate com a constante `NOTA` do script que a regrava — duas
+cópias divergentes viram uma nota descrevendo a forma que o arquivo não tem mais — e que os nomes
+de ambiente saem do próprio `scripts/ambientes.json`, não de uma dupla literal. Sem isso os nomes
+seriam uma **terceira** lista mantida à mão, e ambiente novo no `ambientes.json` nasceria sem slot
+com os gates verdes, aparecendo só no cron do dia seguinte. A conferência é nos dois sentidos:
+slot faltando reprova, e slot que o `ambientes.json` não conhece também — esse é medição fóssil,
+que nenhum gate escreve nem lê e tem cara de dado vivo.
+
+**Isto não deixa o gate `seguranca` verde, e é o esperado:** os slots nascem `null` e a reclamação
+passa a ser *"Baseline sem `digest` para o ambiente 'teste'"* — a mesma de antes, agora no slot
+certo. O verde vem do `--atualizar-baseline` de cada banco, que precisa de rede e é passo do dono.
+Detalhe e decisões: `docs/planos/2026-08-09-baseline-por-ambiente.md`.
+
 ## 08–09/08/2026 — A auditoria completa vira 22 correções, e o gate passa a ver o que não via
 
 Uma auditoria de código, arquitetura, engenharia e documentação
