@@ -79,13 +79,21 @@ jobs:
         if: inputs.baseline == 'qualidade'
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
+      # TODA entrada passa por `env:` e é lida como "$VAR" no shell — nunca `${{ }}` dentro do
+      # `run:`. A interpolação acontece ANTES do shell existir: o valor vira texto no meio do
+      # script, e um valor com `;` ou `$(...)` viraria comando. Aqui os inputs são `choice`, então
+      # o conjunto é fechado e o risco é teórico — mas a regra vale pelo hábito, não pelo caso:
+      # o dia em que alguém trocar `choice` por `string` não vem com um aviso. É a
+      # `yaml.github-actions.security.run-shell-injection` do ruleset completo (116 regras, que só
+      # roda no CI — o ./scripts/semgrep.sh local tem 5 e não pega isto).
       - name: Medir e escrever o slot
         env:
           DIVAT_ALVO: ${{ inputs.alvo }}
+          BASELINE: ${{ inputs.baseline }}
           SUPABASE_PROD_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_PROD_AUDIT_DATABASE_URL }}
           SUPABASE_TEST_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_TEST_AUDIT_DATABASE_URL }}
         run: |
-          if [ "${{ inputs.baseline }}" = "seguranca" ]; then
+          if [ "$BASELINE" = "seguranca" ]; then
             node scripts/check_grants.mjs --atualizar-baseline
           else
             node scripts/check_data_quality.mjs --atualizar-baseline
@@ -95,6 +103,8 @@ jobs:
       # Dizer isso em voz alta evita o operador procurar um PR que nunca vai existir.
       - name: Houve mudança?
         id: diff
+        env:
+          ALVO: ${{ inputs.alvo }}
         run: |
           if git diff --quiet -- scripts/; then
             echo "mudou=nao" >> "$GITHUB_OUTPUT"
@@ -102,7 +112,7 @@ jobs:
           else
             echo "mudou=sim" >> "$GITHUB_OUTPUT"
             {
-              echo "### Diff medido em \`${{ inputs.alvo }}\`"
+              echo "### Diff medido em \`$ALVO\`"
               echo '```diff'
               git diff -- scripts/
               echo '```'
@@ -116,31 +126,31 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BASE: ${{ github.ref_name }}
-          RAMO: baseline/${{ inputs.baseline }}-${{ inputs.alvo }}-${{ github.run_id }}
+          BASELINE: ${{ inputs.baseline }}
+          ALVO: ${{ inputs.alvo }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          RAMO="baseline/$BASELINE-$ALVO-$RUN_ID"
           git config user.name  'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git checkout -b "$RAMO"
           git add scripts/
-          git commit -m "chore(baseline): mede ${{ inputs.baseline }} em ${{ inputs.alvo }}
-
-          Medição feita pelo workflow 'Atualizar baseline' (run ${{ github.run_id }}),
-          disparada à mão. Só o slot de '${{ inputs.alvo }}' foi escrito; a política do
-          topo e o slot do outro banco seguem intactos — confira no diff."
+          git commit -m "chore(baseline): mede $BASELINE em $ALVO" -m "Medição feita pelo workflow 'Atualizar baseline' (run $RUN_ID), disparada à mão. Só o slot de '$ALVO' foi escrito; a política do topo e o slot do outro banco seguem intactos — confira no diff."
           git push -u origin "$RAMO"
           AVISO=''
-          if [ "${{ inputs.baseline }}" = "seguranca" ] && [ "${{ inputs.alvo }}" = "producao" ]; then
+          if [ "$BASELINE" = "seguranca" ] && [ "$ALVO" = "producao" ]; then
             AVISO=$'\n> **Atenção:** produção ainda não tem as migrações da Fase 3, então isto rodou pelo caminho antigo (`divat_security_shape`), que mede `achados` — a **política** — e não preenche slot de medição. Confira se é isso mesmo que você queria.\n'
           fi
           gh pr create \
             --base "$BASE" \
             --head "$RAMO" \
-            --title "chore(baseline): ${{ inputs.baseline }} medido em ${{ inputs.alvo }}" \
-            --body "Medição disparada à mão pelo workflow \`Atualizar baseline\` ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})).
+            --title "chore(baseline): $BASELINE medido em $ALVO" \
+            --body "Medição disparada à mão pelo workflow \`Atualizar baseline\` ([run]($RUN_URL)).
           $AVISO
           **O que conferir antes do merge**
 
-          - o diff toca **só** o slot de \`${{ inputs.alvo }}\`; a política do topo (\`achados\` / \`orfaos_conhecidos\`) e o slot do outro banco não podem ter mudado;
+          - o diff toca **só** o slot de \`$ALVO\`; a política do topo (\`achados\` / \`orfaos_conhecidos\`) e o slot do outro banco não podem ter mudado;
           - contagem que **subiu** é privilégio novo — investigue antes de aceitar, não é rotina;
           - \`digest\` diferente é mudança estrutural (tabela, policy, função). Se você não fez nenhuma, não dê merge: descubra o que mudou.
 
