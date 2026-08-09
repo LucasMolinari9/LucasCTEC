@@ -252,6 +252,9 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    (`check_deriva`, `check_realtime`, `check_grants`, `check_data_quality`) lê chave do `app.js`.
    O alvo vem de **`DIVAT_ALVO`** — `teste` em PR/push, `producao` no cron — resolvido contra
    `scripts/ambientes.json`, e **sem a variável eles falham fechado**, de propósito (issue #74).
+   **Nos baselines (issue #99) isso se reflete na forma:** a **política** (`achados`,
+   `orfaos_conhecidos` — mantida à mão) fica no topo, uma vez só; a **medição** (digest, contagens)
+   mora em `ambientes.<alvo>`, porque é propriedade de um banco e o mesmo gate roda contra dois.
    **O que quebra se esquecer:** nada imediato — por isso o workflow `deriva.yml` roda **semanal**
    além de push/PR: deriva também nasce de mudança NO BANCO, que não gera push. Do ambiente do
    Claude não roda; é para a máquina do dono e o CI. Fica **fora** do `check.js` (contrato dele:

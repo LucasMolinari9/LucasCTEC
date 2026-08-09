@@ -1,10 +1,6 @@
 {
   "gerado_em": "2026-07-27",
-  "nota": "Exceções de segurança CONHECIDAS e aceitas. Cada entrada precisa de justificativa em docs/seguranca.md §9. Isto não é perdão: se um achado NOVO aparecer, revogue — não baseline.",
-  "digest": null,
-  "anon_rpcs": null,
-  "defaults_permissivos": null,
-  "funcoes_sem_search_path": null,
+  "nota": "Exceções de segurança CONHECIDAS e aceitas. Cada entrada de `achados` precisa de justificativa em docs/seguranca.md §9. Isto não é perdão: se um achado NOVO aparecer, revogue — não baseline. FORMA (issue #99): `achados` é POLÍTICA e vale para os dois bancos, mantida à mão, uma vez só; `ambientes.<alvo>` é MEDIÇÃO, escrita pela máquina no --atualizar-baseline e SEPARADA por banco, porque teste e produção têm posturas diferentes e um digest só não cabe nos dois.",
   "achados": [
     {
       "tipo": "default_privilege_permissivo",
@@ -21,5 +17,21 @@
       "alvo": "supabase_admin:public:r",
       "detalhe": "objeto novo (r) criado por supabase_admin em public já nasce com anon=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE authenticated=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
     }
-  ]
+  ],
+  "ambientes": {
+    "teste": {
+      "digest": null,
+      "anon_rpcs": null,
+      "defaults_permissivos": null,
+      "funcoes_sem_search_path": null,
+      "gerado_em": null
+    },
+    "producao": {
+      "digest": null,
+      "anon_rpcs": null,
+      "defaults_permissivos": null,
+      "funcoes_sem_search_path": null,
+      "gerado_em": null
+    }
+  }
 }

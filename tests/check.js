@@ -568,7 +568,40 @@ console.log('\n[2b] Deriva docs × código');
       if (!Array.isArray(b.achados)) throw new Error('campo "achados" não é um array');
       const ruim = b.achados.filter(a => !a.tipo || !a.alvo || !a.detalhe);
       if (ruim.length) throw new Error(`${ruim.length} entrada(s) sem tipo/alvo/detalhe`);
-      okline(`baseline de segurança válido (${b.achados.length} exceção(ões) aceita(s))`);
+      // FORMA POR AMBIENTE (issue #99). A medição — `digest` e as três contagens — é propriedade
+      // de UM banco, e o check_grants.mjs roda contra dois (DIVAT_ALVO). Sem os dois slots ele
+      // aborta na rede, longe daqui: o cron diário de produção descobriria a falta um dia depois,
+      // e por uma mensagem que fala de banco quando o defeito está num JSON versionado.
+      const MEDIDOS = ['digest', 'anon_rpcs', 'defaults_permissivos', 'funcoes_sem_search_path'];
+      if (!b.ambientes || typeof b.ambientes !== 'object' || Array.isArray(b.ambientes)) {
+        throw new Error('sem o bloco "ambientes" — a medição por ambiente é a forma desde a issue #99');
+      }
+      for (const alvo of ['teste', 'producao']){
+        const slot = b.ambientes[alvo];
+        if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
+          throw new Error(`"ambientes" sem o slot do ambiente '${alvo}'`);
+        }
+        // Chave AUSENTE é o defeito; valor `null` é legítimo — é como o slot ainda não medido
+        // espera pelo --atualizar-baseline daquele banco.
+        const faltando = MEDIDOS.filter(c => !(c in slot));
+        if (faltando.length) throw new Error(`ambientes.${alvo} sem o(s) campo(s): ${faltando.join(', ')}`);
+      }
+      // Medição sobrando no TOPO é a forma antiga viva ao lado da nova: o script leria o slot, o
+      // humano leria o topo, e os dois discordariam em silêncio. Nenhum gate enxerga isso.
+      const sobrando = MEDIDOS.filter(c => c in b);
+      if (sobrando.length) {
+        throw new Error(`medição no TOPO (${sobrando.join(', ')}) — é a forma anterior à issue #99; ela mora em "ambientes.<alvo>"`);
+      }
+      // A `nota` é a única explicação da forma para quem abre o JSON sem abrir o script — e o
+      // ramo --atualizar-baseline do caminho antigo a REGRAVA a partir da constante NOTA. Duas
+      // cópias divergentes viram uma nota que descreve a forma que não é mais a do arquivo.
+      const fonte = ler('scripts/check_grants.mjs');
+      const m = fonte.match(/^const NOTA = '((?:[^'\\]|\\.)*)';$/m);
+      if (!m) throw new Error('não achei a constante NOTA em scripts/check_grants.mjs');
+      if (m[1].replace(/\\'/g, "'") !== b.nota) {
+        throw new Error('a "nota" do JSON não bate com a constante NOTA do check_grants.mjs (o --atualizar-baseline sobrescreveria uma pela outra)');
+      }
+      okline(`baseline de segurança válido (${b.achados.length} exceção(ões) aceita(s), medição em ${Object.keys(b.ambientes).length} ambiente(s))`);
     } catch (e){
       fail(`scripts/security_baseline.json inválido: ${e.message}`);
     }

@@ -171,8 +171,14 @@ const digestSao = () => ({
   anon_rpcs: 5,
 });
 
-const baselineDigest = { ...baseline, digest: 'a'.repeat(64), anon_rpcs: 5,
-                         defaults_permissivos: 3, funcoes_sem_search_path: 0 };
+// Baseline na forma da issue #99: `achados` (política) no topo, medição por ambiente. Os dois
+// slots são preenchidos e DIFERENTES de propósito — um baseline em que teste e produção têm o
+// mesmo valor não distingue "leu o slot certo" de "leu qualquer slot".
+const medicaoTeste = { digest: 'a'.repeat(64), anon_rpcs: 5, defaults_permissivos: 3,
+                       funcoes_sem_search_path: 0, gerado_em: '2026-08-09' };
+const medicaoProducao = { digest: 'f'.repeat(64), anon_rpcs: 5, defaults_permissivos: 3,
+                          funcoes_sem_search_path: 0, gerado_em: '2026-08-09' };
+const baselineDigest = { ...baseline, ambientes: { teste: medicaoTeste, producao: medicaoProducao } };
 
 async function casoDigest(nome, mutarDigest, esperado, args = [], hoje = '2026-08-04') {
   await writeFile(`${RAIZ}/scripts/security_baseline.json`, JSON.stringify(baselineDigest, null, 2));
@@ -231,7 +237,8 @@ digestAtual = { ...digestSao(), digest: 'c'.repeat(64) };
 await writeFile(`${RAIZ}/scripts/security_baseline.json`, JSON.stringify(baselineDigest, null, 2));
 await rodar(['--atualizar-baseline']);
 const depois = JSON.parse(await readFile(`${RAIZ}/scripts/security_baseline.json`, 'utf8'));
-const okPreserva = depois.digest === 'c'.repeat(64) && depois.achados.length === baseline.achados.length;
+const okPreserva = depois.ambientes.teste.digest === 'c'.repeat(64)
+  && depois.achados.length === baseline.achados.length;
 if (!okPreserva) falhas++;
 console.log(`${okPreserva ? '  ✓' : '  ✗'} [digest] --atualizar-baseline atualiza o digest e PRESERVA os achados`);
 
@@ -247,6 +254,105 @@ const cicloFechado = await rodar();
 const okCicloFechado = cicloFechado.code === 0;
 if (!okCicloFechado) { falhas++; console.log(cicloFechado.out.split('\n').map(l => '      ' + l).join('\n')); }
 console.log(`${okCicloFechado ? '  ✓' : '  ✗'} [digest] --atualizar-baseline → execução normal fecha o ciclo → saiu ${cicloFechado.code}, esperado 0`);
+
+// ---------------------------------------------------------------------------------------------
+// AMBIENTE (issue #99). A medição — digest e as três contagens — é propriedade DE UM BANCO, e
+// este script roda contra dois. Antes da #99 havia um campo só no topo: no dia em que produção
+// receber as migrações da Fase 3, os dois passariam a produzir digest e a disputá-lo.
+//
+// Os casos abaixo só provam alguma coisa porque `medicaoTeste` e `medicaoProducao` DIFEREM.
+// ---------------------------------------------------------------------------------------------
+const escreverBaseline = obj => writeFile(`${RAIZ}/scripts/security_baseline.json`, JSON.stringify(obj, null, 2));
+async function casoAmbiente(nome, { baseline: b, digest: d, alvo = 'teste', esperado, contem }) {
+  await escreverBaseline(b);
+  digestAtual = d;
+  const { code, out } = await rodar([], '2026-08-04', alvo);
+  const ok = code === esperado && (!contem || contem.every(re => re.test(out)));
+  if (!ok) { falhas++; console.log(out.split('\n').map(l => '      ' + l).join('\n')); }
+  console.log(`${ok ? '  ✓' : '  ✗'} [ambiente] ${nome} → saiu ${code}, esperado ${esperado}`);
+}
+
+// O caso que prova que o bug da #99 morreu: o banco devolve exatamente o digest gravado no slot
+// de PRODUÇÃO, e o alvo é `teste`. Tem que dar vermelho. Se o script lesse um campo comum — ou
+// caísse no primeiro slot que encontrasse —, isto passaria, e um PR seria carimbado com a
+// postura do banco errado.
+await casoAmbiente('digest de produção NÃO satisfaz o alvo teste', {
+  baseline: baselineDigest,
+  digest: { ...digestSao(), digest: 'f'.repeat(64) },
+  esperado: 1,
+  contem: [/superfície de segurança MUDOU/i, /'teste'/],
+});
+// O outro lado da mesma moeda: com o digest do slot de teste, passa — mesmo com o slot de
+// produção ali do lado, divergente.
+await casoAmbiente('digest de teste satisfaz o alvo teste, com produção divergente ao lado', {
+  baseline: baselineDigest,
+  digest: digestSao(),
+  esperado: 0,
+  contem: [/\[teste\]/],
+});
+// Slot ausente é ERRO, nunca "primeiro run". Criá-lo em silêncio é como um gate passa a comparar
+// contra nada — e a mensagem tem que NOMEAR o ambiente, senão o operador roda
+// --atualizar-baseline no alvo errado e sobrescreve a medição boa do outro.
+await casoAmbiente('slot do alvo ausente sai 1 nomeando o ambiente', {
+  baseline: { ...baseline, ambientes: { producao: medicaoProducao } },
+  digest: digestSao(),
+  esperado: 1,
+  contem: [/slot do ambiente 'teste'/],
+});
+// Formato ANTIGO (medição no topo, sem `ambientes`): tem que pedir a migração da forma, não
+// comparar contra `undefined` e passar.
+await casoAmbiente('formato antigo sai 1 pedindo a migração da forma', {
+  baseline: { ...baseline, digest: 'a'.repeat(64), anon_rpcs: 5,
+              defaults_permissivos: 3, funcoes_sem_search_path: 0 },
+  digest: digestSao(),
+  esperado: 1,
+  contem: [/formato ANTIGO/, /ambientes/],
+});
+
+// --atualizar-baseline no alvo `teste` não pode encostar no slot de produção nem no `achados`.
+// Sem isso a correção da #99 seria só meia: os dois ambientes deixariam de disputar na LEITURA e
+// continuariam se sobrescrevendo na ESCRITA.
+await escreverBaseline(baselineDigest);
+digestAtual = { ...digestSao(), digest: 'd'.repeat(64), anon_rpcs: 7 };
+await rodar(['--atualizar-baseline'], '2026-08-04', 'teste');
+const isolado = JSON.parse(await readFile(`${RAIZ}/scripts/security_baseline.json`, 'utf8'));
+const okIsolado = isolado.ambientes.teste.digest === 'd'.repeat(64)
+  && isolado.ambientes.teste.anon_rpcs === 7
+  && JSON.stringify(isolado.ambientes.producao) === JSON.stringify(medicaoProducao)
+  && JSON.stringify(isolado.achados) === JSON.stringify(baseline.achados);
+if (!okIsolado) { falhas++; console.log('      ' + JSON.stringify(isolado, null, 2).split('\n').join('\n      ')); }
+console.log(`${okIsolado ? '  ✓' : '  ✗'} [ambiente] --atualizar-baseline em teste preserva producao e achados`);
+
+// Rodar --atualizar-baseline sobre o formato ANTIGO tem que produzir a forma nova E retirar a
+// medição do topo. Deixar as duas cópias vivas é a deriva que nenhum gate enxerga: o script leria
+// o slot, o humano leria o topo, e os dois discordariam em silêncio.
+await escreverBaseline({ ...baseline, digest: 'a'.repeat(64), anon_rpcs: 5,
+                         defaults_permissivos: 3, funcoes_sem_search_path: 0 });
+digestAtual = { ...digestSao(), digest: 'e'.repeat(64) };
+await rodar(['--atualizar-baseline'], '2026-08-04', 'teste');
+const migrado = JSON.parse(await readFile(`${RAIZ}/scripts/security_baseline.json`, 'utf8'));
+const normalDepois = await rodar([], '2026-08-04', 'teste');
+const okMigrado = migrado.ambientes?.teste?.digest === 'e'.repeat(64)
+  && !('digest' in migrado) && !('anon_rpcs' in migrado)
+  && !('defaults_permissivos' in migrado) && !('funcoes_sem_search_path' in migrado)
+  && normalDepois.code === 0;
+if (!okMigrado) { falhas++; console.log('      ' + JSON.stringify(migrado, null, 2).split('\n').join('\n      ')); }
+console.log(`${okMigrado ? '  ✓' : '  ✗'} [ambiente] --atualizar-baseline migra a forma antiga e não deixa medição no topo`);
+
+// O ramo --atualizar-baseline do caminho ANTIGO (divat_security_shape) regenera o arquivo
+// inteiro. Ele só tem assunto com `achados`, mas escrevia o registro do zero: rodá-lo contra um
+// banco pré-Fase 3 (produção, hoje) apagaria os slots de medição já registrados. Dano cruzado
+// pela porta dos fundos, exatamente o que a #99 fecha. (O alvo aqui é `teste` só porque é o
+// único endereço que o stub atende; o que se mede é o ramo, não o alvo.)
+digestAtual = null;
+respostaAtual = sao();
+await escreverBaseline(baselineDigest);
+await rodar(['--atualizar-baseline'], '2026-08-04', 'teste');
+const posFallback = JSON.parse(await readFile(`${RAIZ}/scripts/security_baseline.json`, 'utf8'));
+const okPosFallback = JSON.stringify(posFallback.ambientes?.teste) === JSON.stringify(medicaoTeste)
+  && JSON.stringify(posFallback.ambientes?.producao) === JSON.stringify(medicaoProducao);
+if (!okPosFallback) { falhas++; console.log('      ' + JSON.stringify(posFallback, null, 2).split('\n').join('\n      ')); }
+console.log(`${okPosFallback ? '  ✓' : '  ✗'} [ambiente] --atualizar-baseline do caminho antigo PRESERVA a medição por ambiente`);
 
 // O fallback tem validade: passada a data, usa-lo e vermelho.
 digestAtual = null;
