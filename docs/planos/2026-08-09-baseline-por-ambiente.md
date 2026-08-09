@@ -1,7 +1,17 @@
 # Baseline por ambiente — plano de implementação (issue #99)
 
-> **Plano vivo.** Trabalho combinado que ainda não começou. Quando fechar, este arquivo migra para
-> `docs/historico/`. Escrito em 09/08/2026, ao fim da sessão que destravou o PR #98.
+> **Plano vivo — as cinco tarefas estão feitas** (commits `f423c78` e `6bb7123`, na branch do
+> PR #98). O que resta são os **dois passos do dono**, listados no fim: eles precisam de rede e de
+> secrets, e é o primeiro deles que acende o `seguranca`. Quando isso fechar, este arquivo migra
+> para `docs/historico/`. Escrito em 09/08/2026, ao fim da sessão que destravou o PR #98.
+
+> **Correção de rumo na Task 4.** O texto dela pedia "`orfaos_conhecidos` (política) e `achados`
+> no topo; as **contagens** por ambiente" — mas no `data_quality_baseline.json` quem carrega as
+> contagens É o `achados` (cada entrada tem `qtd`, e o `--atualizar-baseline` o reescreve). Não
+> havia terceiro campo para mover. Confirmado com o dono: **`achados` desce para
+> `ambientes.<alvo>`**, e `orfaos_conhecidos` + `como_listar_os_orfaos` + `nota` ficam no topo. A
+> anatomia é a mesma do arquivo de segurança, com os papéis trocados — lá o `achados` é política,
+> aqui é medição.
 
 **Para quem executa:** os passos usam checkbox (`- [ ]`). Cada tarefa termina num commit e num
 entregável testável sozinho.
@@ -103,27 +113,27 @@ Três razões a mais:
 
 **Files:** `scripts/check_grants.mjs`, `scripts/security_baseline.json`
 
-- [ ] **Step 1: Reformar o JSON.** Mover `digest`, `anon_rpcs`, `defaults_permissivos`,
+- [x] **Step 1: Reformar o JSON.** Mover `digest`, `anon_rpcs`, `defaults_permissivos`,
   `funcoes_sem_search_path` para `ambientes.teste` e `ambientes.producao`, com `null` nos dois.
   `achados`, `nota` e `gerado_em` de topo ficam onde estão.
 
-- [ ] **Step 2: Ler do slot.** No caminho `if (digest)`, trocar `b.digest` e `b[campo]` por
+- [x] **Step 2: Ler do slot.** No caminho `if (digest)`, trocar `b.digest` e `b[campo]` por
   `b.ambientes?.[alvo]?.digest` e `…?.[campo]`. O nome do alvo já está em memória — é o mesmo que
   o script imprime em `· Alvo: …` (vem de `scripts/lib/ambiente.mjs`).
 
-- [ ] **Step 3: Mensagem de erro que ensina.** Slot ausente ou `digest` nulo deve dizer **de qual
+- [x] **Step 3: Mensagem de erro que ensina.** Slot ausente ou `digest` nulo deve dizer **de qual
   ambiente** se trata, senão o operador roda `--atualizar-baseline` no alvo errado:
 
 ```
 ✗ Baseline sem `digest` para o ambiente 'teste'. Rode com DIVAT_ALVO=teste --atualizar-baseline.
 ```
 
-- [ ] **Step 4: Escrever no slot.** No ramo `atualizar`, gravar em `b.ambientes[alvo]` preservando
+- [x] **Step 4: Escrever no slot.** No ramo `atualizar`, gravar em `b.ambientes[alvo]` preservando
   o outro ambiente **e** o `achados` de topo. O comentário atual já avisa que gravar só parte dos
   campos fecha um laço (a execução seguinte pede `--atualizar-baseline`, que já rodou) — a mesma
   armadilha existe agora por ambiente.
 
-- [ ] **Step 5: Falhar fechado em alvo desconhecido.** `b.ambientes` sem a chave do alvo é erro,
+- [x] **Step 5: Falhar fechado em alvo desconhecido.** `b.ambientes` sem a chave do alvo é erro,
   nunca "primeiro run" — criar o slot em silêncio é como um gate passa a comparar contra nada.
 
 ---
@@ -135,13 +145,13 @@ Três razões a mais:
 A bancada é **offline de verdade**: `psql` falso em diretório temporário e fixtures numa porta que
 o `fetch` recusa antes de abrir socket. Nenhum caso alcança o Supabase, nem em regressão.
 
-- [ ] **Step 1:** caso `[ambiente]` — baseline com os dois slots preenchidos e valores
+- [x] **Step 1:** caso `[ambiente]` — baseline com os dois slots preenchidos e valores
   **diferentes**; rodar com `DIVAT_ALVO=teste` deve comparar contra o slot do teste e **ignorar** o
   de produção. É o caso que prova que o bug da #99 morreu.
-- [ ] **Step 2:** caso — `--atualizar-baseline` com `DIVAT_ALVO=teste` **não pode** alterar o slot
+- [x] **Step 2:** caso — `--atualizar-baseline` com `DIVAT_ALVO=teste` **não pode** alterar o slot
   `producao` nem o `achados`.
-- [ ] **Step 3:** caso — slot do alvo ausente → sai 1 com mensagem que nomeia o ambiente.
-- [ ] **Step 4:** caso — formato **antigo** (campos no topo, sem `ambientes`) → sai 1 pedindo a
+- [x] **Step 3:** caso — slot do alvo ausente → sai 1 com mensagem que nomeia o ambiente.
+- [x] **Step 4:** caso — formato **antigo** (campos no topo, sem `ambientes`) → sai 1 pedindo a
   migração da forma, em vez de comparar contra `undefined` e passar.
 
 ---
@@ -150,8 +160,8 @@ o `fetch` recusa antes de abrir socket. Nenhum caso alcança o Supabase, nem em 
 
 **Files:** `tests/check.js` (seção `[2b]`, bloco "o baseline de segurança é legível offline")
 
-- [ ] **Step 1:** além de `achados`, exigir `ambientes` com as chaves `teste` e `producao`.
-- [ ] **Step 2: Provar que ela reprova** — reintroduzir o formato antigo de propósito e conferir
+- [x] **Step 1:** além de `achados`, exigir `ambientes` com as chaves `teste` e `producao`.
+- [x] **Step 2: Provar que ela reprova** — reintroduzir o formato antigo de propósito e conferir
   que o `check.js` fica vermelho; só então repor. **Guarda que nunca se viu falhar não é guarda.**
 
 ---
@@ -167,21 +177,21 @@ Mesma anatomia: `orfaos_conhecidos` (política, mantida à mão) e `achados` no 
 por ambiente. Hoje o arquivo registra dívida medida em **produção** e é comparado contra **teste**
 em PR — o mesmo defeito, ainda sem sintoma.
 
-- [ ] **Step 1:** reformar o JSON na mesma forma da Task 1.
-- [ ] **Step 2:** `check_data_quality.mjs` lê e escreve o slot do alvo.
-- [ ] **Step 3:** casos na bancada `tests/check_data_quality.test.js`.
-- [ ] **Step 4:** cobrar a forma na guarda offline do `check.js`.
+- [x] **Step 1:** reformar o JSON na mesma forma da Task 1.
+- [x] **Step 2:** `check_data_quality.mjs` lê e escreve o slot do alvo.
+- [x] **Step 3:** casos na bancada `tests/check_data_quality.test.js`.
+- [x] **Step 4:** cobrar a forma na guarda offline do `check.js`.
 
 ---
 
 ## Task 5: Documentar e fechar
 
-- [ ] **Step 1:** `CLAUDE.md` — a seção que descreve os baselines passa a dizer que a medição é por
+- [x] **Step 1:** `CLAUDE.md` — a seção que descreve os baselines passa a dizer que a medição é por
   ambiente e a política é única. Uma frase, não um parágrafo (o bloco de gates virou ponteiro na
   Task 17 do plano de 08/08; respeite isso).
-- [ ] **Step 2:** comentar na **issue #99** qual das duas opções foi escolhida **e por quê a outra
+- [x] **Step 2:** comentar na **issue #99** qual das duas opções foi escolhida **e por quê a outra
   não servia** (o `anon_rpcs` divergente). Fechar só depois do gate verde.
-- [ ] **Step 3:** commit e push na branch do #98. **Sem force.**
+- [x] **Step 3:** commit e push na branch do #98. **Sem force.**
 
 ---
 
