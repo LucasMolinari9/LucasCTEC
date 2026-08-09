@@ -3,6 +3,14 @@
 Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este arquivo descreve o
 **estado atual + regras**; a cronologia de como se chegou aqui está em **`docs/CHANGELOG.md`**.
 
+> **TRABALHO EM CURSO — leia antes de agir:**
+> **[`docs/historico/contexto-proxima-sessao-2026-08-09.md`](docs/historico/contexto-proxima-sessao-2026-08-09.md)**.
+> O PR **#98** está aberto com `seguranca` e `qualidade` vermelhos — **não são bug de código**, são
+> dois passos do dono que precisam de rede e de secrets, com runbook naquele arquivo. **O dono
+> opera pelo CELULAR:** "rode `node …` na sua máquina" não é instrução executável para ele — o
+> caminho é a aba Actions (workflow `atualizar-baseline`) ou o painel do Supabase no navegador.
+> Ao fechar esses passos, atualize este ponteiro ou remova-o.
+
 ## O que é
 Portal **público de consulta (somente leitura)** do DETRO/RJ · DIVAT. Os usuários buscam linhas
 de ônibus e abrem documentos (itinerários, quadro de horários, tarifas, frota, histórico/eventos,
