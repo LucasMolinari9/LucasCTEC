@@ -19,7 +19,13 @@
 // Uso (na SUA máquina / CI — daqui o ambiente do Claude não alcança o Supabase):
 //   node scripts/check_grants.mjs                     # respeita o baseline
 //   node scripts/check_grants.mjs --sem-baseline      # estado cru do banco
-//   node scripts/check_grants.mjs --atualizar-baseline  # SÓ LOCAL, nunca no CI
+//   node scripts/check_grants.mjs --atualizar-baseline  # nunca num gate; ver abaixo
+//
+// SOBRE O `--atualizar-baseline`: ele nunca roda dentro de um GATE — nem aqui, nem no db-checks.
+// Um gate que se conserta sozinho é um alarme que virou carimbo. O que ele exige é decisão humana
+// + diff revisável em PR, e há dois caminhos que satisfazem isso: rodar localmente e commitar, ou
+// disparar à mão o workflow `.github/workflows/atualizar-baseline.yml`, que mede e abre o PR (é o
+// caminho de quem opera pelo navegador, sem repo clonado).
 //
 // Requer apenas Node 18+ (fetch nativo). Nenhuma dependência. Sai 1 se houver achado de
 // severidade `erro` fora do baseline.

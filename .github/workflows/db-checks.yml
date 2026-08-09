@@ -146,8 +146,10 @@ jobs:
   # um clique sem que ninguem saiba.
   #
   # Job separado, nao step dos outros, pela mesma razao do cabecalho: um vermelho nao pode
-  # esconder o outro. NUNCA rodar --atualizar-baseline aqui: baseline se atualiza local, com diff
-  # revisavel em PR.
+  # esconder o outro. NUNCA rodar --atualizar-baseline AQUI: um gate que se conserta sozinho e um
+  # alarme que virou carimbo. O que o baseline exige e decisao humana + diff revisavel em PR — o
+  # que se faz localmente, ou disparando a mao o workflow atualizar-baseline.yml, que mede e abre
+  # o PR sem escrever em branch nenhuma.
   seguranca:
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -199,10 +199,12 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    armadilhas antes de escrever SQL/JS. Ajuste isolado de CSS/texto/UI pula direto pro passo 1.
 1. Edite `app.js` (JS) e/ou `index.html` (HTML/CSS). **Trabalhe numa branch**, não direto na
    `main`: push na branch → o Vercel gera **preview deploy** → confira no preview → merge na
-   `main` (que é a publicada). Existem **8 workflows**, separados por preocupação: `ci.yml`,
+   `main` (que é a publicada). Existem **9 workflows**, separados por preocupação: `ci.yml`,
    `views.yml`, `semgrep.yml`, `deriva.yml`, `db-checks.yml`, `phase3-security.yml`,
-   `deploy-smoke.yml` e `backup.yml`. Os cinco primeiros mais o contrato offline da Fase 3 podem
-   entrar num PR conforme os arquivos tocados; o smoke acompanha deploys; o backup é cron/manual.
+   `deploy-smoke.yml`, `backup.yml` e `atualizar-baseline.yml`. Os cinco primeiros mais o contrato
+   offline da Fase 3 podem entrar num PR conforme os arquivos tocados; o smoke acompanha deploys;
+   o backup é cron/manual; o `atualizar-baseline` é **só** `workflow_dispatch` — ele mede um banco
+   e abre um PR com o diff do baseline, que é como se preenche um slot de medição sem terminal.
    Um vermelho não esconde o outro.
    Se previews estiverem protegidos pela Vercel, configure um **Protection Bypass for
    Automation** e grave o mesmo valor no secret GitHub `VERCEL_AUTOMATION_BYPASS_SECRET`;
