@@ -1,9 +1,21 @@
-# Testes — lógica pura do `app.js` (sem navegador, sem rede)
+# Testes — offline: sem navegador e sem rede
 
-Testes unitários isolados (Node, **sem dependências**) da lógica do `app.js`.
-Não precisam de navegador nem de rede: o `fetch` é mockado, o `AbortController` é o
-nativo do Node, e as funções puras (formatação, busca, filtros) são copiadas
-**verbatim** dos respectivos blocos do `app.js`.
+Testes unitários isolados (Node, **sem dependências**). O contrato que vale para tudo nesta pasta é
+o do `check.js`: nada aqui abre navegador nem toca a rede — o `fetch` é mockado, o
+`AbortController` é o nativo do Node, e as bancadas que precisam de processo filho usam binário
+falso (`psql`) num diretório temporário e fixtures apontando para porta que o `fetch` recusa antes
+de abrir socket.
+
+O que mora aqui é de **duas naturezas**, e a diferença importa na hora de acrescentar caso novo:
+
+- **Lógica pura do `app.js`** — formatação, busca, filtros. As funções são copiadas **verbatim**
+  dos respectivos blocos do `app.js` para um `*.harness.js`, e a guarda anti-drift do `check.js`
+  reprova se a cópia divergir do original (ver a Regra de ouro, no fim).
+- **Contratos dos scripts de `scripts/`** — resolução de `DIVAT_ALVO` (`ambiente.test.js`), guarda
+  de conexão PostgreSQL (`auditor.test.js`), modo duplo do gate de qualidade
+  (`check_data_quality.test.js`), compromissos com data (`prazos.test.js`) e as bancadas
+  `*.rig.mjs`. Estes **não** têm harness nem cópia verbatim: exercitam o script de verdade, por
+  processo filho — então o lugar de testar um script de `scripts/` é aqui, não noutra pasta.
 
 ## Como rodar
 
