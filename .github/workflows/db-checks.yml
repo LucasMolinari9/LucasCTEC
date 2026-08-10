@@ -61,6 +61,10 @@ on:
       - scripts/security_baseline.json
       - scripts/check_prazos.mjs
       - scripts/lib/prazos.mjs
+      # Os dois arquivos que decidem DE QUAL BANCO estes gates falam. Sem eles aqui, uma
+      # mudança de alvo passa sem que nenhuma checagem viva rode (Codex, P2).
+      - scripts/ambientes.json
+      - scripts/lib/ambiente.mjs
       - scripts/prazos.json
       - docs/backup_schema.sql
       - docs/schema.md
@@ -75,6 +79,10 @@ on:
       - scripts/security_baseline.json
       - scripts/check_prazos.mjs
       - scripts/lib/prazos.mjs
+      # Os dois arquivos que decidem DE QUAL BANCO estes gates falam. Sem eles aqui, uma
+      # mudança de alvo passa sem que nenhuma checagem viva rode (Codex, P2).
+      - scripts/ambientes.json
+      - scripts/lib/ambiente.mjs
       - scripts/prazos.json
       - docs/backup_schema.sql
       - docs/schema.md

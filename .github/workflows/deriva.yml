@@ -40,6 +40,9 @@ on:
       - docs/schema.md
       - app.js
       - scripts/check_deriva.mjs
+      # Decidem de qual banco este gate fala; mudá-los sem rodá-lo é deriva de alvo (Codex, P2).
+      - scripts/ambientes.json
+      - scripts/lib/ambiente.mjs
       - .github/workflows/deriva.yml
   pull_request:
     paths:
@@ -47,6 +50,9 @@ on:
       - docs/schema.md
       - app.js
       - scripts/check_deriva.mjs
+      # Decidem de qual banco este gate fala; mudá-los sem rodá-lo é deriva de alvo (Codex, P2).
+      - scripts/ambientes.json
+      - scripts/lib/ambiente.mjs
       - .github/workflows/deriva.yml
 
 # GITHUB_TOKEN no mínimo: nenhum destes workflows faz push, abre PR ou comenta.
