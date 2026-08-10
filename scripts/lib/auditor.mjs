@@ -17,10 +17,10 @@
 
 import { spawnSync } from 'node:child_process';
 
-export const REFS = {
-  producao: 'lwzsxuaqqeoamukduhev',
-  teste: 'gontnlfmothfglssbyyk',
-};
+// Reexportado, nao redeclarado: ate 10/08/2026 esta lista era uma COPIA da de lib/ambiente.mjs, e
+// duas listas de project ref mantidas a mao sao duas listas que divergem.
+import { REFS } from './ambiente.mjs';
+export { REFS };
 
 const VARIAVEL = {
   producao: 'SUPABASE_PROD_AUDIT_DATABASE_URL',

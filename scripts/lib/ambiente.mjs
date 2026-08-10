@@ -17,6 +17,24 @@ import { join } from 'node:path';
 
 export const ALVOS = ['teste', 'producao'];
 
+// O project ref de cada alvo mora AQUI, no código — não no JSON que este módulo lê. É o que
+// impede o arquivo de dados remapear um alvo para outro projeto. `scripts/lib/auditor.mjs`
+// importa daqui para não haver duas listas (era uma cópia até 10/08/2026).
+export const REFS = { teste: 'gontnlfmothfglssbyyk', producao: 'lwzsxuaqqeoamukduhev' };
+
+// A anon key legada é um JWT cujo payload traz `ref`. Devolve esse ref, ou `null` quando a chave
+// não é um JWT legível — caso das `sb_publishable_...`, para as quais o CLAUDE.md prevê migração.
+// LIMITE CONHECIDO: com chave sem `ref` legível, o ref e a URL seguem amarrados pelas checagens
+// abaixo, mas a CHAVE em si não é conferida.
+function refDeChave(key) {
+  const partes = String(key || '').split('.');
+  if (partes.length !== 3) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(partes[1], 'base64url').toString('utf8'));
+    return typeof payload?.ref === 'string' ? payload.ref : null;
+  } catch { return null; }
+}
+
 // Sem normalização de caixa de propósito: 'PRODUCAO' num workflow é quase sempre um engano de
 // quem escreveu o YAML, e aceitar em silêncio esconde o engano.
 export function resolverAlvo(config, env) {
@@ -36,7 +54,54 @@ export function resolverAlvo(config, env) {
       throw new Error(`Ambiente '${alvo}' sem o campo '${campo}' em scripts/ambientes.json.`);
     }
   }
+  // As checagens acima olham só PRESENÇA. O que vem abaixo é COERÊNCIA INTERNA: url e key têm de
+  // falar do mesmo projeto que o `ref` declarado. Pega a edição pela metade — trocar o ref e
+  // esquecer a chave, ou o contrário —, que é o acidente provável.
+  //
+  // O que este nível deliberadamente NÃO faz é amarrar `teste` ao ref de teste. Isso é invariante
+  // do ARQUIVO VERSIONADO, e vive no gate offline (tests/check.js §[2b], `validarAmbientes`), por
+  // uma razão de desenho: as bancadas montam um `ambientes.json` FALSO, com ref fictício apontando
+  // para 127.0.0.1, e é assim que elas garantem que teste nenhum alcança o Supabase nem em
+  // regressão. Amarrar aqui obrigaria as fixtures a carregar ref e URL reais — trocaria uma
+  // proteção por outra. Separado assim, as duas valem. (Codex, P1.)
+  const host = (() => {
+    try { return new URL(escolhido.url).hostname; }
+    catch { throw new Error(`Ambiente '${alvo}' com 'url' ilegível: ${escolhido.url}`); }
+  })();
+  if (host.endsWith('.supabase.co') && host !== `${escolhido.ref}.supabase.co`) {
+    throw new Error(`Ambiente '${alvo}': 'url' aponta para '${host}', mas 'ref' diz `
+      + `'${escolhido.ref}'. Os dois têm de falar do mesmo projeto.`);
+  }
+  const refDaChave = refDeChave(escolhido.key);
+  if (refDaChave && refDaChave !== escolhido.ref) {
+    throw new Error(`Ambiente '${alvo}': 'key' é do projeto '${refDaChave}', mas 'ref' diz `
+      + `'${escolhido.ref}'. Os dois têm de falar do mesmo projeto.`);
+  }
   return { alvo, ref: escolhido.ref, url: escolhido.url, key: escolhido.key };
+}
+
+// Invariante do ARQUIVO VERSIONADO: cada alvo declara o projeto que lhe pertence. Vive aqui, e é
+// chamada pelo gate offline (tests/check.js) contra o `scripts/ambientes.json` de verdade — não
+// pelo `resolverAlvo`, para não obrigar as bancadas a usar ref e URL reais nas fixtures.
+// Devolve a lista de problemas; vazia significa em ordem.
+export function validarAmbientes(config) {
+  const problemas = [];
+  for (const alvo of ALVOS) {
+    const a = config?.[alvo];
+    if (!a) { problemas.push(`ambientes.${alvo} ausente`); continue; }
+    if (a.ref !== REFS[alvo]) {
+      problemas.push(`ambientes.${alvo}.ref = '${a.ref}', esperado '${REFS[alvo]}' — `
+        + 'um alvo não pode ser remapeado para outro projeto');
+    }
+    if (a.url !== `https://${REFS[alvo]}.supabase.co`) {
+      problemas.push(`ambientes.${alvo}.url = '${a.url}', esperado 'https://${REFS[alvo]}.supabase.co'`);
+    }
+    const refChave = refDeChave(a.key);
+    if (refChave && refChave !== REFS[alvo]) {
+      problemas.push(`ambientes.${alvo}.key é do projeto '${refChave}', esperado '${REFS[alvo]}'`);
+    }
+  }
+  return problemas;
 }
 
 export async function carregarAmbiente(root, env = process.env) {
