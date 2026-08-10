@@ -75,5 +75,12 @@ jobs:
       - name: Exigir credencial auditora de teste
         shell: bash
         run: test -n "$SUPABASE_TEST_AUDIT_DATABASE_URL"
+      # Alvo EXPLÍCITO. O script deixou de ter default (Codex, P1): antes ele caía em `teste`
+      # sozinho, e como este passo não passava argumento, o caminho de produção não era
+      # alcançável por aqui de jeito nenhum. Hoje o alvo é uma escolha visível ao lado do comando,
+      # como nos demais gates. Produção continua fora deste job de propósito — a credencial
+      # `SUPABASE_PROD_AUDIT_DATABASE_URL` só é criada na janela de promoção descrita em
+      # docs/planos/fase-3-hardening-moderado.md, e expô-la aqui antes disso seria adiantar risco
+      # sem adiantar cobertura.
       - name: Executar diagnósticos pelo auditor mínimo
-        run: node scripts/check_phase3_audit.mjs
+        run: node scripts/check_phase3_audit.mjs teste

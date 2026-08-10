@@ -1,6 +1,10 @@
 // Executa as RPCs diagnosticas pelo login PostgreSQL minimo da Fase 3.
 //
-// Ambiente por argumento: `node scripts/check_phase3_audit.mjs teste` (padrao) ou `... producao`.
+// Ambiente por argumento (`node scripts/check_phase3_audit.mjs teste`) ou por DIVAT_ALVO, como os
+// demais gates. NAO HA DEFAULT: ate 10/08/2026 este script fazia `process.argv[2] || 'teste'`, o
+// que contradizia a regra que o proprio lib/ambiente.mjs enuncia em maiusculas — e, como o
+// workflow o invoca sem argumento, o alvo de producao era INALCANCAVEL por ali, justamente no
+// workflow que deveria validar a credencial e a migracao de producao (Codex, P1).
 // Ate 04/08/2026 este script travava o ref de TESTE e recusava producao de proposito. Isso
 // deixou de servir quando a Fase 3 passou a ser aplicavel em producao — e check_data_quality
 // depende deste mesmo caminho la. A recusa de ref DESCONHECIDO continua, que e o que protege.
@@ -8,7 +12,13 @@
 // divergirem entre os dois gates. A URL nunca e passada na linha de comando nem impressa.
 import { conectarAuditor, LOGIN } from './lib/auditor.mjs';
 
-const ambiente = process.argv[2] || 'teste';
+const ambiente = process.argv[2] || process.env.DIVAT_ALVO;
+if (!ambiente) {
+  console.error('Alvo não definido. Use `node scripts/check_phase3_audit.mjs <teste|producao>` '
+    + 'ou DIVAT_ALVO. Não há default: um default silencioso é como um gate acaba falando com o '
+    + 'banco errado (issue #74).');
+  process.exit(1);
+}
 let auditor;
 try {
   auditor = conectarAuditor({ ambiente });
