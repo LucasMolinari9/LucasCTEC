@@ -1,4 +1,6 @@
 'use strict';
+const { fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, boolChip, situacaoHTML, isLinhaAtiva, isVigente } = require('../src/domain/core.mjs');
+
 /* Cópias VERBATIM de funções PURAS do app.js, para teste unitário em Node
    (sem navegador, sem rede, sem dependências).
 
@@ -6,56 +8,9 @@
    O tests/check.js tem uma guarda anti-drift que avisa se a versão original mudar.
    A linha de origem está citada em cada bloco. */
 
-// app.js:728 — 101001001 → 101-001-001 (código da ligação no PDF oficial)
-/* @canon fmtCode */
-function fmtCode(code) {
-  if (!code) return '';
-  const s = String(code);
-  return s.length === 9 ? `${s.slice(0,3)}-${s.slice(3,6)}-${s.slice(6)}` : s;
-}
-/* @endcanon */
-// app.js:734 — HH:MM:SS → HH:MM
-/* @canon fmtTime */
-function fmtTime(t){ if(!t) return '—'; const m=String(t).match(/^(\d{2}):(\d{2})/); return m?`${m[1]}:${m[2]}`:t; }
-/* @endcanon */
-// app.js:736 — data ISO (YYYY-MM-DD) → DD/MM/YYYY
-/* @canon fmtDate */
-function fmtDate(d){ if(!d) return '—'; const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:d; }
-/* @endcanon */
-// app.js:737 — escape de HTML (relevante p/ XSS)
-/* @canon esc */
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-/* @endcanon */
-// app.js:738
-/* @canon enc */
-const enc = s => encodeURIComponent(s);
-/* @endcanon */
-// app.js:760 — sanitiza termo p/ uso dentro de padrão ilike do PostgREST
-/* @canon ilikeTerm */
-const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));
-/* @endcanon */
-// app.js:739
-/* @canon orDash */
-const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
-/* @endcanon */
-// app.js — nome "Origem - Destino": quebra só no " - ", cada lado inteiro (&nbsp;)
-/* @canon fmtLineName */
-const fmtLineName = nome => nome ? esc(nome).split(' - ').map(p => p.replace(/ /g, '&nbsp;')).join(' - ') : '—';
-/* @endcanon */
 // app.js — ordena listagem de linhas pelo código (codlinha), natural/numérico
 /* @canon byCodlinha */
 const byCodlinha = (a, b) => String(a.codlinha||'').localeCompare(String(b.codlinha||''), undefined, { numeric:true });
-/* @endcanon */
-// app.js:740
-/* @canon boolChip */
-const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
-/* @endcanon */
-// app.js — situação da linha (busca e documentos): Cancelada, Paralisada ou Ativa.
-// "Ativa" só quando operando (não cancelada e não paralisada). Transferida/sub judice contam como Ativa.
-/* @canon situacaoHTML */
-const situacaoHTML = r => r.cancelado ? '<span class="chip chip-on">Cancelada</span>'
-  : r.paralisado ? '<span class="chip chip-on">Paralisada</span>'
-  : '<span class="chip chip-off">Ativa</span>';
 /* @endcanon */
 // app.js (seção STATE + CACHES) — desempate do cadastro de empresas quando o mesmo RJ aparece
 // duplicado (ex.: o 103). Definição única usada pelo getEmpresas (nome no banner) e pelo
@@ -76,15 +31,6 @@ function dedupEmpresasPorRJ(lista){
   });
   return Object.values(best);
 }
-/* @endcanon */
-// app.js:763 — linha ATIVA = operando (não cancelada e não paralisada). Sub judice e
-// transferida contam como ativas. Critério único de Empresas e Relatórios.
-/* @canon isLinhaAtiva */
-const isLinhaAtiva = r => !r.cancelado && !r.paralisado;
-/* @endcanon */
-// app.js — VIGENTE (seção/tarifa) = critério estrito: além de ativa, exclui sub judice e transferida.
-/* @canon isVigente */
-const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;
 /* @endcanon */
 // app.js:842 — normaliza acento/caixa para busca
 /* @canon norm */
