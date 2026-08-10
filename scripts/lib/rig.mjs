@@ -43,7 +43,7 @@ export function getChromium() {
    SERVIDOR ESTÁTICO
    ================================================================ */
 const MIME = {
-  '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
+  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
   '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json', '.json': 'application/json',
 };
 

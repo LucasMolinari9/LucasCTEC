@@ -19,6 +19,7 @@ vendor/
 # é só SKILL.md, sem código. Se um dia uma skill nossa ganhar JS de navegador, estreite isto
 # para os diretórios listados no .superpowers-manifest.json.
 .claude/skills/
+.agents/skills/
 
 # --- Cópias verbatim para teste ---
 # Os *.harness.js são cópias literais de funções do app.js, guardadas pelo anti-drift do
