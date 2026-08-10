@@ -17,6 +17,16 @@
 # assumido. Um `!/vendor/**` extra seria redundante.
 #
 # AO ADICIONAR ARQUIVO PÚBLICO NOVO (ícone, fonte, página), reabra-o aqui — senão vira 404.
+# `src/` é reaberto ARQUIVO A ARQUIVO, e não com um `!/src` de uma linha como o vendor acima.
+# A diferença não é estilo: `vendor/` só contém asset estático de terceiro, tudo servido; `src/`
+# é um diretório cujo NOME convida a guardar o que não se serve (fixture, script de build, nota).
+# Um `!/src` publicaria tudo que alguém largar ali depois, em silêncio — perdendo justamente o
+# default-deny que este arquivo existe para ter. Medido: reabrir só `!/src/domain/core.mjs` NÃO
+# funciona (o git não desce em diretório excluído, então o arquivo continua fora); é preciso
+# reabrir cada nível e voltar a fechar o conteúdo dele. Daí as três linhas por arquivo.
+# O custo disso é baixo porque o gate cobra: `tests/check.js` §[1] deriva os imports do app.js e
+# os assets de `fetch()`, e reprova nomeando o que ficou de fora. Módulo novo sob `src/` → o
+# check.js falha e diz exatamente o que reabrir aqui.
 /*
 !/index.html
 !/app.js
@@ -24,3 +34,9 @@
 !/manifest.webmanifest
 !/vercel.json
 !/vendor
+!/version.json
+!/src
+/src/*
+!/src/domain
+/src/domain/*
+!/src/domain/core.mjs
