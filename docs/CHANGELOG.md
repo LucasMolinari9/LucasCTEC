@@ -4,6 +4,54 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 10/08/2026 — Quatro achados da revisão da Fase 3 (issues #101–#104)
+
+Leva de correções pequenas, todas nascidas da revisão da Tarefa 10 e todas dentro do PR #98. O que
+as une é a forma do defeito: **guarda que se lê mais apertada do que é**.
+
+**`lib/auditor.mjs` (#101)** — a peça que impede um secret mal colado apontar um gate para o banco
+ou o login errado tinha duas frouxidões. `startsWith('divat_auditor_ci')` aceitava
+`divat_auditor_civil`, `divat_auditor_ci_backup`, `divat_auditor_ci2`; e `sslmode` vinha da URL com
+`|| 'require'`, que é default para a URL que **não diz nada** — uma dizendo `sslmode=disable`
+passava direto, e aí o piso de TLS da conexão era decidido pelo texto do secret, não pelo código.
+Nenhuma das duas é explorável de fora (quem escreve o secret já tem a credencial); as duas são a
+guarda deixando de guardar sem ninguém perceber.
+
+Agora o **login inteiro** é comparado — no pooler o usuário é `<login>.<ref>`, no direto é o login
+puro, e o sufixo é descontado antes da igualdade. Exato é seguro porque o compromisso de rotação em
+`prazos.json` é da **senha** (`VALID UNTIL`), não do nome. A comparação passou a ser na forma
+**decodificada**, que é a que chega ao `PGUSER`: no texto cru, `divat_auditor_ci%2Evil` (→
+`divat_auditor_ci.vil`) passava por checagem de prefixo e chegava ao psql como outro login.
+
+O mesmo defeito tinha um **gêmeo fora do escopo da issue**: `check_phase3_audit.mjs` asseverava
+`session_user` com `startsWith` e um literal repetido, então um role `divat_auditor_civil`
+satisfazia a checagem "executou com o login dedicado". Passou a importar a constante e comparar por
+igualdade — definição única, que é a regra da casa.
+
+**Bancada do `check_data_quality` (#102)** — o `psql` falso registrava o `PGHOST` (com quem se
+falou) mas ignorava o SQL (o que se perguntou). Trocar `audit.divat_data_quality()` por `public.`
+deixava **todos** os casos verdes, e o schema é justamente o ponto: a migração 2 mantém a função em
+`audit` porque como RPC anônima ela é alavanca de indisponibilidade. Faltava também o caso direto
+de `!Array.isArray` pelo caminho do auditor. Os dois foram provados por **mutação** — e a segunda
+mutação ensinou algo: sem a guarda o gate ainda sai 1, mas por **crash** (`achados.filter` num
+objeto), não por aborto diagnosticado. Por isso os casos cobram a mensagem, não só o status.
+
+**`postgresql-client` no CI (#103)** — a issue supunha redundância e pedia medição antes de mexer.
+A evidência estava no log do run de 09/08, sem rodada nova: o apt instalou **um** pacote de 11,6 kB
+— o metapacote —, o que só acontece quando `postgresql-client-16` e `postgresql-client-common`, que
+entregam o binário, já estão na imagem. O passo custava ~8s de `apt-get update` em cada rodada de um
+gate **diário** para instalar um nome. Virou `command -v psql || { ... }`: remover seria apostar na
+imagem do runner, e o dia em que ela mudar o gate quebraria com erro que não se parece com a causa.
+O run seguinte confirmou de frente — o passo imprimiu `/usr/bin/psql` e o job caiu de ~17s para ~9s.
+
+**`tests/README.md` (#104)** — o cabeçalho dizia "lógica pura do `app.js`", que descrevia a pasta
+antes de ela ganhar `ambiente`/`auditor`/`check_data_quality`/`prazos` e as bancadas `*.rig.mjs`.
+Quem lia e ia procurar onde testar um script de `scripts/` concluía que o lugar era outro. O "sem
+navegador, sem rede" subiu para o título — é o contrato que de fato vale — e o corpo passou a
+nomear as duas naturezas do que mora ali.
+
+`auditor.test.js` 26 → 41 casos; `check_data_quality.test.js` 40 → 50.
+
 ## 09/08/2026 — Os baselines se partem na costura entre política e medição (issue #99)
 
 `scripts/security_baseline.json` tinha **um** conjunto de campos medidos — `digest` e as três
