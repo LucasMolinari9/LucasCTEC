@@ -169,12 +169,30 @@ if (digest) {
   // conferência que existia aqui era código morto: nunca chegou a ser alcançada com valor
   // diferente do que aquele laço já tinha aprovado.)
 
+  // anon_referencia/anon_trigger: NOVOS desde a migração 20260810000000 (Codex, P1 — a versão
+  // anterior deste script já checava os campos ANTIGOS do digest, mas a migração acrescentou dois
+  // e este consumidor ficou para trás). CONDICIONAIS de propósito: até a migração ser aplicada no
+  // banco (nenhum ambiente recebeu ainda — este ambiente de execução não alcança o Supabase), o
+  // digest vivo não traz os campos, e exigi-los incondicionalmente quebraria `seguranca` no
+  // PRÓXIMO push, antes mesmo da migração chegar ao banco — regressão autoinfligida. Ausente é
+  // ignorado (nem grave, nem erro de forma); presente segue o mesmo fail-closed do resto do
+  // digest — tipo errado aborta.
+  for (const campo of ['anon_referencia', 'anon_trigger']) {
+    if (campo in digest && typeof digest[campo] !== 'boolean') {
+      console.error(`✗ Digest com booleano malformado '${campo}' (veio ${JSON.stringify(digest[campo])}) — abortando em vez de assumir seguro.`);
+      process.exit(1);
+    }
+  }
+
   // EXPECTATIVAS FIXAS. Ficam no CODIGO, nunca no baseline: um gate cujo conserto habitual e
   // `--atualizar-baseline` ensina o reflexo de apagar o alarme. O reflexo continua possivel para
-  // mudanca estrutural benigna (o digest) e NUNCA alcanca a classe perigosa (estes SEIS).
+  // mudanca estrutural benigna (o digest) e NUNCA alcanca a classe perigosa (estes OITO — eram
+  // seis; anon_referencia/anon_trigger entraram com a migração 20260810000000).
   const graves = [];
   if (digest.anon_escreve) graves.push('anon tem INSERT/UPDATE/DELETE/TRUNCATE em alguma tabela de public');
   if (digest.anon_maintain) graves.push('anon tem MAINTAIN em alguma tabela de public');
+  if (digest.anon_referencia) graves.push('anon tem REFERENCES em alguma tabela de public');
+  if (digest.anon_trigger) graves.push('anon tem TRIGGER em alguma tabela de public');
   if (digest.anon_le_view) graves.push('anon lê alguma VIEW/matview de public — rota clássica de bypass de RLS');
   if (!digest.todas_com_rls) graves.push('alguma tabela de public está sem RLS');
   if (digest.authenticated_tem_privilegio) graves.push('authenticated voltou a ter privilégio de tabela em public');
@@ -327,7 +345,7 @@ if (digest) {
   }
   if (digest.digest !== slot.digest) {
     console.error(`\n✗ A superfície de segurança MUDOU no ambiente '${ALVO}' (digest diferente do baseline).`);
-    console.error('  Os seis indicadores graves estão sãos, então isto é mudança estrutural —');
+    console.error('  Os oito indicadores graves estão sãos, então isto é mudança estrutural —');
     console.error('  tabela nova, policy renomeada, função nova. Confira o que mudou pelo painel');
     console.error('  ou pelo auditor (node scripts/check_phase3_audit.mjs) e, se for esperado,');
     console.error(`  registre com DIVAT_ALVO=${ALVO} --atualizar-baseline.`);

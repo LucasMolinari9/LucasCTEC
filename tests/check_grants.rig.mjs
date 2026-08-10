@@ -194,6 +194,16 @@ await casoDigest('estado são', d => d, 0);
 await casoDigest('anon ganhou escrita', d => { d.anon_escreve = true; return d; }, 1);
 await casoDigest('anon ganhou MAINTAIN', d => { d.anon_maintain = true; return d; }, 1);
 await casoDigest('anon passou a ler uma view', d => { d.anon_le_view = true; return d; }, 1);
+// anon_referencia/anon_trigger: NOVOS desde a migração 20260810000000 (Codex, achado da 2ª
+// rodada de revisão — a versão anterior não os conferia em lugar nenhum). digestSao() não os
+// inclui de propósito: é o estado PRÉ-migração-3 (nenhum banco a recebeu ainda), e o gate
+// precisa continuar passando nesse estado — os dois casos abaixo, ausentes, já são cobertos por
+// TODOS os `casoDigest` acima. Aqui prova-se o outro lado: quando os campos EXISTEM.
+await casoDigest('anon ganhou REFERENCES (campo novo, pós-migração-3)', d => { d.anon_referencia = true; return d; }, 1);
+await casoDigest('anon ganhou TRIGGER (campo novo, pós-migração-3)', d => { d.anon_trigger = true; return d; }, 1);
+await casoDigest('anon_referencia/anon_trigger presentes e false (pós-migração-3, estado são)',
+  d => { d.anon_referencia = false; d.anon_trigger = false; return d; }, 0);
+await casoDigest('anon_referencia veio como string (forma inesperada)', d => { d.anon_referencia = 'false'; return d; }, 1);
 await casoDigest('RLS caiu em alguma tabela', d => { d.todas_com_rls = false; return d; }, 1);
 await casoDigest('authenticated ganhou privilegio', d => { d.authenticated_tem_privilegio = true; return d; }, 1);
 await casoDigest('funcao SECURITY DEFINER executavel por anon', d => { d.funcoes_definer_anon = 1; return d; }, 1);

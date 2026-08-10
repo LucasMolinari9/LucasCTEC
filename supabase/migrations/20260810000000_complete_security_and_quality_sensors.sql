@@ -90,7 +90,7 @@ with tabelas as (
 ),
 priv as (
   select t.relname, t.relrowsecurity,
-         has_table_privilege('anon', t.oid, 'SELECT')                                                        as anon_select,
+         (has_table_privilege('anon', t.oid, 'SELECT')      or has_any_column_privilege('anon', t.oid, 'SELECT'))      as anon_select,
          (has_table_privilege('anon', t.oid, 'INSERT')     or has_any_column_privilege('anon', t.oid, 'INSERT'))     as anon_insert,
          (has_table_privilege('anon', t.oid, 'UPDATE')     or has_any_column_privilege('anon', t.oid, 'UPDATE'))     as anon_update,
          has_table_privilege('anon', t.oid, 'DELETE')                                                        as anon_delete,
@@ -108,19 +108,35 @@ priv as (
          has_table_privilege('authenticated', t.oid, 'TRIGGER')                                               as auth_trigger
   from tabelas t
 ),
--- Views/matviews, policies, funções e default_privileges: INALTERADOS desde a migração 2 — a
--- correção mora inteira na CTE `priv` e no que dela entra no digest.
+-- Views/matviews: `has_any_column_privilege` entra aqui também, e por motivo mais grave que em
+-- `priv` — `anon_le_view` (mais abaixo) é indicador FIXO, não dado de baseline. Até esta correção,
+-- `GRANT SELECT (coluna) ON alguma_view TO anon` sem grant de tabela inteira deixava `anon_select`
+-- falso aqui, `anon_le_view` falso no digest, e a leitura passava DESPERCEBIDA — a mesma classe de
+-- bypass de RLS que `anon_le_view` existe para pegar, só que pela porta que ele não olhava
+-- (Codex, achado da 2ª rodada de revisão).
 vis as (
   select c.relname, c.relkind::text as relkind,
-         has_table_privilege('anon', c.oid, 'SELECT')          as anon_select,
-         has_table_privilege('authenticated', c.oid, 'SELECT') as auth_select,
+         (has_table_privilege('anon', c.oid, 'SELECT')          or has_any_column_privilege('anon', c.oid, 'SELECT'))          as anon_select,
+         (has_table_privilege('authenticated', c.oid, 'SELECT') or has_any_column_privilege('authenticated', c.oid, 'SELECT')) as auth_select,
          coalesce((select true from unnest(coalesce(c.reloptions, '{}'::text[])) o
                    where o like 'security\_invoker=%'), false) as security_invoker
   from pg_class c join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind in ('v','m')
 ),
+-- POLÍTICAS: até esta correção só `polname`+`polcmd` entravam no digest. Uma policy existente
+-- podia ter seu `USING`/`WITH CHECK` trocado por `true`, ou seus papéis alargados de `anon` para
+-- `anon, authenticated`, sem mudar nome nem comando — o digest ficava byte-idêntico. `polroles`
+-- (papéis alcançados, resolvidos para nome — `polroles = '{0}'` é o caso ALL/PUBLIC, e
+-- `0::regrole` imprime `-`), `polpermissive` (PERMISSIVE x RESTRICTIVE muda como a policy combina
+-- com as outras) e `polqual`/`polwithcheck` (o predicado em si, via `pg_get_expr` — NULL é
+-- legítimo: policy só-INSERT não tem `USING`, só-SELECT não tem `WITH CHECK`) entram na
+-- serialização (Codex, achado da 2ª rodada de revisão).
 pols as (
-  select c.relname, p.polname, p.polcmd::text as polcmd
+  select c.relname, p.polname, p.polcmd::text as polcmd, p.polpermissive,
+         coalesce((select string_agg(r::regrole::text, ',' order by r::regrole::text)
+                   from unnest(p.polroles) r), '') as polroles,
+         coalesce(pg_get_expr(p.polqual, p.polrelid), '')      as polqual,
+         coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') as polwithcheck
   from pg_policy p
   join pg_class c on c.oid = p.polrelid
   join pg_namespace n on n.oid = c.relnamespace
@@ -173,7 +189,8 @@ canonico as (
                                  || auth_select::int || security_invoker::int,
         E'\n' order by relname collate "C") from vis), '')
     || E'\n==\n' ||
-    coalesce((select string_agg(relname || '|' || polname || '|' || polcmd,
+    coalesce((select string_agg(relname || '|' || polname || '|' || polcmd || '|' || polpermissive::int
+                                 || '|' || polroles || '|' || polqual || '|' || polwithcheck,
         E'\n' order by relname collate "C", polname collate "C") from pols), '')
     || E'\n==\n' ||
     coalesce((select string_agg(assinatura || '|' || anon_exec::int || auth_exec::int

@@ -127,7 +127,18 @@ console.log(`· Alvo: ${ALVO}`);
 // cópias de um número é uma que envelhece sem ninguém ver.
 const SQL_ACHADOS = `select coalesce(jsonb_agg(t), '[]'::jsonb) from audit.divat_data_quality() t;`;
 
+// QUAL caminho respondeu importa para a guarda de cegueira mais abaixo: o auditor fala com
+// audit.divat_data_quality() — que desde a migração 20260810000000 sempre devolve uma linha por
+// verificação — mas o fallback anônimo fala com public.divat_data_quality(), que só existe (e só
+// existirá) num banco que AINDA NÃO recebeu a migração 2 (ela move a função para `audit`, fora do
+// alcance de anon). Ou seja: sempre que o fallback responde, é NECESSARIAMENTE contra a função
+// ANTIGA — que só emite linha quando a contagem é > 0. `[]` por ali continua podendo significar
+// "banco limpo", exatamente como significava antes desta migração (achado da 2ª rodada de
+// revisão: tratar os dois caminhos com a MESMA régua tornaria o gate diário permanentemente
+// vermelho em produção no dia em que o último achado de dívida fosse corrigido, e antes da janela
+// de promoção da Fase 3 abrir).
 let achados = null;
+let viaAuditor = false;
 try {
   // O auditor fala com o MESMO banco que o resto do gate: quem decide é DIVAT_ALVO, não um
   // literal aqui. Até 05/08/2026 este argumento era 'producao' fixo — com DIVAT_ALVO=teste o
@@ -136,6 +147,7 @@ try {
   // caso tratado: cai no fallback anônimo, avisando qual variável falta.
   const auditor = conectarAuditor({ ambiente: ALVO });
   achados = JSON.parse(auditor.consultar(SQL_ACHADOS).trim().split(/\r?\n/).filter(Boolean).at(-1));
+  viaAuditor = true;
 } catch (e) {
   const prazo = await prazoPorId(ROOT, 'check_data_quality_fallback');
   const v = classificar(prazo, hojeISO());
@@ -174,16 +186,24 @@ if (!Array.isArray(achados)) {
   process.exit(1);
 }
 
-// CEGUEIRA SILENCIOSA, agora fechada na FONTE. Desde a migração 20260810000000, audit.divat_data_
-// quality() devolve UMA LINHA POR VERIFICAÇÃO, inclusive com qtd=0 — o número de verificações é
-// fixo e maior que zero (varre colunas/tabelas conhecidas, não dado que possa zerar). Então `[]`
-// deixou de significar "banco limpo" e passou a significar SÓ UMA COISA: a fonte não rodou
-// verificação nenhuma — permissão revogada, RLS, função trocada de schema, migração pela metade.
-// Até 10/08/2026 esta checagem só disparava se `base.size > 0` (havia dívida no baseline para
-// desaparecer) — com o baseline zerado por uma limpeza legítima, `[]` continuava indistinguível de
-// "tudo certo". Incondicional e ANTES de qualquer baseline (inclusive --atualizar-baseline e
-// --sem-baseline): perder a visão do banco nunca pode virar um baseline vazio gravado por engano.
-if (achados.length === 0) {
+// CEGUEIRA SILENCIOSA, fechada na FONTE — mas só do lado do AUDITOR. Desde a migração
+// 20260810000000, audit.divat_data_quality() devolve UMA LINHA POR VERIFICAÇÃO, inclusive com
+// qtd=0 — o número de verificações é fixo e maior que zero (varre colunas/tabelas conhecidas, não
+// dado que possa zerar). Então, quando `viaAuditor` é true, `[]` deixou de significar "banco
+// limpo" e passou a significar SÓ UMA COISA: a fonte não rodou verificação nenhuma — permissão
+// revogada, RLS, função trocada de schema, migração pela metade. Incondicional e ANTES de
+// qualquer baseline (inclusive --atualizar-baseline e --sem-baseline): perder a visão do banco
+// nunca pode virar um baseline vazio gravado por engano.
+//
+// GATEADO por `viaAuditor` de propósito (achado da 2ª rodada de revisão): quando o caminho foi o
+// FALLBACK, quem respondeu foi necessariamente a função ANTIGA (só existe onde a migração 2 ainda
+// não chegou), que só emite linha para contagem > 0 — ali `[]` continua podendo ser "banco limpo"
+// de verdade, exatamente como significava antes desta migração. Tratar os dois caminhos com a
+// MESMA régua tornaria o gate diário permanentemente vermelho em produção no dia em que o último
+// achado de dívida fosse corrigido, antes mesmo da janela de promoção da Fase 3 abrir — pior do
+// que a cegueira que a guarda existe para pegar. O caminho do fallback tem a SUA PRÓPRIA guarda,
+// mais abaixo, condicionada ao baseline (o mesmo comportamento de antes desta migração).
+if (viaAuditor && achados.length === 0) {
   console.error('\n✗ A verificação não devolveu NENHUMA linha — a função agora sempre devolve uma');
   console.error('  linha por checagem (inclusive qtd=0), então lista vazia só pode ser fonte CEGA:');
   console.error('  permissão revogada, RLS, função trocada de schema, ou migração aplicada pela metade.');
@@ -339,13 +359,23 @@ if (!semBaseline) {
   }
 }
 
-// A CEGUEIRA SILENCIOSA (a única falha deste gate que saía VERDE) já foi barrada lá em cima,
-// incondicionalmente, no primeiro `if (achados.length === 0)` — antes de qualquer baseline ser
-// tocado. Até 10/08/2026 esta checagem só existia AQUI, condicionada a `base.size > 0`: com o
-// baseline zerado por uma limpeza legítima, `[]` continuava indistinguível de "tudo certo", porque
-// a FONTE só emitia linha quando a contagem era > 0. A migração 20260810000000 mudou a fonte —
-// agora ela sempre devolve uma linha por verificação, qtd=0 inclusive — então `[]` deixou de
-// precisar de contexto de baseline para ser reconhecida como cega.
+// CEGUEIRA SILENCIOSA — o lado do FALLBACK, com a régua ANTIGA. `viaAuditor` já filtrou o lado
+// novo lá em cima (incondicional). Aqui, `[]` só chega se veio do fallback — a função ANTIGA, que
+// só emite linha para contagem > 0 —, então as duas causas de `[]` (banco limpo vs. fonte cega)
+// continuam indistinguíveis DAQUI, exatamente como antes desta migração. A guarda PERGUNTA em vez
+// de assumir, mas só quando há dívida registrada para desaparecer (`base.size > 0`): baseline
+// zerado por limpeza legítima volta a ser um ponto cego aqui, e SÓ aqui — é o mesmo limite que
+// esta guarda sempre teve, herdado, não uma regressão desta migração. `--sem-baseline` fica de
+// fora, de propósito: contrato dele é mostrar o estado cru sem opinar sobre baseline nenhum.
+if (!viaAuditor && !semBaseline && achados.length === 0 && base.size > 0) {
+  console.error(`\n✗ A verificação (via RPC anônima — banco ainda sem a migração 3) não devolveu`);
+  console.error(`  achado NENHUM, mas o baseline registra ${base.size}.`);
+  console.error('  Zero achados tem duas causas possíveis, e elas não se distinguem daqui:');
+  console.error('   a) a dívida foi corrigida no banco — confirme com --atualizar-baseline;');
+  console.error('   b) a fonte cegou (permissão/RLS/schema) e o banco segue sujo.');
+  console.error('  Abortando em vez de escolher a leitura otimista.');
+  process.exit(1);
+}
 
 // Linhas com qtd=0 PROVAM que a verificação rodou (é o ponto da mudança de fonte) mas não são
 // achado — pular ANTES da reclassificação por severidade, senão uma checagem operacional zerada

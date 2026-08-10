@@ -29,7 +29,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawnSync, spawn } = require('child_process');
+const { createServer } = require('http');
 
 let pass = 0, fail = 0;
 const fails = [];
@@ -49,6 +50,7 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
 
   const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'dq-test-'));
   const bin = path.join(raiz, 'bin');
+  let srvFallback; // declarado fora do try: precisa existir no `finally`, que é um escopo à parte
   try {
     fs.mkdirSync(path.join(raiz, 'scripts', 'lib'), { recursive: true });
     fs.mkdirSync(bin);
@@ -100,6 +102,66 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
         referencia: 'tests/check_data_quality.test.js',
       }],
     }, null, 2) + '\n');
+
+    // Stub HTTP LOCAL (mesma técnica de check_grants.rig.mjs), só para os dois casos de
+    // "fallback exceção" abaixo — eles precisam de uma resposta de verdade da RPC anônima, e o
+    // endereço morto 127.0.0.1:9 do resto da bancada (ver cabeçalho) não serve para isso. Ainda
+    // assim é 127.0.0.1: nem estes dois casos alcançam o Supabase real.
+    let respostaFallback = [];
+    srvFallback = createServer((req, res) => {
+      if (req.url === '/rest/v1/rpc/divat_data_quality') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(respostaFallback));
+        return;
+      }
+      res.writeHead(404); res.end('{}');
+    });
+    await new Promise(r => srvFallback.listen(0, '127.0.0.1', r));
+    const portaFallback = srvFallback.address().port;
+    // Escreve o ambientes.json apontando para o stub, roda, e devolve para o endereço morto
+    // (127.0.0.1:9) — mesma disciplina do `comBaseline` mais abaixo, que também restaura o
+    // arquivo real depois de cada uso.
+    const AMBIENTES_MORTO = JSON.stringify({
+      nota: 'fixture do teste — nenhum destes endereços existe',
+      ambientes: {
+        teste:    { ref: 'rig-teste', url: 'http://127.0.0.1:9', key: 'chave-de-teste-nao-e-segredo' },
+        producao: { ref: 'rig-prod',  url: 'http://127.0.0.1:9', key: 'chave-de-teste-nao-e-segredo' },
+      },
+    }, null, 2) + '\n';
+    // ASSÍNCRONO de propósito, ao contrário do `rodar()` de baixo (spawnSync): o filho aqui faz um
+    // fetch DE VOLTA para este mesmo processo (o stub HTTP acima). spawnSync BLOQUEIA o laço de
+    // eventos do processo PAI inteiro enquanto espera o filho terminar — e um pai com o laço de
+    // eventos travado não consegue aceitar a conexão HTTP que o próprio filho está esperando.
+    // Deadlock resolvido só pelo timeout (o sintoma foi `status: null, signal: SIGTERM`, sem
+    // nenhuma linha de resposta). `spawn` assíncrono, como o `check_grants.rig.mjs` já usa para o
+    // mesmo problema, mantém o laço de eventos do pai livre para responder.
+    const comFallbackFuncionando = (resposta, extra, alvo, argv) => {
+      respostaFallback = resposta;
+      fs.writeFileSync(path.join(raiz, 'scripts', 'ambientes.json'), JSON.stringify({
+        nota: 'fixture do teste — stub local, não é o Supabase',
+        ambientes: {
+          teste:    { ref: 'rig-teste', url: `http://127.0.0.1:${portaFallback}`, key: 'chave-de-teste-nao-e-segredo' },
+          producao: { ref: 'rig-prod',  url: `http://127.0.0.1:${portaFallback}`, key: 'chave-de-teste-nao-e-segredo' },
+        },
+      }, null, 2) + '\n');
+      const env = { ...process.env, ...extra };
+      delete env.SUPABASE_PROD_AUDIT_DATABASE_URL;
+      delete env.SUPABASE_TEST_AUDIT_DATABASE_URL;
+      for (const k of ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy']) delete env[k];
+      env.NO_PROXY = env.no_proxy = '127.0.0.1,localhost';
+      for (const [k, v] of Object.entries(extra || {})) env[k] = v;
+      if (alvo === null) delete env.DIVAT_ALVO; else env.DIVAT_ALVO = alvo;
+      return new Promise(resolve => {
+        const p = spawn(process.execPath, [script, ...(argv || [])], { cwd: raiz, env });
+        let out = '';
+        p.stdout.on('data', d => out += d);
+        p.stderr.on('data', d => out += d);
+        p.on('close', code => {
+          fs.writeFileSync(path.join(raiz, 'scripts', 'ambientes.json'), AMBIENTES_MORTO);
+          resolve({ status: code, saida: out });
+        });
+      });
+    };
 
     const script = path.join(raiz, 'scripts', 'check_data_quality.mjs');
     // `alvo` separado de `extra` para o caso da AUSÊNCIA poder pedir explicitamente `null` — o
@@ -207,15 +269,15 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
     ok(/⚠ Auditor indisponível \(SUPABASE_TEST_AUDIT_DATABASE_URL não configurado/.test(soProd.saida),
        'avisa que falta a credencial DO ALVO', soProd.saida.slice(0, 300));
 
-    console.log('fonte devolve lista VAZIA — é cegueira, incondicional, mesmo com baseline zerado');
-    // Desde a migração 20260810000000, audit.divat_data_quality() devolve UMA LINHA POR
-    // VERIFICAÇÃO, qtd=0 inclusive — o número de verificações é fixo e nunca zero. Então `[]`
-    // deixou de poder significar "banco limpo": só pode ser a fonte cega (permissão revogada, RLS,
-    // função trocada de schema, migração pela metade). Por isso a checagem é INCONDICIONAL — não
-    // depende mais de haver dívida no baseline para "desaparecer", e vale inclusive em
-    // --atualizar-baseline (bancada abaixo): não existe mais um jeito de zerar o baseline gravando
-    // por cima de uma resposta cega, porque zero de verdade agora vem como linhas com qtd=0, nunca
-    // como lista vazia.
+    console.log('fonte devolve lista VAZIA via AUDITOR — é cegueira, incondicional, mesmo com baseline zerado');
+    // Desde a migração 20260810000000, audit.divat_data_quality() (só alcançável pelo AUDITOR)
+    // devolve UMA LINHA POR VERIFICAÇÃO, qtd=0 inclusive — o número de verificações é fixo e nunca
+    // zero. Então `[]` por esse caminho deixou de poder significar "banco limpo": só pode ser a
+    // fonte cega (permissão revogada, RLS, função trocada de schema, migração pela metade). Por
+    // isso a checagem é INCONDICIONAL para este caminho — não depende mais de haver dívida no
+    // baseline para "desaparecer", e vale inclusive em --atualizar-baseline (bancada abaixo): não
+    // existe mais um jeito de zerar o baseline gravando por cima de uma resposta cega DAQUI, porque
+    // zero de verdade agora vem como linhas com qtd=0, nunca como lista vazia.
     fs.writeFileSync(path.join(bin, 'psql'),
       `#!${process.execPath}\nprocess.stdout.write('\\n[]\\n');\n`, { mode: 0o755 });
     const vazio = rodar({ ...comPath, SUPABASE_PROD_AUDIT_DATABASE_URL: urlDe('producao') }, 'producao');
@@ -226,7 +288,39 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
        'NÃO afirma que a dívida foi resolvida', vazio.saida.slice(0, 300));
     ok(/fonte CEGA/.test(vazio.saida), 'nomeia a hipótese da fonte cega', vazio.saida.slice(0, 400));
 
-    console.log('--atualizar-baseline TAMBÉM recusa lista vazia — não existe mais escape cego');
+    console.log('fonte devolve lista VAZIA via FALLBACK — a régua ANTIGA continua valendo (Codex, achado da 2ª rodada)');
+    // O caminho oposto: quem respondeu foi a RPC ANÔNIMA, não o auditor — e ela só existe (e só
+    // pode existir) num banco que AINDA NÃO recebeu a migração 2, ou seja, fala com a função
+    // ANTIGA, que só emite linha para contagem > 0. `[]` por ESTE caminho continua podendo
+    // significar "banco limpo" de verdade. Tratar os dois caminhos com a mesma régua incondicional
+    // faria o gate diário de produção, hoje, ficar PERMANENTEMENTE vermelho no dia em que o último
+    // achado de dívida fosse corrigido — antes mesmo de qualquer migração da Fase 3 chegar lá.
+    //
+    // Sem credencial de auditor no ambiente: conectarAuditor lança de propósito, e o script cai no
+    // fallback. Baseline SEM dívida para este alvo (`achados: []`) — não há nada para "cegueira"
+    // fazer desaparecer, então o resultado é ok.
+    const semDivida = {
+      gerado_em: '2026-08-09', nota: 'fixture do teste — sem dívida',
+      ambientes: { producao: { gerado_em: '2026-08-09', achados: [] } },
+    };
+    fs.writeFileSync(path.join(raiz, 'scripts', 'data_quality_baseline.json'), JSON.stringify(semDivida, null, 2) + '\n');
+    const fallbackLimpo = await comFallbackFuncionando([], { DIVAT_HOJE: '2026-08-05' }, 'producao', []);
+    ok(fallbackLimpo.status === 0, 'sem dívida no baseline → passa (não é cegueira)',
+       `exit ${fallbackLimpo.status}: ${fallbackLimpo.saida.slice(0, 400)}`);
+    ok(MARCA_REDE.test(fallbackLimpo.saida) === false && /RPC anônima/.test(fallbackLimpo.saida),
+       'usou o fallback (aviso presente), não um erro de rede cru', fallbackLimpo.saida.slice(0, 300));
+
+    console.log('fonte devolve lista VAZIA via FALLBACK, COM dívida no baseline — cegueira, regra antiga (base.size>0)');
+    fs.writeFileSync(path.join(raiz, 'scripts', 'data_quality_baseline.json'), JSON.stringify(fixtureBaseline, null, 2) + '\n');
+    const fallbackCego = await comFallbackFuncionando([], { DIVAT_HOJE: '2026-08-05' }, 'producao', []);
+    ok(fallbackCego.status === 1, 'com dívida registrada, [] via fallback ainda é cegueira → sai 1',
+       `exit ${fallbackCego.status}: ${fallbackCego.saida.slice(0, 400)}`);
+    ok(/duas causas possíveis/.test(fallbackCego.saida),
+       'usa a mensagem ANTIGA (duas causas indistinguíveis), não a nova de "fonte agora sempre devolve"',
+       fallbackCego.saida.slice(0, 400));
+    fs.writeFileSync(path.join(raiz, 'scripts', 'data_quality_baseline.json'), JSON.stringify(fixtureBaseline, null, 2) + '\n');
+
+    console.log('--atualizar-baseline TAMBÉM recusa lista vazia — não existe mais escape cego (caminho do AUDITOR)');
     // Até 10/08/2026 esta era a saída de emergência: `--atualizar-baseline` gravava por cima de
     // uma resposta `[]`, zerando o baseline com um aviso alto. Isso deixou de fazer sentido com a
     // fonte corrigida — zero achados de verdade agora chega como linhas com qtd=0, nunca como `[]`
@@ -343,6 +437,7 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
     ok(/· Alvo: teste/.test(valido.saida), 'imprime o alvo', valido.saida.slice(0, 200));
     ok(!/chave-de-teste-nao-e-segredo/.test(valido.saida), 'não imprime a chave', valido.saida.slice(0, 300));
   } finally {
+    if (srvFallback) srvFallback.close();
     fs.rmSync(raiz, { recursive: true, force: true });
   }
 
