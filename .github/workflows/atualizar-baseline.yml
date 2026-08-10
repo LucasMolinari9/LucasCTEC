@@ -74,10 +74,12 @@ jobs:
           node-version: '20'
 
       # Só o caminho da qualidade usa psql (login auditor). Instalar sempre custaria ~20s a cada
-      # run da segurança, que não o usa.
-      - name: Instalar cliente PostgreSQL
+      # run da segurança, que não o usa. O `command -v` é a segunda condição, pela mesma razão do
+      # db-checks.yml: a imagem já traz o binário, então na prática isto não instala nada — mas
+      # continua instalando no dia em que a imagem mudar (issue #103).
+      - name: Garantir cliente PostgreSQL
         if: inputs.baseline == 'qualidade'
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+        run: command -v psql || { sudo apt-get update && sudo apt-get install -y postgresql-client; }
 
       # TODA entrada passa por `env:` e é lida como "$VAR" no shell — nunca `${{ }}` dentro do
       # `run:`. A interpolação acontece ANTES do shell existir: o valor vira texto no meio do

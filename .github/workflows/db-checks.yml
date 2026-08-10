@@ -14,9 +14,9 @@
 # um conjunto de default privileges do role `supabase_admin` que concede escrita a anon e que NÃO
 # é fechável (postgres não é superusuário no Supabase) — ver docs/seguranca.md §9.1. Enquanto essa
 # porta existir, a janela entre "alguém criou uma tabela por ali" e "o gate percebeu" precisa ser
-# de um dia, não de uma semana. Os outros três jobs pegam carona: todos são read-only. O `realtime`
-# e o `prazos` levam segundos; o `qualidade` deixou de levar, desde que instala o
-# `postgresql-client` para falar com o auditor.
+# de um dia, não de uma semana. Os outros três jobs pegam carona: todos são read-only. Os quatro
+# levam segundos: o `qualidade` precisa de `psql` para falar com o auditor, mas a imagem do runner
+# já o traz e o passo virou condicional (issue #103) — ele não paga mais o `apt-get update` diário.
 #
 # JOBS SEPARADOS, não steps do mesmo job, de propósito: em steps sequenciais o primeiro
 # vermelho aborta o job e esconde o resultado do segundo — e "um vermelho não esconde o outro"
@@ -112,10 +112,18 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
-      # O caminho preferido deste gate e o login auditor (psql + audit.divat_data_quality). O
-      # cliente vem daqui; sem ele, conectarAuditor lanca e o script cai no fallback anonimo.
-      - name: Instalar cliente PostgreSQL
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      # O caminho preferido deste gate e o login auditor (psql + audit.divat_data_quality). Sem
+      # cliente, conectarAuditor lanca e o script cai no fallback anonimo.
+      #
+      # CONDICIONAL de proposito (issue #103). A imagem ubuntu-24.04 ja traz o psql: no run de
+      # 09/08/2026 o apt instalou UM pacote de 11,6 kB — o metapacote `postgresql-client` —, o que
+      # so acontece quando `postgresql-client-16` e `postgresql-client-common`, que sao quem entrega
+      # o binario, ja estao la. O `apt-get update` custava ~8s em CADA rodada (e este gate e
+      # DIARIO) para instalar um nome. Remover o passo seria apostar na imagem: o dia em que ela
+      # mudar e o psql sumir, o gate quebraria com um erro que nao se parece nada com a causa.
+      # Assim nao ha aposta — custa zero quando existe, e ainda instala quando nao existir.
+      - name: Garantir cliente PostgreSQL
+        run: command -v psql || { sudo apt-get update && sudo apt-get install -y postgresql-client; }
       # Respeita scripts/data_quality_baseline.json: passa com a divida ja conhecida e falha
       # quando aparece achado NOVO ou um conhecido PIORA. Para ver o estado cru do banco,
       # rode localmente com --sem-baseline.
