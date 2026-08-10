@@ -73,6 +73,16 @@ async function comRootTemp(prazosArr, fn) {
     ok(r.nivel !== 'erro', `data real '${real}' continua aceita`, `${r.nivel}: ${r.mensagem}`);
   }
 
+  console.log('classificar — fail-closed direto (defesa em profundidade, sem passar por lerPrazos)');
+  // classificar() é chamado de fora com objetos que nem sempre passaram por lerPrazos — a checagem
+  // de sinal precisa existir NOS DOIS lugares, não só na leitura do arquivo (Codex, P2).
+  ok(classificar({ ...base, aviso_dias: -1 }, '2026-08-04').nivel === 'erro',
+     'aviso_dias negativo → erro, nunca o default silencioso');
+  ok(classificar({ ...base, erro_dias: -1 }, '2026-08-04').nivel === 'erro',
+     'erro_dias negativo → erro, nunca o default silencioso');
+  ok(/não-negativo/.test(classificar({ ...base, erro_dias: -1 }, '2026-08-04').mensagem),
+     'a mensagem explica QUAL campo é o problema');
+
   console.log('hojeISO — injetável');
   process.env.DIVAT_HOJE = '2030-01-02';
   ok(hojeISO() === '2030-01-02', 'DIVAT_HOJE manda em hojeISO()');
@@ -93,6 +103,18 @@ async function comRootTemp(prazosArr, fn) {
   await comRootTemp([{ ...prazoOK, erro_dias: '0' }], async root => {
     try { await lerPrazos(root); ok(false, "erro_dias como string → lança Error (caso do achado)"); }
     catch (e) { ok(e instanceof Error, "erro_dias como string → lança Error (caso do achado)", e.message); }
+  });
+
+  // Negativo É um inteiro de verdade — passa pela checagem de TIPO acima e precisa da checagem de
+  // SINAL própria. Com erro_dias:-1, o gate só ficaria vermelho um dia DEPOIS do vencimento
+  // (Codex, P2).
+  await comRootTemp([{ ...prazoOK, aviso_dias: -1 }], async root => {
+    try { await lerPrazos(root); ok(false, "aviso_dias negativo → lança Error"); }
+    catch (e) { ok(e instanceof Error, "aviso_dias negativo → lança Error", e.message); }
+  });
+  await comRootTemp([{ ...prazoOK, erro_dias: -1 }], async root => {
+    try { await lerPrazos(root); ok(false, "erro_dias negativo → lança Error"); }
+    catch (e) { ok(e instanceof Error, "erro_dias negativo → lança Error", e.message); }
   });
 
   await comRootTemp([{ ...prazoOK, vence_em: 20260101 }], async root => {

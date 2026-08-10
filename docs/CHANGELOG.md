@@ -4,6 +4,68 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 10/08/2026 — Migração 3 fecha os dois sensores + segunda leva de revisão do PR #98
+
+Segunda rodada de revisão do Codex sobre o PR #98, depois da leva #101–#104. Dois achados de fundo
+e seis de forma — a mesma família de defeito da leva anterior: guarda que mede menos do que
+promete, ou que confia em estado implícito.
+
+**Migração nova `20260810000000_complete_security_and_quality_sensors.sql`** (não edita as
+migrações 1/2, já aplicadas em teste):
+- `public.divat_security_digest()` passa a somar os **oito** privilégios de tabela que o Postgres
+  reconhece (SELECT/INSERT/UPDATE/DELETE/TRUNCATE/MAINTAIN/REFERENCES/TRIGGER), com
+  `has_any_column_privilege` para os quatro que aceitam grant por coluna. Até aqui REFERENCES e
+  TRIGGER não entravam em lugar nenhum — nem na serialização canônica (o digest ficava
+  byte-idêntico) nem em `authenticated_tem_privilegio` (que só olhava cinco dos oito) — e são
+  justamente dois dos privilégios que a limitação ativa do `supabase_admin` (CLAUDE.md) reconcede
+  sozinha a objeto novo. Dois indicadores graves novos, `anon_referencia`/`anon_trigger`, entram
+  no mesmo regime fixo de `anon_maintain` (nunca baselináveis).
+- `audit.divat_data_quality()` passa a devolver **uma linha por verificação, sempre** — qtd=0
+  inclusive, em vez de só emitir linha quando a contagem é positiva. Fecha o resto da cegueira
+  silenciosa que `check_data_quality.mjs` não conseguia fechar sozinho: com a fonte antiga, banco
+  limpo e fonte cega produziam `[]` igualzinho, mesmo com o baseline zerado por uma limpeza
+  legítima.
+- Validado localmente (Postgres 16 — MAINTAIN é privilégio do Postgres 17, então essa parte não
+  pôde ser reexercitada aqui; já está provada em produção pelas migrações 1/2): GRANT/REVOKE de
+  TRIGGER e REFERENCES muda o indicador e o digest; depois do REVOKE o digest volta ao valor
+  exatamente anterior; `divat_data_quality()` sempre devolve linha, qtd=0 num banco limpo.
+
+**Os seis achados de forma**, um por arquivo:
+- `check_phase3_audit.mjs` parou de chamar `audit.divat_api_shape()`/`audit.realtime_tables()`
+  (a migração 2 já as tinha devolvido a `public`) e passou a usar
+  `audit.divat_security_shape()->funcoes` para a superfície anônima — as cinco RPCs pós-migração-2
+  — e a exigir `data_quality_rows` inteiro e maior que zero. Guarda offline nova em
+  `tests/check.js` impede a reintrodução das duas chamadas antigas.
+- `.github/workflows/db-checks.yml`: o job `qualidade` passa a exportar os dois secrets
+  (`SUPABASE_TEST_AUDIT_DATABASE_URL` e `SUPABASE_PROD_AUDIT_DATABASE_URL`) — só o de produção
+  existia, então `DIVAT_ALVO=teste` (o gatilho de PR/push) nunca alcançava o auditor. Os filtros de
+  `paths` (push e pull_request) ganharam `scripts/lib/auditor.mjs`.
+- `scripts/lib/ambiente.mjs` passa a validar o `role` do payload JWT, não só o `ref`: uma
+  `service_role` do projeto certo passava pela checagem de ref/url (é uma chave válida daquele
+  projeto) e só a checagem de role a reprova — em `resolverAlvo` e em `validarAmbientes`.
+- `scripts/check_grants.mjs`: `--sem-baseline` deixou de ler `security_baseline.json` incondicional
+  e cedo demais — um baseline malformado estourava o `JSON.parse` antes do modo cru ter a chance
+  de decidir. A leitura foi para dentro dos dois ramos que de fato precisam dela
+  (`--atualizar-baseline` e a comparação).
+- `scripts/lib/prazos.mjs`: `aviso_dias`/`erro_dias` negativos passavam pela checagem de tipo (são
+  inteiros de verdade) e empurravam a cobrança para depois do vencimento real. Rejeitado em
+  `lerPrazos` e, em profundidade, em `classificar` (que não confia em ter passado por `lerPrazos`).
+- `tests/check.js`: a validação offline do `security_baseline.json` só conferia PRESENÇA das
+  quatro chaves de medição por ambiente — um digest array ou uma contagem em string passavam como
+  medição válida. Passa a validar tipo/formato quando o slot está preenchido, continuando a aceitar
+  o slot inteiramente `null` (ainda não medido).
+
+Mais dois ajustes sem achado formal: `scripts/semgrep.sh` exporta
+`SEMGREP_ENABLE_VERSION_CHECK=0` nos dois modos offline (padrão e `--test`), para o scan não
+depender de rede só para iniciar; e `supabase/config.toml` + `supabase/.gitignore` passam a existir
+(Postgres 17, migrações ligadas, seed desligado — este repo não versiona `seed.sql`).
+
+**Pendente, e por quê**: aplicar a migração no banco de TESTE e recalcular `security_baseline.json`
+exige rede até o Supabase, que o ambiente de execução desta sessão não tem (mesma limitação já
+registrada para os workflows `deploy_to_vercel`/`vercel` CLI). Uma vez aplicada, o digest de teste
+muda — é mudança de instrumento (a serialização canônica cresceu), não de postura; o diff do
+baseline deve mostrar os indicadores graves continuando falsos.
+
 ## 10/08/2026 — Quatro achados da revisão da Fase 3 (issues #101–#104)
 
 Leva de correções pequenas, todas nascidas da revisão da Tarefa 10 e todas dentro do PR #98. O que

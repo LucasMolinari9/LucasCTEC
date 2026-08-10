@@ -22,17 +22,22 @@ export const ALVOS = ['teste', 'producao'];
 // importa daqui para não haver duas listas (era uma cópia até 10/08/2026).
 export const REFS = { teste: 'gontnlfmothfglssbyyk', producao: 'lwzsxuaqqeoamukduhev' };
 
-// A anon key legada é um JWT cujo payload traz `ref`. Devolve esse ref, ou `null` quando a chave
-// não é um JWT legível — caso das `sb_publishable_...`, para as quais o CLAUDE.md prevê migração.
-// LIMITE CONHECIDO: com chave sem `ref` legível, o ref e a URL seguem amarrados pelas checagens
-// abaixo, mas a CHAVE em si não é conferida.
-function refDeChave(key) {
+// A anon key legada é um JWT cujo payload traz `ref` e `role`. Devolve o payload decodificado, ou
+// `null` quando a chave não é um JWT legível — caso das `sb_publishable_...`, para as quais o
+// CLAUDE.md prevê migração e que documentadamente não oferecem payload local legível. LIMITE
+// CONHECIDO: com chave sem payload legível, o ref e a URL seguem amarrados pelas checagens abaixo,
+// mas a CHAVE em si (`ref` e `role` dela) não é conferida.
+function payloadDeChave(key) {
   const partes = String(key || '').split('.');
   if (partes.length !== 3) return null;
   try {
-    const payload = JSON.parse(Buffer.from(partes[1], 'base64url').toString('utf8'));
-    return typeof payload?.ref === 'string' ? payload.ref : null;
+    return JSON.parse(Buffer.from(partes[1], 'base64url').toString('utf8'));
   } catch { return null; }
+}
+
+function refDeChave(key) {
+  const payload = payloadDeChave(key);
+  return typeof payload?.ref === 'string' ? payload.ref : null;
 }
 
 // Sem normalização de caixa de propósito: 'PRODUCAO' num workflow é quase sempre um engano de
@@ -77,6 +82,17 @@ export function resolverAlvo(config, env) {
     throw new Error(`Ambiente '${alvo}': 'key' é do projeto '${refDaChave}', mas 'ref' diz `
       + `'${escolhido.ref}'. Os dois têm de falar do mesmo projeto.`);
   }
+  // O ROLE do payload, não só o ref: uma `service_role` do MESMO projeto passaria pela checagem
+  // acima — ela É uma chave válida daquele projeto — mas ignora RLS. Colada aqui por engano (ex.:
+  // copiar a chave errada do painel), ela vira, no papel, "a chave pública" e vaza para todo gate
+  // REST que ler scripts/ambientes.json, com a chave mais poderosa que existe. Configuração
+  // VERSIONADA só aceita `anon` — nunca `service_role`, mesmo com ref/url corretos (Codex, P1).
+  const payload = payloadDeChave(escolhido.key);
+  if (payload && payload.role !== 'anon') {
+    throw new Error(`Ambiente '${alvo}': 'key' tem role '${payload.role ?? '(ausente)'}' — só `
+      + `'anon' é aceito em configuração versionada, mesmo quando 'ref' pertence ao projeto certo. `
+      + `Nunca cole uma service_role (ou qualquer role que não seja anon) aqui.`);
+  }
   return { alvo, ref: escolhido.ref, url: escolhido.url, key: escolhido.key };
 }
 
@@ -99,6 +115,13 @@ export function validarAmbientes(config) {
     const refChave = refDeChave(a.key);
     if (refChave && refChave !== REFS[alvo]) {
       problemas.push(`ambientes.${alvo}.key é do projeto '${refChave}', esperado '${REFS[alvo]}'`);
+    }
+    // Mesma amarração de `resolverAlvo`, aqui sobre o ARQUIVO VERSIONADO: só `anon` é aceito.
+    // service_role do projeto CERTO passaria pelo `refChave` acima — é chave válida daquele
+    // projeto — e só esta checagem de role a reprova.
+    const payloadChave = payloadDeChave(a.key);
+    if (payloadChave && payloadChave.role !== 'anon') {
+      problemas.push(`ambientes.${alvo}.key tem role '${payloadChave.role ?? '(ausente)'}', esperado 'anon'`);
     }
   }
   return problemas;

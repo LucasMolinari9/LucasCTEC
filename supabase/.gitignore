@@ -1,0 +1,7 @@
+# Estado LOCAL do Supabase CLI — nunca versionado (mesma regra do backup: dado/estado efêmero de
+# máquina não é código). `supabase/migrations/*.sql` e `supabase/config.toml` continuam versionados;
+# só o que a CLI escreve em runtime fica de fora.
+.branches
+.temp
+.env.local
+.env.keys

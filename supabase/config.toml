@@ -1,0 +1,69 @@
+# Configuração LOCAL do Supabase CLI (`supabase start`/`db diff`/`migration up` na máquina do
+# dono ou no CI) — não é config do projeto HOSPEDADO, que vive só no painel do Supabase.
+#
+# Por que existe: até 10/08/2026 supabase/ tinha só migrations/, sem config.toml — o que faz
+# `supabase` (qualquer subcomando) recusar rodar com "no config found" fora de `supabase init`
+# interativo. As migrações já eram versionadas e cobradas por scripts/check_migrations.mjs; faltava
+# só o arquivo que deixa a CLI reconhecer o diretório como um projeto Supabase.
+#
+# Este portal não usa Auth/Storage/Edge Functions do Supabase (é site estático que só lê REST +
+# Realtime — ver CLAUDE.md § Arquitetura) nem staging local com dado real (o schema-base vem do
+# processo operacional descrito em docs/etl.md, não de um seed.sql versionado). Por isso os
+# serviços que este repo não usa ficam com `enabled = false`: `supabase start` não sobe container
+# para o que ninguém vai testar aqui.
+project_id = "lucasctec"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+# O projeto HOSPEDADO roda Postgres 17 (ver docs/planos/fase-3-hardening-moderado.md e as
+# migrações da Fase 3, que usam privilégio MAINTAIN — introduzido no Postgres 17). A instância
+# local PRECISA ser a mesma versão maior: uma migração que usa sintaxe/privilégio novo do 17
+# passaria aqui só por acidente se a CLI subisse um Postgres mais velho.
+major_version = 17
+
+[db.migrations]
+# As migrações em supabase/migrations/ (versionadas, cobradas por scripts/check_migrations.mjs)
+# são a única fonte de verdade de schema deste repo — não há schema declarativo em
+# supabase/schemas/.
+enabled = true
+schema_paths = []
+
+[db.seed]
+# DESLIGADO DE PROPÓSITO: este repo não versiona seed.sql. O schema-base (tabelas, RLS, grants,
+# funções, roles de auditoria) é a baseline reconstruída por docs/backup_schema.sql — processo
+# operacional documentado em docs/backup.md §"Caminho B", não um seed da CLI — e o DADO em si
+# entra pelo ETL do dono (CSV → Table Editor, service role — ver docs/etl.md), nunca por aqui.
+# `enabled = true` sem um seed.sql faria `supabase db reset` falhar procurando um arquivo que não
+# existe por desenho.
+enabled = false
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = false
+
+[storage]
+enabled = false
+
+[auth]
+enabled = false
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false

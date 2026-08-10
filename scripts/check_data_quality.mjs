@@ -174,6 +174,23 @@ if (!Array.isArray(achados)) {
   process.exit(1);
 }
 
+// CEGUEIRA SILENCIOSA, agora fechada na FONTE. Desde a migração 20260810000000, audit.divat_data_
+// quality() devolve UMA LINHA POR VERIFICAÇÃO, inclusive com qtd=0 — o número de verificações é
+// fixo e maior que zero (varre colunas/tabelas conhecidas, não dado que possa zerar). Então `[]`
+// deixou de significar "banco limpo" e passou a significar SÓ UMA COISA: a fonte não rodou
+// verificação nenhuma — permissão revogada, RLS, função trocada de schema, migração pela metade.
+// Até 10/08/2026 esta checagem só disparava se `base.size > 0` (havia dívida no baseline para
+// desaparecer) — com o baseline zerado por uma limpeza legítima, `[]` continuava indistinguível de
+// "tudo certo". Incondicional e ANTES de qualquer baseline (inclusive --atualizar-baseline e
+// --sem-baseline): perder a visão do banco nunca pode virar um baseline vazio gravado por engano.
+if (achados.length === 0) {
+  console.error('\n✗ A verificação não devolveu NENHUMA linha — a função agora sempre devolve uma');
+  console.error('  linha por checagem (inclusive qtd=0), então lista vazia só pode ser fonte CEGA:');
+  console.error('  permissão revogada, RLS, função trocada de schema, ou migração aplicada pela metade.');
+  console.error('  Abortando em vez de assumir "banco limpo".');
+  process.exit(1);
+}
+
 // `qtd` NÃO tem unidade única: em codlinha_orfa é count(distinct codlinha), nas outras é
 // count(*) de linhas. Rotulado na saída para ninguém somar peras com maçãs.
 const unidade = v => (v === 'codlinha_orfa' ? 'codlinha(s) distinta(s)' : 'linha(s)');
@@ -244,16 +261,19 @@ if (atualizar) {
     // diff gigante que esconde a única linha que de fato mudou.
     ...(herdado ? { orfaos_conhecidos: herdado } : {}),
     // A MEDIÇÃO vai para o slot do ALVO (issue #99). Só entra no baseline o que pode DERRUBAR o
-    // gate, isto é, erro DEPOIS da reclassificação por natureza. Sem este filtro, o primeiro
-    // `--atualizar-baseline` reintroduziria as rebaixadas (a RPC continua devolvendo `erro` para
-    // elas) e o arquivo passaria a carregar entradas que nunca são consultadas — dívida de
-    // mentira, ruído no diff.
+    // gate, isto é, erro DEPOIS da reclassificação por natureza E com qtd>0. Sem o filtro de
+    // severidade, o primeiro `--atualizar-baseline` reintroduziria as rebaixadas (a RPC continua
+    // devolvendo `erro` para elas) e o arquivo passaria a carregar entradas que nunca são
+    // consultadas — dívida de mentira, ruído no diff. Sem o filtro de qtd>0 (novo desde a migração
+    // 20260810000000, que passou a devolver uma linha por verificação mesmo sem achado), toda
+    // verificação que rodou limpa entraria no baseline como um "achado" de zero — dívida fictícia,
+    // o mesmo ruído do lado oposto.
     ambientes: {
       ...ambientes,
       [ALVO]: {
         gerado_em: new Date().toISOString().slice(0, 10),
         achados: achados
-          .filter(a => severidadeDe(a) === 'erro')
+          .filter(a => severidadeDe(a) === 'erro' && Number(a.qtd) > 0)
           .map(a => ({ verificacao: a.verificacao, severidade: severidadeDe(a), qtd: Number(a.qtd), detalhe: a.detalhe })),
       },
     },
@@ -319,48 +339,35 @@ if (!semBaseline) {
   }
 }
 
-// CEGUEIRA SILENCIOSA — a única falha deste gate que sai VERDE, e por isso a pior.
-//
-// A verificação só emite linha quando a contagem é > 0 (veja a função em docs/backup_schema.sql).
-// Logo `[]` significa duas coisas que daqui NÃO se distinguem: (a) a dívida foi corrigida no
-// banco, ou (b) a fonte perdeu a visão dele — permissão revogada, RLS, função trocada de schema,
-// migração aplicada pela metade — e o banco segue sujo. O `Array.isArray` lá em cima não cobre
-// isto: `[]` É uma lista.
-//
-// Até 06/08/2026 o script escolhia sozinho a leitura otimista: `resolvidos` virava o baseline
-// inteiro, imprimia "✓ Resolvido desde o baseline" e saía 0. Quer dizer que o dia em que a fonte
-// cegasse era exatamente o dia em que o gate ficaria mais verde do que nunca.
-//
-// Como as duas causas são indistinguíveis, o gate PERGUNTA em vez de assumir. Assumir (a) é o
-// único dos dois erros que passa despercebido; gate vermelho à toa alguém investiga, gate verde
-// por engano ninguém investiga. A confirmação humana é o `--atualizar-baseline`.
-//
-// O ALCANCE desta guarda, dito para ninguém confiar demais nela: ela só enxerga a cegueira
-// enquanto houver dívida registrada para desaparecer. Com o baseline zerado — depois de uma
-// limpeza legítima — `[]` volta a ser indistinguível de tudo certo, e nada aqui detecta. Fechar
-// esse resto exige mudar a FONTE: a verificação teria de devolver uma linha por varredura, com
-// `qtd = 0` inclusive, para que lista vazia passasse a significar "não rodei". Isso é migração,
-// não conserta-se daqui. `--sem-baseline` também fica de fora, de propósito: é modo de
-// diagnóstico manual, cujo contrato é mostrar o estado cru sem opinar.
-if (!semBaseline && achados.length === 0 && base.size > 0) {
-  console.error(`\n✗ A verificação não devolveu achado NENHUM, mas o baseline registra ${base.size}.`);
-  console.error('  Zero achados tem duas causas possíveis, e elas não se distinguem daqui:');
-  console.error('   a) a dívida foi corrigida no banco — confirme com --atualizar-baseline;');
-  console.error('   b) a fonte cegou (permissão/RLS/schema/migração pela metade) e o banco segue sujo.');
-  console.error('  Abortando em vez de escolher a leitura otimista.');
-  process.exit(1);
-}
+// A CEGUEIRA SILENCIOSA (a única falha deste gate que saía VERDE) já foi barrada lá em cima,
+// incondicionalmente, no primeiro `if (achados.length === 0)` — antes de qualquer baseline ser
+// tocado. Até 10/08/2026 esta checagem só existia AQUI, condicionada a `base.size > 0`: com o
+// baseline zerado por uma limpeza legítima, `[]` continuava indistinguível de "tudo certo", porque
+// a FONTE só emitia linha quando a contagem era > 0. A migração 20260810000000 mudou a fonte —
+// agora ela sempre devolve uma linha por verificação, qtd=0 inclusive — então `[]` deixou de
+// precisar de contexto de baseline para ser reconhecida como cega.
 
+// Linhas com qtd=0 PROVAM que a verificação rodou (é o ponto da mudança de fonte) mas não são
+// achado — pular ANTES da reclassificação por severidade, senão uma checagem operacional zerada
+// entraria em `novos` só porque o baseline nunca teve entrada "zero" para comparar (não existia
+// achado zero antes da migração 3).
 const novos = [], piorados = [], conhecidos = [], avisos = [];
+let verificacoesSemAchado = 0;
 for (const a of achados) {
   const qtd = Number(a.qtd);
+  if (qtd === 0) { verificacoesSemAchado++; continue; }
   if (severidadeDe(a) !== 'erro') { avisos.push({ ...a, qtd, rebaixado: foiRebaixado(a) }); continue; }
   if (!base.has(chave(a))) { novos.push({ ...a, qtd }); continue; }
   const antes = base.get(chave(a));
   if (qtd > antes) piorados.push({ ...a, qtd, antes });
   else conhecidos.push({ ...a, qtd, antes });
 }
-const resolvidos = [...base.keys()].filter(k => !achados.some(a => chave(a) === k));
+// "Resolvido" agora compara contra as chaves com qtd>0 desta rodada, não contra a PRESENÇA da
+// chave na resposta — a chave de uma dívida corrigida continua presente (qtd=0), só que sem
+// contar como achado. Comparar por presença faria uma dívida zerada nunca aparecer como
+// "resolvida" (a chave nunca "some" de verdade, só zera).
+const chavesComAchadoAgora = new Set(achados.filter(a => Number(a.qtd) > 0).map(chave));
+const resolvidos = [...base.keys()].filter(k => !chavesComAchadoAgora.has(k));
 
 const linha = a => `    ${a.detalhe} — ${a.qtd} ${unidade(a.verificacao)}${a.antes !== undefined ? ` (baseline: ${a.antes})` : ''}`;
 
@@ -385,6 +392,7 @@ if (resolvidos.length) {
 if (!novos.length && !piorados.length) {
   const total = conhecidos.reduce((s, a) => s + a.qtd, 0);
   console.log(`\n✓ Qualidade dos dados: nenhum achado de erro${base.size ? ' novo' : ''}.${total ? ` (${total} item(ns) de dívida conhecida — ver acima.)` : ''}`);
+  console.log(`  · ${verificacoesSemAchado} verificação(ões) rodou(aram) sem achado (qtd=0) — prova de que a fonte não cegou.`);
   process.exit(0);
 }
 

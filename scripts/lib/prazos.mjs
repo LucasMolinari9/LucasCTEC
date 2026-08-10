@@ -46,8 +46,26 @@ export function classificar(prazo, hoje) {
     return { id, dias: NaN, nivel: 'erro', mensagem: `${id}: data de referência ilegível (${hoje})` };
   }
   const dias = diasAte(prazo.vence_em, hoje);
-  const aviso = Number.isInteger(prazo.aviso_dias) ? prazo.aviso_dias : 30;
-  const erro = Number.isInteger(prazo.erro_dias) ? prazo.erro_dias : 7;
+  // FAIL-CLOSED também aqui, não só em lerPrazos: um `aviso_dias`/`erro_dias` NEGATIVO empurra a
+  // cobrança para DEPOIS do vencimento real (com erro_dias=-1, o gate só fica vermelho um dia
+  // depois de vencido) — e classificar() é chamado de fora com objetos que podem não ter passado
+  // por lerPrazos (defesa em profundidade, não redundância). Ausência do campo continua usando o
+  // default (30/7); presente e INVÁLIDO (não-inteiro ou negativo) vira `erro`, nunca o default
+  // silencioso — que era exatamente o caminho por onde `erro_dias:'0'` (string) escapava antes de
+  // lerPrazos ganhar a checagem de tipo (Codex, P2).
+  const limite = (valor, nome, def) => {
+    if (valor === undefined) return { ok: true, valor: def };
+    if (!Number.isInteger(valor) || valor < 0) {
+      return { ok: false, mensagem: `${id}: '${nome}' precisa ser inteiro não-negativo (veio ${JSON.stringify(valor)}) — corrija scripts/prazos.json` };
+    }
+    return { ok: true, valor };
+  };
+  const rAviso = limite(prazo.aviso_dias, 'aviso_dias', 30);
+  if (!rAviso.ok) return { id, dias: NaN, nivel: 'erro', mensagem: rAviso.mensagem };
+  const rErro = limite(prazo.erro_dias, 'erro_dias', 7);
+  if (!rErro.ok) return { id, dias: NaN, nivel: 'erro', mensagem: rErro.mensagem };
+  const aviso = rAviso.valor;
+  const erro = rErro.valor;
 
   if (dias <= erro) {
     return { id, dias, nivel: 'erro',
@@ -92,6 +110,14 @@ export async function lerPrazos(root) {
     for (const c of CAMPOS_INTEIRO) {
       if (!Number.isInteger(p[c])) {
         throw new Error(`Prazo '${p.id ?? '?'}' campo '${c}' devia ser inteiro, veio ${typeof p[c]} (${JSON.stringify(p[c])}) em ${caminho}`);
+      }
+      // Negativo é o mesmo defeito do `erro_dias:'0'` (string) que motivou a checagem de tipo
+      // acima, só que passa por ELA: é um inteiro de verdade. Com `erro_dias: -1`, `dias <= erro`
+      // só fica verdadeiro um dia DEPOIS do vencimento — o gate concede um dia de graça exatamente
+      // no dia em que prometeu ficar vermelho (Codex, P2). Fail-closed: rejeita aqui, não deixa
+      // classificar() decidir sozinho (defesa em profundidade — classificar() também rejeita).
+      if (p[c] < 0) {
+        throw new Error(`Prazo '${p.id ?? '?'}' campo '${c}' não pode ser negativo (veio ${p[c]}) em ${caminho} — negativo adiaria a cobrança para DEPOIS do vencimento.`);
       }
     }
   }

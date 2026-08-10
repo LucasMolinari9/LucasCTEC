@@ -207,13 +207,15 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
     ok(/⚠ Auditor indisponível \(SUPABASE_TEST_AUDIT_DATABASE_URL não configurado/.test(soProd.saida),
        'avisa que falta a credencial DO ALVO', soProd.saida.slice(0, 300));
 
-    console.log('fonte devolve lista VAZIA com dívida no baseline — é cegueira, não "resolvido"');
-    // O modo de falha mais perigoso deste gate, e o único que sai VERDE: a fonte perde a visão do
-    // banco (permissão revogada, RLS, função trocada de schema, migração pela metade) e devolve
-    // zero achados. Como a RPC só emite linha quando a contagem é > 0, banco limpo devolve `[]`
-    // igualzinho — as duas causas são indistinguíveis daqui. Antes desta guarda o script escolhia
-    // sozinho a interpretação otimista: imprimia "✓ Resolvido desde o baseline" para a dívida
-    // inteira e saía 0. O `Array.isArray` logo acima não cobre isto — `[]` É uma lista.
+    console.log('fonte devolve lista VAZIA — é cegueira, incondicional, mesmo com baseline zerado');
+    // Desde a migração 20260810000000, audit.divat_data_quality() devolve UMA LINHA POR
+    // VERIFICAÇÃO, qtd=0 inclusive — o número de verificações é fixo e nunca zero. Então `[]`
+    // deixou de poder significar "banco limpo": só pode ser a fonte cega (permissão revogada, RLS,
+    // função trocada de schema, migração pela metade). Por isso a checagem é INCONDICIONAL — não
+    // depende mais de haver dívida no baseline para "desaparecer", e vale inclusive em
+    // --atualizar-baseline (bancada abaixo): não existe mais um jeito de zerar o baseline gravando
+    // por cima de uma resposta cega, porque zero de verdade agora vem como linhas com qtd=0, nunca
+    // como lista vazia.
     fs.writeFileSync(path.join(bin, 'psql'),
       `#!${process.execPath}\nprocess.stdout.write('\\n[]\\n');\n`, { mode: 0o755 });
     const vazio = rodar({ ...comPath, SUPABASE_PROD_AUDIT_DATABASE_URL: urlDe('producao') }, 'producao');
@@ -222,33 +224,48 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
        'NÃO declara qualidade em dia', vazio.saida.slice(0, 300));
     ok(!/✓ Resolvido desde o baseline/.test(vazio.saida),
        'NÃO afirma que a dívida foi resolvida', vazio.saida.slice(0, 300));
-    ok(/--atualizar-baseline/.test(vazio.saida),
-       'diz como confirmar, caso a dívida tenha sido mesmo corrigida', vazio.saida.slice(0, 400));
+    ok(/fonte CEGA/.test(vazio.saida), 'nomeia a hipótese da fonte cega', vazio.saida.slice(0, 400));
 
-    console.log('--atualizar-baseline zerando a dívida — grava, mas AVISA alto');
-    // A saída de emergência do caso acima não pode ser ela mesma um caminho cego. O `psql` falso
-    // continua devolvendo `[]`; se o operador seguir a instrução do gate sem desconfiar, isto aqui
-    // apaga as entradas do baseline — que é a dívida REGISTRADA, não o perdão dela. Gravar é
-    // legítimo (o `--atualizar-baseline` é a confirmação humana), mas passar de N para ZERO é a
-    // assinatura da cegueira, e tem de deixar rastro em duas camadas: o aviso no log e o diff do
-    // arquivo versionado, que ainda precisa ser commitado por alguém.
+    console.log('--atualizar-baseline TAMBÉM recusa lista vazia — não existe mais escape cego');
+    // Até 10/08/2026 esta era a saída de emergência: `--atualizar-baseline` gravava por cima de
+    // uma resposta `[]`, zerando o baseline com um aviso alto. Isso deixou de fazer sentido com a
+    // fonte corrigida — zero achados de verdade agora chega como linhas com qtd=0, nunca como `[]`
+    // — então `[]` em QUALQUER modo (inclusive --atualizar-baseline) só pode ser cegueira, e o
+    // gate se recusa a escrever um baseline a partir dela.
     const baselinePath = path.join(raiz, 'scripts', 'data_quality_baseline.json');
     const antes = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
-    const zerou = rodar({ ...comPath, SUPABASE_PROD_AUDIT_DATABASE_URL: urlDe('producao') },
+    const tentouZerar = rodar({ ...comPath, SUPABASE_PROD_AUDIT_DATABASE_URL: urlDe('producao') },
                         'producao', ['--atualizar-baseline']);
-    ok(zerou.status === 0, 'grava (a confirmação humana é explícita)', `exit ${zerou.status}: ${zerou.saida.slice(0, 300)}`);
-    ok(/⚠/.test(zerou.saida) && /1 achado\(s\)/.test(zerou.saida),
-       'avisa que a dívida registrada foi a ZERO, dizendo quantos sumiram', zerou.saida.slice(0, 500));
-    ok(/cegou|cegueira/.test(zerou.saida),
-       'nomeia a hipótese da fonte cega — não trata como vitória', zerou.saida.slice(0, 500));
-    const reescrito = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
-    ok(reescrito.ambientes.producao.achados.length === 0, 'o slot do alvo foi mesmo reescrito');
+    ok(tentouZerar.status === 1, 'recusa gravar (sai 1, não 0)', `exit ${tentouZerar.status}: ${tentouZerar.saida.slice(0, 300)}`);
+    const naoMudou = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
+    ok(JSON.stringify(naoMudou) === JSON.stringify(antes), 'o arquivo NÃO foi tocado', JSON.stringify(naoMudou));
+
+    console.log('linhas com qtd=0 provam que a verificação rodou, mas não viram achado no baseline');
+    // O par positivo do caso acima: a fonte corrigida devolve uma linha por checagem, qtd=0
+    // inclusive. Uma mistura de achado real (qtd>0) com verificações limpas (qtd=0) só pode
+    // gravar a primeira no baseline — gravar as de qtd=0 também seria dívida de mentira, ruído
+    // que nunca é consultado (item B2 da correção da revisão).
+    fs.writeFileSync(path.join(bin, 'psql'),
+      `#!${process.execPath}\nprocess.stdout.write('\\n[` +
+      `{"verificacao":"codlinha_orfa","severidade":"erro","qtd":2,"detalhe":"itinerario_teste sem match em tabela_vista_teste"},` +
+      `{"verificacao":"encoding_ufffd","severidade":"aviso","qtd":0,"detalhe":"tabela_vista_teste.nome"},` +
+      `{"verificacao":"codempresa_invalida","severidade":"aviso","qtd":0,"detalhe":"tabela_vista_teste.codempresa sem match em codempresa_teste"}` +
+      `]\\n');\n`, { mode: 0o755 });
+    const misto = rodar({ ...comPath, SUPABASE_PROD_AUDIT_DATABASE_URL: urlDe('producao') },
+                        'producao', ['--atualizar-baseline']);
+    ok(misto.status === 0, 'grava normalmente (não é cegueira: há linhas de verdade)', `exit ${misto.status}: ${misto.saida.slice(0, 300)}`);
+    const reescritoMisto = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
+    ok(reescritoMisto.ambientes.producao.achados.length === 1
+       && reescritoMisto.ambientes.producao.achados[0].qtd === 2,
+       'só o achado com qtd>0 entra no baseline — as duas linhas qtd=0 ficam de fora',
+       JSON.stringify(reescritoMisto.ambientes.producao.achados));
+    fs.writeFileSync(baselinePath, JSON.stringify(antes, null, 2) + '\n');   // devolve a fixture
+
     // A escrita é POR AMBIENTE (issue #99): rodar --atualizar-baseline no cron (alvo `producao`)
     // não pode zerar a dívida medida em TESTE. Antes da #99 havia uma lista só e o cron diário
     // reescrevia o arquivo inteiro — dívida do outro banco apagada sem ninguém ver.
-    ok(JSON.stringify(reescrito.ambientes.teste) === JSON.stringify(antes.ambientes.teste),
-       'o slot do OUTRO ambiente ficou intacto', JSON.stringify(reescrito.ambientes.teste));
-    fs.writeFileSync(baselinePath, JSON.stringify(antes, null, 2) + '\n');   // devolve a fixture
+    ok(JSON.stringify(reescritoMisto.ambientes.teste) === JSON.stringify(antes.ambientes.teste),
+       'o slot do OUTRO ambiente ficou intacto', JSON.stringify(reescritoMisto.ambientes.teste));
 
     console.log('fonte devolve algo que NEM É LISTA — aborta em vez de assumir vazio');
     // Irmão do caso acima pelo outro lado. `[]` É uma lista, e por isso passa pelo `Array.isArray`

@@ -71,6 +71,22 @@ const lanca = fn => { try { fn(); return false; } catch { return true; } };
   ok(!lanca(() => resolverAlvo(cfg, { DIVAT_ALVO: 'teste' })),
      'chave que não é JWT continua aceita (limite documentado: sb_publishable_… não traz ref legível)');
 
+  console.log('resolverAlvo — o ROLE do payload também é conferido, não só o ref (Codex, P1)');
+  // service_role do PROJETO CERTO passa pela checagem de ref/url — é uma chave válida daquele
+  // projeto — e é exatamente por isso que ela precisa de uma checagem PRÓPRIA: colada por engano
+  // em ambientes.json ela vazaria como se fosse "a chave pública", ignorando RLS.
+  const jwtComRole = (ref, role) => 'x.' + Buffer.from(JSON.stringify({ iss: 'supabase', ref, role }))
+    .toString('base64url') + '.y';
+  ok(lanca(() => resolverAlvo({ ...cfg, teste: { ...cfg.teste, key: jwtComRole(testeRef, 'service_role') } },
+                              { DIVAT_ALVO: 'teste' })),
+     'service_role do projeto CERTO lança mesmo assim — só anon é aceito');
+  ok(lanca(() => resolverAlvo({ ...cfg, teste: { ...cfg.teste, key: jwtComRole(testeRef, 'authenticated') } },
+                              { DIVAT_ALVO: 'teste' })),
+     'role diferente de anon (mesmo não sendo service_role) também lança');
+  ok(!lanca(() => resolverAlvo({ ...cfg, teste: { ...cfg.teste, key: jwtComRole(testeRef, 'anon') } },
+                               { DIVAT_ALVO: 'teste' })),
+     'role anon, ref certo → passa');
+
   console.log('validarAmbientes — o ambientes.json VERSIONADO aponta para os projetos certos');
   // Esta é a outra metade da guarda, e a divisão é deliberada. `resolverAlvo` confere COERÊNCIA
   // INTERNA (url e key falando do mesmo projeto que o `ref`) — e uma configuração inteiramente
@@ -94,6 +110,8 @@ const lanca = fn => { try { fn(); return false; } catch { return true; } };
      'URL de host de terceiro é reprovada no arquivo versionado');
   ok(validarAmbientes({ ...real.ambientes, teste: { ...real.ambientes.teste, url: 'http://127.0.0.1:9' } }).length > 0,
      'a URL de fixture, legítima na bancada, é reprovada no arquivo versionado');
+  ok(validarAmbientes({ ...real.ambientes, teste: { ...real.ambientes.teste, key: jwtComRole(testeRef, 'service_role') } }).length > 0,
+     'service_role no arquivo VERSIONADO é reprovada, mesmo com ref certo');
 
   console.log('REFS — uma lista só, compartilhada com o auditor');
   const { REFS: refsAmbiente } = await import('../scripts/lib/ambiente.mjs');

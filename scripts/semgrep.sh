@@ -51,8 +51,15 @@ LOCAL_RULES="--config=$ROOT/.semgrep/rules"
 # workflows do Actions (github-actions). Sem p/react, p/nodejs etc. — não há nada disso aqui.
 REGISTRY="--config=p/javascript --config=p/xss --config=p/secrets --config=p/github-actions"
 
+# SEMGREP_ENABLE_VERSION_CHECK=0: os dois modos OFFLINE (padrão e --test) não podem depender de
+# rede para nem sequer INICIAR — sem isso o semgrep bate em check-version antes de escanear, e no
+# ambiente do Claude (saída bloqueada, igual ao vercel CLI) essa checagem consome o timeout da
+# tentativa em vez de falhar rápido. --full FICA DE FORA de propósito: ele já precisa de rede para
+# baixar os rulesets do registry (REGISTRY, abaixo), então desligar o version-check ali não
+# destrava nada e esconderia um aviso de versão que faz sentido justamente quando há rede.
 case "${1:-}" in
   --test)
+    export SEMGREP_ENABLE_VERSION_CHECK=0
     exec "$SEMGREP" --test --metrics=off --config="$ROOT/.semgrep/rules" "$ROOT/.semgrep/tests"
     ;;
   --full)
@@ -61,6 +68,7 @@ case "${1:-}" in
     exec "$SEMGREP" scan $COMMON $LOCAL_RULES $REGISTRY "$@" .
     ;;
   *)
+    export SEMGREP_ENABLE_VERSION_CHECK=0
     # shellcheck disable=SC2086
     exec "$SEMGREP" scan $COMMON $LOCAL_RULES "$@" .
     ;;

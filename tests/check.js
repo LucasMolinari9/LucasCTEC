@@ -633,6 +633,26 @@ console.log('\n[2b] Deriva docs × código');
         // espera pelo --atualizar-baseline daquele banco.
         const faltando = MEDIDOS.filter(c => !(c in slot));
         if (faltando.length) throw new Error(`ambientes.${alvo} sem o(s) campo(s): ${faltando.join(', ')}`);
+        // Até aqui a guarda só conferia PRESENÇA das quatro chaves — um digest array ou uma
+        // contagem em string passavam disfarçados de medição válida. Um PR que corrompesse só
+        // `ambientes.producao` (o alvo que os gates de PR/push nunca tocam) passaria aqui mesmo
+        // assim, e o cron de produção quebraria dias depois, longe de onde o defeito nasceu
+        // (Codex, P2). Slot TOTALMENTE null continua legítimo — é "ainda não medido"; o que não
+        // se aceita é meio-medido (alguns null, outros não) nem tipo errado nos preenchidos.
+        const nulos = MEDIDOS.filter(c => slot[c] === null);
+        if (nulos.length === MEDIDOS.length) continue;
+        if (nulos.length > 0) {
+          throw new Error(`ambientes.${alvo}: slot PARCIALMENTE medido (${nulos.join(', ')} null, o resto não) `
+            + '— ou os quatro campos são null (ainda não medido) ou os quatro estão preenchidos');
+        }
+        if (typeof slot.digest !== 'string' || !/^[0-9a-f]{64}$/.test(slot.digest)) {
+          throw new Error(`ambientes.${alvo}.digest não é um sha256 hex minúsculo de 64 caracteres (veio ${JSON.stringify(slot.digest)})`);
+        }
+        for (const campo of ['anon_rpcs', 'defaults_permissivos', 'funcoes_sem_search_path']) {
+          if (!Number.isInteger(slot[campo]) || slot[campo] < 0) {
+            throw new Error(`ambientes.${alvo}.${campo} precisa ser um inteiro não-negativo (veio ${JSON.stringify(slot[campo])})`);
+          }
+        }
       }
       // Medição sobrando no TOPO é a forma antiga viva ao lado da nova: o script leria o slot, o
       // humano leria o topo, e os dois discordariam em silêncio. Nenhum gate enxerga isso.
@@ -652,6 +672,30 @@ console.log('\n[2b] Deriva docs × código');
       okline(`baseline de segurança válido (${b.achados.length} exceção(ões) aceita(s), medição em ${Object.keys(b.ambientes).length} ambiente(s))`);
     } catch (e){
       fail(`scripts/security_baseline.json inválido: ${e.message}`);
+    }
+  }
+
+  // --- o auditor da Fase 3 não regride para as RPCs que a migração 2 já moveu para public ---
+  // audit.divat_api_shape() e audit.realtime_tables() pararam de existir NO SCHEMA AUDIT desde a
+  // migração 20260805000000 (elas voltaram para `public`, anônimas). Se
+  // scripts/check_phase3_audit.mjs voltar a chamá-las qualificadas por `audit.`, o job
+  // `test-auditor` quebra com "função não existe" em vez de validar o rollout — e só se descobre
+  // isso rodando contra um banco de verdade, longe daqui. Guarda OFFLINE, puramente textual.
+  if (existe('scripts/check_phase3_audit.mjs')) {
+    // Comentários `//` saem ANTES de procurar — o cabeçalho do próprio arquivo cita as duas
+    // chamadas antigas em prosa, explicando por que pararam de existir, e essa prosa não pode
+    // reprovar a si mesma. Regex simples (sem parser de JS): suficiente porque este arquivo não
+    // tem `//` dentro de string nem de regex literal.
+    const fonteAuditor = ler('scripts/check_phase3_audit.mjs')
+      .split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
+    const proibidas = [/audit\.divat_api_shape\s*\(/, /audit\.realtime_tables\s*\(/];
+    const achadas = proibidas.filter(re => re.test(fonteAuditor));
+    if (achadas.length) {
+      fail('[scripts/check_phase3_audit.mjs] chama função que a migração 2 moveu de audit para '
+        + 'public (audit.divat_api_shape()/audit.realtime_tables()) — use audit.divat_security_shape() '
+        + 'para validar a superfície pública.');
+    } else {
+      okline('check_phase3_audit.mjs não reintroduziu audit.divat_api_shape()/audit.realtime_tables()');
     }
   }
 

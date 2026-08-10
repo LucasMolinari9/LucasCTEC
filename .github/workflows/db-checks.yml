@@ -65,6 +65,10 @@ on:
       # mudança de alvo passa sem que nenhuma checagem viva rode (Codex, P2).
       - scripts/ambientes.json
       - scripts/lib/ambiente.mjs
+      # A guarda de conexão compartilhada pelos dois gates que usam login PostgreSQL (qualidade e
+      # o auditor da Fase 3). Sem ela aqui, uma mudança nela roda só os testes stubados e nunca a
+      # credencial/pooler/psql de verdade (Codex, P2).
+      - scripts/lib/auditor.mjs
       - scripts/prazos.json
       - docs/backup_schema.sql
       - docs/schema.md
@@ -83,6 +87,10 @@ on:
       # mudança de alvo passa sem que nenhuma checagem viva rode (Codex, P2).
       - scripts/ambientes.json
       - scripts/lib/ambiente.mjs
+      # A guarda de conexão compartilhada pelos dois gates que usam login PostgreSQL (qualidade e
+      # o auditor da Fase 3). Sem ela aqui, uma mudança nela roda só os testes stubados e nunca a
+      # credencial/pooler/psql de verdade (Codex, P2).
+      - scripts/lib/auditor.mjs
       - scripts/prazos.json
       - docs/backup_schema.sql
       - docs/schema.md
@@ -141,17 +149,28 @@ jobs:
       # validade em scripts/prazos.json (id check_data_quality_fallback): passada a data, o gate
       # fica vermelho de proposito, para caminho temporario nao virar permanente por inercia.
       #
-      # LEIA ANTES DE ABRIR BUG PELO ⚠ DO PRIMEIRO PR: hoje so existe o secret
-      # SUPABASE_PROD_AUDIT_DATABASE_URL. Com DIVAT_ALVO=teste (o gatilho de PR/push), o auditor
-      # procura SUPABASE_TEST_AUDIT_DATABASE_URL, nao acha, e o gate cai no fallback anonimo
-      # contra o banco de TESTE, imprimindo `⚠ Auditor indisponivel (...)`. Isso e o
-      # comportamento CORRETO, nao uma falha: a credencial de producao nao pode virar atalho para
-      # um gate de PR falar com producao (issue #74). O ⚠ so desaparece quando existir o secret
-      # SUPABASE_TEST_AUDIT_DATABASE_URL — ate la, o caminho do auditor vale so no cron e no
-      # dispatch, que sao os dois gatilhos que resolvem DIVAT_ALVO=producao.
+      # LEIA ANTES DE ABRIR BUG PELO ⚠/VERMELHO DESTE JOB: o passo abaixo agora exporta os DOIS
+      # secrets (SUPABASE_TEST_AUDIT_DATABASE_URL e SUPABASE_PROD_AUDIT_DATABASE_URL) — mas o
+      # secret de TESTE só existe de verdade depois que o dono o configurar em
+      # Settings → Secrets → Actions (runbook: docs/planos/fase-3-hardening-moderado.md). Até lá a
+      # variável chega VAZIA em PR/push (DIVAT_ALVO=teste), conectarAuditor lança, e o gate cai no
+      # fallback anônimo — que a migração 20260805000000 JÁ CEGOU no banco de teste (a RPC saiu de
+      # `public`), então o fallback não tem mais para onde cair e o job fica vermelho de verdade,
+      # não em aviso. Isso não é bug de código: é a credencial que falta. Depois que o secret
+      # existir, este job passa a usar o caminho do auditor também em PR/push, igual ao cron já
+      # faz com o de produção — e o secret de PRODUÇÃO nunca serve de atalho para um alvo teste
+      # (issue #74): cada DIVAT_ALVO só enxerga a variável do SEU nome.
+      # Os DOIS secrets vão para o env do passo — conectarAuditor (scripts/lib/auditor.mjs) só lê
+      # a variavel que corresponde ao DIVAT_ALVO deste run (SUPABASE_TEST_AUDIT_DATABASE_URL em
+      # teste, SUPABASE_PROD_AUDIT_DATABASE_URL em producao); a outra fica presente mas nunca e
+      # lida, entao nao ha caminho pelo qual o secret de producao vire fallback de um alvo teste
+      # (Codex, P1). Sem o de TESTE aqui, DIVAT_ALVO=teste (o gatilho de PR/push) nunca alcancava
+      # o auditor e o gate ficava PERMANENTEMENTE no fallback anonimo — que a migracao 2 ja
+      # cegou no banco de teste (o `⚠` do primeiro PR virava vermelho de verdade).
       - name: Qualidade dos dados pos-ETL (orfaos referenciais, U+FFFD)
         env:
           DIVAT_ALVO: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'producao' || 'teste' }}
+          SUPABASE_TEST_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_TEST_AUDIT_DATABASE_URL }}
           SUPABASE_PROD_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_PROD_AUDIT_DATABASE_URL }}
         run: node scripts/check_data_quality.mjs
 

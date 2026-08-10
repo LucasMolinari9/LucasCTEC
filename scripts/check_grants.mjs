@@ -180,14 +180,23 @@ if (digest) {
   if (digest.authenticated_tem_privilegio) graves.push('authenticated voltou a ter privilégio de tabela em public');
   if (digest.funcoes_definer_anon > 0) graves.push(`${digest.funcoes_definer_anon} função(ões) SECURITY DEFINER executável(is) por anon`);
 
-  const b = JSON.parse(await readFile(BASELINE, 'utf8').catch(() => '{}'));
-
   if (atualizar) {
     if (graves.length) {
       console.error('✗ Há achado GRAVE — não existe caminho para baseliná-lo:');
       for (const g of graves) console.error(`    ${g}`);
       console.error('\n  A resposta certa é REVOGAR o privilégio, não registrar a exceção.');
       process.exit(1);
+    }
+    // Só ESTE ramo e o de comparação (mais abaixo) leem security_baseline.json — nunca
+    // --sem-baseline, cujo contrato é justamente NÃO consultar baseline nenhum (Codex, P2: ver o
+    // comentário no `if (semBaseline)`, logo abaixo). `--atualizar-baseline` precisa ler porque
+    // PRESERVA `achados` e o slot do OUTRO ambiente (comentário mais abaixo) — regravar sem reler
+    // apagaria os dois.
+    let b = {};
+    try {
+      b = JSON.parse(await readFile(BASELINE, 'utf8'));
+    } catch (e) {
+      if (e.code !== 'ENOENT') { console.error(`Baseline ilegível (${BASELINE}): ${e.message}`); process.exit(1); }
     }
     // Atualiza o digest e AS TRÊS contagens que a execução normal exige (`CONTAGENS`, abaixo:
     // anon_rpcs, defaults_permissivos, funcoes_sem_search_path) — gravar só duas fecharia um
@@ -237,13 +246,31 @@ if (digest) {
   // exceções conhecidas para expor); a resposta honesta é relatar o estado cru e dizer
   // explicitamente que nada foi comparado — nunca afirmar "bate com o baseline" sobre um
   // baseline que este branch nunca leu.
+  //
+  // Este `if` precisa vir ANTES de qualquer leitura de security_baseline.json — até 10/08/2026 a
+  // leitura (`JSON.parse(...).catch(() => '{}')`) rodava incondicionalmente, mais acima, antes
+  // deste branch existir sequer ter a chance de decidir. Um security_baseline.json malformado
+  // fazia o `JSON.parse` estourar ANTES daqui, e o comando anunciado para inspecionar o banco cru
+  // — precisamente quando o baseline está quebrado — ficava inutilizável no exato momento em que
+  // mais se precisa dele (Codex, P2).
   if (semBaseline) {
     console.log(`\n✓ Estado CRU do banco (baseline ignorado) — nenhum achado grave. `
       + `(${digest.tabelas_publicas} tabelas públicas, ${digest.anon_rpcs} RPCs anônimas, `
       + `${digest.defaults_permissivos} default(s) permissivo(s) em public, `
       + `${digest.funcoes_sem_search_path} função(ões) sem search_path fixo, RLS em todas.)`);
     console.log('  · Contagens e digest NÃO foram comparados a nenhum baseline — é o propósito de --sem-baseline.');
+    console.log('  · security_baseline.json NÃO foi lido — este modo funciona mesmo com o arquivo ausente ou malformado.');
     process.exit(0);
+  }
+
+  // A partir daqui o baseline É necessário para comparar — lido só agora, nunca antes de
+  // --sem-baseline já ter tido a chance de sair sem tocar o arquivo.
+  let b;
+  try {
+    b = JSON.parse(await readFile(BASELINE, 'utf8'));
+  } catch (e) {
+    console.error(`✗ Baseline ilegível (${BASELINE}): ${e.message}`);
+    process.exit(1);
   }
 
   // A MEDIÇÃO É POR AMBIENTE (issue #99). Ler o slot do alvo, e falhar FECHADO quando ele não

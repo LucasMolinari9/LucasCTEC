@@ -27,29 +27,32 @@ try {
   process.exit(1);
 }
 
+// A migração 2 (20260805000000) devolveu divat_api_shape() e realtime_tables() para `public`,
+// anônimas — só divat_security_shape() e divat_data_quality() ficaram em `audit`. Até 10/08/2026
+// este script ainda chamava audit.divat_api_shape() e audit.realtime_tables(), então o job
+// test-auditor quebrava com "função não existe" em vez de validar o rollout (Codex, P1). A
+// superfície pública inteira (as 5 RPCs anônimas — produto + diagnóstico) já sai de
+// `divat_security_shape()->'funcoes'`, filtrada a `public` e `anon_execute`: não há razão para
+// chamar divat_api_shape()/realtime_tables() a partir daqui só para redizer o que a shape já lista.
 const query = String.raw`
 with payload as (
   select
-    audit.divat_api_shape() as api,
     audit.divat_security_shape() as security,
-    (select coalesce(jsonb_agg(t order by t), '[]'::jsonb) from audit.realtime_tables() t) as realtime,
     (select count(*) from audit.divat_data_quality()) as data_quality_rows
 )
 select jsonb_build_object(
-  'api_rpcs', api->'rpcs',
-  'public_objects', jsonb_array_length(security->'tabelas'),
-  'all_rls', not exists (
-    select 1 from jsonb_array_elements(security->'tabelas') t where not (t->>'rls')::boolean
-  ),
   'anon_rpcs', coalesce((
     select jsonb_agg(f->>'assinatura' order by f->>'assinatura')
     from jsonb_array_elements(security->'funcoes') f where (f->>'anon_execute')::boolean
   ), '[]'::jsonb),
+  'public_objects', jsonb_array_length(security->'tabelas'),
+  'all_rls', not exists (
+    select 1 from jsonb_array_elements(security->'tabelas') t where not (t->>'rls')::boolean
+  ),
   'authenticated_exec_count', (
     select count(*) from jsonb_array_elements(security->'funcoes') f
     where (f->>'authenticated_execute')::boolean
   ),
-  'realtime_count', jsonb_array_length(realtime),
   'data_quality_rows', data_quality_rows,
   'direct_table_select', has_table_privilege(current_user, 'public.tabela_vista_teste', 'select'),
   'session_user', session_user
@@ -74,16 +77,28 @@ try {
   process.exit(1);
 }
 
-const expectedRpcs = ['divat_busca_logradouro', 'divat_linhas_regiao'];
-const expectedSignatures = ['divat_busca_logradouro(text,integer)', 'divat_linhas_regiao(text,text)'];
+// As CINCO RPCs anônimas pós-migração-2 (produto + diagnóstico — spec 04/08/2026 §8), na mesma
+// ordem que o autoteste da própria migração assertiva (20260805000000): 3 diagnósticas de
+// catálogo (divat_api_shape, divat_security_digest, realtime_tables) + 2 de produto
+// (divat_busca_logradouro, divat_linhas_regiao). `assinatura` vem de `regprocedure::text`, que não
+// usa espaço depois da vírgula — conferido contra Postgres 16 local (o formato não muda no 17).
+const expectedAnonRpcs = [
+  'divat_api_shape()',
+  'divat_busca_logradouro(text,integer)',
+  'divat_linhas_regiao(text,text)',
+  'divat_security_digest()',
+  'realtime_tables()',
+];
 const checks = [
-  [JSON.stringify([...(shape.api_rpcs || [])].sort()) === JSON.stringify(expectedRpcs), 'API expõe RPCs além da allowlist'],
-  [JSON.stringify(shape.anon_rpcs) === JSON.stringify(expectedSignatures), 'grants anônimos de função divergiram'],
+  [JSON.stringify(shape.anon_rpcs) === JSON.stringify(expectedAnonRpcs), 'RPCs anônimas em public divergiram da allowlist pós-migração-2'],
   [shape.authenticated_exec_count === 0, 'authenticated voltou a executar função pública'],
   [shape.public_objects >= 18 && shape.all_rls === true, 'objeto público sem RLS ou catálogo incompleto'],
-  [shape.realtime_count === 14, 'publicação Realtime divergiu das 14 tabelas'],
+  // Inteiro E maior que zero: a função sempre devolve uma linha por verificação (inclusive
+  // qtd=0), desde a migração 3 (20260810000000) — `0` aqui não é "nenhum achado", é a RPC não
+  // ter executado uma varredura sequer, ou seja, exatamente a cegueira que o runner de qualidade
+  // (check_data_quality.mjs) também recusa a aceitar como "tudo certo".
+  [Number.isInteger(shape.data_quality_rows) && shape.data_quality_rows > 0, 'RPC de qualidade não devolveu nenhuma linha (não pôde ser executada, ou a fonte cegou)'],
   [shape.direct_table_select === false, 'credencial auditora ganhou leitura direta de tabela'],
-  [typeof shape.data_quality_rows === 'number', 'RPC de qualidade não pôde ser executada'],
   // Igualdade, não `startsWith`, e a constante do auditor em vez do literal repetido: um role
   // `divat_auditor_civil` satisfazia esta asserção como se fosse o auditor (issue #101). O
   // `session_user` devolve o nome do role mesmo pelo pooler, que tira o sufixo `.<ref>` no
@@ -98,4 +113,4 @@ if (failed.length) {
   process.exit(1);
 }
 
-console.log(`✓ Auditor mínimo: ${shape.public_objects} objetos públicos, ${shape.realtime_count} tabelas Realtime, RPCs anônimas na allowlist.`);
+console.log(`✓ Auditor mínimo: ${shape.public_objects} objetos públicos, ${shape.data_quality_rows} linha(s) de qualidade, RPCs anônimas na allowlist.`);

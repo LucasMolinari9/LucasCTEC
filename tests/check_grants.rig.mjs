@@ -223,6 +223,24 @@ const okCruDigest = cruDigest.code === 0
 if (!okCruDigest) { falhas++; console.log(cruDigest.out.split('\n').map(l => '      ' + l).join('\n')); }
 console.log(`${okCruDigest ? '  ✓' : '  ✗'} [digest] --sem-baseline relata estado cru sem alegar baseline → saiu ${cruDigest.code}, esperado 0`);
 
+// --sem-baseline NÃO PODE ler o baseline — nem para tentar. Até 10/08/2026 a leitura era
+// incondicional (rodava ANTES deste `if`), então um security_baseline.json malformado estourava
+// o JSON.parse antes do modo cru ter a chance de decidir, e o comando anunciado para inspecionar
+// o banco justamente quando o baseline está quebrado ficava inutilizável (Codex, P2).
+digestAtual = digestSao();
+await writeFile(`${RAIZ}/scripts/security_baseline.json`, '{ isto não é JSON válido');
+const cruBaselineRuim = await rodar(['--sem-baseline']);
+const okCruBaselineRuim = cruBaselineRuim.code === 0 && !/bate com o baseline/i.test(cruBaselineRuim.out);
+if (!okCruBaselineRuim) { falhas++; console.log(cruBaselineRuim.out.split('\n').map(l => '      ' + l).join('\n')); }
+console.log(`${okCruBaselineRuim ? '  ✓' : '  ✗'} --sem-baseline funciona mesmo com security_baseline.json malformado → saiu ${cruBaselineRuim.code}, esperado 0`);
+// O caminho QUE compara (sem --sem-baseline) continua exigindo o arquivo — falha CONTROLADA
+// (mensagem, não stack trace) com o mesmo baseline malformado.
+const comparaBaselineRuim = await rodar([]);
+const okComparaBaselineRuim = comparaBaselineRuim.code === 1 && /ilegível/i.test(comparaBaselineRuim.out);
+if (!okComparaBaselineRuim) { falhas++; console.log(comparaBaselineRuim.out.split('\n').map(l => '      ' + l).join('\n')); }
+console.log(`${okComparaBaselineRuim ? '  ✓' : '  ✗'} sem --sem-baseline, baseline malformado falha com mensagem clara → saiu ${comparaBaselineRuim.code}, esperado 1`);
+await writeFile(`${RAIZ}/scripts/security_baseline.json`, JSON.stringify(baselineDigest, null, 2));
+
 // --atualizar-baseline NAO pode silenciar a classe perigosa: os booleanos sao expectativa fixa
 // no codigo, nao dado de baseline.
 digestAtual = { ...digestSao(), anon_escreve: true };
