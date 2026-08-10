@@ -172,6 +172,14 @@ const publicAssets = [
   '/app.js',
   '/styles.css',
   '/manifest.webmanifest',
+  // O app.js é ES module e importa este arquivo. Import ES é ATÔMICO: um 404 aqui não degrada,
+  // impede o app.js inteiro de executar e a página sai com cabeçalho, rodapé e nenhum card.
+  // Foi o defeito de 10/08/2026, e esta lista não o continha — por isso o smoke passou verde
+  // com o portal quebrado. Módulo novo sob src/ entra AQUI e na allowlist do .vercelignore.
+  '/src/domain/core.mjs',
+  // Marcador do auto-update (`checarNovaVersao` faz HEAD nele). Em 404 o detector fica mudo:
+  // ninguém recebe deploy novo sem recarregar na mão, e o sintoma é invisível.
+  '/version.json',
   '/vendor/supabase-js-2.110.7.min.js',
   '/vendor/icon.svg',
   '/vendor/fonts/archivo-latin-600-normal.woff2',
