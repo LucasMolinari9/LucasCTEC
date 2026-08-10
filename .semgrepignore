@@ -19,6 +19,12 @@ vendor/
 # é só SKILL.md, sem código. Se um dia uma skill nossa ganhar JS de navegador, estreite isto
 # para os diretórios listados no .superpowers-manifest.json.
 .claude/skills/
+# A linha abaixo é a IRMÃ da de cima, não um extra: desde que o update_superpowers.sh passou a
+# instalar nos DOIS destinos, o mesmo helper do `brainstorming` existe em duas cópias reais, e
+# `.agents/skills/` hospeda ainda a leva do mattpocock/skills (travada no skills-lock.json, e
+# symlinkada para cá). Como o Semgrep resolve o caminho REAL, ignorar só o `.claude/skills/`
+# deixava os 3 achados de `style=` voltarem pela outra porta. Ao mexer numa, mexa na outra.
+.agents/skills/
 
 # --- Cópias verbatim para teste ---
 # Os *.harness.js são cópias literais de funções do app.js, guardadas pelo anti-drift do

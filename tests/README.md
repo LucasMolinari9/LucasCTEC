@@ -67,7 +67,9 @@ cada teste novo).
 > validam renderização determinística, não substituem um preview ligado a um banco restaurado.
 
 ## ⚠️ Regra de ouro (anti-drift)
-Os harness **copiam o código do `app.js` à mão**. Ao **editar uma dessas funções
+Os harness ainda copiam o código legado do `app.js` à mão. As regras já extraídas em
+`src/domain/core.mjs` são importadas diretamente por `pure.harness.js`. Ao editar uma função
+que ainda estiver copiada,
 no `app.js`, atualize a cópia** no harness correspondente. O `check.js` tem uma
 guarda que falha avisando "harness DESATUALIZADO" se um trecho canônico sumir do
 `app.js` — mas ela cobre só os trechos listados; mantenha a disciplina.

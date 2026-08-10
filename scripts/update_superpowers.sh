@@ -12,8 +12,9 @@
 #   auto-instala o plugin declarado no settings.json (o `installed_plugins.json`
 #   nasce com `"plugins": {}` e nenhuma skill `superpowers:` aparece).
 #   O único mecanismo que carrega com estado global zero é o diretório de
-#   skills do projeto: `.claude/skills/<nome>/SKILL.md`. Por isso as skills
-#   entram no git, planas, e este script mantém a cópia atualizável.
+#   skills do projeto. Por isso as skills entram no git, planas, tanto em
+#   `.claude/skills/` (Claude Code) quanto em `.agents/skills/` (Codex), e este
+#   script mantém as duas cópias atualizáveis.
 #
 # CONSEQUÊNCIA PRÁTICA: sem o plugin não há prefixo de namespace, então as
 #   skills chamam-se `brainstorming`, `test-driven-development`, … (e não
@@ -28,8 +29,7 @@ set -euo pipefail
 
 REF="${1:-}"
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
-DEST="$RAIZ/.claude/skills"
-MANIFEST="$DEST/.superpowers-manifest.json"
+DESTINOS=("$RAIZ/.claude/skills" "$RAIZ/.agents/skills")
 UPSTREAM="https://github.com/obra/superpowers.git"
 
 TMP="$(mktemp -d)"
@@ -49,22 +49,27 @@ VERSAO="$(node -e 'process.stdout.write(require(process.argv[1]).version)' \
 echo "→ upstream $VERSAO @ ${SHA:0:12}"
 
 # --- remove a leva anterior (só o que ESTE script instalou) -----------------
-if [ -f "$MANIFEST" ]; then
-  while IFS= read -r nome; do
-    [ -n "$nome" ] && rm -rf "$DEST/${nome:?}"
-  done < <(node -e '
-    const m = require(process.argv[1]);
-    for (const s of m.skills || []) console.log(s);
-  ' "$MANIFEST")
-fi
+for DEST in "${DESTINOS[@]}"; do
+  MANIFEST="$DEST/.superpowers-manifest.json"
+  if [ -f "$MANIFEST" ]; then
+    while IFS= read -r nome; do
+      [ -n "$nome" ] && rm -rf "$DEST/${nome:?}"
+    done < <(node -e '
+      const m = require(process.argv[1]);
+      for (const s of m.skills || []) console.log(s);
+    ' "$MANIFEST")
+  fi
+done
 
 # --- copia as skills, planas ------------------------------------------------
-mkdir -p "$DEST"
 NOMES=()
 for dir in "$TMP/sp/skills"/*/; do
   nome="$(basename "$dir")"
   [ -f "$dir/SKILL.md" ] || { echo "  ! $nome sem SKILL.md, pulado"; continue; }
-  cp -r "$dir" "$DEST/$nome"
+  for DEST in "${DESTINOS[@]}"; do
+    mkdir -p "$DEST"
+    cp -r "$dir" "$DEST/$nome"
+  done
   NOMES+=("$nome")
 done
 
@@ -78,19 +83,22 @@ while IFS= read -r f; do
     sed -i -E "s/superpowers:($ALVOS)/\1/g" "$f"
     REESCRITOS=$((REESCRITOS + 1))
   fi
-done < <(find "$DEST" -type f -name '*.md')
+done < <(find "${DESTINOS[@]}" -type f -name '*.md')
 
 # --- manifesto (provenance + lista para a próxima limpeza) ------------------
-node -e '
-  const [out, sha, versao, upstream, ...skills] = process.argv.slice(1);
-  require("fs").writeFileSync(out, JSON.stringify({
-    _comment: "Gerado por scripts/update_superpowers.sh — NÃO editar à mão.",
-    upstream, versao, commit: sha,
-    vendorizadoEm: new Date().toISOString().slice(0, 10),
-    skills: skills.sort()
-  }, null, 2) + "\n");
-' "$MANIFEST" "$SHA" "$VERSAO" "$UPSTREAM" "${NOMES[@]}"
+for DEST in "${DESTINOS[@]}"; do
+  MANIFEST="$DEST/.superpowers-manifest.json"
+  node -e '
+    const [out, sha, versao, upstream, ...skills] = process.argv.slice(1);
+    require("fs").writeFileSync(out, JSON.stringify({
+      _comment: "Gerado por scripts/update_superpowers.sh — NÃO editar à mão.",
+      upstream, versao, commit: sha,
+      vendorizadoEm: new Date().toISOString().slice(0, 10),
+      skills: skills.sort()
+    }, null, 2) + "\n");
+  ' "$MANIFEST" "$SHA" "$VERSAO" "$UPSTREAM" "${NOMES[@]}"
+done
 
-echo "→ ${#NOMES[@]} skills vendorizadas em .claude/skills/ ($REESCRITOS arquivo(s) com referência reescrita)"
-echo "→ manifesto: ${MANIFEST#"$RAIZ"/}"
+echo "→ ${#NOMES[@]} skills vendorizadas para Claude Code e Codex ($REESCRITOS arquivo(s) com referência reescrita)"
+printf '→ manifesto: %s/.superpowers-manifest.json\n' .claude/skills .agents/skills
 echo "Confira o diff (git status) e commite."

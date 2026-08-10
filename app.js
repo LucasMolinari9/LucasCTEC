@@ -1,3 +1,8 @@
+import {
+  fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash,
+  fmtLineName, boolChip, situacaoHTML, isLinhaAtiva, isVigente,
+} from './src/domain/core.mjs';
+
 /* ================================================================
    ÍNDICE DO ARQUIVO  —  navegue por `grep` da marca da seção.
    ----------------------------------------------------------------
@@ -180,42 +185,8 @@ function bannerTrunc(rows){
    veio nem quem vai renderizá-lo. Em especial `isLinhaAtiva`/`isVigente` são
    a REGRA DE NEGÓCIO central do portal (o que conta como linha ativa/vigente)
    — mudar esse critério é editar só aqui, nunca nos `render*`. --- */
-// 101001001 → 101-001-001 (formato do código da ligação no PDF oficial)
-function fmtCode(code) {
-  if (!code) return '';
-  const s = String(code);
-  return s.length === 9 ? `${s.slice(0,3)}-${s.slice(3,6)}-${s.slice(6)}` : s;
-}
-// HH:MM:SS → HH:MM
-function fmtTime(t){ if(!t) return '—'; const m=String(t).match(/^(\d{2}):(\d{2})/); return m?`${m[1]}:${m[2]}`:t; }
-// data ISO (YYYY-MM-DD) → DD/MM/YYYY
-function fmtDate(d){ if(!d) return '—'; const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:d; }
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-const enc = s => encodeURIComponent(s);
-// Sanitiza um termo do usuário para uso DENTRO de um padrão ilike do PostgREST.
-// encodeURIComponent não escapa ( ) * — que delimitam o grupo or=(...) e são curinga;
-// neutralizá-los impede que o termo quebre o filtro ou injete curingas. Depois codifica.
-const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));
-const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
-// Nome de ligação "Origem - Destino": só permite quebra de linha no separador " - ",
-// mantendo cada lado inteiro (não pica "Rio de Janeiro" palavra a palavra). Escapa e
-// devolve HTML pronto (&nbsp; nos espaços internos) — NÃO re-escapar quem usa.
-const fmtLineName = nome => nome ? esc(nome).split(' - ').map(p => p.replace(/ /g, '&nbsp;')).join(' - ') : '—';
-const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';
-// Situação da linha (busca e documentos): Cancelada, Paralisada ou Ativa. "Ativa" (verde) só
-// quando a linha está operando (não cancelada e não paralisada) — igual ao critério isLinhaAtiva.
-// Transferida/Sub judice contam como Ativa (a linha segue operando).
-const situacaoHTML = r => r.cancelado ? '<span class="chip chip-on">Cancelada</span>'
-  : r.paralisado ? '<span class="chip chip-on">Paralisada</span>'
-  : '<span class="chip chip-off">Ativa</span>';
-// Uma linha está ATIVA quando está operando: não cancelada e não paralisada.
-// Sub judice (pendência só na Justiça) e transferida (mudou de operadora) seguem
-// operando → contam como ativas. Critério único usado por Empresas e Relatórios.
-const isLinhaAtiva = r => !r.cancelado && !r.paralisado;
-// VIGENTE (seção/tarifa) é o critério ESTRITO: além de ativa, exclui sub judice e transferida.
-// Repare que sub_judice/transferido têm efeito OPOSTO aqui vs. em isLinhaAtiva — por isso as
-// duas noções são explícitas e derivam de um ponto só (não confundir "ativa" com "vigente").
-const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;
+// Formatação, escaping e regras de situação de linha vivem em
+// src/domain/core.mjs: uma implementação compartilhada pelo navegador e pelos testes.
 
 /* ================================================================
    ÍCONES
@@ -3372,19 +3343,16 @@ function initRealtime(){
 getEmpresas().catch(()=>{});
 
 /* ================================================================
-   AUTO-ATUALIZAÇÃO — detecta novo deploy e recarrega sozinho,
-   sem ninguém precisar limpar cache. Compara os ETags do index.html,
-   do app.js E do styles.css (deploy que muda só um deles também
-   precisa recarregar todo mundo).
+   AUTO-ATUALIZAÇÃO — detecta novo deploy e recarrega sozinho.
+   version.json é o marcador atômico do conjunto index/CSS/JS/módulos:
+   qualquer deploy que os altere também incrementa sua versão.
    ================================================================ */
 let _verTag = null;
 async function checarNovaVersao(){
   try {
-    const heads = await Promise.all(['/index.html', '/app.js', '/styles.css'].map(p =>
-      fetch(p + '?_=' + Date.now(), { method: 'HEAD', cache: 'no-store' })));
-    const tags = heads.map(r => r.headers.get('etag') || r.headers.get('last-modified'));
-    if (tags.some(t => !t)) return;    // sem como comparar → não faz nada
-    const tag = tags.join('|');
+    const res = await fetch('/version.json?_=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
+    const tag = res.headers.get('etag') || res.headers.get('last-modified');
+    if (!tag) return;                  // sem como comparar → não faz nada
     if (_verTag === null) { _verTag = tag; return; }   // 1ª medição = referência
     if (tag !== _verTag) {             // mudou no servidor → versão nova publicada
       _verTag = tag;

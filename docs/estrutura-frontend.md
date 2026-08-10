@@ -1,8 +1,7 @@
 # Estrutura e navegação do frontend (`index.html` + `styles.css` + `app.js`) — Portal DIVAT
 
-> **Por que este arquivo existe:** o frontend são **três arquivos**: `index.html` (HTML),
-> `styles.css` (todo o CSS — extraído do HTML em 22/07/2026) e **`app.js`** (todo o JS,
-> ~3,5k linhas — extraído do HTML em 21/07/2026, envolto num IIFE desde 22/07/2026). Continua
+> **Por que este arquivo existe:** o frontend tem `index.html` (HTML), `styles.css` (CSS),
+> `app.js` (~3,4k linhas — extraído do HTML e ainda envolto num IIFE) e módulos puros em `src/`. Continua
 > **zero-build**: nada de bundler, framework ou `package.json`. Este doc registra (1) *por que*
 > essa forma, (2) *como navegar* no `app.js` sem se perder, e (3) as **regras de segurança** para
 > reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do `CLAUDE.md` (que lista as
@@ -12,22 +11,19 @@
 > era um único `index.html`, então as citações `index.html:NNN` deles não se traduzem para o
 > `app.js` atual.
 
-## 1. Por que `index.html` + `styles.css` + `app.js` (e por que **não** fatiar mais)
+## 1. Estrutura atual e modularização incremental
 
 Até 21/07/2026 o JS era embutido no `index.html`. Foi extraído para um único `app.js` por **um**
 motivo: derrubar o `'unsafe-inline'` do `script-src` da CSP — com JS inline, a CSP não segura um
 XSS que escape do `esc()`; com `script-src 'self'` (estado atual do `vercel.json`), segura. O que
 mudou junto, e o que continua valendo:
 
-- **Auto-update por ETag** vigia os **três** arquivos: `checarNovaVersao` (seção
-  `AUTO-ATUALIZAÇÃO`) faz `HEAD` de `/index.html`, `/app.js` **e** `/styles.css` e compara os
-  ETags — deploy que muda só um deles também recarrega todo mundo. Não há cache-busting `?v=`: o
-  `Cache-Control: max-age=0, must-revalidate` do `vercel.json` já faz o navegador revalidar os
-  três a cada carga. **Ao criar um novo arquivo estático de primeira ordem, inclua-o na lista.**
-- **Zero-build continua.** É **um** `app.js` inteiro (mesmo conteúdo, mesma ordem), carregado por
-  `<script src>` clássico no fim do `<body>` — **não** são ES modules, não há cadeia de `import`.
-  **Não fatiar em `js/*.js`**: N arquivos = N chances de ordem errada + detector de versão tendo
-  que vigiar N ETags, por ganho nenhum.
+- **Auto-update atômico:** `checarNovaVersao` faz `HEAD` de `/version.json`. Todo deploy que muda
+  HTML, CSS, JS ou módulos deve incrementar `version`; assim a lista não cresce a cada módulo.
+- **Zero-build continua.** `app.js` é um ES module nativo carregado com `type="module"`; não há
+  bundler nem dependências. O primeiro seam está em `src/domain/core.mjs`, sem DOM ou rede.
+- **Regra para extrair:** prefira módulos profundos com interface pequena. Não mova loaders/estado
+  apenas para reduzir linhas; extraia quando a dependência puder ser expressa por imports claros.
 - **CSS em `styles.css`** (extraído do `<style>` em 22/07/2026): cacheável separado do HTML e
   editável com tooling. Desde **27/07/2026** o `style-src` é `'self'` com **`style-src-attr
   'none'`** — **nenhum `unsafe-inline`** (achado SEC-08). Os 10 atributos `style=` que restavam
@@ -44,7 +40,7 @@ mudou junto, e o que continua valendo:
   Os gates de navegador (`check_views.mjs`/`check_abas.mjs`) passaram a servir **a CSP de
   produção, lida do `vercel.json`** — antes rodavam sem cabeçalho nenhum, num mundo mais
   permissivo que o real, e uma regressão de CSP passaria verde.
-- **IIFE**: o `app.js` inteiro roda dentro de `(() => { … })();` — nada vaza para `window`
+- **IIFE**: após os imports, o `app.js` roda dentro de `(() => { … })();` — nada vaza para `window`
   (o vendor `supabase-js` continua global e é lido normalmente). O escopo interno é único, então
   as regras de hoisting/TDZ da seção 3 continuam valendo sem mudança.
 - **supabase-js é injetado dinamicamente** pelo `app.js` (seção `REALTIME`) — script dinâmico é

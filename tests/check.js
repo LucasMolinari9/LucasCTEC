@@ -11,7 +11,6 @@
    Sai com código != 0 se QUALQUER etapa falhar. Node puro, sem dependências. */
 const fs = require('fs');
 const path = require('path');
-const vm = require('vm');
 const { spawnSync } = require('child_process');
 const { extrairCanon, conferirCanon } = require('./canon.js');
 
@@ -19,6 +18,7 @@ const TESTS_DIR = __dirname;
 const INDEX = path.join(__dirname, '..', 'index.html');
 const APPJS = path.join(__dirname, '..', 'app.js');
 const CSS   = path.join(__dirname, '..', 'styles.css');
+const VERSION = path.join(__dirname, '..', 'version.json');
 
 let problems = 0;
 const fail   = msg => { console.log('  ✗', msg); problems++; };
@@ -31,7 +31,8 @@ const css  = fs.readFileSync(CSS, 'utf8');
 // ---------- [1] sintaxe do app.js + nenhum <script> inline no index.html ----------
 console.log('\n[1] Sintaxe do app.js + index.html sem <script> inline');
 try {
-  new vm.Script(js, { filename: 'app.js' });                    // só COMPILA — não roda
+  const syntax = spawnSync(process.execPath, ['--input-type=module', '--check'], { input: js, encoding:'utf8' });
+  if (syntax.status !== 0) throw new Error((syntax.stderr || syntax.stdout || 'erro desconhecido').trim());
   okline(`sintaxe OK (${js.split('\n').length} linhas em app.js)`);
 } catch (e){
   const first = String(e.stack || '').split('\n')[0];
@@ -44,6 +45,15 @@ if (/<script(?![^>]*\bsrc=)[^>]*>/.test(html)) {
   fail('<script> inline no index.html — a CSP (script-src \'self\') bloqueia; mova o código para o app.js.');
 } else {
   okline('index.html sem <script> inline (compatível com a CSP)');
+}
+if (!/<script\s+type="module"\s+src="app\.js"><\/script>/.test(html)) {
+  fail('app.js deve ser carregado como ES module nativo');
+}
+if (!js.includes("from './src/domain/core.mjs'")) {
+  fail('app.js deve consumir o módulo puro src/domain/core.mjs');
+}
+if (!fs.existsSync(VERSION) || !js.includes("'/version.json")) {
+  fail('auto-atualização deve observar /version.json');
 }
 
 // Irmã da guarda acima, para o outro eixo da CSP: desde 27/07/2026 o style-src é 'self' com
@@ -185,7 +195,11 @@ console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
       .map(s => s.replace(/^(?:get|set)\s+/, '').split(/[:(]/)[0].trim())
       .filter(Boolean);
     totalExportados += new Set(exportados).size;
-    const semMarcador = [...new Set(exportados)].filter(n => !copias.has(n));
+    const importadosDoDominio = new Set([
+      'fmtCode', 'fmtTime', 'fmtDate', 'esc', 'enc', 'ilikeTerm', 'orDash',
+      'fmtLineName', 'boolChip', 'situacaoHTML', 'isLinhaAtiva', 'isVigente',
+    ]);
+    const semMarcador = [...new Set(exportados)].filter(n => !copias.has(n) && !importadosDoDominio.has(n));
     if (semMarcador.length){
       fail(`[${arquivo}] cópia exportada sem marcador @canon: ${semMarcador.join(', ')} — `
          + 'envolva o bloco em /* @canon <nome> */ … /* @endcanon */');
@@ -577,9 +591,9 @@ console.log('\n[2b] Deriva docs × código');
 }
 
 // ---------- [3] roda os testes unitários ----------
-console.log('\n[3] Testes unitários (*.test.js)');
-const testFiles = fs.readdirSync(TESTS_DIR).filter(f => f.endsWith('.test.js')).sort();
-if (!testFiles.length) fail('nenhum arquivo *.test.js encontrado');
+console.log('\n[3] Testes unitários (*.test.js / *.test.mjs)');
+const testFiles = fs.readdirSync(TESTS_DIR).filter(f => /\.test\.(?:js|mjs)$/.test(f)).sort();
+if (!testFiles.length) fail('nenhum arquivo *.test.js ou *.test.mjs encontrado');
 for (const f of testFiles){
   const res = spawnSync(process.execPath, [path.join(TESTS_DIR, f)], { encoding: 'utf8' });
   const out = (res.stdout || '') + (res.stderr || '');
