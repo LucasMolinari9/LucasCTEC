@@ -56,6 +56,69 @@ if (!fs.existsSync(VERSION) || !js.includes("'/version.json")) {
   fail('auto-atualização deve observar /version.json');
 }
 
+// Guarda de PUBLICAÇÃO: todo asset que o app.js exige em runtime tem de sobreviver ao deploy.
+// Motivo (produção, 10/08/2026): o app.js virou ES module e passou a importar
+// `src/domain/core.mjs`, mas a allowlist do .vercelignore não reabria `src/` — o import
+// respondia 404. **Import ES é atômico**: não degrada, ele impede o app.js INTEIRO de executar.
+// A página subia com cabeçalho e rodapé, `<main id="app">` ficava vazio e NENHUM card aparecia.
+// Nenhum outro gate vê isso: local o arquivo existe e a sintaxe está certa — quem omite é o
+// deploy. O mesmo vale para o `/version.json` do auto-update, que 404 deixa mudo.
+// A allowlist é default-deny de propósito (achado SEC-03), então arquivo novo NASCE não
+// publicado: esta guarda é o que transforma esse acerto de segurança num erro barulhento em vez
+// de uma tela branca em produção.
+{
+  const ROOT = path.join(__dirname, '..');
+  const exigidos = new Map();   // caminho relativo à raiz → por que é exigido
+  // Os arquivos servidos moram na raiz, então um especificador local já É o caminho publicado.
+  // Normaliza `./x`, `/x` e `x` para a mesma chave e descarta query/hash (cache-buster).
+  const pedir = (bruto, porque) => {
+    if (!bruto || /^[a-z][a-z0-9+.-]*:/i.test(bruto) || bruto.startsWith('//')) return; // URL externa, data:, mailto:
+    const rel = bruto.split(/[?#]/)[0].replace(/^\.?\//, '');
+    if (rel) exigidos.set(rel, porque);
+  };
+  // Todo canal pelo qual o site pede um arquivo DE SI MESMO em runtime. Cada um já foi um
+  // buraco: a 1ª versão desta guarda só lia `from '…'` e passava batido por `import './x'`,
+  // `import('./x')` e pelo <script> injetado — medido por mutação, não suposto.
+  const canais = [
+    [js,   /\bfrom\s*['"](\.[^'"]+)['"]/g,          s => `import do app.js ('${s}')`],   // import/export … from
+    [js,   /\bimport\s+['"](\.[^'"]+)['"]/g,        s => `import sem binding no app.js ('${s}')`],
+    [js,   /\bimport\s*\(\s*['"`](\.[^'"`]+)['"`]/g, s => `import() dinâmico no app.js ('${s}')`],
+    [js,   /\.src\s*=\s*['"`]([^'"`:]+)['"`]/g,     s => `<script>/asset injetado pelo app.js ('${s}')`],
+    [js,   /\bfetch\(\s*['"`](\/[^'"`\s]+)['"`+]/g, s => `fetch('${s}') no app.js`],
+    [html, /\b(?:href|src)\s*=\s*"([^"]+)"/g,       s => `referência do index.html ('${s}')`],
+    [css,  /\burl\(\s*['"]?([^'")]+)['"]?\s*\)/g,   s => `url() do styles.css ('${s}')`],
+  ];
+  for (const [fonte, re, porque] of canais) {
+    for (const m of fonte.matchAll(re)) pedir(m[1], porque(m[1]));
+  }
+
+  // A allowlist é interpretada pelo PRÓPRIO git — mesma engine de padrões que a Vercel usa —
+  // em vez de reimplementada aqui. `ls-files -c -i` lista os arquivos RASTREADOS que os padrões
+  // excluem; o deploy da Vercel parte do git, então rastreado+não-excluído == publicado.
+  const gitOut = (...args) => {
+    const r = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
+    if (r.status !== 0) return null;
+    return new Set(r.stdout.split('\n').filter(Boolean));
+  };
+  const rastreados = gitOut('ls-files');
+  const excluidos  = gitOut('ls-files', '-c', '-i', '--exclude-from=.vercelignore');
+  if (!rastreados || !excluidos) {
+    // Falha FECHADO. Um "pulei porque o git não respondeu" seria justamente a cegueira
+    // silenciosa que esta guarda existe para eliminar.
+    fail('não consegui consultar o git para conferir a allowlist do .vercelignore');
+  } else {
+    const fora = [...exigidos.keys()]
+      .filter(f => !rastreados.has(f) || excluidos.has(f))
+      .sort();
+    if (fora.length) {
+      fail(`assets necessários ignorados no deploy: ${fora.join(', ')}`
+         + ` — reabra no .vercelignore (${fora.map(f => exigidos.get(f)).join('; ')})`);
+    } else {
+      okline(`allowlist do .vercelignore publica os ${exigidos.size} assets pedidos por app.js/index.html/styles.css`);
+    }
+  }
+}
+
 // Irmã da guarda acima, para o outro eixo da CSP: desde 27/07/2026 o style-src é 'self' com
 // `style-src-attr 'none'`, então atributo `style=` em markup é IGNORADO pelo navegador (medido
 // em Chromium headless — markup e setAttribute bloqueados, CSSOM liberado). O sintoma de uma

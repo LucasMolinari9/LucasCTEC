@@ -44,8 +44,18 @@ exibe e **atualiza ao vivo** (Realtime).
   **CSSOM** — `el.style.x = …` e `setProperty`, que a CSP permite (medido em Chromium headless).
   Duas guardas cobram isso: `tests/check.js` §[1] e a regra Semgrep `divat-style-attr-quebra-csp`.
 - **`.vercelignore` é allowlist**: o deploy publica só `index.html`, `app.js`, `styles.css`,
-  `manifest.webmanifest`, `vercel.json` e `vendor/`. Arquivo público novo (ícone, fonte) precisa
-  ser reaberto lá, senão vira 404.
+  `manifest.webmanifest`, `vercel.json`, `version.json`, `vendor/` e `src/domain/core.mjs`.
+  Arquivo público novo (ícone, fonte) precisa ser reaberto lá, senão vira 404. **`src/` é reaberto
+  arquivo a arquivo**, não com um `!/src` de uma linha: é diretório cujo nome convida a guardar o
+  que não se serve, e reabri-lo inteiro publicaria em silêncio o que alguém largar ali. Reabrir só
+  o arquivo **não basta** — o git não desce em diretório excluído, então cada nível precisa ser
+  reaberto e ter o conteúdo fechado de novo (medido, não suposto).
+  **Esquecer isso derrubou o portal inteiro em 10/08/2026**: o `app.js` virou ES module e importa
+  `src/domain/core.mjs`; sem `src/` na allowlist o import deu 404 e — porque **import ES é
+  atômico** — o `app.js` inteiro deixou de executar, com `<main id="app">` vazio e nenhum card na
+  tela. Hoje `tests/check.js` §[1] deriva os assets pedidos por `app.js` (`import`, `import()`,
+  `.src=`, `fetch('/…')`), `index.html` (`href`/`src`) e `styles.css` (`url()`) e reprova se algum
+  não sobreviver à allowlist, conferindo pelo próprio git — a mesma engine de padrões da Vercel.
 
 ## Supabase
 - Projeto: **`bd_teste`** · ref **`lwzsxuaqqeoamukduhev`** · região sa-east-1.
