@@ -6,7 +6,7 @@
 // depende deste mesmo caminho la. A recusa de ref DESCONHECIDO continua, que e o que protege.
 // A guarda de ref/login/senha e a montagem do psql moram em scripts/lib/auditor.mjs, para nao
 // divergirem entre os dois gates. A URL nunca e passada na linha de comando nem impressa.
-import { conectarAuditor } from './lib/auditor.mjs';
+import { conectarAuditor, LOGIN } from './lib/auditor.mjs';
 
 const ambiente = process.argv[2] || 'teste';
 let auditor;
@@ -74,7 +74,11 @@ const checks = [
   [shape.realtime_count === 14, 'publicação Realtime divergiu das 14 tabelas'],
   [shape.direct_table_select === false, 'credencial auditora ganhou leitura direta de tabela'],
   [typeof shape.data_quality_rows === 'number', 'RPC de qualidade não pôde ser executada'],
-  [String(shape.session_user || '').startsWith('divat_auditor_ci'), 'checagem não executou com o login auditor dedicado'],
+  // Igualdade, não `startsWith`, e a constante do auditor em vez do literal repetido: um role
+  // `divat_auditor_civil` satisfazia esta asserção como se fosse o auditor (issue #101). O
+  // `session_user` devolve o nome do role mesmo pelo pooler, que tira o sufixo `.<ref>` no
+  // roteamento — não há forma legítima com sufixo a acomodar aqui.
+  [String(shape.session_user || '') === LOGIN, 'checagem não executou com o login auditor dedicado'],
 ];
 
 const failed = checks.filter(([ok]) => !ok).map(([, message]) => message);

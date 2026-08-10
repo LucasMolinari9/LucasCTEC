@@ -97,11 +97,56 @@ function comEnv(vars, fn){
   ok(/Conexão recusada: host\/project ref/.test(
        comEnv({ [V_TESTE]: `postgres://postgres:x@db.${TESTE}.supabase.co/postgres` },
               () => erro(() => conectarAuditor({ ambiente: 'teste' }))) || ''),
-     'login fora do prefixo divat_auditor_ci recusa');
+     'login que não é o do auditor recusa (postgres)');
   ok(/não contém senha/.test(
        comEnv({ [V_TESTE]: `postgres://divat_auditor_ci@db.${TESTE}.supabase.co/postgres` },
               () => erro(() => conectarAuditor({ ambiente: 'teste' }))) || ''),
      'URL sem senha recusa');
+
+  // O login é `divat_auditor_ci` EXATO — o bootstrap cria esse nome e a rotação de prazos.json é
+  // de SENHA (VALID UNTIL), não de nome. Enquanto a comparação era `startsWith`, qualquer role
+  // que começasse com o prefixo passava por auditor. Não é explorável de fora (quem escreve o
+  // secret já tem a credencial); é a guarda sendo mais frouxa do que se lê — que é como uma
+  // guarda deixa de guardar sem ninguém perceber (issue #101).
+  for (const impostor of ['divat_auditor_civil', 'divat_auditor_ci_backup', 'divat_auditor_ci2']) {
+    ok(/Conexão recusada: host\/project ref/.test(
+         comEnv({ [V_TESTE]: `postgres://${impostor}:x@db.${TESTE}.supabase.co/postgres` },
+                () => erro(() => conectarAuditor({ ambiente: 'teste' }))) || ''),
+       `login '${impostor}' recusa (o prefixo não é o login)`);
+    ok(/Conexão recusada: host\/project ref/.test(
+         comEnv({ [V_TESTE]: `postgres://${impostor}.${TESTE}:x@aws-0-sa-east-1.pooler.supabase.com:6543/postgres` },
+                () => erro(() => conectarAuditor({ ambiente: 'teste' }))) || ''),
+       `no pooler também, login '${impostor}' recusa`);
+  }
+  // O usuário vai DECODIFICADO para o PGUSER, então é a forma decodificada que precisa bater:
+  // conferir o texto cru deixaria `divat_auditor_ci%2Evil` (→ `divat_auditor_ci.vil`) passar por
+  // um `startsWith`, e chegaria ao psql como outro login.
+  ok(/Conexão recusada: host\/project ref/.test(
+       comEnv({ [V_TESTE]: `postgres://divat_auditor_ci%2Evil:x@db.${TESTE}.supabase.co/postgres` },
+              () => erro(() => conectarAuditor({ ambiente: 'teste' }))) || ''),
+     'login percent-encoded que decodifica para outro nome recusa');
+  ok(comEnv({ [V_TESTE]: `postgres://divat_auditor_c%69:x@db.${TESTE}.supabase.co/postgres` },
+            () => conectarAuditor({ ambiente: 'teste' })).ref === TESTE,
+     'login percent-encoded que decodifica para o login CERTO aceita');
+
+  console.log('recusa — sslmode abaixo do piso');
+  // `sslmode` vinha da URL com `|| 'require'`, que é default para quando a URL não diz NADA. Uma
+  // URL dizendo `sslmode=disable` passava direto: o piso de segurança da conexão era decidido
+  // pelo texto do secret, não pelo código (issue #101).
+  for (const modo of ['disable', 'allow', 'prefer']) {
+    ok(new RegExp(`sslmode='${modo}'`).test(
+         comEnv({ [V_TESTE]: `postgres://divat_auditor_ci:x@db.${TESTE}.supabase.co/postgres?sslmode=${modo}` },
+                () => erro(() => conectarAuditor({ ambiente: 'teste' }))) || ''),
+       `sslmode=${modo} recusa (o piso é do código, não do secret)`);
+  }
+  for (const modo of ['require', 'verify-ca', 'verify-full']) {
+    ok(comEnv({ [V_TESTE]: `postgres://divat_auditor_ci:x@db.${TESTE}.supabase.co/postgres?sslmode=${modo}` },
+              () => conectarAuditor({ ambiente: 'teste' })).ref === TESTE,
+       `sslmode=${modo} aceita`);
+  }
+  ok(comEnv({ [V_TESTE]: `postgres://divat_auditor_ci:x@db.${TESTE}.supabase.co/postgres` },
+            () => conectarAuditor({ ambiente: 'teste' })).ref === TESTE,
+     'URL sem sslmode continua aceita (o default require é o piso, não uma exceção)');
 
   console.log('aceita — os caminhos legítimos (direto e pooler, nos dois refs)');
   ok(comEnv({ [V_TESTE]: `postgres://divat_auditor_ci:x@db.${TESTE}.supabase.co/postgres` },
