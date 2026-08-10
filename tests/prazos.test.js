@@ -53,6 +53,25 @@ async function comRootTemp(prazosArr, fn) {
      'data ilegível → erro, não ok');
   ok(classificar({ ...base, vence_em: '' }, '2026-08-04').nivel === 'erro',
      'data vazia → erro, não ok');
+  // Data com FORMA válida e CALENDÁRIO impossível. `Date.parse('2026-02-30T00:00:00Z')` não
+  // devolve NaN — normaliza para 02/03, silenciosamente. Sem conferir a volta, um erro de
+  // digitação no prazos.json desloca a cobrança em dias sem ninguém ver (achado do Codex, P2).
+  //
+  // A referência é 2026-01-01 e as datas estão TODAS no futuro dela, de propósito: com uma data
+  // passada, `erro` sairia por vencimento e o caso passaria sem exercitar guarda nenhuma —
+  // exatamente o falso verde que esta bancada existe para não produzir.
+  const REF = '2026-01-01';
+  for (const impossivel of ['2026-02-30', '2026-04-31', '2026-06-31', '2027-02-29']) {
+    const r = classificar({ ...base, vence_em: impossivel }, REF);
+    ok(r.nivel === 'erro' && /ilegível/.test(r.mensagem),
+       `data impossível '${impossivel}' → erro de leitura, não normalização silenciosa`,
+       `${r.nivel}: ${r.mensagem}`);
+  }
+  // O outro lado: data real de calendário no futuro continua passando, inclusive 29/02 bissexto.
+  for (const real of ['2026-02-28', '2028-02-29', '2026-12-31']) {
+    const r = classificar({ ...base, vence_em: real }, REF);
+    ok(r.nivel !== 'erro', `data real '${real}' continua aceita`, `${r.nivel}: ${r.mensagem}`);
+  }
 
   console.log('hojeISO — injetável');
   process.env.DIVAT_HOJE = '2030-01-02';

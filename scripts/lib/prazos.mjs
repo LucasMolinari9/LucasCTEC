@@ -18,8 +18,16 @@ export function hojeISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-const ehData = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
-  && !Number.isNaN(Date.parse(`${s}T00:00:00Z`));
+// A ida-e-volta NÃO é redundante com o `Date.parse`. Data de calendário impossível mas de forma
+// válida — `2026-02-30`, `2026-04-31` — não vira NaN: o `Date` NORMALIZA para o dia seguinte ao
+// fim do mês (02/03, 01/05). Sem conferir a volta, um erro de digitação no prazos.json passa como
+// prazo legítimo e desloca a cobrança em dias, dizendo "60 dias de folga" para uma data que não
+// existe. O regex sozinho não pega: a forma está certa, o calendário é que não. (Codex, P2.)
+const ehData = s => {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const t = Date.parse(`${s}T00:00:00Z`);
+  return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s;
+};
 
 // Dias inteiros de `hoje` até `vence_em`. Ambos em UTC para não escorregar por fuso.
 function diasAte(vence_em, hoje) {
