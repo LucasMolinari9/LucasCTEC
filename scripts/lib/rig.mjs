@@ -42,6 +42,12 @@ export function getChromium() {
 /* ================================================================
    SERVIDOR ESTÁTICO
    ================================================================ */
+// O `.mjs` aqui é OBRIGATÓRIO, não zelo: o index.html carrega o app.js como `type="module"` e
+// ele importa `src/domain/core.mjs`. Sem entrada no mapa o arquivo sai como
+// `application/octet-stream`, o Chromium RECUSA o módulo ("Strict MIME type checking is enforced
+// for module scripts per HTML spec"), o app.js nunca avalia e as 17 views falham por TIMEOUT
+// esperando `#modalOverlay.open` — uma falha que aponta para o render, não para o servidor, e
+// por isso custa caro de achar. Extensão nova que o navegador carregue como módulo entra aqui.
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
   '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json', '.json': 'application/json',

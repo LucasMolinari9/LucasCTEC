@@ -104,6 +104,12 @@ node tests/check.js && ./scripts/semgrep.sh
   `divat-style-attr-quebra-csp` acusava 3 vezes o overlay da página companheira do
   `brainstorming` — página servida pelo próprio script, fora da CSP do portal — e "consertar"
   código de terceiro viraria conflito no próximo `./scripts/update_superpowers.sh`.
+- `.agents/skills/` — **irmã da linha de cima, e não um extra.** Desde que o
+  `update_superpowers.sh` passou a instalar nos **dois** destinos, o mesmo helper do
+  `brainstorming` existe em duas cópias reais; e é aqui que mora a leva do `mattpocock/skills`
+  (travada no `skills-lock.json`, symlinkada para `.claude/skills/`). Como o Semgrep resolve o
+  caminho **real**, ignorar só o `.claude/skills/` deixava os mesmos 3 achados voltarem pela
+  outra porta — foi o que deixou o gate vermelho no PR #119. **Ao mexer numa, mexa na outra.**
 
 **Atenção:** quando existe, este arquivo **substitui** o `.semgrepignore` padrão do Semgrep
 em vez de somar — por isso ele repete `node_modules/` e companhia.
