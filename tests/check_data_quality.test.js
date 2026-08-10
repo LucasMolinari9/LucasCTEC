@@ -146,11 +146,21 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
     // REGISTRA o PGHOST recebido: é por PGHOST que se descobre com qual banco o auditor falou,
     // porque a URL de conexão nunca aparece na linha de comando nem no log (auditor.mjs).
     const REGISTRO = path.join(raiz, 'pghost.log');
-    fs.writeFileSync(path.join(bin, 'psql'),
+    // Registrar o PGHOST prova COM QUEM se falou; registrar o argv prova O QUE se perguntou. Sem o
+    // segundo, trocar `audit.divat_data_quality()` por `public.` — ou por qualquer outra coisa —
+    // deixava a bancada inteira verde (issue #102). E o schema é justamente o ponto: a migração 2
+    // mantém essa função em `audit`, fora do alcance de `anon`, porque como RPC anônima ela é
+    // alavanca de indisponibilidade (59 varreduras sobre ~116 mil linhas por chamada).
+    const REGISTRO_SQL = path.join(raiz, 'sql.log');
+    const psqlFalso = corpo =>
       `#!${process.execPath}\n`
       + `require('fs').appendFileSync(${JSON.stringify(REGISTRO)}, (process.env.PGHOST || '(sem PGHOST)') + '\\n');\n`
-      + `process.stdout.write('\\n[{"verificacao":"codlinha_orfa","severidade":"erro",`
-      + `"qtd":2,"detalhe":"itinerario_teste sem match em tabela_vista_teste"}]\\n');\n`,
+      + `require('fs').appendFileSync(${JSON.stringify(REGISTRO_SQL)}, process.argv.slice(2).join(' ') + '\\n');\n`
+      + corpo;
+    fs.writeFileSync(REGISTRO_SQL, '');
+    fs.writeFileSync(path.join(bin, 'psql'),
+      psqlFalso(`process.stdout.write('\\n[{"verificacao":"codlinha_orfa","severidade":"erro",`
+      + `"qtd":2,"detalhe":"itinerario_teste sem match em tabela_vista_teste"}]\\n');\n`),
       { mode: 0o755 });
     const comPath = { PATH: `${bin}${path.delimiter}${process.env.PATH}` };
     const urlDe = amb => `postgres://divat_auditor_ci:x@db.${REFS[amb]}.supabase.co/postgres`;
@@ -165,6 +175,11 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
        `exit ${comAuditor.status}: ${comAuditor.saida.slice(0, 300)}`);
     ok(fs.readFileSync(REGISTRO, 'utf8').trim() === `db.${REFS.producao}.supabase.co`,
        'no cron o auditor conecta no ref de PRODUÇÃO', fs.readFileSync(REGISTRO, 'utf8'));
+    const sqlPedido = fs.readFileSync(REGISTRO_SQL, 'utf8');
+    ok(/audit\.divat_data_quality\(\)/.test(sqlPedido),
+       'o SQL pergunta pela função em `audit`, não em qualquer schema', sqlPedido.slice(0, 300));
+    ok(!/public\.divat_data_quality/.test(sqlPedido),
+       'NÃO cai na RPC pública (a migração 2 a tirou do alcance de anon de propósito)', sqlPedido.slice(0, 300));
 
     console.log('DIVAT_ALVO=teste — o auditor segue o alvo, não um literal (issue #74)');
     // A propriedade que este caso fixa: o ALVO governa os DOIS caminhos do modo duplo. Até
@@ -234,6 +249,27 @@ const MARCA_REDE = /RPC divat_data_quality falhou|fetch failed|ECONNREFUSED|Nem 
     ok(JSON.stringify(reescrito.ambientes.teste) === JSON.stringify(antes.ambientes.teste),
        'o slot do OUTRO ambiente ficou intacto', JSON.stringify(reescrito.ambientes.teste));
     fs.writeFileSync(baselinePath, JSON.stringify(antes, null, 2) + '\n');   // devolve a fixture
+
+    console.log('fonte devolve algo que NEM É LISTA — aborta em vez de assumir vazio');
+    // Irmão do caso acima pelo outro lado. `[]` É uma lista, e por isso passa pelo `Array.isArray`
+    // — quem o pega é a guarda de cegueira. `{}` e `null` não são lista, e aí quem responde é o
+    // `!Array.isArray` (check_data_quality.mjs:172), que existia sem nenhum caso a exercitando de
+    // frente (issue #102). É a guarda que separa "perdi a visão do banco" de "nenhum achado" — o
+    // pior modo de falha deste gate, porque é o único que sairia VERDE.
+    for (const [rotulo, saidaPsql] of [['um objeto', '{}'], ['null', 'null']]) {
+      fs.writeFileSync(path.join(bin, 'psql'),
+        `#!${process.execPath}\nprocess.stdout.write('\\n${saidaPsql}\\n');\n`, { mode: 0o755 });
+      const naoLista = rodar({ ...comPath, SUPABASE_PROD_AUDIT_DATABASE_URL: urlDe('producao') }, 'producao');
+      ok(naoLista.status === 1, `psql devolvendo ${rotulo} sai 1`,
+         `exit ${naoLista.status}: ${naoLista.saida.slice(0, 300)}`);
+      ok(/não devolveu uma lista de achados/.test(naoLista.saida),
+         `psql devolvendo ${rotulo} diz que abortou`, naoLista.saida.slice(0, 300));
+      ok(!/✓ Qualidade dos dados/.test(naoLista.saida),
+         `psql devolvendo ${rotulo} NÃO declara qualidade em dia`, naoLista.saida.slice(0, 300));
+      ok(!/⚠ Auditor indisponível/.test(naoLista.saida),
+         `psql devolvendo ${rotulo} não disfarça de fallback (o auditor RESPONDEU — mal)`,
+         naoLista.saida.slice(0, 300));
+    }
 
     console.log('baseline por ambiente — falha fechado em vez de comparar contra o banco errado');
     // As três formas de o slot do alvo não existir mandam para lugares diferentes, e por isso têm
