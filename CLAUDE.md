@@ -202,6 +202,34 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
   são: **push** (auto-deploy git) ou o MCP **`deploy_to_vercel`**.
 
 ## Como fazer mudanças
+
+> ### REGRA 0 — PLANO ANTES DE CÓDIGO, REVISADO ANTES DE EXECUTADO (desde 10/08/2026)
+>
+> **Ordem obrigatória: planeja → mostra ao dono → Codex revisa → só então implementa.** Vale para
+> qualquer mudança que não seja correção de uma linha óbvia. Não comece a editar porque "já
+> entendi o problema" — foi exatamente esse reflexo que produziu o estrago abaixo.
+>
+> **Por que existe.** Em 10/08/2026 uma sessão afirmou ao dono que "não sobrou trabalho de código
+> destravado" enquanto cinco achados de revisão estavam abertos; conferiu o placar do CI e nunca
+> os threads; e citou num PR público um hash de commit que não existia. O dono decidiu com base na
+> primeira afirmação. O problema não foi falta de capacidade — foi **afirmar antes de verificar**,
+> repetidamente, com confiança que os fatos não sustentavam.
+>
+> **Como o plano vira revisável — o Codex NÃO enxerga o chat.** Ele só comenta o que está num PR.
+> Então o plano tem de ser um **arquivo commitado**:
+> 1. escreva o plano em `docs/planos/AAAA-MM-DD-<assunto>.md` — o que muda, por quê, quais
+>    arquivos, como se verifica, e **o que pode dar errado**;
+> 2. abra um PR só com esse arquivo (sem código junto — código no mesmo PR faz a revisão do plano
+>    virar revisão do diff);
+> 3. peça a revisão (`@codex review` num comentário, se ele não disparar sozinho);
+> 4. espere o dono ler e o Codex responder. **Achado se responde: corrigir o plano, ou dizer por
+>    que não.** Thread sem resposta é indistinguível de thread não lida;
+> 5. só depois implemente — e o PR de implementação aponta para o plano aprovado.
+>
+> **Ao relatar qualquer coisa ao dono, o padrão é evidência, não memória:** o comando que rodou e a
+> saída dele, o log do CI, o `git log` do hash. Se não foi verificado nesta sessão, diga que não
+> foi. "Provavelmente está verde" não é relatório.
+
 0. **Mudança estrutural no banco** (tabela/coluna nova, RLS/GRANT, Realtime, índice, staging do
    ETL)? Use a skill `db-change` (`.claude/skills/db-change/`) — ela cobre o checklist de
    armadilhas antes de escrever SQL/JS. Ajuste isolado de CSS/texto/UI pula direto pro passo 1.
