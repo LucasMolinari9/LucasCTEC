@@ -69,27 +69,72 @@ if (!fs.existsSync(VERSION) || !js.includes("'/version.json")) {
 {
   const ROOT = path.join(__dirname, '..');
   const exigidos = new Map();   // caminho relativo à raiz → por que é exigido
-  // Os arquivos servidos moram na raiz, então um especificador local já É o caminho publicado.
-  // Normaliza `./x`, `/x` e `x` para a mesma chave e descarta query/hash (cache-buster).
-  const pedir = (bruto, porque) => {
-    if (!bruto || /^[a-z][a-z0-9+.-]*:/i.test(bruto) || bruto.startsWith('//')) return; // URL externa, data:, mailto:
-    const rel = bruto.split(/[?#]/)[0].replace(/^\.?\//, '');
-    if (rel) exigidos.set(rel, porque);
+
+  // Comentário NÃO é dependência: o navegador nunca pede o que está comentado, e cobrá-lo
+  // reprova mudança legítima (quem comenta um import para testar não deveria brigar com o gate).
+  // O corte do `//` exige início de linha ou espaço antes — sem isso `'https://x'` viraria
+  // `'https:` e mutilaria strings, trocando um falso positivo por um falso negativo.
+  const semCom = {
+    js:   s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1'),
+    html: s => s.replace(/<!--[\s\S]*?-->/g, ''),
+    css:  s => s.replace(/\/\*[\s\S]*?\*\//g, ''),
   };
-  // Todo canal pelo qual o site pede um arquivo DE SI MESMO em runtime. Cada um já foi um
-  // buraco: a 1ª versão desta guarda só lia `from '…'` e passava batido por `import './x'`,
-  // `import('./x')` e pelo <script> injetado — medido por mutação, não suposto.
-  const canais = [
-    [js,   /\bfrom\s*['"](\.[^'"]+)['"]/g,          s => `import do app.js ('${s}')`],   // import/export … from
-    [js,   /\bimport\s+['"](\.[^'"]+)['"]/g,        s => `import sem binding no app.js ('${s}')`],
-    [js,   /\bimport\s*\(\s*['"`](\.[^'"`]+)['"`]/g, s => `import() dinâmico no app.js ('${s}')`],
-    [js,   /\.src\s*=\s*['"`]([^'"`:]+)['"`]/g,     s => `<script>/asset injetado pelo app.js ('${s}')`],
-    [js,   /\bfetch\(\s*['"`](\/[^'"`\s]+)['"`+]/g, s => `fetch('${s}') no app.js`],
-    [html, /\b(?:href|src)\s*=\s*"([^"]+)"/g,       s => `referência do index.html ('${s}')`],
-    [css,  /\burl\(\s*['"]?([^'")]+)['"]?\s*\)/g,   s => `url() do styles.css ('${s}')`],
+
+  // Resolve um especificador para caminho relativo À RAIZ. `/x` é absoluto do site; o resto é
+  // relativo AO ARQUIVO QUE PEDE — e isso importa: `./formatters.mjs` dentro de
+  // `src/domain/core.mjs` é `src/domain/formatters.mjs`, não `formatters.mjs` na raiz.
+  // O `.trim()` existe porque `url(x )` sem aspas traz o espaço na captura e faria o gate
+  // procurar um arquivo com espaço no nome, reprovando um asset publicado.
+  const resolver = (dir, spec) => {
+    const lim = String(spec).trim().split(/[?#]/)[0];
+    if (!lim || /^[a-z][a-z0-9+.-]*:/i.test(lim) || lim.startsWith('//')) return null; // externa, data:, mailto:
+    return lim.startsWith('/') ? path.posix.normalize(lim.slice(1))
+                               : path.posix.normalize(path.posix.join(dir, lim));
+  };
+  const ehLocal = s => /^\.{0,2}\//.test(s);   // ./x, ../x, /x — descarta pacote bare ('react')
+
+  // (a) MÓDULOS — varredura TRANSITIVA. Parar no app.js deixava o buraco de origem aberto: um
+  // módulo publicado que importe outro não publicado quebra o app.js inteiro do mesmo jeito
+  // (import ES é atômico), com o gate verde. Por isso a fila segue cada módulo descoberto.
+  const RE_MOD = [
+    [/\bfrom\s*['"]([^'"]+)['"]/g,            'import … from'],
+    [/\bimport\s+['"]([^'"]+)['"]/g,          'import sem binding'],
+    [/\bimport\s*\(\s*['"`]([^'"`]+)['"`]/g,  'import() dinâmico'],
   ];
-  for (const [fonte, re, porque] of canais) {
-    for (const m of fonte.matchAll(re)) pedir(m[1], porque(m[1]));
+  const vistos = new Set(['app.js']);
+  const fila = [['app.js', semCom.js(js)]];
+  while (fila.length) {
+    const [arquivo, src] = fila.shift();
+    const dir = path.posix.dirname(arquivo);
+    for (const [re, rotulo] of RE_MOD) {
+      for (const m of src.matchAll(re)) {
+        if (!ehLocal(m[1])) continue;
+        const rel = resolver(dir, m[1]);
+        if (!rel) continue;
+        if (!exigidos.has(rel)) exigidos.set(rel, `${rotulo} em ${arquivo} ('${m[1]}')`);
+        if (vistos.has(rel)) continue;            // já na fila/varrido — não reenfileira (ciclo)
+        vistos.add(rel);
+        const abs = path.join(ROOT, rel);
+        if (/\.(mjs|js)$/.test(rel) && fs.existsSync(abs)) {
+          fila.push([rel, semCom.js(fs.readFileSync(abs, 'utf8'))]);
+        }
+      }
+    }
+  }
+
+  // (b) canais NÃO-modulares: não têm grafo a percorrer, cada um pede um arquivo e acabou.
+  const canais = [
+    ['app.js',     semCom.js(js),     /\.src\s*=\s*['"`]([^'"`]+)['"`]/g,     'asset injetado por .src='],
+    ['app.js',     semCom.js(js),     /\bfetch\(\s*['"`](\/[^'"`\s]+)['"`+]/g, 'fetch()'],
+    ['index.html', semCom.html(html), /\b(?:href|src)\s*=\s*(["'])([^"']*)\1/g, 'href/src'],
+    ['styles.css', semCom.css(css),   /\burl\(\s*['"]?([^'")]*)['"]?\s*\)/g,  'url()'],
+  ];
+  for (const [arquivo, fonte, re, rotulo] of canais) {
+    for (const m of fonte.matchAll(re)) {
+      const spec = m[2] !== undefined ? m[2] : m[1];       // href/src usa retrovisor p/ casar as aspas
+      const rel = resolver(path.posix.dirname(arquivo), spec);
+      if (rel) exigidos.set(rel, `${rotulo} em ${arquivo} ('${spec}')`);
+    }
   }
 
   // A allowlist é interpretada pelo PRÓPRIO git — mesma engine de padrões que a Vercel usa —
