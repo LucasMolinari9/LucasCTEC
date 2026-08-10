@@ -20,11 +20,11 @@
   ],
   "ambientes": {
     "teste": {
-      "digest": null,
-      "anon_rpcs": null,
-      "defaults_permissivos": null,
-      "funcoes_sem_search_path": null,
-      "gerado_em": null
+      "digest": "ad20270168c4a06c2aab147d41ea57db2bf9d74fe86f755c7c646ea8fb789642",
+      "anon_rpcs": 5,
+      "defaults_permissivos": 12,
+      "funcoes_sem_search_path": 0,
+      "gerado_em": "2026-08-10"
     },
     "producao": {
       "digest": null,
