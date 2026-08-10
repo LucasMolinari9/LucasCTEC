@@ -311,6 +311,20 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    porque o contrato dele é ser determinístico, e um gate que muda de veredito com o calendário
    não é. Nasceu da constatação de que, neste repo, o que cabe num `git push` acontece e o que
    depende de lembrar não acontece.
+2g. **Revisão automática do PR — leia os _review threads_, não só os _checks_.** O **Codex** está
+   ligado neste repositório (ChatGPT → Codex → settings) e revisa todo PR aberto, marcado como
+   pronto, ou quando alguém comenta `@codex review`. **Ele comenta em linha, não no placar.** Um PR
+   pode estar com todos os gates verdes e ter P1 aberto — os dois canais são independentes, e o
+   verde do CI não diz nada sobre eles.
+   **O que quebra se esquecer:** exatamente o que aconteceu em 10/08/2026. Uma sessão inteira
+   conferiu `get_check_runs` do #98, concluiu "não sobrou trabalho de código destravado" e foi
+   fechar issues — enquanto cinco achados do Codex (3 P1, 2 P2) estavam abertos desde 06/08. Todos
+   os cinco eram reais. Pior: a sessão editou **dois dos arquivos apontados** sem ver o
+   apontamento. Placar verde não é revisão lida.
+   **Como conferir:** `pull_request_read` com `method: get_review_comments` (ou a aba
+   *Files changed* → *Conversations*). Achado do Codex se responde: corrigir, ou responder por que
+   não — **nunca deixar em silêncio**, porque thread aberta sem resposta é indistinguível de
+   thread não lida.
 3. Merge na `main` → republica sozinho (ou MCP `deploy_to_vercel`). As telas dos usuários se
    atualizam via detector de versão. Bumpe o carimbo se quiser confirmar a chegada.
 4. Mudanças de **dados** NÃO exigem deploy — o site lê o Supabase ao vivo.
