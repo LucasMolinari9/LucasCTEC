@@ -140,9 +140,18 @@ Troque **duas** coisas e acrescente uma:
 - `[SENHA]` → a senha que a query devolveu
 - `?sslmode=require` no fim
 
-O host do pooler fica como o painel deu. A guarda do `auditor.mjs` exige que o usuário comece com
+O host do pooler fica como o painel deu. A guarda do `auditor.mjs` exige que o usuário seja
 `divat_auditor_ci` **e** termine com `.gontnlfmothfglssbyyk` — errar um dos dois faz o gate recusar
 a conexão, e a mensagem cita o nome da variável, nunca o valor.
+
+> **Correção de 10/08/2026 (issue #101).** Até esta data a frase acima dizia que a guarda exigia que
+> o usuário *começasse* com `divat_auditor_ci`, o que descrevia o `startsWith` que havia no código —
+> e que aceitava `divat_auditor_civil`, `divat_auditor_ci_backup`, `divat_auditor_ci2`. Hoje a
+> comparação é do **login inteiro** (no pooler, descontado o sufixo `.<ref>`) e na forma
+> **decodificada**. **A URL que este runbook manda montar continua exatamente a mesma e continua
+> válida** — o que mudou é o que a guarda aceita ALÉM dela, que agora é nada. O `?sslmode=require`
+> do fim, que já estava aqui, também deixou de ser cosmético: `disable`, `allow` e `prefer` passaram
+> a ser recusados.
 
 ### 3. Gravar o secret e o prazo
 
