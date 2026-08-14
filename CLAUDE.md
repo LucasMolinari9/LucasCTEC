@@ -5,10 +5,12 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 
 > **TRABALHO EM CURSO — leia antes de agir:**
 > **[`docs/historico/contexto-proxima-sessao-2026-08-14.md`](docs/historico/contexto-proxima-sessao-2026-08-14.md)**
-> — plano de 6 sessões respondendo a uma crítica externa. A **Sessão 1** (vendorizar os rulesets do
-> Semgrep) está **mergeada**; a **Sessão 2** é `src/domain/agrupamento.mjs`. Aquele arquivo traz a
-> especificação de cada sessão, o protocolo combinado (um PR por sessão, `@codex review`, sem merge
-> por conta própria) e os limites medidos do ambiente do agente.
+> — plano de 6 sessões respondendo a uma crítica externa. As Sessões **1** (vendorizar os rulesets
+> do Semgrep) e **2** (`src/domain/agrupamento.mjs`) estão **mergeadas**; a próxima é a **Sessão 3**,
+> `src/domain/busca.mjs`. Aquele arquivo traz a especificação de cada sessão, o protocolo combinado
+> (um PR por sessão, `@codex review`, sem merge por conta própria) e os limites medidos do ambiente
+> do agente. **Ressalva da Sessão 2:** `norm` saiu na frente e já está em `core.mjs` — a tabela do
+> plano ainda a lista na Sessão 3, mas ela é dependência de `agrupamento.mjs` e não podia esperar.
 >
 > Continua valendo:
 > **[`docs/historico/contexto-proxima-sessao-2026-08-09.md`](docs/historico/contexto-proxima-sessao-2026-08-09.md)**
@@ -27,13 +29,23 @@ empresas, relatórios). Os dados são **alimentados pelo dono direto no Supabase
 exibe e **atualiza ao vivo** (Realtime).
 
 ## Arquitetura (importante)
-- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (todo o JS, ~3,5k
+- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (quase todo o JS, ~3,4k
   linhas, num IIFE)** — zero-build: sem framework, sem `package.json`, `<script src>` clássico no
   fim do `<body>`. Todo JS novo vai no `app.js` (o `tests/check.js` **falha** se aparecer
   `<script>` inline no `index.html` — a CSP publica `script-src 'self'` e bloquearia) e todo CSS
   novo vai em **classe no `styles.css`** (não em `style=""` no template). Há **rotas por hash**
   (`#/linha/<cod>`, `#/consulta/<view>`) — deep link e Voltar do navegador fecham o modal.
   Racional e regras de navegação: **`docs/estrutura-frontend.md`**.
+- **A lógica PURA vai saindo do `app.js` para `src/domain/*.mjs`**, um módulo por sessão. Hoje são
+  dois: **`core.mjs`** (formatação, escaping, `norm`, e as regras de situação `isLinhaAtiva`/
+  `isVigente`) e **`agrupamento.mjs`** (`groupBy`/`countBy`/`fmtMoney`, as ordenações `byCodlinha`/
+  `rjOrder`, o desempate `scoreEmpresa`/`dedupEmpresasPorRJ`, os recortes por município
+  `classifyMunLines`/`terminaisDoMunicipio` e a frota `resumoFrota`/`filtrarFrotaEmpresas`).
+  **Regra: função pura extraída deixa de ter cópia em `tests/*.harness.js`** — o harness passa a
+  fazer `require` do módulo real, e o bloco `@canon` correspondente é APAGADO, não atualizado. A
+  cobrança do `check.js` §[2] deriva sozinha os `export` de `src/domain/` para saber quem é import
+  legítimo e quem é cópia sem guarda; não há lista a manter à mão. Módulo novo precisa de linha
+  própria no `.vercelignore` (abaixo) e de `import` no `app.js`.
 - As consultas usam **REST do Supabase via `fetch`** (PostgREST). O **supabase-js** é usado **só**
   para o canal **Realtime** — é **vendorado** em `vendor/supabase-js-2.110.7.min.js` (versão
   fixa, mesma origem, sem CDN em runtime; ver Armadilhas para atualizar) e **injetado
@@ -53,7 +65,8 @@ exibe e **atualiza ao vivo** (Realtime).
   **CSSOM** — `el.style.x = …` e `setProperty`, que a CSP permite (medido em Chromium headless).
   Duas guardas cobram isso: `tests/check.js` §[1] e a regra Semgrep `divat-style-attr-quebra-csp`.
 - **`.vercelignore` é allowlist**: o deploy publica só `index.html`, `app.js`, `styles.css`,
-  `manifest.webmanifest`, `vercel.json`, `version.json`, `vendor/` e `src/domain/core.mjs`.
+  `manifest.webmanifest`, `vercel.json`, `version.json`, `vendor/` e os módulos de `src/domain/`
+  reabertos um a um (hoje `core.mjs` e `agrupamento.mjs`).
   Arquivo público novo (ícone, fonte) precisa ser reaberto lá, senão vira 404. **`src/` é reaberto
   arquivo a arquivo**, não com um `!/src` de uma linha: é diretório cujo nome convida a guardar o
   que não se serve, e reabri-lo inteiro publicaria em silêncio o que alguém largar ali. Reabrir só
@@ -170,7 +183,9 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 
 | Seção (faça grep do título) | Funções-chave | O que faz |
 |---|---|---|
-| `SUPABASE CONFIG` | `sbFetch`, `fetchComTimeout`, `marcarTrunc`, `bannerTrunc`, `fmtCode/fmtTime/fmtDate`, `esc/enc/orDash` | Config SB + fetch com timeout/retry; helpers de formatação e escape (XSS). |
+| *(fora do `app.js`)* `src/domain/core.mjs` | `fmtCode/fmtTime/fmtDate`, `esc/enc/ilikeTerm/orDash`, `norm`, `isLinhaAtiva`/`isVigente` | Formatação, escaping, normalização de texto e as regras de situação da linha. |
+| *(fora do `app.js`)* `src/domain/agrupamento.mjs` | `groupBy`, `countBy`, `fmtMoney`, `byCodlinha`, `rjOrder`, `scoreEmpresa`/`dedupEmpresasPorRJ`, `classifyMunLines`/`terminaisDoMunicipio`, `resumoFrota`/`filtrarFrotaEmpresas` | Agregação, ordenação e filtros de conjunto — importados pelo `app.js` e pelos testes, sem cópia no meio. |
+| `SUPABASE CONFIG` | `sbFetch`, `fetchComTimeout`, `selecionarSupabase`, `marcarTrunc`, `bannerTrunc` | Config SB + fetch com timeout/retry. Os helpers de formatação e escape que ficavam aqui moraram para `src/domain/core.mjs` (linha de cima). |
 | `ÍCONES` | objeto `I` | SVGs dos ícones. |
 | `SEÇÕES / CARDS` | array `SECTIONS` | Define os cards `[ícone, título, descrição, view, precisaLinha]`. |
 | `RENDER CARDS` | `selectTopic`, `renderSideNav`, `renderSideContent` | Monta o **painel lateral** (sidebar de tópicos + painel de conteúdo) a partir de `SECTIONS`; `selectTopic` troca o tópico ativo (clique na sidebar, busca do topo e rota `#/topico/<key>`). |
@@ -180,7 +195,7 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody/loading/errorBox`, `baixarPdf`, `docHead`, `tableHTML`, `paginateEvents`, `matchEvent`, `beginGen`/`isCurrentGen`/`commitViewResult`/`pushDetail`/`popDetail` (seam do ciclo de vida da view), `renderBlankTab`/`renderTabChooser` (seletor de documentos da aba do "+"), todos os `render*` | **Maior bloco**: abre/preenche o modal e renderiza TODOS os documentos. |
 | `COMPONENTES AUXILIARES` | `linhasTable`, `bindLineRows`, `searchPanel`, `lineResults`, `pageBounds`, `paginate`, `paginateTable`, `paginateLines` | Tabela de linhas + painel de busca reutilizável + **paginação de tela** (25/pág; ver `docs/estrutura-frontend.md` §4). |
 | `CLIQUE NOS CARDS` | — | Liga o clique do card → abre a view. |
-| `UTILITÁRIOS` | `groupBy`, `countBy`, `fmtMoney` | Agregação dos relatórios e moeda pt-BR. |
+| `UTILITÁRIOS` | `debounce` | O que sobrou depois que a agregação (`groupBy`/`countBy`/`fmtMoney`) foi para `src/domain/agrupamento.mjs`. |
 | `TOAST` | `toast` | Avisos transitórios. |
 | `REALTIME` | `RT_TABLES`, `invalidateCaches`, `scheduleReload`/`reloadTab`, `markStale`, `tabMatchesEvent`, `dispatchRealtime`, `onRealtime`, `initRealtime` | Assina mudanças do Supabase e despacha por aba: a aba ativa recarrega ao vivo, as de segundo plano só ficam `stale` (recarregam ao serem reativadas). supabase-js injetado dinamicamente aqui. |
 | `AUTO-ATUALIZAÇÃO` | `checarNovaVersao` | Detector de novo deploy (ETags de `index.html`, `app.js` e `styles.css`) que recarrega sozinho. |

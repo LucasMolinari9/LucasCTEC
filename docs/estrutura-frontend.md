@@ -21,9 +21,20 @@ mudou junto, e o que continua valendo:
 - **Auto-update atômico:** `checarNovaVersao` faz `HEAD` de `/version.json`. Todo deploy que muda
   HTML, CSS, JS ou módulos deve incrementar `version`; assim a lista não cresce a cada módulo.
 - **Zero-build continua.** `app.js` é um ES module nativo carregado com `type="module"`; não há
-  bundler nem dependências. O primeiro seam está em `src/domain/core.mjs`, sem DOM ou rede.
+  bundler nem dependências. Os seams abertos até aqui, ambos sem DOM, rede ou estado global:
+  **`src/domain/core.mjs`** (formatação, escaping, `norm`, situação da linha) e
+  **`src/domain/agrupamento.mjs`** (agregação, ordenação e filtros de conjunto).
 - **Regra para extrair:** prefira módulos profundos com interface pequena. Não mova loaders/estado
   apenas para reduzir linhas; extraia quando a dependência puder ser expressa por imports claros.
+- **Extração paga o processo que ela torna desnecessário.** Enquanto a função mora no `app.js`, o
+  teste unitário roda sobre uma **cópia** em `tests/*.harness.js`, e essa cópia precisa da guarda
+  `@canon` para não divergir do original. Extraída, o harness importa o módulo real: cópia e guarda
+  são **apagadas** no mesmo commit — o teste passa a exercitar exatamente o código que o navegador
+  executa. Quando o último `@canon` sair, `tests/canon.js` e `tests/drift.test.js` se aposentam.
+- **Toda extração tem três passos obrigatórios, não um:** mover a função + importar no `app.js`;
+  apagar o `@canon` e trocar por `require` no harness; e **reabrir o arquivo no `.vercelignore`**.
+  Pular o terceiro derruba o portal inteiro (import ES é atômico — ver §`.vercelignore` no
+  `CLAUDE.md`); o `check.js` §[1] reprova nomeando o arquivo que ficou de fora.
 - **CSS em `styles.css`** (extraído do `<style>` em 22/07/2026): cacheável separado do HTML e
   editável com tooling. Desde **27/07/2026** o `style-src` é `'self'` com **`style-src-attr
   'none'`** — **nenhum `unsafe-inline`** (achado SEC-08). Os 10 atributos `style=` que restavam

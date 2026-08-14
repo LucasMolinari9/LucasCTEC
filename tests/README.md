@@ -67,12 +67,17 @@ cada teste novo).
 > validam renderização determinística, não substituem um preview ligado a um banco restaurado.
 
 ## ⚠️ Regra de ouro (anti-drift)
-Os harness ainda copiam o código legado do `app.js` à mão. As regras já extraídas em
-`src/domain/core.mjs` são importadas diretamente por `pure.harness.js`. Ao editar uma função
-que ainda estiver copiada,
-no `app.js`, atualize a cópia** no harness correspondente. O `check.js` tem uma
-guarda que falha avisando "harness DESATUALIZADO" se um trecho canônico sumir do
-`app.js` — mas ela cobre só os trechos listados; mantenha a disciplina.
+Os harness ainda copiam à mão o código que continua dentro do `app.js`. **Ao editar uma função
+que ainda estiver copiada, atualize a cópia** no harness correspondente, entre os marcadores
+`/* @canon <nome> */ … /* @endcanon */`. O `check.js` §[2] compara o texto INTEIRO da cópia com o
+`app.js` e falha nomeando quem divergiu.
+
+O que já foi extraído para `src/domain/*.mjs` (hoje `core.mjs` e `agrupamento.mjs`) **não tem
+cópia**: o `pure.harness.js` faz `require` do módulo real, que é a mesma implementação que o
+navegador executa. **Extrair uma função é, portanto, apagar o bloco `@canon` dela** — não
+atualizá-lo. A checagem de cobertura do `check.js` deriva sozinha os `export` de `src/domain/`
+para distinguir import legítimo de cópia sem guarda, então não há lista a manter à mão; um
+símbolo exportado pelo harness que não venha de um módulo e não esteja marcado reprova o gate.
 
 > Observação: estes testes cobrem a camada de dados/lógica pura. A renderização (DOM)
 > e o PDF não são testados aqui — exigiriam um navegador headless.

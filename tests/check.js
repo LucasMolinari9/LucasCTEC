@@ -248,7 +248,36 @@ console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
   // à mão). Esta checagem fecha o laço: todo símbolo exportado por um harness tem de estar
   // entre marcadores. Varre os DOIS harness — varrer só um e deixar o irmão aberto é o mesmo
   // bug, adiado (o harness.js ficou descoberto assim até 27/07/2026). Harness NOVO entra aqui.
+  //
+  // A exceção legítima é o símbolo que o harness IMPORTA de `src/domain/` em vez de copiar: ali
+  // não há cópia para divergir, é a mesma implementação que o navegador executa. A lista dessas
+  // exceções sai do DISCO, lendo os `export` dos módulos — escrita à mão ela vira dívida a cada
+  // extração, e o modo de falha é o pior possível: para calar o gate, a saída mais curta é
+  // escrever o nome na lista, que é exatamente como uma cópia de verdade passaria batida.
+  const exportadosDoDominio = () => {
+    const dir = path.join(__dirname, '..', 'src', 'domain');
+    const nomes = new Set();
+    let arquivos = [];
+    try { arquivos = fs.readdirSync(dir).filter(f => f.endsWith('.mjs')); } catch (_) { return null; }
+    if (!arquivos.length) return null;
+    for (const f of arquivos){
+      const src = fs.readFileSync(path.join(dir, f), 'utf8');
+      for (const m of src.matchAll(/^export\s+(?:async\s+)?(?:function\*?|const|let|var|class)\s+([A-Za-z_$][\w$]*)/gm)) nomes.add(m[1]);
+      for (const m of src.matchAll(/^export\s*\{([^}]*)\}/gm)){
+        for (const parte of m[1].split(',')){
+          const nome = parte.trim().split(/\s+as\s+/).pop().trim();
+          if (nome) nomes.add(nome);
+        }
+      }
+    }
+    return nomes;
+  };
   let totalExportados = 0, falhou = false;
+  const importadosDoDominio = exportadosDoDominio();
+  if (!importadosDoDominio){
+    fail('não consegui ler os export de src/domain/*.mjs — a guarda de cobertura @canon ficaria cega');
+    falhou = true;
+  }
   for (const arquivo of HARNESSES){
     const src = fs.readFileSync(path.join(TESTS_DIR, arquivo), 'utf8');
     const m = src.match(/module\.exports\s*=\s*\{([\s\S]*?)\}\s*;/);
@@ -258,11 +287,8 @@ console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
       .map(s => s.replace(/^(?:get|set)\s+/, '').split(/[:(]/)[0].trim())
       .filter(Boolean);
     totalExportados += new Set(exportados).size;
-    const importadosDoDominio = new Set([
-      'fmtCode', 'fmtTime', 'fmtDate', 'esc', 'enc', 'ilikeTerm', 'orDash',
-      'fmtLineName', 'boolChip', 'situacaoHTML', 'isLinhaAtiva', 'isVigente',
-    ]);
-    const semMarcador = [...new Set(exportados)].filter(n => !copias.has(n) && !importadosDoDominio.has(n));
+    const semMarcador = [...new Set(exportados)]
+      .filter(n => !copias.has(n) && !(importadosDoDominio && importadosDoDominio.has(n)));
     if (semMarcador.length){
       fail(`[${arquivo}] cópia exportada sem marcador @canon: ${semMarcador.join(', ')} — `
          + 'envolva o bloco em /* @canon <nome> */ … /* @endcanon */');
