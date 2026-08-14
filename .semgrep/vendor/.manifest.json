@@ -1,0 +1,13 @@
+{
+  "_comentario": "Gerado pelo workflow atualizar-semgrep-rulesets. NÃO editar à mão.",
+  "semgrep": "1.171.0",
+  "baixado_em": "2026-08-14T22:04:56Z",
+  "run": "https://github.com/LucasMolinari9/LucasCTEC/actions/runs/31845142284",
+  "rulesets": {
+    "p/javascript": 74,
+    "p/xss": 35,
+    "p/secrets": 52,
+    "p/github-actions": 12
+  },
+  "total_regras": 173
+}
