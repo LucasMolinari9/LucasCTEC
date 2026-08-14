@@ -210,13 +210,14 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    armadilhas antes de escrever SQL/JS. Ajuste isolado de CSS/texto/UI pula direto pro passo 1.
 1. Edite `app.js` (JS) e/ou `index.html` (HTML/CSS). **Trabalhe numa branch**, não direto na
    `main`: push na branch → o Vercel gera **preview deploy** → confira no preview → merge na
-   `main` (que é a publicada). Existem **9 workflows**, separados por preocupação: `ci.yml`,
+   `main` (que é a publicada). Existem **10 workflows**, separados por preocupação: `ci.yml`,
    `views.yml`, `semgrep.yml`, `deriva.yml`, `db-checks.yml`, `phase3-security.yml`,
-   `deploy-smoke.yml`, `backup.yml` e `atualizar-baseline.yml` (este último é **só**
-   `workflow_dispatch`: mede um banco e abre um PR com o diff do baseline, que é como se preenche
-   um slot de medição sem terminal). Os cinco primeiros mais o contrato offline da Fase 3 podem
-   entrar num PR conforme os arquivos tocados; o smoke acompanha deploys; o backup é cron/manual.
-   Um vermelho não esconde o outro.
+   `deploy-smoke.yml`, `backup.yml`, `atualizar-baseline.yml` e `atualizar-semgrep-rulesets.yml`
+   (os dois últimos são **só** `workflow_dispatch` e existem pelo mesmo motivo: fazer, pela aba
+   Actions, o que de outro modo exigiria terminal — um mede um banco e abre PR com o diff do
+   baseline; o outro baixa os rulesets do Semgrep e abre PR com o diff deles). Os cinco primeiros
+   mais o contrato offline da Fase 3 podem entrar num PR conforme os arquivos tocados; o smoke
+   acompanha deploys; o backup é cron/manual. Um vermelho não esconde o outro.
    Se previews estiverem protegidos pela Vercel, configure um **Protection Bypass for
    Automation** e grave o mesmo valor no secret GitHub `VERCEL_AUTOMATION_BYPASS_SECRET`;
    sem isso o smoke recebe a tela de login em vez do portal e falha de propósito.
@@ -257,7 +258,12 @@ guardadas pelo `check.js`). Render/DOM e PDF não têm teste (exigiriam navegado
    que só quebraria no navegador do usuário — `eval`/`new Function`, CDN externo em runtime,
    `style=` em markup e atribuição direta a `currentView.pdfHTML` fora do seam.
    **O que quebra se esquecer:** nada no gate offline — é justamente o que ele não vê.
-   Modo padrão é offline; `--full` precisa de rede (bloqueada no ambiente do Claude).
+   O modo padrão roda as **5 regras locais** mais os rulesets **vendorizados** em
+   `.semgrep/vendor/` — offline, e igual ao que o CI roda. Até 14/08/2026 rodava só as 5, e
+   "verde local" não era evidência de verde no CI: foi assim que **3 achados de
+   `run-shell-injection`** chegaram ao CI em 09/08. `--full` (rede, bloqueada no ambiente do
+   Claude) vira conferência de frescor. **Para atualizar a cópia, nunca edite à mão:** aba
+   Actions → workflow `atualizar-semgrep-rulesets` → abre PR com o diff.
    Runbook e como escrever regra nova: **`docs/semgrep.md`**.
 2c. **Deriva docs×banco — `node scripts/check_deriva.mjs`** (precisa de rede). Confere que toda
    tabela/coluna/RPC que o repo afirma existe mesmo, na visão de `anon`.

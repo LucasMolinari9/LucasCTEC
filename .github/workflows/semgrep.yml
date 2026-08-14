@@ -5,12 +5,19 @@
 # (o que o projeto NÃO PODE fazer). São gates separados de propósito — um pode ficar
 # vermelho sem esconder o resultado do outro.
 #
-# Duas metades, na ordem de quem depende de menos coisa:
+# Três metades (sic), na ordem de quem depende de menos coisa:
 #   [1] regras locais (.semgrep/rules/) — offline, deterministas, escritas pra este portal.
 #       Rodam antes: se quebrarem, é problema NOSSO, e o log fica no topo.
-#   [2] rulesets públicos (p/javascript, p/xss, p/secrets, p/github-actions) — baixados de
-#       semgrep.dev. Precisam de rede; por isso não dá pra rodar essa metade no ambiente do
-#       agente Claude (saída bloqueada), só aqui e na máquina do dono.
+#   [2] rulesets VENDORIZADOS (.semgrep/vendor/) — cópia versionada dos mesmos rulesets do [3].
+#       É EXATAMENTE o que `./scripts/semgrep.sh` roda na máquina de quem desenvolve, e existe
+#       para que verde local seja evidência de verde aqui. Antes dele, não era: em 09/08/2026,
+#       3 achados de `run-shell-injection` passaram do local para o CI justamente por essa
+#       diferença (docs/historico/contexto-proxima-sessao-2026-08-09.md).
+#   [3] rulesets públicos ao vivo (p/javascript, p/xss, p/secrets, p/github-actions) — baixados
+#       de semgrep.dev. Precisam de rede; por isso não dá pra rodar essa metade no ambiente do
+#       agente Claude (saída bloqueada), só aqui e na máquina do dono. Continua sendo a
+#       AUTORIDADE: é ele que percebe regra nova a montante. [2] verde + [3] vermelho tem
+#       diagnóstico único — a cópia vendorizada está velha, rode `atualizar-semgrep-rulesets`.
 #
 # Sem upload SARIF / Code Scanning. A justificativa antiga ("exige GitHub Advanced Security, que
 # este repo privado no plano free não tem") caiu junto com a premissa: o repo é PÚBLICO desde
@@ -62,7 +69,20 @@ jobs:
       - name: '[1] Regras locais do portal (offline)'
         run: semgrep scan --config=.semgrep/rules --metrics=off --error .
 
-      - name: '[2] Rulesets públicos (registry)'
+      # [2] roda EXATAMENTE o que `./scripts/semgrep.sh` roda na máquina de quem desenvolve.
+      # Está antes do registry ao vivo de propósito: se este passar e o [3] reprovar, o
+      # diagnóstico é imediato — a cópia vendorizada está velha, rode o workflow
+      # `atualizar-semgrep-rulesets`. Antes disto existir, a diferença entre local e CI era
+      # invisível até o PR ficar vermelho sem explicação (foi assim que 3 achados de
+      # `run-shell-injection` chegaram ao CI em 09/08).
+      #
+      # O `if:` cobre o estado transitório em que `.semgrep/vendor/` ainda não foi preenchido:
+      # sem ele, o passo falharia por config inexistente e pareceria achado.
+      - name: '[2] Rulesets vendorizados (offline — o mesmo que roda local)'
+        if: hashFiles('.semgrep/vendor/*.yml') != ''
+        run: semgrep scan --config=.semgrep/vendor --metrics=off --error .
+
+      - name: '[3] Rulesets públicos (registry ao vivo)'
         run: >-
           semgrep scan
           --config=p/javascript
@@ -74,5 +94,5 @@ jobs:
       # Guarda das próprias regras: garante que cada regra de .semgrep/rules/ ainda pega o
       # caso ruim E ignora o bom (.semgrep/tests/). Roda por último porque é meta — se falhar,
       # o problema está na REGRA, não no código do portal.
-      - name: '[3] Testes das regras locais'
+      - name: '[4] Testes das regras locais'
         run: semgrep --test --metrics=off --config=.semgrep/rules .semgrep/tests

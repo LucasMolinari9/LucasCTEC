@@ -350,6 +350,17 @@ console.log('\n[2b] Deriva docs × código');
     ? JSON.parse(ler('.claude/skills/.superpowers-manifest.json')) : null;
   const spSkills = spManifesto ? (spManifesto.skills || []).length : null;
 
+  // Regras LOCAIS do Semgrep (.semgrep/rules/), que a prosa cita pelo número. Ficaram de fora
+  // da guarda até 14/08/2026, e o número virou justamente o argumento de uma crítica externa
+  // ("o local roda 5, o CI roda 116") — fato numérico repetido em vários arquivos é exatamente
+  // o que esta seção existe para prender. Só as LOCAIS entram: as vendorizadas
+  // (.semgrep/vendor/) mudam quando o registry muda, e prendê-las aqui faria o gate reprovar
+  // por um número que ninguém neste repo escolheu. A contagem delas mora no manifesto.
+  const semgrepRegras = existe('.semgrep/rules')
+    ? fs.readdirSync(path.join(RAIZ, '.semgrep/rules')).filter(f => /\.ya?ml$/.test(f))
+        .reduce((n, f) => n + (ler(`.semgrep/rules/${f}`).match(/^\s{0,2}- id:/gm) || []).length, 0)
+    : null;
+
   // --- fatos que os docs AFIRMAM (regex contra o texto com espaços normalizados,
   //     para que quebra de linha do markdown não escape da checagem) ---
   // Em `.yml` o marcador `#` do comentário é removido ANTES de normalizar o espaço: um comentário
@@ -391,6 +402,11 @@ console.log('\n[2b] Deriva docs × código');
     // numa linha só — o `normalizar` não tira o `#` de `.sh`, então quebra de linha a esconde.
     { doc:['CLAUDE.md', '.claude/hooks/superpowers-session-start.sh'],
       o:'skills do Superpowers', re:/([\d]+) skills do Superpowers/, real:spSkills, esc:'exato' },
+    // O `scripts/semgrep.sh` é `.sh`: o `normalizar` não tira o `#`, então a frase precisa caber
+    // numa linha só (mesma armadilha do hook, logo acima). O `\*{0,2}` deixa o regex servir ao
+    // markdown do CLAUDE.md (`**5** regras locais`) e ao comentário do shell ao mesmo tempo.
+    { doc:['CLAUDE.md', 'docs/semgrep.md', 'scripts/semgrep.sh'],
+      o:'regras locais do Semgrep', re:/as \*{0,2}([\d]+) regras locais/, real:semgrepRegras, esc:'exato' },
   ];
   // TODA ocorrência é conferida, não só a primeira. A 1ª versão parava no primeiro casamento, e
   // o `views.yml` afirma "23 views" em TRÊS linhas (1, 11 e 71): consertar uma e esquecer as

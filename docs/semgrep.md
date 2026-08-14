@@ -30,19 +30,51 @@ de propósito (roda em qualquer lugar, em segundos), e é uma propriedade que va
 dois rodam separados — `ci.yml` e `semgrep.yml` — e um pode ficar vermelho sem esconder o
 resultado do outro.
 
-## As duas metades do scan
+## As três fontes de regra
 
 Isto é o que mais confunde na hora de rodar:
 
 1. **Regras locais** — `.semgrep/rules/divat.yml`, versionadas neste repo. Invariantes
    **deste** portal, que ruleset genérico nenhum conhece. Rodam **offline**, sempre.
-2. **Rulesets públicos** — `p/javascript`, `p/xss`, `p/secrets`, `p/github-actions`,
+2. **Rulesets vendorizados** — `.semgrep/vendor/*.yml`, cópia versionada dos rulesets do
+   item (3). Rodam **offline** também, e entram no modo padrão do wrapper.
+3. **Rulesets públicos ao vivo** — `p/javascript`, `p/xss`, `p/secrets`, `p/github-actions`,
    baixados do registry `semgrep.dev` a cada execução. **Precisam de rede.**
 
-A metade (2) **não roda no ambiente do agente Claude** (a saída para `semgrep.dev` é
+A metade (3) **não roda no ambiente do agente Claude** (a saída para `semgrep.dev` é
 bloqueada pela política de rede, mesma situação do `vercel` CLI — ver `CLAUDE.md` §
-Publicação). Roda no CI e na máquina do dono. A metade (1) roda em qualquer lugar — por isso
-ela é o padrão do wrapper, e é a que abre o job no CI.
+Publicação), nem no celular do dono. Roda no CI.
+
+### Por que a cópia vendorizada existe
+
+Até 14/08/2026 só havia (1) e (3). O padrão do wrapper rodava **5 regras** e o CI rodava o
+conjunto completo — então **verde local não era evidência de verde no CI**. Não é hipótese: em
+09/08/2026, **3 achados de `run-shell-injection` passaram do local para o CI** no workflow
+`atualizar-baseline.yml` (registrado em
+`docs/historico/contexto-proxima-sessao-2026-08-09.md`).
+
+Cachear os rulesets **fora** do git não resolveria para ninguém que trabalha neste repo: nem o
+agente nem o dono (que opera pelo celular, sem terminal) alcançam `semgrep.dev`. A cópia no git
+é a única forma de os dois rodarem o mesmo conjunto — mesma disciplina do supabase-js e das
+fontes.
+
+Isso **não** contradiz a versão fixa do binário. Aquilo prende o *executável* para que
+atualizá-lo seja uma decisão; isto prende as *regras* pelo mesmo motivo. Regra nova do registry
+chega quando alguém decidir, e chega num diff legível.
+
+### Atualizar a cópia
+
+Nunca à mão. Aba **Actions → "Atualizar rulesets do Semgrep" → Run workflow** (funciona no
+celular). Ele baixa, regrava `.semgrep/vendor/` e o manifesto, **prova que o conjunto
+vendorizado acha exatamente o que o registry ao vivo acha** naquele commit — e só então abre um
+PR com o diff. Se divergir, ele falha em vez de propor uma cópia que mente.
+
+A provenance fica em `.semgrep/vendor/.manifest.json`: versão do binário, data, contagem por
+ruleset e o link do run. Espelha o `.claude/skills/.superpowers-manifest.json`.
+
+**Enquanto `.semgrep/vendor/` estiver vazio**, o wrapper roda só as regras locais e **avisa em
+`stderr`** que o verde ali ainda não vale como verde no CI. O aviso é intencional: silenciá-lo
+reconstruiria exatamente o falso verde que motivou tudo isto.
 
 ## Instalar
 
@@ -69,11 +101,14 @@ na instalação é o dono, e o `pipx` acima já sobrevive entre sessões.
 ## Rodar
 
 ```sh
-./scripts/semgrep.sh                   # só regras locais (offline) — o padrão
-./scripts/semgrep.sh --full            # locais + rulesets do registry (precisa de rede)
+./scripts/semgrep.sh                   # locais + vendorizados (offline) — o padrão
+./scripts/semgrep.sh --full            # locais + registry AO VIVO (precisa de rede)
 ./scripts/semgrep.sh --test            # testa as REGRAS contra .semgrep/tests/
 ./scripts/semgrep.sh --baseline-commit=origin/main   # só o que a SUA branch introduziu
 ```
+
+`--full` continua existindo como **conferência de frescor**: se ele acusar algo que o padrão
+não acusou, a cópia vendorizada está velha — rode o workflow de atualização.
 
 Sai com código != 0 quando há achado (`--error`), então serve de gate em script. Argumento
 extra é repassado ao `semgrep scan` — é assim que o `--baseline-commit` chega lá (ele **aborta**
@@ -153,8 +188,16 @@ o próprio Semgrep as leria como anotação e o teste quebraria.
 
 ## CI
 
-`.github/workflows/semgrep.yml`, em todo push e PR: regras locais → rulesets do registry →
-teste das regras. A versão do Semgrep é **fixa** (`semgrep==1.171.0`), mesma disciplina do
+`.github/workflows/semgrep.yml`, em todo push e PR: regras locais → rulesets vendorizados →
+rulesets do registry ao vivo → teste das regras.
+
+O passo dos **vendorizados** roda exatamente o que `./scripts/semgrep.sh` roda na sua máquina, e
+está **antes** do registry ao vivo de propósito: quando ele passa e o seguinte reprova, o
+diagnóstico é único — a cópia vendorizada está velha, rode o workflow *Atualizar rulesets do
+Semgrep*. O registry ao vivo continua sendo a **autoridade**, porque é ele que enxerga regra nova
+a montante.
+
+A versão do Semgrep é **fixa** (`semgrep==1.171.0`), mesma disciplina do
 supabase-js vendorado: atualizar é uma decisão, não efeito colateral de um push qualquer —
 versão nova traz regra nova e deixaria vermelho um PR que não mexeu em nada disso. Para
 subir: troque o número no workflow, rode `./scripts/semgrep.sh --full` local e resolva os

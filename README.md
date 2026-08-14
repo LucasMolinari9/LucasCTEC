@@ -89,7 +89,7 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 | `docs/` | Documentação técnica (abaixo). |
 | `CLAUDE.md` | Contexto detalhado do projeto para sessões de IA (mapa do código, banco, armadilhas). |
 | `CONTEXT.md` | Glossário do domínio (termos do cadastro de linhas). |
-| `.github/workflows/` | Os 9 workflows de automação e CI (ver a tabela de testes acima). |
+| `.github/workflows/` | Os 10 workflows de automação e CI (ver a tabela de testes acima). |
 
 ### Documentação (`docs/`)
 
