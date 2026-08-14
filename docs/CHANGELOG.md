@@ -84,6 +84,22 @@ dois; `vendor/` com 1 de 4 arquivos → avisa "INCOMPLETO" e roda 5 regras (não
 com 4 de 4 → roda 9 e não avisa; versão do CI trocada para 9.9.9 → avisa com o comando de
 alinhamento. Fixtures removidas depois.
 
+### Segunda rodada do Codex, sobre o commit de correção — um achado, procedente
+
+**O ramo do atualizador reusava o `run_id`, e re-executar não tinha saída.** Re-executar um run
+pela aba Actions **preserva o `run_id`** e só incrementa o `run_attempt`. Então, se o `git push`
+passasse e o `gh pr create` seguinte falhasse por instabilidade da API, a re-execução recriaria o
+**mesmo nome de ramo**, a partir da base, com um commit **irmão** do que já estava no remoto — e o
+push sairia rejeitado como non-fast-forward. Quem opera pelo celular ficaria sem saída, justamente
+no caminho que este workflow existe para servir. O ramo passou a incluir a tentativa
+(`semgrep/rulesets-<run>-<tentativa>`). Custo aceito: tentativa falha deixa ramo órfão — barato,
+visível, e sem PR apontando para ele.
+
+Vale registrar o padrão das duas rodadas: **os seis achados foram sobre o mecanismo de segurança,
+nenhum sobre o portal.** É o que se espera quando a mudança é toda de ferramental — e é a razão
+de a revisão externa valer a pena mesmo com todos os gates verdes: gate confere o que alguém já
+pensou em conferir.
+
 **Pendente (só o dono, pela aba Actions):** rodar o workflow uma vez para preencher
 `.semgrep/vendor/`. Até lá o gap continua aberto — o que muda é que agora ele **avisa**.
 

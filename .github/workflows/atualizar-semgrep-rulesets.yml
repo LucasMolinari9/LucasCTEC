@@ -262,14 +262,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BASE: ${{ github.ref_name }}
           RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          RAMO="semgrep/rulesets-$RUN_ID"
+          # O nome do ramo inclui a TENTATIVA, não só o run. Re-executar um run pela aba Actions
+          # preserva o `run_id` e só incrementa o `run_attempt` — então, sem isto, a 2ª tentativa
+          # recriaria o MESMO nome de ramo, a partir da base, com um commit IRMÃO (manifesto com
+          # data nova) do que já está no remoto. O push sairia rejeitado como non-fast-forward e o
+          # operador — que está no celular, sem terminal — ficaria sem saída. Justamente o caminho
+          # que este workflow existe para servir. O cenário é alcançável: basta o `git push` passar
+          # e o `gh pr create` seguinte falhar por instabilidade da API.
+          # Custo aceito: uma tentativa que falhou deixa um ramo órfão. É barato e visível — e
+          # como só se re-executa o que falhou, o órfão não tem PR apontando para ele.
+          RAMO="semgrep/rulesets-$RUN_ID-$RUN_ATTEMPT"
           git config user.name  'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git checkout -b "$RAMO"
           git add .semgrep/vendor/
-          git commit -m "chore(semgrep): atualiza os rulesets vendorizados" -m "Baixado pelo workflow 'Atualizar rulesets do Semgrep' (run $RUN_ID), disparado à mão. Só .semgrep/vendor/ foi tocado; as regras locais de .semgrep/rules/ seguem intactas."
+          git commit -m "chore(semgrep): atualiza os rulesets vendorizados" -m "Baixado pelo workflow 'Atualizar rulesets do Semgrep' (run $RUN_ID, tentativa $RUN_ATTEMPT), disparado à mão. Só .semgrep/vendor/ foi tocado; as regras locais de .semgrep/rules/ seguem intactas."
           git push -u origin "$RAMO"
           gh pr create \
             --base "$BASE" \
