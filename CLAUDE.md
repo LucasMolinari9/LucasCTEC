@@ -43,9 +43,11 @@ exibe e **atualiza ao vivo** (Realtime).
   `classifyMunLines`/`terminaisDoMunicipio` e a frota `resumoFrota`/`filtrarFrotaEmpresas`).
   **Regra: função pura extraída deixa de ter cópia em `tests/*.harness.js`** — o harness passa a
   fazer `require` do módulo real, e o bloco `@canon` correspondente é APAGADO, não atualizado. A
-  cobrança do `check.js` §[2] deriva sozinha os `export` de `src/domain/` para saber quem é import
-  legítimo e quem é cópia sem guarda; não há lista a manter à mão. Módulo novo precisa de linha
-  própria no `.vercelignore` (abaixo) e de `import` no `app.js`.
+  cobrança do `check.js` §[2] não tem lista a manter à mão: ela lê o `require` **de cada harness**
+  e o casa com os `export` do módulo citado, isentando o símbolo só quando aquele harness de fato
+  o liga ao módulo. Tirar um nome do `require` e recolocar uma cópia local reprova o gate — e
+  desestruturar nome que o módulo não exporta também, porque o binding chegaria `undefined`.
+  Módulo novo precisa de linha própria no `.vercelignore` (abaixo) e de `import` no `app.js`.
 - As consultas usam **REST do Supabase via `fetch`** (PostgREST). O **supabase-js** é usado **só**
   para o canal **Realtime** — é **vendorado** em `vendor/supabase-js-2.110.7.min.js` (versão
   fixa, mesma origem, sem CDN em runtime; ver Armadilhas para atualizar) e **injetado

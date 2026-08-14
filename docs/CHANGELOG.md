@@ -32,9 +32,10 @@ que o navegador de fato executa, em vez de um gêmeo.
   processo que deixou de ter objeto.
 - **`tests/check.js` §[2]:** a lista de "símbolos que o harness pode exportar sem marcador
   `@canon`" (os importados do domínio) era escrita **à mão** e teria virado dívida a cada extração.
-  Agora ela é **derivada do disco**, lendo os `export` de `src/domain/*.mjs`. O modo de falha da
-  lista manual era o pior possível: com o gate reclamando, a saída mais curta é escrever o nome na
-  lista — que é exatamente como uma cópia de verdade passaria batida.
+  Agora a isenção é apurada **por harness e por binding**: o gate lê os `require` de cada harness e
+  os casa com os `export` do módulo citado. O modo de falha da lista manual era o pior possível:
+  com o gate reclamando, a saída mais curta é escrever o nome na lista — que é exatamente como uma
+  cópia de verdade passaria batida.
 - **`.vercelignore`:** `!/src/domain/agrupamento.mjs`. A guarda §[1] do `check.js` **pegou o
   esquecimento na primeira rodada** (o arquivo ainda não estava no git), que é o cenário exato que
   derrubou o portal em 10/08.
@@ -46,6 +47,26 @@ os testes agora mordem o código servido. Gates: `check.js` verde (54 símbolos 
 harness, todos ou marcados ou vindos de módulo; 232 testes puros;
 19/19 fatos numéricos), `check_views.mjs` 17/17, `check_abas.mjs` e `check_selecao_linha.mjs`
 verdes, Semgrep local 0 achados (com o aviso de `vendor/` vazio — a pendência do dono da Sessão 1).
+
+### Revisão do Codex (PR #125) — um achado, procedente: a isenção por NOME tinha o mesmo buraco
+
+A 1ª versão da correção acima trocou a lista escrita à mão por um conjunto de todos os nomes
+exportados em qualquer lugar de `src/domain/`. O Codex apontou que isso isenta por **nome**, não
+por **ligação**: um harness que tirasse `groupBy` do seu `require` e recolocasse uma cópia local
+sem marcador continuaria isento, porque `groupBy` segue exportado pelo `agrupamento.mjs`.
+
+**Reproduzido antes de aceitar**, que é o único jeito de saber se um achado é real: com a cópia
+local fiel no lugar da importada, o gate imprimia *"cobertura (54 …), todas marcadas e conferidas"*
+e saía **tudo verde**. Dali em diante a cópia podia divergir do módulo sem nada olhando — a lista
+manual saindo pela porta e voltando pela janela.
+
+A isenção passou a ser apurada **por harness e por binding**: o gate lê os `require` daquele
+arquivo, casa cada nome desestruturado com os `export` do módulo citado, e só então isenta. Três
+comportamentos novos, cada um provado por mutação: cópia local reintroduzida **reprova**;
+desestruturar nome que o módulo não exporta **reprova** (o binding chegaria `undefined` e o teste
+passaria testando nada); e forma de `require` que o extrator não reconhece — namespace, caminho
+computado — **não isenta ninguém**, porque um extrator que erra para o lado permissivo é pior que
+extrator nenhum.
 
 ## 14/08/2026 — "Verde local não é verde no CI": os rulesets do Semgrep passam a ser vendorizados
 
