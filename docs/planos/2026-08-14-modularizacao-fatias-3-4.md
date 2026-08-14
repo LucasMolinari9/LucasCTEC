@@ -75,12 +75,26 @@ código: seguir as fases como estavam escritas esbarrava neles. Foram tratados n
 correspondentes, e ficam registrados aqui com o destino de cada um. Threads em
 `https://github.com/LucasMolinari9/LucasCTEC/pull/126`.
 
-| achado | onde foi tratado |
+| achado (2ª rodada, P2) | onde foi tratado |
 |---|---|
-| Os paginadores não mudam de arquivo "sem mudar assinatura" | **Fase B2**, que passou a separar os quatro em vez de tratá-los como bloco |
-| Os loaders de C1 dependem de wrappers privados (`lineDocView`, `searchPanel`/`lineSearchRun`) | **Fase C**, que passou a compor só os `render*` |
+| Os paginadores não mudam de arquivo "sem mudar assinatura" | **Fase B2**, que passou a separar os cinco em vez de tratá-los como bloco |
+| Os loaders de C1 dependem de wrappers privados (`lineDocView`, `searchPanel`/`lineSearchRun`) | **Fase C**, que passou a mover só os `render*` |
 | A bancada de corrida da Fase A precisa da asserção POSITIVA | **Fase A**, asserção (c) |
 | `activeLine` tem de estar no contrato da Fase A | **Fase A**, o `ctx` ganhou `line` |
+
+**3ª rodada (P1) — as correções acima estavam certas no diagnóstico e erradas na dose.** O Codex
+revisou o próprio commit que fechou os P2 e achou três defeitos mais graves, todos reproduzidos
+contra o `app.js` antes de aceitar:
+
+| achado (3ª rodada, P1) | o que estava errado | onde foi tratado |
+|---|---|---|
+| Separe os renders do registro de loaders | `openView` invoca `LOADERS[view]` **sem argumentos** (`app.js:3036`), e 14 dos 17 loaders não têm `render*` autônomo — o `Object.assign` prometido quebraria a abertura do card | **Fase C** reescrita; **Fase D cancelada** |
+| Permita derivar o contexto com a linha encontrada | no `lineSearchRun` a linha certa só existe **depois** do `await` (`:1322`, `:1325`); render que lesse só o `ctx.line` inicial pegaria `null` ou a linha anterior | **Fase A**, `withLine(ctx, linha)` |
+| Propague `afterPaint` por `lineResults` | `lineResults` chama `paginateLines` por dentro e tem **9 call sites**; injetar só em `paginateLines` deixaria listas sem handler de seleção, em silêncio | **Fase B2**: a família de listas **fica** no `app.js` |
+
+Vale registrar o padrão, porque ele se repetiu: nas duas rodadas o erro foi **afirmar movimento
+sem medir o call site**. A 3ª rodada só apareceu porque a 2ª foi escrita com confiança — e é por
+isso que este plano prefere tabela medida a prosa afirmativa.
 
 ## Ordem — uma fase por sessão, um PR por sessão
 
@@ -92,9 +106,9 @@ correspondentes, e ficam registrados aqui com o destino de cada um. Threads em
 | 3 | **A** | contexto explícito + **bancada de corrida** | médio |
 | 4 | **B** | `src/data/rest.mjs` — **encerra o mecanismo `@canon`** | baixo |
 | 5 | **B2** | `src/ui/doc.mjs` + acesso a lookups — o seam que torna a C possível | médio |
-| 6–9 | **C1…C4** | documentos por família, **cada uma compondo seus `render*`** | cresce a cada uma |
-| 10 | **D** | remoção do registro `LOADERS` residual | baixo |
-| 11 | **E** | infra do modal + shell de busca de linha (opcional) | médio |
+| 6–9 | **C1…C4** | documentos por família, **cada uma movendo seus `render*`** | cresce a cada uma |
+| ~~10~~ | ~~**D**~~ | **cancelada** — não há registro residual para remover (ver a seção) | — |
+| 10 | **E** | infra do modal + shell de busca de linha, incl. as listas (opcional) | médio |
 
 A ordem 0 não é fase: é o merge de um PR já pronto.
 
@@ -136,6 +150,16 @@ Nenhum arquivo muda de lugar. Muda o **contrato**.
   exportá-lo), e a B2 acabaria reabrindo uma fase dada por encerrada. Vale a mesma disciplina do
   `view`: é **snapshot**, capturado antes do `await` e usado depois dele — quem reler o global no
   fim reintroduz a corrida por outra porta. Escrita continua só por `selectLine`.
+- **O contrato precisa de `withLine(ctx, linha)`, e não é detalhe de conveniência.** Há um fluxo em
+  que a linha certa **só existe depois do `await`**: no `lineSearchRun`, quando não há linha ativa
+  ou o termo casa outra, a linha sai da busca e é passada explicitamente ao render —
+  `if (lines.length === 1){ selectLine(lines[0]); return render(host, lines[0]); }` (`app.js:1322`),
+  e o mesmo no clique da lista (`:1325`). Um render que consumisse **só** o `ctx.line` capturado no
+  início receberia `null` (sem linha ativa) ou **a linha anterior** (troca de linha) — regressão
+  silenciosa, do tipo que pinta o documento da linha errada sem erro nenhum. Então:
+  `withLine(ctx, linha)` devolve `{ ...ctx, line: linha }` — **mesmos `view` e `gen`**, linha nova.
+  Só quem *resolve* uma linha deriva; ninguém relê `activeLine`. Preservar `view`/`gen` na derivação
+  é o ponto: um `gen` novo ali destruiria justamente a proteção que a Fase A existe para dar.
 - `currentView` continua existindo e continua sendo escrito só por `setCurrentView`. O que acaba é
   **ler** essa variável de dentro de um documento. O mesmo vale para `activeLine`: continua
   existindo e continua sendo lido pelo wiring do `app.js` — o que acaba é lê-lo de dentro de um
@@ -216,18 +240,33 @@ dela. Por isso esta fase existe, e vem **antes** da C:
 
   | função | do que depende, além do que a B2 já move | veredito |
   |---|---|---|
-  | `paginate` | só `isCurrentGen` + DOM | move limpo |
-  | `paginateTable` | `tableHTML`, `docHead`, `commitViewResult` | move limpo (todos saem na B2/Sessão 4) |
-  | `linhasTable` | `empNome`, `bannerTrunc`, `tableHTML`, `emptyBox` | move limpo (a `bannerTrunc` vem da Fase B) |
-  | `paginateLines` | fixa `afterPaint: bindLineRows` | **bloqueado** |
-  | `lineResults` | `situacaoSelectHTML`/`filtrarSituacao` + `paginateLines` | **bloqueado** pelo anterior |
+  | `paginate` | só `isCurrentGen` + DOM | **move** |
+  | `paginateTable` | `tableHTML`, `docHead`, `commitViewResult` | **move** (todos saem na B2/Sessão 4) |
+  | `linhasTable` | `empNome`, `bannerTrunc`, `tableHTML`, `emptyBox` | tecnicamente móvel, **fica** (ver abaixo) |
+  | `paginateLines` | fixa `afterPaint: bindLineRows` | **fica** |
+  | `lineResults` | `situacaoSelectHTML`/`filtrarSituacao` + `paginateLines` (`:2841`, `:2843`) | **fica** |
 
   O bloqueio é um só, e tem nome: **`bindLineRows`**, que chama `selectLine`, `closeModal` e
   `toast` e lê `activeLine` — ou seja, compõe seleção de linha, fechamento de modal e rota. Isso
-  não é paginação, é **ação do shell**, e o shell só sai na Fase E (opcional). Resolução adotada:
-  `paginateLines` deixa de fixar `bindLineRows` e passa a **receber** `afterPaint` de quem chama,
-  como `paginateTable` já faz com `bind`. `bindLineRows` **fica no `app.js`**. Custo: uma
-  dependência injetada, e ela é callback, não estado — bem dentro do teto do critério de parada.
+  não é paginação, é **ação do shell**, e o shell só sai na Fase E (opcional).
+
+  **Resolução adotada: `paginate` e `paginateTable` mudam de arquivo; `linhasTable`,
+  `paginateLines`, `lineResults` e `bindLineRows` FICAM no `app.js`.** A tentação era injetar
+  `afterPaint` em `paginateLines` e mover tudo — foi o que uma versão anterior deste plano dizia,
+  e ela não fechava a conta. Medido: `lineResults` chama `paginateLines` por dentro, nos dois
+  ramos (`app.js:2841` e `:2843`), e há ainda a chamada direta em `renderLocalidadeSecoes`
+  (`:2946`). Mover `lineResults` junto obrigaria a **encadear** o callback por ele também, e a
+  encadeá-lo a partir dos seus **9 call sites** — todos no `app.js`, todos passando exatamente o
+  mesmo `bindLineRows`. Nove parâmetros idênticos atravessando duas camadas para que o módulo possa
+  chamar de volta uma função que nunca saiu do `app.js`: isso é acoplamento com passo extra, não
+  desacoplamento. Esquecer um único call site deixa as linhas daquela tela **renderizadas e não
+  clicáveis** — falha silenciosa, sem erro no console, que é o modo de falha que este repo mais
+  persegue.
+
+  A família de listas de linha é coesa em torno de **seleção**, e seleção é shell. Ela sai inteira
+  na Fase E ou não sai — o que se ganharia movendo metade dela agora é contagem de linhas, não
+  redução de acoplamento, e o critério de parada abaixo diz textualmente que isso não justifica uma
+  fase.
 - `activeLine` **não** vira import: chega pelo campo `line` do `ctx` da Fase A (ver o contrato lá,
   que foi corrigido para incluí-lo), porque é estado mutável de sessão — exatamente o que o estudo
   proíbe exportar do IIFE.
@@ -246,52 +285,75 @@ dela. Por isso esta fase existe, e vem **antes** da C:
 C4 por último: são os únicos com filtro de escopo, dois ramos de PDF e o bloco secundário cujo PDF
 cobre os dois blocos — logo não pode ser sobrescrito pelo paginador.
 
-**Cada fase C compõe os loaders DA SUA família, no mesmo PR.** Não junte isso numa fase final: uma
-sessão que compusesse o registro inteiro migraria todos os loaders **de uma vez** — precisamente o
-que o estudo proíbe — e concentraria num commit só toda a superfície de regressão de ordem/TDZ.
-Adiar não é fatiar. Na prática, ao fim de cada C o `app.js` faz `Object.assign(LOADERS, …)` com o
-que aquela família exporta, e o registro encolhe família a família.
+**Cada fase C move os `render*` DA SUA família, no mesmo PR.** Não junte isso numa fase final: uma
+sessão que fizesse todas migraria tudo **de uma vez** — precisamente o que o estudo proíbe — e
+concentraria num commit só toda a superfície de regressão de ordem/TDZ. Adiar não é fatiar.
 
-**O que cada família exporta é o `render*`, não o loader inteiro** — e isso corrige uma promessa
-que a 1ª versão deste plano não podia cumprir. Os loaders de C1 não são autônomos: são
-one-liners sobre wrappers privados do IIFE, que a B2 não move e que ninguém planejou mover.
-Medido:
+**O registro `LOADERS` NÃO recebe os módulos, e não encolhe.** Duas versões deste plano erraram
+aqui, cada uma de um jeito: a 1ª mandava `Object.assign(LOADERS, …)` numa fase final; a 2ª mandava
+o mesmo `Object.assign`, só que por família, "compondo renders, não loaders". As duas são
+inexecutáveis, e a medição diz por quê:
 
 ```js
-LOADERS.itinerarios   = () => lineDocView({ subtitle:'…', render:renderItinerarios });  // app.js:1504
-LOADERS.frota         = () => lineDocView({ subtitle:'Frota da Linha', render:renderFrota });   // 1835
-LOADERS.historicoLinha = async () => { searchPanel({ …, onRun:(t,h)=>lineSearchRun(t, h, { render:renderLineHistory, … }) }); };  // 1448
+function openView(view){                       // app.js:3036
+  const loader = LOADERS[view];
+  …
+  runView({ …, loader });                      // runView chama loader() SEM ARGUMENTOS
+}
 ```
 
-`lineDocView` chama `searchPanel` e lê `activeLine`/`modalBody`; `lineSearchRun` lê `currentView`,
-chama `selectLine`, `searchLines`, `getEmpresas` e `linhasTable`. Um módulo ESM não alcança nada
-disso. Então a regra da Fase C é: **a família exporta os `render*`; a linha do `LOADERS` e o
-wrapper que ela chama ficam no `app.js`.** O `Object.assign` compõe renders, não loaders.
+O valor guardado no registro é invocado **sem argumentos**. Um `render*` precisa de `host` e da
+linha. Assinar o registro com renders quebraria a abertura do card — não é questão de estilo, é
+`TypeError` na primeira linha do documento.
 
-Isso não esvazia a fase — esvazia a retórica. A massa das 1.280 linhas está nos `render*`; as
-linhas do `LOADERS` são wiring de uma linha cada, e wiring é exatamente o que o critério de parada
-declara como resíduo legítimo. O que muda é a expectativa sobre a Fase D, abaixo.
+E os loaders não são a casca fina que o plano supunha. **Medido: 3 dos 17.**
 
-## Fase D — remover o registro residual
+| forma | quantos | exemplos |
+|---|---|---|
+| one-liner sobre `lineDocView` | **3** | `itinerarios` (`app.js:1504`), `frota` (`:1835`), `estrutura` (`:1873`) |
+| `async () => { … }` com a implementação **dentro** | **14** | `empresasRegulares` (`:1876`), `portarias` (`:2418`), `localidades` (`:2636`) |
 
-Quando a última família sair, o que resta do `LOADERS` no `app.js` é casca: a composição já terá
-sido feita em C1…C4. Esta fase só apaga o resíduo e confere que a ordem de avaliação continua
-segura. É pequena de propósito — se ela estiver grande, alguma fase C não terminou o próprio
-trabalho.
+Para os 14, **não existe `render*` autônomo para exportar**: extrair um é parte do trabalho da fase
+C daquela família, não uma precondição já satisfeita. Quem planejar C2–C4 contando com um render
+pronto vai encontrar um loader de 300 linhas.
 
-**Com a correção da Fase C, "resíduo" tem tamanho previsto:** as linhas `LOADERS.x = () =>
-lineDocView({…, render:renderX })` **permanecem**, porque o wrapper permanece. A Fase D apaga o que
-sobrou de registro morto e para aí. Mover os wrappers (`lineDocView`, `lineDocRun`, `lineSearchRun`,
-`searchPanel`) é trabalho da Fase E, junto com o resto do shell — e é o único ponto em que a E
-deixa de ser cosmética: enquanto ela não acontecer, o `app.js` guarda o shell de busca de linha,
+Então a regra da Fase C, agora executável:
+
+- a família exporta **`render*` puros de documento** — recebem `ctx` e dados, devolvem/pintam;
+- para os 14 loaders monolíticos, **extrair o `render*` é o primeiro passo da própria fase**;
+- a **linha do `LOADERS` continua no `app.js`**, com a mesma forma de hoje, apenas importando o
+  render: `LOADERS.frota = () => lineDocView({ subtitle:'Frota da Linha', render: renderFrota })`;
+- os wrappers (`lineDocView`, `lineDocRun`, `lineSearchRun`, `searchPanel`) continuam no `app.js`.
+
+Isso não esvazia a fase — esvazia a retórica. A massa das 1.280 linhas está nos `render*`; a linha
+do `LOADERS` é wiring de uma linha, e wiring é o que o critério de parada declara como resíduo
+legítimo. O que muda de verdade é a Fase D, abaixo, que perde o objeto.
+
+## Fase D — CANCELADA (não há registro residual para remover)
+
+A fase existia para apagar o que sobrasse do `LOADERS` depois que C1…C4 tivessem migrado os
+loaders. **Elas não migram loaders** — a seção acima mostra por quê: `openView` invoca o valor do
+registro sem argumentos, então o registro tem de continuar guardando loaders, e cada
+`LOADERS.x = () => …` é wiring vivo, não resíduo.
+
+Fica registrada como cancelada em vez de apagada porque a distinção importa para quem ler o plano
+depois: não foi cortada por falta de tempo nem adiada — **perdeu o objeto**, exatamente como o
+mecanismo `@canon` perde o dele na Fase B. Refatoração que remove uma etapa por ela ter deixado de
+fazer sentido é o resultado desejado, não um desvio.
+
+O que era a única parte real dela — mover `lineDocView`, `lineDocRun`, `lineSearchRun` e
+`searchPanel` — sempre foi trabalho da Fase E, junto com o resto do shell. É o único ponto em que a
+E deixa de ser cosmética: enquanto ela não acontecer, o `app.js` guarda o shell de busca de linha,
 o que é uma escolha declarada, não um esquecimento.
 
 ## Fase E — infra do modal (opcional)
 
 Chrome do modal (95) + faixa de abas (346) = 441 linhas para `src/ui/`, **mais o shell de busca de
-linha** que a Fase C não pôde levar: `lineDocView`, `lineDocRun`, `lineSearchRun`, `searchPanel` e
-`bindLineRows`. É a área mais exercitada pelo `check_abas.mjs` e o ganho é menor que o das
-anteriores. **Só fazer se A–D correrem sem sustos** — continua sendo a primeira candidata a ser
+linha** que a Fase C não pôde levar (`lineDocView`, `lineDocRun`, `lineSearchRun`, `searchPanel`)
+**e a família de listas de linha** que a B2 deixou para cá (`linhasTable`, `paginateLines`,
+`lineResults`, `bindLineRows`) — elas saem juntas porque o que as prende é a **seleção**, e a
+seleção é shell. É a área mais exercitada pelo `check_abas.mjs` e o ganho é menor que o das
+anteriores. **Só fazer se A–C correrem sem sustos** — continua sendo a primeira candidata a ser
 cortada.
 
 Cortá-la agora tem preço conhecido, e é barato: o `app.js` fica com o shell de busca e as linhas
@@ -307,13 +369,18 @@ de `LOADERS` que o chamam. Nenhuma fase anterior fica pela metade por causa diss
 | após a Sessão 2 | 3.352 |
 | após as Sessões 3–4 | ~3.200 |
 | após a Fase B | ~3.030 |
-| após a Fase B2 | ~2.700 |
-| após a Fase C | ~1.700 |
-| após D+E | **~1.250** |
+| após a Fase B2 | ~2.770 |
+| após a Fase C | ~1.770 |
+| após a Fase E | **~1.250** |
+
+A linha da B2 subiu ~70 em relação à 1ª versão desta tabela, e a da C acompanhou: é a família de
+listas de linha que **fica** no `app.js` até a E. A queda não sumiu, mudou de fase — e o número
+menos otimista é o correto, o que vale mais registrar do que a projeção bonita.
 
 Não vai a zero, e não deve: o que sobra é wiring de verdade — bootstrap, referências de DOM,
 listeners, rotas, composição. Um arquivo de 1.250 linhas de ligação não é o defeito que a crítica
-apontou.
+apontou. E se a Fase E for cortada, o piso é mais alto — ~1.700 —, o que continua não sendo o
+monólito da crítica.
 
 ## Critério de parada
 
