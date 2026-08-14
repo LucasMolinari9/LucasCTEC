@@ -4,12 +4,21 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 **estado atual + regras**; a cronologia de como se chegou aqui está em **`docs/CHANGELOG.md`**.
 
 > **TRABALHO EM CURSO — leia antes de agir:**
-> **[`docs/historico/contexto-proxima-sessao-2026-08-09.md`](docs/historico/contexto-proxima-sessao-2026-08-09.md)**.
-> O PR **#98** está aberto com `seguranca` e `qualidade` vermelhos — **não são bug de código**, são
-> dois passos do dono que precisam de rede e de secrets, com runbook naquele arquivo. **O dono
-> opera pelo CELULAR:** "rode `node …` na sua máquina" não é instrução executável para ele — o
-> caminho é a aba Actions (workflow `atualizar-baseline`) ou o painel do Supabase no navegador.
-> Ao fechar esses passos, atualize este ponteiro ou remova-o.
+> **[`docs/historico/contexto-proxima-sessao-2026-08-14.md`](docs/historico/contexto-proxima-sessao-2026-08-14.md)**
+> — plano de 6 sessões respondendo a uma crítica externa. A **Sessão 1** (vendorizar os rulesets do
+> Semgrep) está **mergeada**; a **Sessão 2** é `src/domain/agrupamento.mjs`. Aquele arquivo traz a
+> especificação de cada sessão, o protocolo combinado (um PR por sessão, `@codex review`, sem merge
+> por conta própria) e os limites medidos do ambiente do agente.
+>
+> Continua valendo:
+> **[`docs/historico/contexto-proxima-sessao-2026-08-09.md`](docs/historico/contexto-proxima-sessao-2026-08-09.md)**
+> — o PR **#98** segue aberto com `seguranca` e `qualidade` vermelhos, que **não são bug de
+> código**: são dois passos do dono que precisam de rede e de secrets, com runbook naquele arquivo.
+> Ele é a **Sessão 6**, por decisão do dono — as obras sem SQL vêm antes.
+>
+> **O dono opera pelo CELULAR:** "rode `node …` na sua máquina" não é instrução executável para ele
+> — o caminho é a aba Actions ou o painel do Supabase, no navegador (o **app** do GitHub não mostra
+> o botão *Run workflow*; só o site). Ao fechar esses passos, atualize este ponteiro ou remova-o.
 
 ## O que é
 Portal **público de consulta (somente leitura)** do DETRO/RJ · DIVAT. Os usuários buscam linhas
