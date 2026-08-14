@@ -4,6 +4,105 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 14/08/2026 — "Verde local não é verde no CI": os rulesets do Semgrep passam a ser vendorizados
+
+**Motivação — uma crítica externa que estava certa.** Levantaram três pontos sobre o projeto; o
+segundo era que `./scripts/semgrep.sh` rodava 5 regras enquanto o CI rodava 116, e que achados
+reais de shell-injection já tinham vazado do local para o CI por causa disso. A apuração mostrou
+que a crítica **citava a documentação do próprio repo**: o número e o episódio estão em
+`.github/workflows/atualizar-baseline.yml` e em
+`docs/historico/contexto-proxima-sessao-2026-08-09.md` — *"o CI roda 116 … Foi assim que 3 achados
+de `run-shell-injection` passaram para o CI no workflow novo"* (09/08). Não era hipótese: tinha
+acontecido cinco dias antes.
+
+**Por que vendorizar, e não cachear.** O caminho óbvio — guardar os rulesets fora do git — não
+serve a ninguém que trabalha neste repo: nem o ambiente do agente Claude nem o dono (que opera
+pelo **celular**, sem terminal) alcançam `semgrep.dev`. A cópia versionada é a única forma de os
+dois rodarem o mesmo conjunto. Mesma disciplina do supabase-js e das fontes.
+
+Isso **não** contradiz a versão fixa do binário: aquilo prende o *executável* para que atualizá-lo
+seja uma decisão; isto prende as *regras* pelo mesmo motivo, e com o mesmo mecanismo (só
+`workflow_dispatch`, PR com diff, merge deliberado).
+
+- **`.github/workflows/atualizar-semgrep-rulesets.yml`** (novo, 10º workflow): baixa os 4 rulesets
+  de `https://semgrep.dev/c/p/<nome>`, escreve `.semgrep/vendor/` + `.manifest.json` (provenance:
+  binário, data, contagem por ruleset, link do run) e abre PR. `workflow_dispatch` puro —
+  operável pela aba Actions, no celular.
+- **A conferência que dá sentido ao workflow:** antes de propor, ele roda o conjunto **vendorizado**
+  e o **registry ao vivo** contra o mesmo commit e compara as assinaturas dos achados
+  (`check_id` + arquivo + linha). Se divergirem, **falha** em vez de propor uma cópia que mente.
+  Sem isso, vendorizar só trocaria um falso verde por outro — pior, porque este pareceria resolvido.
+- **`scripts/semgrep.sh`:** o modo padrão passa a somar `.semgrep/vendor/`; `--full` vira
+  conferência de frescor contra o registry. Enquanto `vendor/` estiver vazio, o wrapper **avisa em
+  `stderr`** que o verde ali ainda não vale como verde no CI — silenciar seria reconstruir
+  exatamente o problema que motivou tudo.
+- **`semgrep.yml`:** ganha o passo `[2] Rulesets vendorizados`, que roda o que a máquina de quem
+  desenvolve roda, **antes** do registry ao vivo. `[2]` verde + `[3]` vermelho tem diagnóstico
+  único: a cópia está velha, rode o workflow. O `if: hashFiles(...)` cobre o estado transitório em
+  que `vendor/` ainda não foi preenchido.
+- **`tests/check.js` §[2b]:** a contagem de regras locais entra na tabela `FATOS`, conferida em
+  `CLAUDE.md`, `docs/semgrep.md` e `scripts/semgrep.sh`. Era um número repetido em prosa viva e
+  sem guarda — exatamente o que essa seção existe para prender, e o que virou munição de crítica.
+  Só as **locais** entram: as vendorizadas mudam quando o registry muda, e prendê-las faria o gate
+  reprovar por um número que ninguém neste repo escolheu.
+
+**Verificado, não suposto:** `--dump-config` **não existe** no Semgrep 1.171.0 (só `--dump-ast` e
+afins), por isso o download é por `curl` no endpoint que o próprio Semgrep resolve. A guarda nova
+foi provada quebrando-a de propósito (`5` → `7` no `CLAUDE.md` → gate reprova nomeando o arquivo).
+O carregamento do `vendor/` foi provado com uma regra de mentira: 5 regras sem o diretório, 6 com
+ele, e o aviso some quando ele existe.
+
+### Leva de revisão do Codex (mesmo dia) — cinco achados, cinco procedentes
+
+Nenhum foi descartado, e dois eram o **defeito original reaparecendo por outra porta** — o que é
+o risco típico de uma correção escrita pela mesma cabeça que criou o problema:
+
+- **`vendor/` parcial passava por completo.** A checagem era "existe *algum* `.yml`?", então
+  perder um arquivo num merge faria o wrapper escanear um subconjunto e devolver verde. Num repo
+  limpo, parcial e completo acham zero igualmente — verde indistinguível do verdadeiro, que é
+  exatamente o que este PR veio matar. Hoje exige-se o conjunto **completo**; faltando qualquer
+  um, cai para as regras locais e diz o que falta.
+- **Versão do binário local × do CI.** O wrapper usava qualquer `semgrep` do `PATH` enquanto o CI
+  fixa 1.171.0. Versões diferentes leem os mesmos rulesets de formas diferentes — mesmo falso
+  verde, outro caminho. Passa a avisar (não falhar), lendo a versão do próprio `semgrep.yml`.
+- **Provenance volátil tornava o "nada mudou" inalcançável.** O manifesto grava data e URL do
+  run, e a decisão de abrir PR olhava o diretório inteiro — então **todo run abriria um PR só de
+  provenance**, o oposto do que o passo prometia. A decisão passou a olhar só os `.yml`, e o
+  manifesto só é reescrito quando eles mudam.
+- **`set +e` engolia falha de scan.** Sem `--error`, achado sai 0 — logo, saída não-zero é falha
+  real (config inválida, regra que o binário fixo não entende). Se as duas metades falhassem do
+  mesmo jeito, as saídas parciais concordariam e o workflow proporia uma cópia que o próprio
+  Semgrep recusou. Os quatro status agora são capturados e conferidos antes de qualquer comparação.
+- **Um comentário afirmava uma guarda que não existia.** O workflow dizia que o `check.js` §[2b]
+  conferia as três listas de rulesets; não conferia — a entrada nova só contava regras locais,
+  fato não relacionado. A guarda foi **implementada** (comparação nominal entre `semgrep.sh`,
+  `semgrep.yml` e o atualizador) em vez de o comentário ser apagado. De quebra, a lista deixou de
+  aparecer três vezes dentro do próprio atualizador: virou `RULESETS` no `env:` do job.
+
+Provado quebrando: lista divergente em um dos três arquivos → gate reprova nomeando os outros
+dois; `vendor/` com 1 de 4 arquivos → avisa "INCOMPLETO" e roda 5 regras (não o subconjunto);
+com 4 de 4 → roda 9 e não avisa; versão do CI trocada para 9.9.9 → avisa com o comando de
+alinhamento. Fixtures removidas depois.
+
+### Segunda rodada do Codex, sobre o commit de correção — um achado, procedente
+
+**O ramo do atualizador reusava o `run_id`, e re-executar não tinha saída.** Re-executar um run
+pela aba Actions **preserva o `run_id`** e só incrementa o `run_attempt`. Então, se o `git push`
+passasse e o `gh pr create` seguinte falhasse por instabilidade da API, a re-execução recriaria o
+**mesmo nome de ramo**, a partir da base, com um commit **irmão** do que já estava no remoto — e o
+push sairia rejeitado como non-fast-forward. Quem opera pelo celular ficaria sem saída, justamente
+no caminho que este workflow existe para servir. O ramo passou a incluir a tentativa
+(`semgrep/rulesets-<run>-<tentativa>`). Custo aceito: tentativa falha deixa ramo órfão — barato,
+visível, e sem PR apontando para ele.
+
+Vale registrar o padrão das duas rodadas: **os seis achados foram sobre o mecanismo de segurança,
+nenhum sobre o portal.** É o que se espera quando a mudança é toda de ferramental — e é a razão
+de a revisão externa valer a pena mesmo com todos os gates verdes: gate confere o que alguém já
+pensou em conferir.
+
+**Pendente (só o dono, pela aba Actions):** rodar o workflow uma vez para preencher
+`.semgrep/vendor/`. Até lá o gap continua aberto — o que muda é que agora ele **avisa**.
+
 ## 08–09/08/2026 — A auditoria completa vira 22 correções, e o gate passa a ver o que não via
 
 Uma auditoria de código, arquitetura, engenharia e documentação

@@ -84,8 +84,11 @@ jobs:
       # script, e um valor com `;` ou `$(...)` viraria comando. Aqui os inputs são `choice`, então
       # o conjunto é fechado e o risco é teórico — mas a regra vale pelo hábito, não pelo caso:
       # o dia em que alguém trocar `choice` por `string` não vem com um aviso. É a
-      # `yaml.github-actions.security.run-shell-injection` do ruleset completo (116 regras, que só
-      # roda no CI — o ./scripts/semgrep.sh local tem 5 e não pega isto).
+      # `yaml.github-actions.security.run-shell-injection`, do ruleset `p/github-actions`.
+      # Nota histórica: até 14/08/2026 essa regra só rodava no CI (o ./scripts/semgrep.sh local
+      # tinha 5 regras), e foi assim que 3 achados dela chegaram ao CI neste arquivo. Hoje os
+      # rulesets são vendorizados em .semgrep/vendor/ e o modo padrão do wrapper os roda offline
+      # — ver docs/semgrep.md § "Por que a cópia vendorizada existe".
       - name: Medir e escrever o slot
         env:
           DIVAT_ALVO: ${{ inputs.alvo }}

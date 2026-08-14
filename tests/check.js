@@ -350,6 +350,17 @@ console.log('\n[2b] Deriva docs × código');
     ? JSON.parse(ler('.claude/skills/.superpowers-manifest.json')) : null;
   const spSkills = spManifesto ? (spManifesto.skills || []).length : null;
 
+  // Regras LOCAIS do Semgrep (.semgrep/rules/), que a prosa cita pelo número. Ficaram de fora
+  // da guarda até 14/08/2026, e o número virou justamente o argumento de uma crítica externa
+  // ("o local roda 5, o CI roda 116") — fato numérico repetido em vários arquivos é exatamente
+  // o que esta seção existe para prender. Só as LOCAIS entram: as vendorizadas
+  // (.semgrep/vendor/) mudam quando o registry muda, e prendê-las aqui faria o gate reprovar
+  // por um número que ninguém neste repo escolheu. A contagem delas mora no manifesto.
+  const semgrepRegras = existe('.semgrep/rules')
+    ? fs.readdirSync(path.join(RAIZ, '.semgrep/rules')).filter(f => /\.ya?ml$/.test(f))
+        .reduce((n, f) => n + (ler(`.semgrep/rules/${f}`).match(/^\s{0,2}- id:/gm) || []).length, 0)
+    : null;
+
   // --- fatos que os docs AFIRMAM (regex contra o texto com espaços normalizados,
   //     para que quebra de linha do markdown não escape da checagem) ---
   // Em `.yml` o marcador `#` do comentário é removido ANTES de normalizar o espaço: um comentário
@@ -391,6 +402,11 @@ console.log('\n[2b] Deriva docs × código');
     // numa linha só — o `normalizar` não tira o `#` de `.sh`, então quebra de linha a esconde.
     { doc:['CLAUDE.md', '.claude/hooks/superpowers-session-start.sh'],
       o:'skills do Superpowers', re:/([\d]+) skills do Superpowers/, real:spSkills, esc:'exato' },
+    // O `scripts/semgrep.sh` é `.sh`: o `normalizar` não tira o `#`, então a frase precisa caber
+    // numa linha só (mesma armadilha do hook, logo acima). O `\*{0,2}` deixa o regex servir ao
+    // markdown do CLAUDE.md (`**5** regras locais`) e ao comentário do shell ao mesmo tempo.
+    { doc:['CLAUDE.md', 'docs/semgrep.md', 'scripts/semgrep.sh'],
+      o:'regras locais do Semgrep', re:/as \*{0,2}([\d]+) regras locais/, real:semgrepRegras, esc:'exato' },
   ];
   // TODA ocorrência é conferida, não só a primeira. A 1ª versão parava no primeiro casamento, e
   // o `views.yml` afirma "23 views" em TRÊS linhas (1, 11 e 71): consertar uma e esquecer as
@@ -420,6 +436,36 @@ console.log('\n[2b] Deriva docs × código');
     else { ocorrencias += achou; if (!divergiu) fatosOk++; }
   }
   okline(`fatos numéricos conferidos (${fatosOk}/${FATOS.length - fatosPulados} afirmações, ${ocorrencias} ocorrências)`);
+
+  // --- a lista de rulesets do Semgrep bate nos TRÊS lugares que a repetem ---
+  // O scan local (`scripts/semgrep.sh`), o CI (`semgrep.yml`) e o atualizador
+  // (`atualizar-semgrep-rulesets.yml`) precisam operar sobre o MESMO conjunto. Editar só um
+  // faria os três divergirem em silêncio: o CI cobriria um ruleset que o local não cobre — que
+  // é literalmente o defeito que a vendorização veio consertar, reaparecendo por outra porta.
+  // A comparação é NOMINAL, como a de RT_TABLES acima: contagem igual com nomes diferentes
+  // passaria, e é o tipo de verde que não vale nada.
+  {
+    const FONTES = {
+      'scripts/semgrep.sh': t => (/REGISTRY_IDS="([^"]*)"/.exec(t)?.[1] || '').split(/\s+/),
+      '.github/workflows/atualizar-semgrep-rulesets.yml': t => (/^\s*RULESETS:\s*(.+)$/m.exec(t)?.[1] || '').trim().split(/\s+/),
+      '.github/workflows/semgrep.yml': t => (t.match(/--config=p\/([a-z0-9-]+)/g) || []).map(s => s.split('/')[1]),
+    };
+    const lidas = {};
+    let cego = false;
+    for (const [arq, extrair] of Object.entries(FONTES)){
+      if (!existe(arq)) continue;
+      const ids = extrair(ler(arq)).filter(Boolean).sort();
+      if (!ids.length){ fail(`[${arq}] não consegui ler a lista de rulesets do Semgrep — a guarda ficou cega, conserte o extrator`); cego = true; }
+      else lidas[arq] = ids;
+    }
+    const arqs = Object.keys(lidas);
+    if (!cego && arqs.length >= 2){
+      const ref = lidas[arqs[0]].join(' ');
+      const fora = arqs.slice(1).filter(a => lidas[a].join(' ') !== ref);
+      if (fora.length) fail(`[${fora.join(', ')}] a lista de rulesets do Semgrep divergiu de ${arqs[0]} (${ref}) — as três precisam bater, senão local e CI escaneiam conjuntos diferentes`);
+      else okline(`rulesets do Semgrep iguais nos ${arqs.length} lugares (${ref})`);
+    }
+  }
 
   // --- toda tabela de RT_TABLES aparece no mapa tabela→card do CLAUDE.md ---
   // A contagem sozinha não bastava: o CLAUDE.md dizia "as 14 tabelas lidas pelo portal" logo acima

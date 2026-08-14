@@ -1,0 +1,301 @@
+# atualizar-semgrep-rulesets.yml — BAIXA os rulesets públicos do Semgrep e abre um PR com o diff.
+#
+# Por que existe: até 14/08/2026 o `./scripts/semgrep.sh` local rodava 5 regras e o CI rodava o
+# conjunto completo (locais + p/javascript + p/xss + p/secrets + p/github-actions). "Verde local"
+# não era evidência de "verde no CI", e isso não foi teoria: **3 achados de `run-shell-injection`
+# passaram batido para o CI** no `atualizar-baseline.yml` (registrado em
+# docs/historico/contexto-proxima-sessao-2026-08-09.md).
+#
+# Cachear os rulesets fora do git não resolveria para ninguém que trabalha neste repo: nem o
+# ambiente do agente Claude nem o dono (que opera pelo CELULAR, sem terminal) alcançam
+# semgrep.dev. A cópia versionada em `.semgrep/vendor/` é a única forma de os dois rodarem o
+# mesmo conjunto de regras. Mesma disciplina do supabase-js e das fontes vendorizadas.
+#
+# NÃO CONTRADIZ a fixação de versão do `semgrep.yml`. Aquilo prende o BINÁRIO (1.171.0) para que
+# atualizar o Semgrep seja uma decisão, não efeito colateral de um push. Este workflow prende as
+# REGRAS pelo mesmo motivo e com o mesmo mecanismo: só `workflow_dispatch`, nunca escreve na
+# branch, e o merge é um segundo ato deliberado. Regra nova do registry chega quando alguém
+# decidir que chega — e chega num diff que dá para ler.
+#
+# O QUE ELE NÃO FAZ: não mexe nas regras LOCAIS (`.semgrep/rules/divat.yml`), que são escritas à
+# mão para os invariantes deste portal e não vêm de lugar nenhum. Só `.semgrep/vendor/` e o
+# manifesto são reescritos.
+#
+# COMO USAR (pelo navegador, celular inclusive): aba Actions → "Atualizar rulesets do Semgrep" →
+# "Run workflow" → escolha a branch → Run. Ao fim, um PR aparece com o diff. Se nada mudou desde
+# a última vez, ele diz isso no resumo do run e não abre PR nenhum.
+#
+# DEPOIS DO MERGE: `./scripts/semgrep.sh` (sem `--full`) passa a rodar o conjunto completo
+# offline. O `--full` continua servindo como conferência de frescor contra o registry ao vivo.
+name: Atualizar rulesets do Semgrep
+
+on:
+  workflow_dispatch:
+
+# `contents: write` e `pull-requests: write` são o mínimo para abrir o PR, e só existem aqui e no
+# `atualizar-baseline.yml` — os outros workflows seguem com `contents: read` (achado SEC-07).
+# Escrita na branch não acontece: o push é sempre numa branch nova, criada pelo run.
+permissions:
+  contents: write
+  pull-requests: write
+
+# Duas atualizações simultâneas produziriam dois PRs disputando os mesmos arquivos.
+concurrency:
+  group: atualizar-semgrep-rulesets
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # A lista mora AQUI uma vez só, e todos os passos a leem. Antes ela aparecia três vezes
+    # dentro deste arquivo (download, manifesto, prova), o que é a mesma doença que o
+    # `tests/check.js` §[2b] cobra entre arquivos — de nada adianta guardar a fronteira externa
+    # e deixar o arquivo divergir de si mesmo.
+    env:
+      RULESETS: javascript xss secrets github-actions
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      # Mesma versão fixa do semgrep.yml. O binário decide o formato do que é baixado, então
+      # baixar com uma versão e escanear com outra é como vendorizar de um registro e conferir
+      # a integridade contra outro. Ao subir um, suba o outro no mesmo commit.
+      - name: Instalar Semgrep (versão fixa)
+        run: pip install semgrep==1.171.0
+
+      # A lista de rulesets ($RULESETS, no `env:` do job) é a MESMA do `scripts/semgrep.sh` e do
+      # `semgrep.yml`, e o `tests/check.js` §[2b] reprova se os três divergirem — guarda que
+      # existe de fato, não só nesta frase.
+      #
+      # `https://semgrep.dev/c/p/<nome>` é o endpoint que o próprio Semgrep resolve quando recebe
+      # `--config=p/<nome>`: devolve o YAML das regras, já achatado. (Não existe `--dump-config`
+      # no 1.171.0 — medido, não suposto; os únicos dumps são `--dump-ast` e afins.)
+      #
+      # `-f` faz o curl falhar em HTTP >= 400 em vez de gravar a página de erro como se fosse
+      # regra; sem ele, um 503 do registry viraria um .yml inválido de 200 bytes.
+      - name: Baixar os rulesets do registry
+        run: |
+          mkdir -p .semgrep/vendor
+          rm -f .semgrep/vendor/*.yml
+          for RULESET in $RULESETS; do
+            echo "· baixando p/$RULESET"
+            curl -sSfL --retry 3 --retry-delay 2 \
+              "https://semgrep.dev/c/p/$RULESET" -o ".semgrep/vendor/$RULESET.yml"
+            if [ ! -s ".semgrep/vendor/$RULESET.yml" ]; then
+              echo "p/$RULESET veio VAZIO — abortando para não vendorizar um conjunto cego." >&2
+              exit 1
+            fi
+            if ! grep -qE '^rules:' ".semgrep/vendor/$RULESET.yml"; then
+              echo "p/$RULESET não parece YAML de regras (sem 'rules:') — abortando." >&2
+              head -n 5 ".semgrep/vendor/$RULESET.yml" >&2
+              exit 1
+            fi
+          done
+
+      # A DECISÃO de propor vem só dos `.yml` dos rulesets, NUNCA do manifesto. O manifesto
+      # carrega campos voláteis (data, URL do run) que mudam a cada execução: se ele entrasse na
+      # conta, o caminho "nada mudou" seria inalcançável e todo run abriria um PR só de
+      # provenance — o oposto do que o passo promete. Por isso a comparação acontece ANTES de o
+      # manifesto ser reescrito, e os passos seguintes ficam condicionados a ela.
+      - name: Houve mudança nos rulesets?
+        id: diff
+        run: |
+          if [ -z "$(git status --porcelain -- '.semgrep/vendor/*.yml')" ]; then
+            echo "mudou=nao" >> "$GITHUB_OUTPUT"
+            echo "Os rulesets já estavam iguais aos do registry — nada a propor." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "mudou=sim" >> "$GITHUB_OUTPUT"
+          fi
+
+      # O manifesto é a provenance: de onde veio, quando, com qual binário e quantas regras.
+      # Espelha o .claude/skills/.superpowers-manifest.json. Sem ele, uma cópia vendorizada é
+      # indistinguível de um arquivo que alguém editou à mão.
+      - name: Escrever o manifesto
+        if: steps.diff.outputs.mudou == 'sim'
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TOTAL=0
+          {
+            echo '{'
+            echo '  "_comentario": "Gerado pelo workflow atualizar-semgrep-rulesets. NÃO editar à mão.",'
+            echo "  \"semgrep\": \"$(semgrep --version)\","
+            echo "  \"baixado_em\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
+            echo "  \"run\": \"$RUN_URL\","
+            echo '  "rulesets": {'
+            SEP=''
+            for RULESET in $RULESETS; do
+              N=$(grep -cE '^[[:space:]]{0,2}- id:' ".semgrep/vendor/$RULESET.yml" || true)
+              TOTAL=$((TOTAL + N))
+              printf '%s    "p/%s": %s' "$SEP" "$RULESET" "$N"
+              SEP=$',\n'
+            done
+            echo ''
+            echo '  },'
+            echo "  \"total_regras\": $TOTAL"
+            echo '}'
+          } > .semgrep/vendor/.manifest.json
+          echo "TOTAL_REGRAS=$TOTAL" >> "$GITHUB_ENV"
+          echo "### Rulesets vendorizados" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat .semgrep/vendor/.manifest.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # A conferência que dá sentido ao workflow inteiro: o conjunto VENDORIZADO tem de achar
+      # exatamente o que o registry AO VIVO acha, neste mesmo commit. Se divergir, a promessa
+      # "offline vale tanto quanto o CI" é falsa, e vendorizar teria só trocado um falso verde
+      # por outro — pior, porque este pareceria resolvido.
+      #
+      # `--error` fica de FORA nas duas metades de propósito: achado é informação para o PR, não
+      # motivo para abortar a atualização. O que faz o passo falhar é a DIVERGÊNCIA entre os dois
+      # — ou uma das quatro invocações ter FALHADO.
+      #
+      # Sobre os códigos de saída: como `--error` está fora, achado sai 0. Logo, saída != 0 aqui
+      # é falha de verdade (config inválida, regra que o binário fixo não entende, parse quebrado)
+      # e NÃO pode ser engolida pelo `set +e`. Se as duas metades falharem do MESMO jeito, as
+      # saídas parciais concordam e o workflow proporia uma cópia que o próprio Semgrep recusou.
+      # Por isso cada status é capturado e conferido antes de qualquer comparação.
+      - name: Provar que o vendorizado == o registry ao vivo
+        if: steps.diff.outputs.mudou == 'sim'
+        run: |
+          # O lado "ao vivo" é montado a partir do MESMO $RULESETS que baixou a cópia. Se fosse
+          # escrito à mão aqui, a prova poderia comparar a cópia de quatro rulesets contra um
+          # registry de três — e passar.
+          CFG_VIVO=""
+          for R in $RULESETS; do CFG_VIVO="$CFG_VIVO --config=p/$R"; done
+
+          set +e
+          semgrep scan --metrics=off --json --quiet \
+            --config=.semgrep/rules --config=.semgrep/vendor . > /tmp/vendor.json
+          ST_VENDOR_JSON=$?
+          semgrep scan --metrics=off --json --quiet \
+            --config=.semgrep/rules $CFG_VIVO . > /tmp/vivo.json
+          ST_VIVO_JSON=$?
+          # A saída de TEXTO traz "Rules run: N". Comparar achados sozinho não prova nada quando
+          # os dois acham zero — e este repo costuma estar limpo, então esse é o caso NORMAL.
+          # Um vendor pela metade acharia zero igualzinho ao completo, e o check passaria feliz.
+          # A contagem de regras é o que distingue "concordam" de "os dois estão calados".
+          semgrep scan --metrics=off \
+            --config=.semgrep/rules --config=.semgrep/vendor . > /tmp/vendor.txt.raw 2>&1
+          ST_VENDOR_TXT=$?
+          semgrep scan --metrics=off \
+            --config=.semgrep/rules $CFG_VIVO . > /tmp/vivo.txt.raw 2>&1
+          ST_VIVO_TXT=$?
+          set -e
+
+          for PAR in "vendor/json:$ST_VENDOR_JSON" "vivo/json:$ST_VIVO_JSON" \
+                     "vendor/texto:$ST_VENDOR_TXT" "vivo/texto:$ST_VIVO_TXT"; do
+            QUAL=${PAR%%:*}; ST=${PAR##*:}
+            if [ "$ST" -ne 0 ]; then
+              echo "O scan '$QUAL' saiu $ST. Sem --error, achado sai 0 — então isto é FALHA," >&2
+              echo "não achado. Comparar saídas parciais proporia uma cópia inválida." >&2
+              {
+                echo "> **Scan \`$QUAL\` falhou (status $ST).** Nada foi proposto."
+                echo '```'
+                tail -n 30 /tmp/vendor.txt.raw /tmp/vivo.txt.raw 2>/dev/null
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          done
+
+          regras_de() { grep -oE 'Rules run: *[0-9]+' "$1" | grep -oE '[0-9]+' | tail -n 1; }
+          R_VENDOR=$(regras_de /tmp/vendor.txt.raw)
+          R_VIVO=$(regras_de /tmp/vivo.txt.raw)
+          if [ -z "$R_VENDOR" ] || [ -z "$R_VIVO" ]; then
+            echo "Não consegui ler 'Rules run:' de uma das saídas — a conferência ficaria cega." >&2
+            exit 1
+          fi
+          echo "### Regras carregadas" >> "$GITHUB_STEP_SUMMARY"
+          echo "- vendorizado: **$R_VENDOR** · registry ao vivo: **$R_VIVO**" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$R_VENDOR" != "$R_VIVO" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> **DIVERGÊNCIA.** O vendorizado carregou $R_VENDOR regras; o registry, $R_VIVO." >> "$GITHUB_STEP_SUMMARY"
+            echo "Contagem de regras diferente — a cópia não reproduz o registry." >&2
+            exit 1
+          fi
+
+          # Assinatura de um achado: regra + arquivo + linha. Ordenada, para comparar conjuntos.
+          jq -r '.results[] | "\(.check_id)\t\(.path):\(.start.line)"' /tmp/vendor.json \
+            | sort > /tmp/vendor.txt
+          jq -r '.results[] | "\(.check_id)\t\(.path):\(.start.line)"' /tmp/vivo.json \
+            | sort > /tmp/vivo.txt
+
+          N_VENDOR=$(wc -l < /tmp/vendor.txt)
+          N_VIVO=$(wc -l < /tmp/vivo.txt)
+          echo "### Vendorizado × registry ao vivo" >> "$GITHUB_STEP_SUMMARY"
+          echo "- achados com o conjunto vendorizado: **$N_VENDOR**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- achados com o registry ao vivo: **$N_VIVO**" >> "$GITHUB_STEP_SUMMARY"
+
+          if diff -u /tmp/vivo.txt /tmp/vendor.txt > /tmp/delta.txt; then
+            echo "- **idênticos** — o modo offline passa a valer tanto quanto o CI." >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo ""
+              echo "> **DIVERGÊNCIA.** O conjunto vendorizado não reproduz o registry ao vivo."
+              echo '```diff'
+              head -n 40 /tmp/delta.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "Vendorizado e registry ao vivo divergem — não vou propor uma cópia que mente." >&2
+            exit 1
+          fi
+
+          # O scan legível, para quem for ler o PR sem abrir JSON.
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.results[] | "\(.check_id)  \(.path):\(.start.line)"' /tmp/vendor.json \
+            | head -n 40 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # TODA entrada passa por `env:` e é lida como "$VAR" no shell — nunca `${{ }}` dentro do
+      # `run:`. A interpolação acontece ANTES do shell existir: o valor vira texto no meio do
+      # script, e um valor com `;` ou `$(...)` viraria comando. É a
+      # `yaml.github-actions.security.run-shell-injection` — a mesma regra que pegou 3 achados
+      # neste repo em 09/08, e a razão pela qual este workflow existe.
+      - name: Abrir o PR com o diff
+        if: steps.diff.outputs.mudou == 'sim'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # O nome do ramo inclui a TENTATIVA, não só o run. Re-executar um run pela aba Actions
+          # preserva o `run_id` e só incrementa o `run_attempt` — então, sem isto, a 2ª tentativa
+          # recriaria o MESMO nome de ramo, a partir da base, com um commit IRMÃO (manifesto com
+          # data nova) do que já está no remoto. O push sairia rejeitado como non-fast-forward e o
+          # operador — que está no celular, sem terminal — ficaria sem saída. Justamente o caminho
+          # que este workflow existe para servir. O cenário é alcançável: basta o `git push` passar
+          # e o `gh pr create` seguinte falhar por instabilidade da API.
+          # Custo aceito: uma tentativa que falhou deixa um ramo órfão. É barato e visível — e
+          # como só se re-executa o que falhou, o órfão não tem PR apontando para ele.
+          RAMO="semgrep/rulesets-$RUN_ID-$RUN_ATTEMPT"
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout -b "$RAMO"
+          git add .semgrep/vendor/
+          git commit -m "chore(semgrep): atualiza os rulesets vendorizados" -m "Baixado pelo workflow 'Atualizar rulesets do Semgrep' (run $RUN_ID, tentativa $RUN_ATTEMPT), disparado à mão. Só .semgrep/vendor/ foi tocado; as regras locais de .semgrep/rules/ seguem intactas."
+          git push -u origin "$RAMO"
+          gh pr create \
+            --base "$BASE" \
+            --head "$RAMO" \
+            --title "chore(semgrep): atualiza os rulesets vendorizados ($TOTAL_REGRAS regras)" \
+            --body "Atualização disparada à mão pelo workflow \`Atualizar rulesets do Semgrep\` ([run]($RUN_URL)).
+
+          Total no conjunto vendorizado: **$TOTAL_REGRAS regras**. O manifesto (\`.semgrep/vendor/.manifest.json\`) registra a versão do binário, a data e a contagem por ruleset.
+
+          **O que conferir antes do merge**
+
+          - o diff toca **só** \`.semgrep/vendor/\` — se \`.semgrep/rules/divat.yml\` aparecer, algo saiu do lugar;
+          - o resumo do run traz o scan do repo com o conjunto novo. Se ele acusar achado que antes não existia, **é regra nova pegando código velho** — resolva o achado, não remova a regra;
+          - contagem que **despencou** merece investigação: pode ser ruleset renomeado no registry, e aí o vendor ficaria cego sem avisar.
+
+          As regras locais não passam por aqui — este workflow não as toca.
+
+          ---
+          _Generated by [Claude Code](https://claude.ai/code)_"
