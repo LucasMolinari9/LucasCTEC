@@ -12,6 +12,11 @@ export function fmtDate(d){ if(!d) return '—'; const m=String(d).match(/^(\d{4
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 export const enc = s => encodeURIComponent(s);
 export const ilikeTerm = s => enc(String(s ?? '').replace(/[()*]/g, ' '));
+// Normaliza acento/caixa para comparação de texto ("São Gonçalo" → "sao goncalo"). Mora aqui,
+// junto de esc/enc/ilikeTerm, por ser primitiva de string: os módulos de domínio dependem dela
+// (agrupamento.mjs a usa em terminaisDoMunicipio/filtrarFrotaEmpresas), e duplicá-la em cada um
+// recriaria a divergência silenciosa que a extração existe para acabar.
+export const norm = s => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 export const orDash = v => (v===null||v===undefined||v==='') ? '—' : v;
 export const fmtLineName = nome => nome ? esc(nome).split(' - ').map(p => p.replace(/ /g, '&nbsp;')).join(' - ') : '—';
 export const boolChip = (v,label) => v ? `<span class="chip chip-on">${label}</span>` : '';

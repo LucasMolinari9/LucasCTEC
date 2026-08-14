@@ -167,16 +167,40 @@ if (home) {
 }
 
 console.log('\n[allowlist] arquivos públicos necessários');
+// Os módulos ES saem do PRÓPRIO app.js, não de uma lista escrita à mão.
+//
+// Import ES é ATÔMICO: um 404 num módulo não degrada, impede o app.js INTEIRO de executar e a
+// página sai com cabeçalho, rodapé e nenhum card. Foi o defeito de 10/08/2026, e a lista daqui
+// não continha o `core.mjs` — por isso o smoke passou VERDE com o portal quebrado.
+//
+// A lição foi lida pela metade: o item que faltava entrou, mas a lista continuou manual. Medido
+// em 14/08/2026, ao extrair o `agrupamento.mjs`: o `.vercelignore` foi atualizado, esta lista
+// não, e o smoke voltou a passar verde sem nunca pedir o módulo novo — o mesmo ponto cego, com
+// o mesmo sintoma, quatro dias depois. Uma lista que precisa ser lembrada será esquecida; ela
+// só falha quando alguém acerta, que é o oposto do que um gate deve fazer.
+//
+// Derivar do `import` resolve para todo módulo futuro sem ninguém lembrar de nada. Quem não é
+// alcançável por `import` (HTML, CSS, fontes, vendor, o marcador do auto-update) continua
+// explícito abaixo — não há de onde derivá-los.
+const modulosImportados = async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { fileURLToPath } = await import('node:url');
+  const raiz = fileURLToPath(new URL('..', import.meta.url));
+  const src = await readFile(raiz + 'app.js', 'utf8');
+  const achados = new Set();
+  for (const re of [/\bfrom\s*['"](\.[^'"]+)['"]/g, /\bimport\s+['"](\.[^'"]+)['"]/g,
+                    /\bimport\s*\(\s*['"`](\.[^'"`]+)['"`]/g]) {
+    for (const m of src.matchAll(re)) achados.add('/' + m[1].replace(/^\.?\//, ''));
+  }
+  if (!achados.size) throw new Error('nenhum import encontrado no app.js — o extrator do smoke quebrou');
+  return [...achados].sort();
+};
 const publicAssets = [
   '/index.html',
   '/app.js',
   '/styles.css',
   '/manifest.webmanifest',
-  // O app.js é ES module e importa este arquivo. Import ES é ATÔMICO: um 404 aqui não degrada,
-  // impede o app.js inteiro de executar e a página sai com cabeçalho, rodapé e nenhum card.
-  // Foi o defeito de 10/08/2026, e esta lista não o continha — por isso o smoke passou verde
-  // com o portal quebrado. Módulo novo sob src/ entra AQUI e na allowlist do .vercelignore.
-  '/src/domain/core.mjs',
+  ...(await modulosImportados()),
   // Marcador do auto-update (`checarNovaVersao` faz HEAD nele). Em 404 o detector fica mudo:
   // ninguém recebe deploy novo sem recarregar na mão, e o sintoma é invisível.
   '/version.json',

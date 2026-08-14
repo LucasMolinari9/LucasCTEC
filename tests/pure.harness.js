@@ -1,5 +1,11 @@
 'use strict';
-const { fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, boolChip, situacaoHTML, isLinhaAtiva, isVigente } = require('../src/domain/core.mjs');
+/* O que é IMPORTADO dos módulos de domínio já é a implementação real que o navegador executa —
+   não há cópia a guardar, e por isso estes nomes não aparecem entre marcadores @canon.
+   O que ainda é CÓPIA (blocos @canon abaixo) só existe porque a função continua dentro do
+   app.js; cada extração para src/domain/ apaga a cópia e a guarda junto. */
+const { fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, boolChip, situacaoHTML, isLinhaAtiva, isVigente, norm } = require('../src/domain/core.mjs');
+const { groupBy, countBy, fmtMoney, byCodlinha, rjOrder, scoreEmpresa, dedupEmpresasPorRJ,
+        classifyMunLines, terminaisDoMunicipio, resumoFrota, filtrarFrotaEmpresas } = require('../src/domain/agrupamento.mjs');
 
 /* Cópias VERBATIM de funções PURAS do app.js, para teste unitário em Node
    (sem navegador, sem rede, sem dependências).
@@ -8,34 +14,6 @@ const { fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, boo
    O tests/check.js tem uma guarda anti-drift que avisa se a versão original mudar.
    A linha de origem está citada em cada bloco. */
 
-// app.js — ordena listagem de linhas pelo código (codlinha), natural/numérico
-/* @canon byCodlinha */
-const byCodlinha = (a, b) => String(a.codlinha||'').localeCompare(String(b.codlinha||''), undefined, { numeric:true });
-/* @endcanon */
-// app.js (seção STATE + CACHES) — desempate do cadastro de empresas quando o mesmo RJ aparece
-// duplicado (ex.: o 103). Definição única usada pelo getEmpresas (nome no banner) e pelo
-// LOADERS.empresasRegulares (o card) — antes da issue #111 eram duas cópias que podiam divergir.
-/* @canon scoreEmpresa */
-function scoreEmpresa(e){
-  if (!e || e.cassada) return 0;
-  return String(e.situacao||'').toUpperCase()==='REGULAR' ? 2 : 1;
-}
-/* @endcanon */
-/* @canon dedupEmpresasPorRJ */
-function dedupEmpresasPorRJ(lista){
-  const best = {};
-  (lista||[]).forEach(e => {
-    const k = e && e.codempresa;
-    if (k == null) return;
-    if (!Object.prototype.hasOwnProperty.call(best, k) || scoreEmpresa(e) > scoreEmpresa(best[k])) best[k] = e;
-  });
-  return Object.values(best);
-}
-/* @endcanon */
-// app.js:842 — normaliza acento/caixa para busca
-/* @canon norm */
-const norm = s => String(s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
-/* @endcanon */
 // app.js:1510
 /* @canon yearOf */
 const yearOf = d => d ? parseInt(String(d).slice(0,4),10) : null;
@@ -75,64 +53,6 @@ function municipiosExatos(ibge, termos){
   return Object.entries(ibge).filter(([,v])=>nts.has(norm(v.nome))).map(([c])=>c);
 }
 /* @endcanon */
-// app.js:2356
-/* @canon groupBy */
-function groupBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); if(!m.has(k))m.set(k,[]); m.get(k).push(x); } return m; }
-/* @endcanon */
-// app.js:2357
-/* @canon countBy */
-function countBy(arr, keyFn){ const m=new Map(); for(const x of arr){ const k=keyFn(x); m.set(k,(m.get(k)||0)+1); } return m; }
-/* @endcanon */
-// app.js:2358
-/* @canon fmtMoney */
-function fmtMoney(v){ if(v===null||v===undefined||v==='') return '—'; const n=Number(v); return isNaN(n)?String(v):n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-/* @endcanon */
-// app.js — classifica linhas por município (dentro × intermunicipal) a partir das linhas de
-// itinerário (codlinha, cod_municipio_origem). "dentro" = todos os trechos no próprio município (M);
-// "inter" = tem ao menos um trecho em OUTRO município (cod_municipio_origem não-vazio e != M).
-/* @canon classifyMunLines */
-function classifyMunLines(itRows, codibge){
-  const M = String(codibge);
-  const bySet = new Map();                       // codlinha(String) → Set de cod_municipio_origem (não vazios)
-  for(const r of itRows){
-    if(r.codlinha==null || r.codlinha==='') continue;
-    const cl = String(r.codlinha);
-    let s = bySet.get(cl); if(!s){ s = new Set(); bySet.set(cl, s); }
-    const co = r.cod_municipio_origem==null ? '' : String(r.cod_municipio_origem);
-    if(co) s.add(co);
-  }
-  const dentro = new Set(), inter = new Set();
-  for(const [cl, s] of bySet){
-    let outro = false;
-    for(const co of s){ if(co !== M){ outro = true; break; } }
-    (outro ? inter : dentro).add(cl);
-  }
-  return { dentro, inter };
-}
-/* @endcanon */
-/* @canon terminaisDoMunicipio */
-function terminaisDoMunicipio(itRows, codibge){
-  const grupos = new Map();
-  for(const r of itRows){
-    if(String(r.cod_municipio_origem) !== String(codibge)) continue;
-    const nome = r.nome_logradouro==null ? '' : String(r.nome_logradouro).trim();
-    if(!nome) continue;
-    const chave = norm(nome);
-    let grupo = grupos.get(chave);
-    if(!grupo){ grupo = { grafias:new Map(), linhas:new Set() }; grupos.set(chave, grupo); }
-    grupo.grafias.set(nome, (grupo.grafias.get(nome)||0)+1);
-    if(r.codlinha!=null && r.codlinha!=='') grupo.linhas.add(String(r.codlinha));
-  }
-  return [...grupos.values()].map(grupo=>{
-    let nome = '', maior = 0;
-    for(const [grafia, total] of grupo.grafias){
-      if(total>maior){ nome=grafia; maior=total; }
-    }
-    return { nome, nLinhas:grupo.linhas.size };
-  }).sort((a,b)=>a.nome.localeCompare(b.nome));
-}
-/* @endcanon */
-
 /* app.js:2966 — filtro do Realtime, por ABA (#54). Puro: recebe a aba (com sua própria
    `view` e sua própria `line`) em vez de ler `currentView`/`activeLine` do módulo. */
 /* @canon tabMatchesEvent */
@@ -154,46 +74,6 @@ function dispatchRealtime(tabs, activeTabId, table, payload){
     reload: casam.some(t => t.id === activeTabId) ? activeTabId : null,
     stale:  casam.filter(t => t.id !== activeTabId).map(t => t.id),
   };
-}
-/* @endcanon */
-
-// app.js:2715 — ordenação numérica do RJ usada nas listagens por empresa
-/* @canon rjOrder */
-function rjOrder(a, b){
-  const na=parseInt(a,10), nb=parseInt(b,10);
-  if(isNaN(na)&&isNaN(nb)) return String(a).localeCompare(String(b));
-  if(isNaN(na)) return 1; if(isNaN(nb)) return -1;
-  return na-nb;
-}
-/* @endcanon */
-// app.js:2344 — agregação da Frota por Empresa (depende de groupBy/rjOrder)
-/* @canon resumoFrota */
-function resumoFrota(rows){
-  const num = v => { const n = Number(v); return isNaN(n) ? 0 : n; };
-  const sum = (arr,f) => arr.reduce((s,r)=>s+num(r[f]),0);
-  return {
-    totOp: sum(rows,'frota_operacional'),
-    totRes: sum(rows,'reserva'),
-    porEmp: [...groupBy(rows, r=>r.codempresa||'—')]
-      .map(([cod,rs])=>({cod, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
-      .sort((a,b)=>rjOrder(a.cod,b.cod)),
-    porHier: [...groupBy(rows, r=>r.hierarquia||'—')]
-      .map(([h,rs])=>({h, n:rs.length, op:sum(rs,'frota_operacional'), res:sum(rs,'reserva')}))
-      .sort((a,b)=>b.op-a.op),
-  };
-}
-/* @endcanon */
-// app.js:2359 — filtro da tabela Frota por Empresa
-/* @canon filtrarFrotaEmpresas */
-function filtrarFrotaEmpresas(items, status='ativas', termo=''){
-  const raw = String(termo||'').trim(), q = norm(raw);
-  return (items||[]).filter(e=>{
-    const situacao = norm(e.situacao||'');
-    if(status==='ativas' && situacao!=='regular') return false;
-    if(status==='canceladas' && situacao!=='cancelado') return false;
-    if(q && !(norm(e.nome_empresa||'').includes(q) || String(e.cod||'').includes(raw))) return false;
-    return true;
-  });
 }
 /* @endcanon */
 

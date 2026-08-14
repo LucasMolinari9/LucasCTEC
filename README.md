@@ -8,10 +8,13 @@ histórico/eventos, empresas e relatórios. Os dados são mantidos pelo dono dir
 ## Como funciona (resumo)
 
 - **Frontend = três arquivos estáticos:** [`index.html`](index.html) (HTML),
-  [`styles.css`](styles.css) (todo o CSS) e [`app.js`](app.js) (todo o JS, ~3,5k linhas num
+  [`styles.css`](styles.css) (todo o CSS) e [`app.js`](app.js) (~3,4k linhas num
   IIFE). Não há build, framework nem `package.json`: é só servir a pasta. O JS entra por
   `<script src>` clássico no fim do `<body>` — **nada de `<script>` inline**, porque a CSP
   publica `script-src 'self'` e bloquearia.
+- A lógica **pura** vai saindo do `app.js` para módulos ES nativos em [`src/domain/`](src/domain)
+  (hoje `core.mjs` e `agrupamento.mjs`), importados tanto pelo navegador quanto pelos testes —
+  continua sem build: são `import` nativos, não bundle.
 - As consultas vão direto ao **Supabase via REST** (PostgREST) com `fetch`. O `supabase-js`
   entra **só** para o canal **Realtime**, é **vendorado** em
   [`vendor/`](vendor/) (versão fixa, mesma origem) e é injetado dinamicamente pelo `app.js`.

@@ -67,12 +67,27 @@ cada teste novo).
 > validam renderização determinística, não substituem um preview ligado a um banco restaurado.
 
 ## ⚠️ Regra de ouro (anti-drift)
-Os harness ainda copiam o código legado do `app.js` à mão. As regras já extraídas em
-`src/domain/core.mjs` são importadas diretamente por `pure.harness.js`. Ao editar uma função
-que ainda estiver copiada,
-no `app.js`, atualize a cópia** no harness correspondente. O `check.js` tem uma
-guarda que falha avisando "harness DESATUALIZADO" se um trecho canônico sumir do
-`app.js` — mas ela cobre só os trechos listados; mantenha a disciplina.
+Os harness ainda copiam à mão o código que continua dentro do `app.js`. **Ao editar uma função
+que ainda estiver copiada, atualize a cópia** no harness correspondente, entre os marcadores
+`/* @canon <nome> */ … /* @endcanon */`. O `check.js` §[2] compara o texto INTEIRO da cópia com o
+`app.js` e falha nomeando quem divergiu.
+
+O que já foi extraído para `src/domain/*.mjs` (hoje `core.mjs` e `agrupamento.mjs`) **não tem
+cópia**: o `pure.harness.js` faz `require` do módulo real, que é a mesma implementação que o
+navegador executa. **Extrair uma função é, portanto, apagar o bloco `@canon` dela** — não
+atualizá-lo.
+
+A checagem de cobertura do `check.js` §[2] não tem lista a manter à mão: para cada harness ela lê
+os próprios `require` de `src/domain/` e os casa com os `export` do módulo citado. Um símbolo só é
+isento de marcador quando **aquele** harness realmente o liga ao módulo. Consequências práticas,
+todas provadas por mutação:
+
+- tirar um nome do `require` e recolocar uma cópia local sem marcador **reprova** — mesmo que a
+  cópia esteja fiel no dia em que foi escrita, que é justamente quando ela passaria despercebida;
+- desestruturar nome que o módulo não exporta **reprova**, porque o binding chegaria `undefined` e
+  o teste passaria testando nada;
+- forma de `require` que o extrator não reconhece (namespace, caminho computado) **não isenta
+  ninguém**: o gate pede o marcador em vez de adivinhar.
 
 > Observação: estes testes cobrem a camada de dados/lógica pura. A renderização (DOM)
 > e o PDF não são testados aqui — exigiriam um navegador headless.

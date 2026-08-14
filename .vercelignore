@@ -40,3 +40,4 @@
 !/src/domain
 /src/domain/*
 !/src/domain/core.mjs
+!/src/domain/agrupamento.mjs

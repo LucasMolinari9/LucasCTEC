@@ -4,6 +4,70 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 14/08/2026 — `src/domain/agrupamento.mjs`: a extração que apaga a cópia e a guarda junto
+
+**Sessão 2 do plano de 6** (`docs/historico/contexto-proxima-sessao-2026-08-14.md`). Responde às
+críticas nº 1 ("o processo virou um projeto paralelo") e nº 3 ("`app.js` é um monólito") com a
+**mesma obra**, e é essa coincidência que faz o passo valer a pena.
+
+**A ligação entre as duas críticas.** `tests/pure.harness.js` mantinha **30 cópias verbatim** de
+funções do `app.js`, e cada cópia exigia uma guarda `@canon` para não divergir do original. As
+cópias não existiam por gosto por processo: existiam **porque o código não era modular** — teste
+unitário em Node não consegue importar uma função declarada dentro de um IIFE de navegador. Mover
+a função para um módulo ES apaga a cópia *e* a guarda, e ainda deixa o teste exercitando o código
+que o navegador de fato executa, em vez de um gêmeo.
+
+- **`src/domain/agrupamento.mjs`** (novo): `groupBy`, `countBy`, `fmtMoney`, `byCodlinha`,
+  `rjOrder`, `scoreEmpresa`, `dedupEmpresasPorRJ`, `classifyMunLines`, `terminaisDoMunicipio`,
+  `resumoFrota`, `filtrarFrotaEmpresas`. São 11 funções que respondem "como estes registros se
+  agrupam, se ordenam e quais deles ficam" — sem DOM, rede ou estado global, como o `core.mjs`.
+- **`norm` foi para `core.mjs`, não para `agrupamento.mjs`.** `terminaisDoMunicipio` e
+  `filtrarFrotaEmpresas` dependem dela, e a tabela do plano só a extrai na Sessão 3 (`busca.mjs`).
+  As saídas eram duplicá-la (recriando a divergência silenciosa que a extração existe para acabar)
+  ou promovê-la à primitiva de string que ela já é, ao lado de `esc`/`enc`/`ilikeTerm`. **Desvio
+  deliberado do plano**, registrado aqui e no ponteiro do `CLAUDE.md`: a Sessão 3 encontra `norm`
+  já pronta e importa do `core`.
+- **`app.js` cai de 3.447 para 3.352 linhas** e o `pure.harness.js`, de 305 para 185: **12 blocos
+  `@canon` apagados** (as 11 funções + `norm`), de 30 para 18. Não é corte de disciplina — é
+  processo que deixou de ter objeto.
+- **`tests/check.js` §[2]:** a lista de "símbolos que o harness pode exportar sem marcador
+  `@canon`" (os importados do domínio) era escrita **à mão** e teria virado dívida a cada extração.
+  Agora a isenção é apurada **por harness e por binding**: o gate lê os `require` de cada harness e
+  os casa com os `export` do módulo citado. O modo de falha da lista manual era o pior possível:
+  com o gate reclamando, a saída mais curta é escrever o nome na lista — que é exatamente como uma
+  cópia de verdade passaria batida.
+- **`.vercelignore`:** `!/src/domain/agrupamento.mjs`. A guarda §[1] do `check.js` **pegou o
+  esquecimento na primeira rodada** (o arquivo ainda não estava no git), que é o cenário exato que
+  derrubou o portal em 10/08.
+
+**Verificado por mutação, não por leitura:** (1) exportar um símbolo novo sem marcador no harness
+→ gate reprova nomeando-o, então a derivação automática não afrouxou a cobertura; (2) trocar
+`return 0` por `return 9` em `scoreEmpresa` **dentro do módulo** → 3 testes falham, prova de que
+os testes agora mordem o código servido. Gates: `check.js` verde (54 símbolos exportados pelos
+harness, todos ou marcados ou vindos de módulo; 232 testes puros;
+19/19 fatos numéricos), `check_views.mjs` 17/17, `check_abas.mjs` e `check_selecao_linha.mjs`
+verdes, Semgrep local 0 achados (com o aviso de `vendor/` vazio — a pendência do dono da Sessão 1).
+
+### Revisão do Codex (PR #125) — um achado, procedente: a isenção por NOME tinha o mesmo buraco
+
+A 1ª versão da correção acima trocou a lista escrita à mão por um conjunto de todos os nomes
+exportados em qualquer lugar de `src/domain/`. O Codex apontou que isso isenta por **nome**, não
+por **ligação**: um harness que tirasse `groupBy` do seu `require` e recolocasse uma cópia local
+sem marcador continuaria isento, porque `groupBy` segue exportado pelo `agrupamento.mjs`.
+
+**Reproduzido antes de aceitar**, que é o único jeito de saber se um achado é real: com a cópia
+local fiel no lugar da importada, o gate imprimia *"cobertura (54 …), todas marcadas e conferidas"*
+e saía **tudo verde**. Dali em diante a cópia podia divergir do módulo sem nada olhando — a lista
+manual saindo pela porta e voltando pela janela.
+
+A isenção passou a ser apurada **por harness e por binding**: o gate lê os `require` daquele
+arquivo, casa cada nome desestruturado com os `export` do módulo citado, e só então isenta. Três
+comportamentos novos, cada um provado por mutação: cópia local reintroduzida **reprova**;
+desestruturar nome que o módulo não exporta **reprova** (o binding chegaria `undefined` e o teste
+passaria testando nada); e forma de `require` que o extrator não reconhece — namespace, caminho
+computado — **não isenta ninguém**, porque um extrator que erra para o lado permissivo é pior que
+extrator nenhum.
+
 ## 14/08/2026 — "Verde local não é verde no CI": os rulesets do Semgrep passam a ser vendorizados
 
 **Motivação — uma crítica externa que estava certa.** Levantaram três pontos sobre o projeto; o
