@@ -287,7 +287,20 @@ console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
   // Só a forma desestruturada é aceita — é a que o repo usa, e é a única em que dá para saber,
   // pelo texto, qual binding veio do módulo.
   const RE_REQUIRE_DOMINIO = /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\(\s*['"][^'"]*\/src\/domain\/([A-Za-z0-9_.-]+\.mjs)['"]\s*\)/g;
-  const ligadosAoDominio = (src, porModulo, arquivo) => {
+  // Comentário é removido ANTES de procurar o `require`, senão declaração MORTA concede isenção
+  // viva. Medido em 14/08/2026 (achado do Codex sobre o próprio commit que trocou a isenção por
+  // nome pela isenção por binding): bastava tirar `groupBy` do require de verdade, deixar
+  // `// const { groupBy } = require('../src/domain/agrupamento.mjs')` no arquivo e recolocar a
+  // cópia local sem marcador — o gate imprimia "todas marcadas e conferidas" e saía verde.
+  // É o MESMO defeito da versão anterior (extrator que erra para o lado permissivo) entrando pela
+  // terceira porta; daí o comentário longo, para a quarta não passar.
+  // O corte do `//` exige início de linha ou espaço antes: sem isso `'https://x'` viraria
+  // `'https:` e mutilaria strings, trocando um falso positivo por um falso negativo.
+  const semComentariosJS = txt => txt
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|\s)\/\/[^\n]*/g, '$1');
+  const ligadosAoDominio = (bruto, porModulo, arquivo) => {
+    const src = semComentariosJS(bruto);
     const nomes = new Set();
     for (const m of src.matchAll(RE_REQUIRE_DOMINIO)){
       const modulo = m[2];

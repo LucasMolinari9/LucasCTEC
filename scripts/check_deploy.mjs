@@ -182,17 +182,51 @@ console.log('\n[allowlist] arquivos públicos necessários');
 // Derivar do `import` resolve para todo módulo futuro sem ninguém lembrar de nada. Quem não é
 // alcançável por `import` (HTML, CSS, fontes, vendor, o marcador do auto-update) continua
 // explícito abaixo — não há de onde derivá-los.
+//
+// A travessia é TRANSITIVA, e isso não é zelo. A 1ª versão lia só o `app.js`, e um módulo
+// importado apenas por OUTRO módulo ficava invisível: com `app.js → familia.mjs → dep.mjs`, o
+// smoke pedia os dois primeiros com 200, dava o deploy por aprovado, e o navegador tomava 404 no
+// terceiro — matando o grafo ESM inteiro, que é atômico. Reproduzido em 14/08/2026 (achado P1 do
+// Codex): com um `dep.mjs` fora da allowlist, ESTE gate e o `tests/check.js` §[1] ficavam os dois
+// verdes e o portal morria. O `check.js` segue lendo só o `app.js` — a correção dele é o PR #122;
+// enquanto ele não entrar, a travessia daqui é a ÚNICA que enxerga o grafo, e ela roda no preview,
+// antes de produção.
+//
+// Comentário é descartado antes da varredura: um `import` comentado num módulo faria o smoke
+// exigir arquivo que ninguém pede, e o gate reprovaria um deploy correto. O corte do `//` exige
+// início de linha ou espaço antes, senão `'https://x'` viraria `'https:` e mutilaria a string —
+// trocar falso positivo por falso negativo é piorar.
+const semComentarios = txt => txt
+  .replace(/\/\*[\s\S]*?\*\//g, ' ')
+  .replace(/(^|\s)\/\/[^\n]*/g, '$1');
 const modulosImportados = async () => {
   const { readFile } = await import('node:fs/promises');
   const { fileURLToPath } = await import('node:url');
+  const path = await import('node:path');
   const raiz = fileURLToPath(new URL('..', import.meta.url));
-  const src = await readFile(raiz + 'app.js', 'utf8');
+  const RES = [/\bfrom\s*['"](\.[^'"]+)['"]/g, /\bimport\s+['"](\.[^'"]+)['"]/g,
+               /\bimport\s*\(\s*['"`](\.[^'"`]+)['"`]/g];
   const achados = new Set();
-  for (const re of [/\bfrom\s*['"](\.[^'"]+)['"]/g, /\bimport\s+['"](\.[^'"]+)['"]/g,
-                    /\bimport\s*\(\s*['"`](\.[^'"`]+)['"`]/g]) {
-    for (const m of src.matchAll(re)) achados.add('/' + m[1].replace(/^\.?\//, ''));
+  const vistos = new Set();
+  const fila = ['app.js'];
+  while (fila.length) {
+    const rel = fila.shift();
+    if (vistos.has(rel)) continue;              // ciclo de imports não trava a fila
+    vistos.add(rel);
+    let src;
+    try { src = semComentarios(await readFile(path.join(raiz, rel), 'utf8')); }
+    catch { continue; }                          // arquivo ausente: quem acusa é o 404 do fetch
+    const dir = path.posix.dirname(rel);
+    for (const re of RES) {
+      for (const m of src.matchAll(re)) {
+        // especificador é relativo a QUEM IMPORTA, não à raiz
+        const alvo = path.posix.normalize(path.posix.join(dir === '.' ? '' : dir, m[1]));
+        achados.add('/' + alvo);
+        fila.push(alvo);
+      }
+    }
   }
-  if (!achados.size) throw new Error('nenhum import encontrado no app.js — o extrator do smoke quebrou');
+  if (!achados.size) throw new Error('nenhum import encontrado a partir do app.js — o extrator do smoke quebrou');
   return [...achados].sort();
 };
 const publicAssets = [
