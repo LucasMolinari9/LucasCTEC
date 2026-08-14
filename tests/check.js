@@ -437,6 +437,36 @@ console.log('\n[2b] Deriva docs × código');
   }
   okline(`fatos numéricos conferidos (${fatosOk}/${FATOS.length - fatosPulados} afirmações, ${ocorrencias} ocorrências)`);
 
+  // --- a lista de rulesets do Semgrep bate nos TRÊS lugares que a repetem ---
+  // O scan local (`scripts/semgrep.sh`), o CI (`semgrep.yml`) e o atualizador
+  // (`atualizar-semgrep-rulesets.yml`) precisam operar sobre o MESMO conjunto. Editar só um
+  // faria os três divergirem em silêncio: o CI cobriria um ruleset que o local não cobre — que
+  // é literalmente o defeito que a vendorização veio consertar, reaparecendo por outra porta.
+  // A comparação é NOMINAL, como a de RT_TABLES acima: contagem igual com nomes diferentes
+  // passaria, e é o tipo de verde que não vale nada.
+  {
+    const FONTES = {
+      'scripts/semgrep.sh': t => (/REGISTRY_IDS="([^"]*)"/.exec(t)?.[1] || '').split(/\s+/),
+      '.github/workflows/atualizar-semgrep-rulesets.yml': t => (/^\s*RULESETS:\s*(.+)$/m.exec(t)?.[1] || '').trim().split(/\s+/),
+      '.github/workflows/semgrep.yml': t => (t.match(/--config=p\/([a-z0-9-]+)/g) || []).map(s => s.split('/')[1]),
+    };
+    const lidas = {};
+    let cego = false;
+    for (const [arq, extrair] of Object.entries(FONTES)){
+      if (!existe(arq)) continue;
+      const ids = extrair(ler(arq)).filter(Boolean).sort();
+      if (!ids.length){ fail(`[${arq}] não consegui ler a lista de rulesets do Semgrep — a guarda ficou cega, conserte o extrator`); cego = true; }
+      else lidas[arq] = ids;
+    }
+    const arqs = Object.keys(lidas);
+    if (!cego && arqs.length >= 2){
+      const ref = lidas[arqs[0]].join(' ');
+      const fora = arqs.slice(1).filter(a => lidas[a].join(' ') !== ref);
+      if (fora.length) fail(`[${fora.join(', ')}] a lista de rulesets do Semgrep divergiu de ${arqs[0]} (${ref}) — as três precisam bater, senão local e CI escaneiam conjuntos diferentes`);
+      else okline(`rulesets do Semgrep iguais nos ${arqs.length} lugares (${ref})`);
+    }
+  }
+
   // --- toda tabela de RT_TABLES aparece no mapa tabela→card do CLAUDE.md ---
   // A contagem sozinha não bastava: o CLAUDE.md dizia "as 14 tabelas lidas pelo portal" logo acima
   // de um mapa que listava 12 (faltavam `codempresa_teste` e `portaria_teste`, e com elas o tópico

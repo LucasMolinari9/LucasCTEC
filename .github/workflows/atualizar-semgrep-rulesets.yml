@@ -48,6 +48,12 @@ jobs:
   atualizar:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # A lista mora AQUI uma vez só, e todos os passos a leem. Antes ela aparecia três vezes
+    # dentro deste arquivo (download, manifesto, prova), o que é a mesma doença que o
+    # `tests/check.js` §[2b] cobra entre arquivos — de nada adianta guardar a fronteira externa
+    # e deixar o arquivo divergir de si mesmo.
+    env:
+      RULESETS: javascript xss secrets github-actions
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -61,9 +67,9 @@ jobs:
       - name: Instalar Semgrep (versão fixa)
         run: pip install semgrep==1.171.0
 
-      # A lista de rulesets é a MESMA do scripts/semgrep.sh e do semgrep.yml. Está escrita aqui
-      # por extenso, e não derivada, porque derivá-la de um `.sh` exigiria parsear shell — e o
-      # `tests/check.js` §[2b] confere que as três listas batem.
+      # A lista de rulesets ($RULESETS, no `env:` do job) é a MESMA do `scripts/semgrep.sh` e do
+      # `semgrep.yml`, e o `tests/check.js` §[2b] reprova se os três divergirem — guarda que
+      # existe de fato, não só nesta frase.
       #
       # `https://semgrep.dev/c/p/<nome>` é o endpoint que o próprio Semgrep resolve quando recebe
       # `--config=p/<nome>`: devolve o YAML das regras, já achatado. (Não existe `--dump-config`
@@ -75,7 +81,7 @@ jobs:
         run: |
           mkdir -p .semgrep/vendor
           rm -f .semgrep/vendor/*.yml
-          for RULESET in javascript xss secrets github-actions; do
+          for RULESET in $RULESETS; do
             echo "· baixando p/$RULESET"
             curl -sSfL --retry 3 --retry-delay 2 \
               "https://semgrep.dev/c/p/$RULESET" -o ".semgrep/vendor/$RULESET.yml"
@@ -90,10 +96,26 @@ jobs:
             fi
           done
 
+      # A DECISÃO de propor vem só dos `.yml` dos rulesets, NUNCA do manifesto. O manifesto
+      # carrega campos voláteis (data, URL do run) que mudam a cada execução: se ele entrasse na
+      # conta, o caminho "nada mudou" seria inalcançável e todo run abriria um PR só de
+      # provenance — o oposto do que o passo promete. Por isso a comparação acontece ANTES de o
+      # manifesto ser reescrito, e os passos seguintes ficam condicionados a ela.
+      - name: Houve mudança nos rulesets?
+        id: diff
+        run: |
+          if [ -z "$(git status --porcelain -- '.semgrep/vendor/*.yml')" ]; then
+            echo "mudou=nao" >> "$GITHUB_OUTPUT"
+            echo "Os rulesets já estavam iguais aos do registry — nada a propor." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "mudou=sim" >> "$GITHUB_OUTPUT"
+          fi
+
       # O manifesto é a provenance: de onde veio, quando, com qual binário e quantas regras.
       # Espelha o .claude/skills/.superpowers-manifest.json. Sem ele, uma cópia vendorizada é
       # indistinguível de um arquivo que alguém editou à mão.
       - name: Escrever o manifesto
+        if: steps.diff.outputs.mudou == 'sim'
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -106,7 +128,7 @@ jobs:
             echo "  \"run\": \"$RUN_URL\","
             echo '  "rulesets": {'
             SEP=''
-            for RULESET in javascript xss secrets github-actions; do
+            for RULESET in $RULESETS; do
               N=$(grep -cE '^[[:space:]]{0,2}- id:' ".semgrep/vendor/$RULESET.yml" || true)
               TOTAL=$((TOTAL + N))
               printf '%s    "p/%s": %s' "$SEP" "$RULESET" "$N"
@@ -129,27 +151,57 @@ jobs:
       # por outro — pior, porque este pareceria resolvido.
       #
       # `--error` fica de FORA nas duas metades de propósito: achado é informação para o PR, não
-      # motivo para abortar a atualização. O que faz o passo falhar é a DIVERGÊNCIA entre os dois.
+      # motivo para abortar a atualização. O que faz o passo falhar é a DIVERGÊNCIA entre os dois
+      # — ou uma das quatro invocações ter FALHADO.
+      #
+      # Sobre os códigos de saída: como `--error` está fora, achado sai 0. Logo, saída != 0 aqui
+      # é falha de verdade (config inválida, regra que o binário fixo não entende, parse quebrado)
+      # e NÃO pode ser engolida pelo `set +e`. Se as duas metades falharem do MESMO jeito, as
+      # saídas parciais concordam e o workflow proporia uma cópia que o próprio Semgrep recusou.
+      # Por isso cada status é capturado e conferido antes de qualquer comparação.
       - name: Provar que o vendorizado == o registry ao vivo
+        if: steps.diff.outputs.mudou == 'sim'
         run: |
+          # O lado "ao vivo" é montado a partir do MESMO $RULESETS que baixou a cópia. Se fosse
+          # escrito à mão aqui, a prova poderia comparar a cópia de quatro rulesets contra um
+          # registry de três — e passar.
+          CFG_VIVO=""
+          for R in $RULESETS; do CFG_VIVO="$CFG_VIVO --config=p/$R"; done
+
           set +e
           semgrep scan --metrics=off --json --quiet \
             --config=.semgrep/rules --config=.semgrep/vendor . > /tmp/vendor.json
+          ST_VENDOR_JSON=$?
           semgrep scan --metrics=off --json --quiet \
-            --config=.semgrep/rules \
-            --config=p/javascript --config=p/xss \
-            --config=p/secrets --config=p/github-actions . > /tmp/vivo.json
+            --config=.semgrep/rules $CFG_VIVO . > /tmp/vivo.json
+          ST_VIVO_JSON=$?
           # A saída de TEXTO traz "Rules run: N". Comparar achados sozinho não prova nada quando
           # os dois acham zero — e este repo costuma estar limpo, então esse é o caso NORMAL.
           # Um vendor pela metade acharia zero igualzinho ao completo, e o check passaria feliz.
           # A contagem de regras é o que distingue "concordam" de "os dois estão calados".
           semgrep scan --metrics=off \
             --config=.semgrep/rules --config=.semgrep/vendor . > /tmp/vendor.txt.raw 2>&1
+          ST_VENDOR_TXT=$?
           semgrep scan --metrics=off \
-            --config=.semgrep/rules \
-            --config=p/javascript --config=p/xss \
-            --config=p/secrets --config=p/github-actions . > /tmp/vivo.txt.raw 2>&1
+            --config=.semgrep/rules $CFG_VIVO . > /tmp/vivo.txt.raw 2>&1
+          ST_VIVO_TXT=$?
           set -e
+
+          for PAR in "vendor/json:$ST_VENDOR_JSON" "vivo/json:$ST_VIVO_JSON" \
+                     "vendor/texto:$ST_VENDOR_TXT" "vivo/texto:$ST_VIVO_TXT"; do
+            QUAL=${PAR%%:*}; ST=${PAR##*:}
+            if [ "$ST" -ne 0 ]; then
+              echo "O scan '$QUAL' saiu $ST. Sem --error, achado sai 0 — então isto é FALHA," >&2
+              echo "não achado. Comparar saídas parciais proporia uma cópia inválida." >&2
+              {
+                echo "> **Scan \`$QUAL\` falhou (status $ST).** Nada foi proposto."
+                echo '```'
+                tail -n 30 /tmp/vendor.txt.raw /tmp/vivo.txt.raw 2>/dev/null
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          done
 
           regras_de() { grep -oE 'Rules run: *[0-9]+' "$1" | grep -oE '[0-9]+' | tail -n 1; }
           R_VENDOR=$(regras_de /tmp/vendor.txt.raw)
@@ -198,18 +250,6 @@ jobs:
           jq -r '.results[] | "\(.check_id)  \(.path):\(.start.line)"' /tmp/vendor.json \
             | head -n 40 >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-      # Sem mudança não há PR. O caso é comum e legítimo: rodar de novo num registry que não
-      # mudou. Dizer isso em voz alta evita o operador procurar um PR que nunca vai existir.
-      - name: Houve mudança?
-        id: diff
-        run: |
-          if git diff --quiet -- .semgrep/vendor/ && [ -z "$(git status --porcelain .semgrep/vendor/)" ]; then
-            echo "mudou=nao" >> "$GITHUB_OUTPUT"
-            echo "Os rulesets já estavam iguais aos do registry — nada a propor." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "mudou=sim" >> "$GITHUB_OUTPUT"
-          fi
 
       # TODA entrada passa por `env:` e é lida como "$VAR" no shell — nunca `${{ }}` dentro do
       # `run:`. A interpolação acontece ANTES do shell existir: o valor vira texto no meio do

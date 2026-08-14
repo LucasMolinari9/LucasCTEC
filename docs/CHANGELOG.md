@@ -52,6 +52,38 @@ foi provada quebrando-a de propósito (`5` → `7` no `CLAUDE.md` → gate repro
 O carregamento do `vendor/` foi provado com uma regra de mentira: 5 regras sem o diretório, 6 com
 ele, e o aviso some quando ele existe.
 
+### Leva de revisão do Codex (mesmo dia) — cinco achados, cinco procedentes
+
+Nenhum foi descartado, e dois eram o **defeito original reaparecendo por outra porta** — o que é
+o risco típico de uma correção escrita pela mesma cabeça que criou o problema:
+
+- **`vendor/` parcial passava por completo.** A checagem era "existe *algum* `.yml`?", então
+  perder um arquivo num merge faria o wrapper escanear um subconjunto e devolver verde. Num repo
+  limpo, parcial e completo acham zero igualmente — verde indistinguível do verdadeiro, que é
+  exatamente o que este PR veio matar. Hoje exige-se o conjunto **completo**; faltando qualquer
+  um, cai para as regras locais e diz o que falta.
+- **Versão do binário local × do CI.** O wrapper usava qualquer `semgrep` do `PATH` enquanto o CI
+  fixa 1.171.0. Versões diferentes leem os mesmos rulesets de formas diferentes — mesmo falso
+  verde, outro caminho. Passa a avisar (não falhar), lendo a versão do próprio `semgrep.yml`.
+- **Provenance volátil tornava o "nada mudou" inalcançável.** O manifesto grava data e URL do
+  run, e a decisão de abrir PR olhava o diretório inteiro — então **todo run abriria um PR só de
+  provenance**, o oposto do que o passo prometia. A decisão passou a olhar só os `.yml`, e o
+  manifesto só é reescrito quando eles mudam.
+- **`set +e` engolia falha de scan.** Sem `--error`, achado sai 0 — logo, saída não-zero é falha
+  real (config inválida, regra que o binário fixo não entende). Se as duas metades falhassem do
+  mesmo jeito, as saídas parciais concordariam e o workflow proporia uma cópia que o próprio
+  Semgrep recusou. Os quatro status agora são capturados e conferidos antes de qualquer comparação.
+- **Um comentário afirmava uma guarda que não existia.** O workflow dizia que o `check.js` §[2b]
+  conferia as três listas de rulesets; não conferia — a entrada nova só contava regras locais,
+  fato não relacionado. A guarda foi **implementada** (comparação nominal entre `semgrep.sh`,
+  `semgrep.yml` e o atualizador) em vez de o comentário ser apagado. De quebra, a lista deixou de
+  aparecer três vezes dentro do próprio atualizador: virou `RULESETS` no `env:` do job.
+
+Provado quebrando: lista divergente em um dos três arquivos → gate reprova nomeando os outros
+dois; `vendor/` com 1 de 4 arquivos → avisa "INCOMPLETO" e roda 5 regras (não o subconjunto);
+com 4 de 4 → roda 9 e não avisa; versão do CI trocada para 9.9.9 → avisa com o comando de
+alinhamento. Fixtures removidas depois.
+
 **Pendente (só o dono, pela aba Actions):** rodar o workflow uma vez para preencher
 `.semgrep/vendor/`. Até lá o gap continua aberto — o que muda é que agora ele **avisa**.
 

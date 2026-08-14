@@ -76,6 +76,23 @@ ruleset e o link do run. Espelha o `.claude/skills/.superpowers-manifest.json`.
 `stderr`** que o verde ali ainda não vale como verde no CI. O aviso é intencional: silenciá-lo
 reconstruiria exatamente o falso verde que motivou tudo isto.
 
+### Duas exigências do wrapper, e por que existem
+
+Ambas nasceram da revisão do PR #123 — as duas são o mesmo defeito de origem reaparecendo por
+outra porta, e por isso viraram guarda em vez de nota.
+
+- **O conjunto tem de estar COMPLETO.** Um `.yml` solto não autoriza o modo offline: se um dos
+  quatro se perder (merge malfeito, remoção acidental), o wrapper **cai para só as regras
+  locais** e diz o que falta, em vez de escanear um subconjunto. Rodar parcial devolveria verde
+  — e num repo limpo o parcial e o completo acham zero do mesmo jeito, então o verde parcial é
+  indistinguível do verdadeiro.
+- **A versão do binário é conferida contra a do CI.** O CI fixa `semgrep==1.171.0`, mas a
+  instrução de instalação é `pipx install semgrep`, sem versão. Binário mais velho **pula** regra
+  que não entende; mais novo a interpreta diferente — e aí o mesmo `vendor/` dá verde aqui e
+  vermelho lá. A versão do CI é lida do próprio `semgrep.yml` (fonte única, a mesma que o hook de
+  sessão usa). É **aviso, não falha**: travar quebraria a instalação do dono e o hook, e o risco
+  é de divergência, não de dano.
+
 ## Instalar
 
 O binário **não** é dependência do projeto (o `check.js` continua sem dependência alguma):
