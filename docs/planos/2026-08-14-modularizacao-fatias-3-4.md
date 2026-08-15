@@ -134,11 +134,23 @@ de `withLine(ctx, linha)` → `{ ...ctx, line: linha }`, **preservando `view` e 
 **documentos**: um documento deixa de ler o global e passa a usar `ctx.line`. O wiring de troca e
 limpeza de abas continua escrevendo — mexer nele é fora de escopo e quebraria a seleção.
 
-O mesmo vale para `currentView`: continua existindo e continua escrito só por `setCurrentView`; o
-que acaba é **ler** essas variáveis de dentro de um documento.
+**`currentView` tem exatamente o mesmo formato de problema**, e a versão anterior desta seção
+consertou o `activeLine` e deixou a frase gêmea errada ao lado: `setCurrentView` atribui em
+`app.js:1122`, **mas `activateTab` também escreve**, `currentView = t.view`, em `app.js:960`. Vale
+a mesma regra: o que acaba é **ler** essas variáveis de dentro de um documento; o wiring de abas
+continua escrevendo as duas.
 
-**Exceções documentadas:** `_panelRun` fica fora do seam de propósito (atribuído antes de qualquer
-`await`, não há corrida a proteger), e os 4 call sites com `pdf:false` seguem passando `view`/`gen`.
+**Exceções documentadas — e a razão da primeira estava errada.**
+
+- **`_panelRun` fica fora do seam**, mas *não* porque seja "sempre atribuído antes de qualquer
+  `await`". Isso vale para dois dos três: `LOADERS.localidades` (`app.js:2701`) e `searchPanel`
+  (`app.js:3006`) atribuem antes de qualquer `await` do próprio corpo. **Portarias não**: o loader
+  faz `await getPortariaAnos()` em `app.js:2422` e só atribui `_panelRun` em `app.js:2464`. O que
+  protege ali é o guard explícito — `if (!isCurrentGen(view, gen)) return;` em `app.js:2423`. Quem
+  mexer neste seam **preserva esse guard**: sem ele, uma tentativa velha religa o runner depois de
+  uma troca de aba.
+- Os **5** call sites com `pdf:false` seguem passando `view`/`gen`: `app.js:1672`, `:2137`,
+  `:2141`, `:2396` e `:2946`. (Eram descritos como 4 — número herdado e nunca medido.)
 
 ### Entregável obrigatório: a bancada de corrida
 
@@ -265,8 +277,17 @@ Entrega o item 4 do estudo: *"transformar o registro `LOADERS` em composição e
 todos os loaders de uma vez."*
 
 O tamanho é **consequência**: cada fase C que puder compor o loader da sua família já compõe, e a D
-fica com o resto. **Se ela estiver grande, alguma fase C não terminou o próprio trabalho** — o
-tamanho é sinal, não surpresa.
+fica com o resto.
+
+**O critério de saída depende do ramo escolhido na B2, e tratá-lo como único estava errado:**
+
+- **ramo da opção 1** (seam de seleção exposto) — se a D estiver grande, **alguma fase C não
+  terminou o próprio trabalho**; o tamanho é sinal de falha;
+- **ramo da opção 2** (família de listas fica no `app.js`) — C3 e C4 terminam legitimamente com
+  escopo reduzido, e os loaders que dependem da família de listas ficam adiados. A D **pode** ser
+  grande com todas as fases C tendo cumprido exatamente o que declararam. Aqui o critério é outro:
+  a D fecha quando tiver composto tudo que **não** depende da família de listas, e o restante é
+  declarado como herança da E — nominalmente, não por omissão.
 
 Os wrappers (`lineDocView`, `lineDocRun`, `lineSearchRun`, `searchPanel`) não são trabalho da D:
 são shell, e saem na E.
@@ -279,9 +300,20 @@ Chrome do modal e faixa de abas para `src/ui/`, mais o shell de busca de linha (
 `lineDocRun`, `lineSearchRun`, `searchPanel`) e — se a B2 tiver escolhido a opção 2 — a família de
 listas e os renders que a C tiver adiado.
 
-É a área mais exercitada pelo `check_abas.mjs` e o ganho é menor que o das anteriores. **Só fazer
-se A–D correrem sem sustos**; é a primeira candidata a ser cortada. Se for cortada, o `app.js` fica
-com o shell — escolha declarada, não dívida escondida. Quem cortar deve dizer, aqui, o que ficou.
+É a área mais exercitada pelo `check_abas.mjs` e o ganho é menor que o das anteriores.
+
+**Se ela é opcional depende do ramo da B2, e dizer "opcional" sem qualificar estava errado:**
+
+- **ramo da opção 1** — a E é de fato **opcional**. Cortá-la deixa no `app.js` o shell do modal e o
+  de busca de linha: escolha de escopo declarada, não dívida escondida;
+- **ramo da opção 2** — a E deixa de ser cosmética e passa a ser **obrigatória para o plano
+  fechar**, porque é a única fase que ainda moveria os documentos que C3/C4 adiaram
+  (`ligacoesPorEmpresa`, `ligacoesPorLogradouro`, `municipioRegiao`, `ligacoesPorTerminal` e os
+  demais que listam linha). Cortá-la nesse ramo é decisão legítima, mas então **o estado de parada
+  precisa declarar esses documentos por nome** como permanentes no `app.js` — senão o plano termina
+  afirmando ter movido o que não moveu.
+
+Em qualquer um dos dois: quem cortar a E escreve aqui o que ficou.
 
 ---
 
