@@ -1,7 +1,7 @@
 # Estrutura e navegação do frontend (`index.html` + `styles.css` + `app.js`) — Portal DIVAT
 
 > **Por que este arquivo existe:** o frontend tem `index.html` (HTML), `styles.css` (CSS),
-> `app.js` (~3,4k linhas — extraído do HTML e ainda envolto num IIFE) e módulos puros em `src/`. Continua
+> `app.js` (~3,3k linhas — extraído do HTML e ainda envolto num IIFE) e módulos puros em `src/`. Continua
 > **zero-build**: nada de bundler, framework ou `package.json`. Este doc registra (1) *por que*
 > essa forma, (2) *como navegar* no `app.js` sem se perder, e (3) as **regras de segurança** para
 > reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do `CLAUDE.md` (que lista as
@@ -23,10 +23,12 @@ mudou junto, e o que continua valendo:
 - **Zero-build continua.** `app.js` é um ES module nativo carregado com `type="module"`; não há
   bundler nem dependências. Os seams abertos até aqui, todos sem DOM, rede ou estado global:
   **`src/domain/core.mjs`** (formatação, escaping, `norm`, situação da linha),
-  **`src/domain/agrupamento.mjs`** (agregação, ordenação e filtros de conjunto) e
-  **`src/domain/busca.mjs`** (filtro de evento e preparação do termo de busca). O corte é pela
-  pureza, não pelo assunto: `termosLocalidade` (`app.js:2494`) é da mesma família do
-  `localidadesQueCasam`, mas faz `await getLocalidades()` em `app.js:2495` — é I/O, e ficou.
+  **`src/domain/agrupamento.mjs`** (agregação, ordenação e filtros de conjunto),
+  **`src/domain/busca.mjs`** (filtro de evento e preparação do termo de busca) e
+  **`src/domain/view-state.mjs`** (seam do ciclo de vida da view, modelo de abas, despacho do
+  Realtime por aba e o que cada lista mostra). O corte é pela pureza, não pelo assunto:
+  `termosLocalidade` (`app.js:2442`) é da mesma família do
+  `localidadesQueCasam`, mas faz `await getLocalidades()` em `app.js:2443` — é I/O, e ficou.
 - **Regra para extrair:** prefira módulos profundos com interface pequena. Não mova loaders/estado
   apenas para reduzir linhas; extraia quando a dependência puder ser expressa por imports claros.
 - **Extração paga o processo que ela torna desnecessário.** Enquanto a função mora no `app.js`, o
@@ -34,6 +36,8 @@ mudou junto, e o que continua valendo:
   `@canon` para não divergir do original. Extraída, o harness importa o módulo real: cópia e guarda
   são **apagadas** no mesmo commit — o teste passa a exercitar exatamente o código que o navegador
   executa. Quando o último `@canon` sair, `tests/canon.js` e `tests/drift.test.js` se aposentam.
+  O `pure.harness.js` chegou lá na Sessão 4 (zero cópias); as 12 que faltam estão no `harness.js`
+  e dependem da Fase B (`src/data/rest.mjs`).
 - **Toda extração tem três passos obrigatórios, não um:** mover a função + importar no `app.js`;
   apagar o `@canon` e trocar por `require` no harness; e **reabrir o arquivo no `.vercelignore`**.
   Pular o terceiro derruba o portal inteiro (import ES é atômico — ver §`.vercelignore` no
@@ -86,7 +90,7 @@ achar por `grep` do texto da marca, nunca por linha.
   `COMPONENTES AUXILIARES` · `CLIQUE NOS CARDS` · `UTILITÁRIOS` · `TOAST` · `REALTIME` ·
   `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~58,8% do JS (~2,0k linhas, ~90 funções).
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~58,3% do JS (~1,9k linhas, ~90 funções).
 
 ### Sub-marcas do bloco `MODAL / SISTEMA DE VIEWS`
 
@@ -147,8 +151,8 @@ paginação vive na seção `COMPONENTES AUXILIARES` (exceto `paginateEvents`, q
 ### As funções (grep pela marca / nome)
 
 - **`pageBounds(total, pageSize, page)`** — matemática **pura** (clampa a página, devolve
-  `{page,totalPages,start,end}`). Tem cópia verbatim em `tests/pure.harness.js` + casos em
-  `tests/pure.test.js`. É o único pedaço testável; o resto é DOM.
+  `{page,totalPages,start,end}`). Mora em `src/domain/view-state.mjs` desde a Sessão 4 (era cópia
+  no harness); casos em `tests/pure.test.js`. É o único pedaço testável; o resto é DOM.
 - **`paginate(container, total, renderSlice, {pageSize=25, afterPaint, unit})`** — **núcleo** por
   fatia, agnóstico de conteúdo. Renderiza **só a fatia atual** num `.pg-slot` + uma barra
   `.doc-pager` (‹ Anterior · `.pg-info` "Página X de Y · N `unit`" · "ir p/ Nº" · Próxima ›).

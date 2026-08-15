@@ -15,6 +15,14 @@ import {
 import {
   matchEvent, localidadesQueCasam, orIlike, municipiosExatos,
 } from './src/domain/busca.mjs';
+// Estado do que está na tela — o seam do ciclo de vida da view, o modelo de abas, o despacho do
+// Realtime por aba e o que cada lista mostra. A camada de UI (renderTabs/activateTab/markStale/
+// scheduleReload) fica no app.js: o módulo decide, o app.js aplica.
+import {
+  beginGen, isCurrentGen, commitViewResult, pushDetail, popDetail,
+  MAX_TABS, makeTab, openTabState, closeTabState,
+  dispatchRealtime, pageBounds, filtrarSituacao,
+} from './src/domain/view-state.mjs';
 
 /* ================================================================
    ÍNDICE DO ARQUIVO  —  navegue por `grep` da marca da seção.
@@ -438,44 +446,19 @@ function updateNeedChips(){
    ================================================================ */
 let activeLine = null;   // { codlinha, numero_ligacao, nome_ligacao, codempresa, ... }
 
-/* ---- Abas — modelo de múltiplas abas de documento (#51 prefactor + #52 faixa de abas) ----
-   Cada aba guarda sua própria linha, sua própria view aberta e sua própria pilha de navegação
-   do botão Voltar (`navStack`; a pilha global antiga era `nav.stack`). `stale` = aba em segundo
-   plano com dado novo esperando: o Realtime a marca sem recarregar nada e ela só recarrega ao
-   ser reativada (ver dispatchRealtime/reloadTab, seção REALTIME, e #54). `paneEl`
-   (o `<div class="modal-body">` da aba) e `scrollTop` são propriedades de runtime/DOM, coladas
-   pela camada de UI (seção MODAL) — não fazem parte do formato "puro" abaixo, pra manter
-   openTabState/closeTabState testáveis sem DOM (cópia em tests/pure.harness.js).
+/* ---- Abas — estado de runtime das abas de documento (#51 prefactor + #52 faixa de abas) ----
+   O FORMATO da aba e as transições puras (makeTab/openTabState/closeTabState/MAX_TABS) moram em
+   `src/domain/view-state.mjs`; aqui fica só o estado vivo — qual aba existe agora, qual é a
+   ativa — e o `paneEl`/`scrollTop` que a camada de UI (seção MODAL) cola por cima.
    `activeLine`/`currentView` (declarado mais abaixo, seção MODAL) continuam sendo os pontos de
    LEITURA usados pelos loaders — não se espalha acesso "por aba" pelos call sites existentes.
    Eles só são reatribuídos nos pontos de abrir/selecionar/fechar aba (setActiveLine aqui;
    setCurrentView e activateTab na seção MODAL), sempre em sincronia com `activeTab()`. */
-const MAX_TABS = 5;
 let tabIdSeq = 1;
-function makeTab(id){ return { id, line: null, view: null, navStack: [], stale: false }; }
 let tabs = [makeTab(tabIdSeq)];
 let activeTabId = tabs[0].id;
 function activeTab(){ return tabs.find(t => t.id === activeTabId); }
 function setActiveLine(row){ activeLine = row; activeTab().line = row; }
-
-// abre uma aba em branco (linha/view null); nunca ultrapassa MAX_TABS — nesse caso devolve
-// blocked:true com `tabs`/`activeTabId` originais intactos (quem chama decide o toast).
-function openTabState(tabs, tabIdSeq){
-  if (tabs.length >= MAX_TABS) return { blocked:true, tabs, activeTabId:null, tabIdSeq };
-  const id = tabIdSeq + 1;
-  return { blocked:false, tabs:[...tabs, makeTab(id)], activeTabId:id, tabIdSeq:id };
-}
-// fecha a aba `id`. Se ela era a ativa, ativa a vizinha (prioriza a da direita, senão a da
-// esquerda — convenção comum de abas de navegador). Fechar a última aba devolve closedModal:true
-// (tabs fica vazio; quem chama decide fechar o modal e recriar a aba inicial em branco).
-function closeTabState(tabs, activeTabId, id){
-  const idx = tabs.findIndex(t => t.id === id);
-  if (idx === -1) return { tabs, activeTabId, closedModal:false };
-  const next = tabs.slice(0, idx).concat(tabs.slice(idx + 1));
-  if (!next.length) return { tabs: next, activeTabId:null, closedModal:true };
-  const nextActiveId = activeTabId !== id ? activeTabId : (next[idx] || next[idx - 1]).id;
-  return { tabs: next, activeTabId: nextActiveId, closedModal:false };
-}
 
 let ibgeMap   = null;    // { [codibge]: {nome,regiao,regiaoPrograma} }
 let origemMap = null;    // { [cod_origem]: nome_origem }
@@ -1129,44 +1112,9 @@ let currentView = null, lastFocused = null;
 function setCurrentView(view){ currentView = view; activeTab().view = view; }
 const btnBack = document.getElementById('btnBack');
 
-// Seam do ciclo de vida da view: único caminho de escrita em view.pdfHTML (e no slot
-// de detalhe de painéis tipo Portarias). Protege contra respostas atrasadas de uma
-// busca/troca de linha anterior sobrescreverem o resultado de uma tentativa mais nova
-// (ex.: digitar "101" e trocar pra "202" antes da 1ª resposta voltar).
-//
-// Uso: no INÍCIO de todo loader/run que vai fazer `await` e depois escrever pdfHTML —
-// antes desse await, não depois — capture `const view = currentView, gen = beginGen(view);`.
-// Ao terminar, troque `currentView.pdfHTML = X` por `commitViewResult(view, gen, { pdfHTML: X })`.
-// Helpers que escrevem pdfHTML DEPOIS do await de quem os chama (paginateTable,
-// paginateLines, lineResults) recebem `gen` como opção em vez de capturar a própria —
-// capturar ali seria tarde demais pra distinguir qual tentativa é a mais recente.
-function beginGen(view){
-  if (!view) return null;   // modal já pode ter fechado (currentView virou null) — no-op seguro
-  view._gen = (view._gen || 0) + 1;
-  return view._gen;
-}
-// `gen` ainda é a tentativa mais recente para essa view? Usada por commitViewResult e por todo
-// ponto que pinta resultado NA TELA (paginate/paginateEvents) — a mesma pergunta protege os dois.
-function isCurrentGen(view, gen){
-  return !!view && gen === view._gen;
-}
-function commitViewResult(view, gen, patch){
-  if (!isCurrentGen(view, gen)) return false;
-  if ('pdfHTML' in patch) view.pdfHTML = patch.pdfHTML;
-  return true;
-}
-// pushDetail/popDetail: entra/sai de um "detalhe" dentro de um painel de lista (hoje só
-// Portarias) sem perder o pdfHTML/pesquisa da lista por baixo.
-function pushDetail(view, patch){
-  if (!view) return;
-  view._detail = { pdfHTML: view.pdfHTML };
-  if ('pdfHTML' in patch) view.pdfHTML = patch.pdfHTML;
-}
-function popDetail(view){
-  if (!view || !view._detail) return;
-  view.pdfHTML = view._detail.pdfHTML;
-  view._detail = null;
-}
+// O seam do ciclo de vida da view (beginGen/isCurrentGen/commitViewResult/pushDetail/popDetail)
+// mora em `src/domain/view-state.mjs`, importado no topo — é puro sobre o objeto `view`, e o
+// runbook de uso está lá e no CLAUDE.md § Armadilhas.
 
 // Pilha de navegação do modal (voltar). Estado que muda junto — pilha, flag de "indo p/ trás"
 // e o botão Voltar — encapsulado aqui em vez de três variáveis soltas espalhadas por
@@ -2703,14 +2651,7 @@ async function fetchLinesByCods(cods, { limit = 300 } = {}){
   ]);
   return rows;
 }
-// bordas de paginação: clampa `page` no intervalo válido e devolve os índices da fatia.
-// total=0 → 1 página (start=end=0). PURA (cópia em tests/pure.harness.js; testada).
-function pageBounds(total, pageSize, page){
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const p = Math.min(Math.max(1, (page|0) || 1), totalPages);
-  const start = (p - 1) * pageSize;
-  return { page:p, totalPages, start, end:Math.min(start + pageSize, total) };
-}
+// As bordas da fatia (`pageBounds`) vêm de `src/domain/view-state.mjs` — matemática pura, testada.
 // Núcleo de paginação POR FATIA, agnóstico de conteúdo. Reusa o visual do paginador de eventos
 // (.doc-pager/.pg-*) e o `pageBounds` (testado). `renderSlice(start,end)` devolve o HTML da
 // página; `afterPaint(slot)` (opcional) religa cliques; `unit` rotula o .pg-info. Sem barra
@@ -2782,16 +2723,9 @@ function paginateLines(container, rows, { grouped=false, pageSize=25, pdf=true, 
   // próprio mais rico (ex.: Município com meta/aviso).
   if(pdf && view) commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead(view.title)}${renderSlice(0, rows.length)}</div>` });
 }
-// Filtro de SITUAÇÃO das listas de linha — definição única, usada pelo `lineResults` (listas
-// paginadas) e pelo `renderLocalidadeSecoes` (relatório por localidade). Ficava só no
-// lineResults, então o card "Linhas por Localidade e Município" não tinha filtro nenhum;
-// duplicar a regra aqui faria as duas telas divergirem na definição de "ativa".
-// PURA (cópia em tests/pure.harness.js; testada).
-function filtrarSituacao(rows, st){
-  return st==='ativas'     ? rows.filter(isLinhaAtiva)
-       : st==='canceladas' ? rows.filter(r=>!!r.cancelado)
-       : rows;
-}
+// O par que define o filtro de situação continua sendo um só, mas em camadas diferentes: a REGRA
+// (`filtrarSituacao`) vem de `src/domain/view-state.mjs`, o MARKUP fica aqui embaixo. Quem lista
+// linha usa os dois — nunca uma cópia local do `filter(r=>!r.cancelado…)`.
 // markup do seletor Todas/Ativas/Canceladas (id `lrStatus` — a CSS de `.loc-tools` já o cobre)
 function situacaoSelectHTML(){
   return `<label>Situação <select id="lrStatus"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="canceladas">Canceladas</option></select></label>`;
@@ -3174,26 +3108,9 @@ function markStale(ids){
   ids.forEach(id => { const t = tabs.find(x => x.id === id); if (t && !t.stale){ t.stale = true; mudou = true; } });
   if (mudou) renderTabs();
 }
-// a aba `tab` se importa com este evento? (view dela lê a tabela alterada E, se o documento
-// depende de linha, a mudança é da linha DAQUELA aba — cada aba tem a sua). Generalização do
-// antigo rowMatchesActiveLine, que perguntava isso do par global currentView/activeLine.
-function tabMatchesEvent(tab, table, payload){
-  const view = tab && tab.view;
-  if(!view || !(view.tables||[]).includes(table)) return false;
-  if(!view.lineFilter || !tab.line) return true;      // documento não filtrado por linha → sempre casa
-  const cod = payload?.new?.codlinha ?? payload?.old?.codlinha;
-  if(cod===undefined || cod===null) return true;      // sem como filtrar → recarrega
-  return String(cod) === String(tab.line.codlinha);
-}
-// dispatch por aba: quem recarrega AGORA (só a ativa, ao vivo como sempre) e quem só fica
-// marcada como desatualizada (as de segundo plano — recarregam ao serem reativadas).
-function dispatchRealtime(tabs, activeTabId, table, payload){
-  const casam = (tabs||[]).filter(t => tabMatchesEvent(t, table, payload));
-  return {
-    reload: casam.some(t => t.id === activeTabId) ? activeTabId : null,
-    stale:  casam.filter(t => t.id !== activeTabId).map(t => t.id),
-  };
-}
+// O dispatch por aba (`dispatchRealtime`, e o `tabMatchesEvent` que ele usa por dentro) mora em
+// `src/domain/view-state.mjs`: decide quem recarrega AGORA e quem só fica marcada. Quem APLICA a
+// decisão é o `onRealtime` abaixo, com o `markStale`/`scheduleReload` daqui.
 function onRealtime(table, payload){
   invalidateCaches(table);
   const { reload, stale } = dispatchRealtime(tabs, activeTabId, table, payload);

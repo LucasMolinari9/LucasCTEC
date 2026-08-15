@@ -57,7 +57,8 @@ cada teste novo).
 - `check.js` — **runner / gate de pré-publicação** (sintaxe + anti-drift + testes).
 - `harness.js` — cópia das funções do bloco SUPABASE CONFIG + mocks; usado por `sbFetch.test.js`.
 - `sbFetch.test.js` — casos de `sbFetch`/`marcarTrunc`/`bannerTrunc`.
-- `pure.harness.js` — cópia **verbatim** das funções puras (com a linha de origem citada).
+- `pure.harness.js` — ponte CommonJS para `src/domain/*.mjs`: desde a Sessão 4 não copia mais
+  nada, só faz `require` dos módulos reais (era cópia verbatim de 30 funções, 305 linhas).
 - `pure.test.js` — casos das funções puras.
 - `realtime.test.js` — guarda a sincronização `VIEW_TABLES`/`RT_TABLES` (extrai os literais do `app.js`).
 - `backup_rest.rig.mjs` — paginação keyset, contagem, SHA-256 e headers das chaves opacas.
@@ -72,10 +73,13 @@ que ainda estiver copiada, atualize a cópia** no harness correspondente, entre 
 `/* @canon <nome> */ … /* @endcanon */`. O `check.js` §[2] compara o texto INTEIRO da cópia com o
 `app.js` e falha nomeando quem divergiu.
 
-O que já foi extraído para `src/domain/*.mjs` (hoje `core.mjs` e `agrupamento.mjs`) **não tem
-cópia**: o `pure.harness.js` faz `require` do módulo real, que é a mesma implementação que o
-navegador executa. **Extrair uma função é, portanto, apagar o bloco `@canon` dela** — não
-atualizá-lo.
+O que já foi extraído para `src/domain/*.mjs` (hoje `core.mjs`, `agrupamento.mjs`, `busca.mjs` e
+`view-state.mjs`) **não tem cópia**: o `pure.harness.js` faz `require` do módulo real, que é a
+mesma implementação que o navegador executa. **Extrair uma função é, portanto, apagar o bloco
+`@canon` dela** — não atualizá-lo.
+
+Depois da Sessão 4 as **12** marcas `@canon` restantes estão todas no `harness.js` (as funções que
+dependem de rede/estado do IIFE, `sbFetch` e companhia). O `pure.harness.js` não tem nenhuma.
 
 A checagem de cobertura do `check.js` §[2] não tem lista a manter à mão: para cada harness ela lê
 os próprios `require` de `src/domain/` e os casa com os `export` do módulo citado. Um símbolo só é
