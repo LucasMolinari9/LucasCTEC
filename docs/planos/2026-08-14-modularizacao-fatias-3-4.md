@@ -44,6 +44,34 @@ disciplina ao resto — não é desenho novo.
 beginGen(view)` aparece ~30 vezes, quase sempre como **primeira linha** do loader/render. Isso faz
 da Fase A um trabalho mecânico e revisável, não uma cirurgia.
 
+## ⚠️ ACHADOS ABERTOS — ler antes de executar qualquer fase
+
+Revisão do Codex sobre o commit de merge deste plano (14/08/2026, PR #126), **ainda não tratados**.
+São defeitos de PLANEJAMENTO: seguir as fases como escritas abaixo esbarra neles. Threads em
+`https://github.com/LucasMolinari9/LucasCTEC/pull/126`.
+
+1. **Travessia transitiva é precondição, não detalhe.** Nem o `tests/check.js` §[1] nem o
+   `scripts/check_deploy.mjs` seguiam import de módulo para módulo — reproduzido: com
+   `app.js → familia.mjs → dep.mjs` e `dep.mjs` fora da allowlist, os dois gates ficavam verdes e
+   o portal morria. O smoke foi corrigido (travessia transitiva); **o `check.js` continua cego**, e
+   a correção dele é o **PR #122**, aberto desde 10/08. Como B/B2/C criam módulos que importam
+   módulos, o #122 (ou equivalente) precisa entrar **antes** delas.
+2. **Os paginadores não mudam de arquivo "sem mudar assinatura".** `paginateLines` chama
+   `linhasTable`/`bindLineRows`, e `bindLineRows` usa `selectLine`, `closeModal`, `toast` e lê
+   `activeLine` — todos privados do IIFE. A Fase B2 precisa definir injeção de callbacks de seleção,
+   mover esse seam antes, ou deixar os paginadores no `app.js`.
+3. **Os loaders de C1 dependem de wrappers privados** não previstos na B2: `lineDocView`
+   (`LOADERS.itinerarios`, `LOADERS.frota`) e `searchPanel`/`lineSearchRun`
+   (`LOADERS.historicoLinha`). Ou o shell sai antes da C, ou a C compõe **só os `render*`
+   exportados** e os wrappers ficam no `app.js`.
+4. **A bancada de corrida da Fase A precisa da asserção POSITIVA.** Afirmar só que a aba 2 não foi
+   corrompida deixa passar uma implementação que descarta toda resposta atrasada — a aba 1 ficaria
+   eternamente sem o resultado dela. Afirme também que o pane e o `pdfHTML` **da aba 1** recebem a
+   resposta.
+5. **`activeLine` tem de estar no contrato da Fase A.** O plano define o `ctx` como
+   `{ view, gen, pane, host }` numa seção e diz que `activeLine` entra nele em outra. Como está,
+   ou a C fica sem fonte válida, ou a B2 reabre uma fase encerrada.
+
 ## Ordem — uma fase por sessão, um PR por sessão
 
 | ordem | fase | entrega | risco |
