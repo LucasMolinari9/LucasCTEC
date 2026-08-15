@@ -8,11 +8,12 @@ plano **vivo**: atualize-o conforme as fases entrarem, e apague-o quando a últi
 Este documento **declara restrições e mede o presente. Não prevê o futuro.**
 
 Não é preferência de estilo. A 1ª versão previa: dizia quais funções seriam movíveis, quanto cada
-fase encolheria o `app.js`, o que sobraria em cada registro. Foram **cinco rodadas de revisão e
-~15 achados P1**, e nenhum deles sobre o código — todos sobre afirmações do plano a respeito do
-código. O motivo é estrutural: a única forma de saber se `X` é movível é tentar mover `X`, e
-nenhum gate deste repo distingue uma frase verdadeira de uma falsa sobre o `app.js` (`check.js`,
-`semgrep`, `views` e `smoke` ficaram verdes nas cinco rodadas).
+fase encolheria o `app.js`, o que sobraria em cada registro. Foram **seis rodadas de revisão e 25
+achados** — quatro de planejamento no #126 e 21 neste PR (20 P1 e um P2) —, e nenhum deles sobre o
+código: todos sobre afirmações do plano a respeito do código. O motivo é estrutural: a única forma
+de saber se `X` é movível é tentar mover `X`, e nenhum gate deste repo distingue uma frase
+verdadeira de uma falsa sobre o `app.js` (`check.js`, `semgrep`, `views` e `smoke` ficaram verdes
+nas seis rodadas).
 
 Duas regras, portanto:
 
@@ -42,16 +43,23 @@ Medido hoje, no `app.js` de **3.352 linhas**:
 
 Dois terços do arquivo, e é onde nenhuma das sessões já planejadas toca. O estudo de 10/08
 ([`../historico/estudo-modularizacao-frontend-2026-08-10.md`](../historico/estudo-modularizacao-frontend-2026-08-10.md))
-chama isso de fatias 3 e 4, e as **condiciona**: separar documentos "somente após injetar
-explicitamente estado e render target; não exportar dezenas de variáveis do IIFE".
+chama isso de fatias 3 e 4, e as **condiciona** no item 3 de "Próximas fatias recomendadas"
+(`docs/historico/estudo-modularizacao-frontend-2026-08-10.md:29`): separar documentos "somente após
+injetar explicitamente estado e render target; não exportar dezenas de variáveis do IIFE".
 
 O diagnóstico que justifica a ordem abaixo: um documento típico lê `currentView` e `activeLine` —
-estado mutável de módulo. Enquanto isso for verdade, mover o arquivo troca um monólito por módulos
-rasos acoplados por variável global. Seria piorar com aparência de melhorar.
+estado mutável de módulo. O `lineSearchRun` (`app.js:1312`) é o caso típico: abre com
+`const view = currentView, gen = beginGen(view);` em `app.js:1313` e lê `activeLine` em `:1316`. A
+mesma abertura se repete em `:1433`, `:1474` e `:1571`. Enquanto isso for verdade, mover o arquivo
+troca um monólito por módulos rasos acoplados por variável global. Seria piorar com aparência de
+melhorar.
 
-**O padrão de injeção já existe e está em produção.** O seam do `pdfHTML` fez `paginate`,
-`paginateTable`, `paginateLines`, `lineResults` e `paginateEvents` receberem `view` e `gen` por
-parâmetro. As fases abaixo estendem essa disciplina — não é desenho novo.
+**O padrão de injeção já existe e está em produção.** O seam do `pdfHTML` fez cinco helpers
+receberem `view` e `gen` por parâmetro: `paginate` (`app.js:2741`), `paginateTable` (`:2778`),
+`paginateLines` (`:2789`) e `lineResults` (`:2821`) os declaram na própria assinatura;
+`paginateEvents` (`:1381`) os recebe dentro de `opts` e os lê em `:1382` — nele a assinatura
+sozinha não prova nada, a evidência é a linha seguinte. As fases abaixo estendem essa disciplina —
+não é desenho novo.
 
 ---
 
@@ -62,8 +70,17 @@ documento que, se ignorado, quebra o portal em produção sem nenhum gate acusar
 
 Nem o `tests/check.js` §[1] nem o `scripts/check_deploy.mjs` seguiam import de módulo para módulo.
 Com `app.js → familia.mjs → dep.mjs` e `dep.mjs` fora da allowlist, os dois ficavam **verdes** e o
-portal morria — import ES é atômico, um 404 mata o grafo inteiro. O smoke foi corrigido no PR #128;
-o `check.js` é o #122.
+portal morria — import ES é atômico, um 404 mata o grafo inteiro. Não é dedução: foi reproduzido em
+14/08/2026, e o registro está no cabeçalho do próprio gate, `scripts/check_deploy.mjs:186`–`:193`.
+
+Onde cada um está **hoje**, nesta branch (que já empilha o #128):
+
+- o smoke **atravessa**: a fila de `scripts/check_deploy.mjs:212`–`:228` reenfileira cada módulo que
+  descobre (`fila.push(alvo)` em `:225`), partindo de `app.js` (`:211`), então alcança o grafo
+  inteiro. O próprio gate registra o estado em `scripts/check_deploy.mjs:190`–`:193`;
+- o `check.js` **não**: as fontes da varredura são só `app.js`, `index.html` e `styles.css`
+  (`tests/check.js:27`–`:29`), lidas pela tabela `canais` de `:82`–`:90`, e o laço de `:91`–`:93`
+  não reenfileira nada do que descobre — não há fila. A correção dele é o #122.
 
 Estado medido em 14/08/2026 contra a `main` `761213d`, rodando os gates (não lendo o badge):
 
@@ -110,7 +127,8 @@ As Sessões 5 (custo do processo) e 6 (retomada do PR #98) não conflitam e entr
 ## Fase A — contexto explícito (precondição de tudo)
 
 Nenhum arquivo muda de lugar. Muda o **contrato**: cada `render*`/loader passa a **receber**
-`ctx = { view, gen, pane, host, line }` em vez de abrir com `const view = currentView, …`.
+`ctx = { view, gen, pane, host, line }` em vez de abrir com `const view = currentView, …` — a
+abertura de hoje, medida em `app.js:1313`, `:1433`, `:1474` e `:1571`.
 
 Três coisas que a fase precisa acertar, todas conferidas no código:
 
@@ -155,10 +173,18 @@ continua escrevendo as duas.
 ### Entregável obrigatório: a bancada de corrida
 
 Os gates de hoje **não cobrem** esta fase, e vale registrar por quê: nenhum dos três **cria a
-ordenação** que define o bug. O `check_views.mjs` abre cada view numa página limpa, em sequência; o
-`check_abas.mjs` dá `waitForTimeout` **depois** de cada ação, ou seja, espera a requisição assentar
-antes de trocar de aba; o `check_selecao_linha.mjs` exercita seleção e paginação. O stub do
-PostgREST responde instantaneamente. Os três podem ficar verdes enquanto um render atrasado pinta o
+ordenação** que define o bug.
+
+- `check_views.mjs` abre cada view numa página limpa, em sequência — `page.goto('about:blank')` em
+  `scripts/check_views.mjs:139`, dentro do laço que percorre as views em `:132`;
+- `check_abas.mjs` dá `waitForTimeout` **depois** de cada ação — `scripts/check_abas.mjs:38`, `:49`
+  e `:65`, que são as três ocorrências do arquivo —, ou seja, espera a requisição assentar antes de
+  trocar de aba;
+- `check_selecao_linha.mjs` espera o pane parar de girar antes de seguir: `waitForFunction` exigindo
+  `#locHost` sem `.spin` em `scripts/check_selecao_linha.mjs:97`–`:100`.
+
+E o stub do PostgREST responde na hora — `route.fulfill` síncrono, sem atraso nenhum, em
+`scripts/lib/rig.mjs:294`–`:297`. Os três podem ficar verdes enquanto um render atrasado pinta o
 pane ATIVO em vez do pane que capturou.
 
 O seam `beginGen`/`commitViewResult` nasceu de raciocínio, não de teste — e esta fase mexe nele.
@@ -182,18 +208,23 @@ eternamente sem o resultado do pane que capturou.
 Só entra se a interface **esconder** timeout, retry e truncagem — condição literal do estudo.
 Config (URL, chave, `fetch`) injetada, não lida de global.
 
-**Mais `preencherLookup`**, que não é REST — pertence a `src/data/lookups.mjs`. Ele entra nesta
-fase mesmo assim porque é uma das cópias `@canon` restantes, e deixá-lo para depois anula o marco
-abaixo. Ou ele sai aqui, ou `canon.js`/`drift.test.js` permanecem até que saia.
+**Mais `preencherLookup`** (`app.js:537`), que não é REST — pertence a `src/data/lookups.mjs`. Ele
+entra nesta fase mesmo assim porque é uma das cópias `@canon` restantes (`tests/harness.js:136`), e
+deixá-lo para depois anula o marco abaixo. Ou ele sai aqui, ou `canon.js`/`drift.test.js`
+permanecem até que saia.
 
-**Também no mesmo PR:** os runbooks que mandam editar `SB_MAX_ROWS` no `app.js` — `CLAUDE.md`
-(§ Supabase, o parágrafo dos "TRÊS lugares a mudar juntos") e o comentário do
-`docs/backup_schema.sql`. Mover a constante sem mover a instrução deixa dois runbooks apontando
-para onde ela não está, e a guarda docs×código **não** cobre esse caminho: a falha só apareceria
-quando alguém subisse o teto do PostgREST e a truncagem ficasse no valor velho, em silêncio.
+**Também no mesmo PR:** os dois runbooks que mandam editar `SB_MAX_ROWS` no `app.js` — `CLAUDE.md:127`
+("suba, na mesma tarefa, a constante `SB_MAX_ROWS` do `app.js`") e `CLAUDE.md:131`–`:132` ("São TRÊS
+lugares a mudar juntos"), mais `docs/backup_schema.sql:783`–`:784` ("na constante SB_MAX_ROWS do
+app.js"). Mover a constante sem mover a instrução deixa os dois apontando para onde ela não está, e
+a guarda docs×código **não** cobre esse caminho: ela começa em `tests/check.js:356` e confere fatos
+NUMÉRICOS por regex (tabela `FATOS`, `tests/check.js:457`) — nenhum gate do repo sequer menciona
+`SB_MAX_ROWS` (grep vazio em `tests/check.js` e `scripts/*.mjs`). A falha só apareceria quando
+alguém subisse o teto do PostgREST e a truncagem ficasse no valor velho, em silêncio.
 
-**O marco:** [`../../tests/harness.js`](../../tests/harness.js) tem hoje **12** cópias `@canon`
-(medido). Quando a última sair, [`../../tests/canon.js`](../../tests/canon.js) (56 linhas) e
+**O marco:** [`../../tests/harness.js`](../../tests/harness.js) tem hoje **12** marcas `@canon`
+(`grep -c '@canon' tests/harness.js`; a de `preencherLookup` é a de `tests/harness.js:136`). Quando
+a última sair, [`../../tests/canon.js`](../../tests/canon.js) (56 linhas) e
 [`../../tests/drift.test.js`](../../tests/drift.test.js) (72) se aposentam junto com a §[2] do
 `check.js` — processo apagado por ter **perdido o objeto**, não por corte de rigor.
 
@@ -201,9 +232,14 @@ quando alguém subisse o teto do PostgREST e a truncagem ficasse no valor velho,
 
 ## Fase B2 — helpers compartilhados e o seam de seleção
 
-As Fases A e B não bastam para mover um documento: ao virar módulo nativo ele perde acesso a
-helpers privados do IIFE (`loading`, `emptyLinha`, `metaRows`, `docHead`, `empNome`, `getEmpresas`,
-os paginadores). Esta fase existe para resolver isso, e vem **antes** da C.
+As Fases A e B não bastam para mover um documento: ao virar módulo nativo ele perde acesso aos
+helpers privados do IIFE — que abre em `app.js:25` e fecha em `app.js:3352`, sem uma única
+instrução `export` no arquivo (`grep -c '^export ' app.js` = 0). Onde cada um é declarado hoje:
+`getIbge` (`app.js:480`), `getOrigem` (`:489`), `getEmpresas` (`:505`), `empNome` (`:518`),
+`preencherLookup` (`:537`), `getEvLookups` (`:547`), `loading` (`:1216`), `emptyBox` (`:1217`),
+`emptyLinha` (`:1226`), `docHead` (`:1261`), `metaRows` (`:1266`), `colClass` (`:1275`),
+`tableHTML` (`:1276`) e os paginadores (`:1381`, `:2741`, `:2778`, `:2789`). Esta fase existe para
+resolver isso, e vem **antes** da C.
 
 Alvos: `src/ui/doc.mjs` (`docHead`, `metaRows`, `tableHTML`, `colClass`, `loading`, `emptyBox`,
 `emptyLinha` — markup, sem estado), `src/data/lookups.mjs` (`getEmpresas`/`empNome`/`getIbge`/
@@ -215,8 +251,9 @@ Alvos: `src/ui/doc.mjs` (`docHead`, `metaRows`, `tableHTML`, `colClass`, `loadin
 
 Quem executar decide **como**; o que não é opcional é resolver. Os fatos, conferidos:
 
-- `bindLineRows` (`app.js:2865`) chama `selectLine`, `closeModal`, `toast` e lê `activeLine` — é
-  composição de seleção, fechamento de modal e rota. Não é paginação: é **ação de shell**.
+- `bindLineRows` (declarado em `app.js:2865`) chama `selectLine` e `closeModal` em `app.js:2869`, e
+  `toast` lendo `activeLine` em `app.js:2870` — é composição de seleção, fechamento de modal e
+  rota. Não é paginação: é **ação de shell**.
 - `paginateLines` fixa `afterPaint: bindLineRows` (`app.js:2798`).
 - `lineResults` chama `paginateLines` nos dois ramos (`app.js:2841`, `:2843`), e
   `renderLocalidadeSecoes` o chama direto (`app.js:2946`).
@@ -251,19 +288,29 @@ reconferidos** — meça antes de dimensionar a sessão:
 | C3 | Quadro de Horários · Empresas |
 | C4 | Municípios · Localidades |
 
-C4 por último: são os únicos com filtro de escopo, dois ramos de PDF e o bloco secundário cujo PDF
-cobre os dois blocos.
+C4 por último, e cada metade traz uma complicação própria. Municípios é a única família com filtro
+de escopo — `#regScope` (`app.js:2064`) e `#munScope` (`app.js:2110`), os dois únicos do arquivo —
+e com dois ramos de PDF na mesma tela (`app.js:2137` e `:2141`, ambos `pdf:false`). Localidades tem
+o bloco secundário cujo `pdfHTML` cobre os DOIS blocos: por isso o `paginateLines` dele vai com
+`pdf:false` (`app.js:2946`) e o `commitViewResult` único vem depois, em `:2948`.
 
 **Cada fase C move a SUA família, no mesmo PR.** Não junte numa fase final: migrar tudo de uma vez
 é o que o estudo proíbe, e concentra num commit só a superfície de regressão de ordem/TDZ.
 
 **O que cada família consegue exportar varia, e é a primeira coisa a medir na sessão.** Alguns
-loaders já delegam a um `render*` — `LOADERS.historicoLinha` (`app.js:1448`) chama
-`renderLineHistory`, `LOADERS.quadroHorarios` (`:1676`) chama `renderLinhaQuadro`, `LOADERS.tarifas`
-(`:1782`) chama `renderTarifas`/`tarifaEmpresaRun`, e os one-liners `itinerarios` (`:1504`), `frota`
-(`:1835`) e `estrutura` (`:1873`) delegam via `lineDocView`. Outros têm a implementação dentro do
-próprio loader. **Não há partição limpa** — uma versão anterior deste plano afirmou "3 assim, 14
-assado" e estava errada. Abra o loader da família antes de planejar a sessão.
+loaders já delegam a um `render*`, e aqui a linha da **declaração** não é a linha da **delegação** —
+citar a primeira no lugar da segunda não prova a delegação:
+
+| loader | declarado em | delega em |
+|---|---|---|
+| `LOADERS.historicoLinha` | `app.js:1448` | `app.js:1451` — passa `renderLineHistory` como `render:` do `lineSearchRun` |
+| `LOADERS.quadroHorarios` | `app.js:1676` | `app.js:1682` (despacha `quadroLinhaRun`/`quadroEmpresaRun`) e `:1687` (chama `renderLinhaQuadro` direto) |
+| `LOADERS.tarifas` | `app.js:1782` | `app.js:1788` (despacha `tarifaEmpresaRun`/`lineDocRun`) e `:1794` (chama `renderTarifas` direto) |
+
+Nos one-liners `itinerarios` (`app.js:1504`), `frota` (`:1835`) e `estrutura` (`:1873`) as duas
+coincidem: a delegação via `lineDocView` é a própria linha da declaração. Outros têm a
+implementação dentro do próprio loader. **Não há partição limpa** — uma versão anterior deste plano
+afirmou "3 assim, 14 assado" e estava errada. Abra o loader da família antes de planejar a sessão.
 
 O registro `LOADERS` guarda **loaders**, nunca renders: o valor é invocado como função de carga
 (`app.js:1253`, `:3179`). Depois da Fase A ele recebe `ctx`, e aí um loader exportado por módulo
@@ -273,8 +320,9 @@ pode entrar no registro — é o que torna a Fase D possível.
 
 ## Fase D — `LOADERS` como composição explícita
 
-Entrega o item 4 do estudo: *"transformar o registro `LOADERS` em composição explícita. Não migrar
-todos os loaders de uma vez."*
+Entrega o item 4 do estudo (`docs/historico/estudo-modularizacao-frontend-2026-08-10.md:30`):
+*"Por último, transformar o registro `LOADERS` em composição explícita. Não migrar todos os loaders
+de uma vez."*
 
 O tamanho é **consequência**: cada fase C que puder compor o loader da sua família já compõe, e a D
 fica com o resto.
@@ -350,8 +398,10 @@ listeners, rotas, composição — e wiring não é o defeito que a crítica apo
 
 1. **Produção sai apenas da `main`.** Push em branch gera *preview deploy*, em domínio próprio. Os
    únicos caminhos para produção são o merge (auto-deploy) e a promoção manual pelo painel.
-2. **Preview não alcança o banco de produção.** `HOSTS_PROD` é allowlist; host fora dela cai no
-   banco de teste. Branch nova nasce apontando para teste, por desenho fail-closed.
+2. **Preview não alcança o banco de produção.** `HOSTS_PROD` (`app.js:56`) é allowlist, e o
+   `selecionarSupabase` (`app.js:62`) decide por pertencimento: `hostsProd.includes(host)` em
+   `app.js:65` e o ternário de `:66`–`:68` mandam todo host fora da lista para o banco de teste.
+   Branch nova nasce apontando para teste, por desenho fail-closed.
 3. **Zero SQL neste plano.** Nenhuma migração, query, chave ou policy.
 
 A ressalva que mantém isso honesto: não mergear protege o **site**, não o **repositório**. O único
@@ -375,4 +425,6 @@ node scripts/check_selecao_linha.mjs   # seleção dentro do modal        (obrig
 
 As Fases A e C ganham, além disso, uma **prova por mutação**: trocar o corpo de um render movido e
 confirmar que algum gate fica vermelho. Verde que não morde não é evidência — foi assim que
-`matchEvent` passou meses coberto por uma guarda que só olhava a assinatura.
+`matchEvent` passou meses coberto por uma guarda que só olhava a assinatura. O episódio está
+registrado onde a guarda foi consertada: `tests/canon.js:14`–`:16` e `tests/check.js:221`–`:222`
+(corpo trocado por `return false`, gate saindo "tudo verde"), e em `docs/CHANGELOG.md:179`.
