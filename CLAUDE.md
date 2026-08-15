@@ -220,7 +220,7 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | `UTILITÁRIOS` | `debounce` | O que sobrou depois que a agregação (`groupBy`/`countBy`/`fmtMoney`) foi para `src/domain/agrupamento.mjs`. |
 | `TOAST` | `toast` | Avisos transitórios. |
 | `REALTIME` | `RT_TABLES`, `invalidateCaches`, `scheduleReload`/`reloadTab`, `markStale`, `onRealtime`, `initRealtime` (a decisão de quem recarrega, `dispatchRealtime`, vem de `src/domain/view-state.mjs`) | Assina mudanças do Supabase e despacha por aba: a aba ativa recarrega ao vivo, as de segundo plano só ficam `stale` (recarregam ao serem reativadas). supabase-js injetado dinamicamente aqui. |
-| `AUTO-ATUALIZAÇÃO` | `checarNovaVersao` | Detector de novo deploy (ETags de `index.html`, `app.js` e `styles.css`) que recarrega sozinho. |
+| `AUTO-ATUALIZAÇÃO` | `checarNovaVersao` | Detector de novo deploy (`HEAD /version.json`, compara o ETag) que recarrega sozinho. |
 | `ROTAS (hash)` | `syncHash`, `applyRoute` | Deep link (`#/linha/…`, `#/consulta/…`) e Voltar do navegador fechando o modal. |
 
 A lógica **pura** dessas seções tem testes em `tests/`: o que já saiu para `src/domain/` é
@@ -245,9 +245,14 @@ têm teste (exigiriam navegador).
 - **Atualização automática para todos os usuários** (sem limpar cache):
   1. `Cache-Control: public, max-age=0, must-revalidate` (no `vercel.json`) → cada visita
      revalida (`index.html` **e** `app.js`).
-  2. Detector de versão (`checarNovaVersao` no `app.js`): compara os **ETags** de `/index.html`,
-     `/app.js` e `/styles.css` a cada ~3 min e ao focar a aba; se mudou, recarrega sozinho
-     (espera fechar o modal aberto). Arquivo estático novo de primeira ordem → entra na lista.
+  2. Detector de versão (`checarNovaVersao` no `app.js`): faz **`HEAD /version.json`** e compara o
+     ETag a cada ~3 min, ao focar a aba e ao voltar de segundo plano; se mudou, recarrega sozinho
+     (espera fechar o modal aberto). **Não há lista de arquivos a manter** — é um arquivo só, de
+     propósito, e por isso **todo deploy que muda HTML, CSS, JS ou MÓDULO tem de incrementar o
+     `version.json`**. Até 15/08/2026 esta linha descrevia o mecanismo antigo (ETags de
+     `/index.html`, `/app.js` e `/styles.css`) e mandava pôr "arquivo novo de primeira ordem" numa
+     lista que não existe mais: quem seguisse podia concluir que módulo novo dispensa o bump, e o
+     usuário ficaria com a versão velha em cache.
 - **Carimbo de versão** no rodapé (`#verTag`, ex.: `build 21/07-A`). Ao publicar algo que o
   usuário precisa confirmar, **incremente esse texto**.
 - O `vercel` CLI **não** funciona pelo ambiente do Claude (rede de saída bloqueada). Os caminhos
