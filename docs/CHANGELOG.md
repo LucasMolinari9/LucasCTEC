@@ -4,6 +4,45 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 15/08/2026 — `src/domain/busca.mjs`: o corte é pela pureza, não pelo assunto
+
+**Sessão 3 do plano de 6** (`docs/historico/contexto-proxima-sessao-2026-08-14.md`), executada sob
+o plano vivo `docs/planos/2026-08-14-modularizacao-fatias-3-4.md`. Mesma forma da Sessão 2: a
+função sai do `app.js`, a cópia e a guarda `@canon` são apagadas no mesmo commit, e o teste passa a
+exercitar o código que o navegador executa.
+
+- **`src/domain/busca.mjs`** (novo): `yearOf`, `matchEvent`, `localidadesQueCasam`, `orIlike`,
+  `municipiosExatos`. Duas famílias sob o mesmo teto — o filtro do histórico de eventos, aplicado
+  no cliente sobre linhas já buscadas, e a preparação do termo que vai ao servidor (o `or=()` do
+  PostgREST). Quatro das cinco dependem do `core.mjs` (`norm`, `ilikeTerm`), então `busca.mjs →
+  core.mjs` é aresta módulo→módulo — a mesma que `agrupamento.mjs:5` já tinha, e a primeira a
+  entrar depois de o #122 passar a enxergá-la.
+- **São CINCO, não seis.** A tabela do plano de 6 sessões
+  (`docs/historico/contexto-proxima-sessao-2026-08-14.md:87`) lista `norm` nesta sessão. Ela saiu
+  na frente, na Sessão 2, por ser dependência do `agrupamento.mjs` — desvio já registrado no
+  ponteiro do `CLAUDE.md`. A Sessão 3 a encontrou pronta e importou do `core`.
+- **`termosLocalidade` NÃO foi junto** (`app.js:2494`), embora chame `localidadesQueCasam`: faz
+  `await getLocalidades()` em `app.js:2495`, ou seja, é I/O. Ficou no `app.js` e passou a importar
+  a que saiu. O critério de corte deste repo é pureza, não proximidade temática.
+- **`app.js` cai de 3.352 para 3.332 linhas**; o `pure.harness.js`, de 185 para 147, com **5 blocos
+  `@canon` apagados** (de 18 para 13). Os 13 restantes são todos da Sessão 4 (`view-state.mjs`).
+- **`.vercelignore`:** `!/src/domain/busca.mjs`. A guarda §[1] do `check.js` **reprovou de verdade
+  na primeira rodada** — pelo motivo certo e por um segundo que vale registrar: ela lê a allowlist
+  pelo `git ls-files`, então o módulo só conta como publicado depois de **rastreado**. Arquivo novo
+  criado e não commitado reprova igual, que é o comportamento correto (a Vercel parte do git).
+- **`tests/domain-module.test.mjs`:** o smoke ESM passou a cobrir o módulo novo. Não é redundante
+  com o `pure.test.js`: aquele chega por `require`, este pelo `import` que o **navegador** usa —
+  erro de sintaxe ESM ou `export` com nome trocado passaria batido pelo primeiro. 27 → 37 asserções.
+- **`.github/workflows/views.yml`:** a seção `MODAL` afirmava "~59,5% do app.js"; com 20 linhas a
+  menos no arquivo o real virou 57,9% e a guarda docs×código do `check.js` §[2b] reprovou. Número
+  atualizado, guarda intacta — a reação prescrita pelo `CLAUDE.md` §2d.
+
+**Verificado por mutação:** removida a linha `!/src/domain/busca.mjs` do `.vercelignore`, o
+`check.js` reprova nomeando **o arquivo e o importador** (`assets necessários ignorados no deploy:
+src/domain/busca.mjs — reabra no .vercelignore (import … from em app.js)`); reposta, volta a
+`publica os 16 assets`. Gates: `check.js` verde (54 símbolos exportados pelos harness, 232 testes
+puros, 19/19 fatos numéricos), `check_views.mjs` 17/17, Semgrep local 0 achados em 121 regras.
+
 ## 14/08/2026 — `src/domain/agrupamento.mjs`: a extração que apaga a cópia e a guarda junto
 
 **Sessão 2 do plano de 6** (`docs/historico/contexto-proxima-sessao-2026-08-14.md`). Responde às

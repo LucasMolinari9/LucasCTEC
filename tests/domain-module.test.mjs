@@ -9,6 +9,7 @@ import {
   fmtLineName, boolChip, situacaoHTML, isLinhaAtiva, isVigente, norm,
 } from '../src/domain/core.mjs';
 import * as agrupamento from '../src/domain/agrupamento.mjs';
+import * as busca from '../src/domain/busca.mjs';
 
 assert.equal(fmtCode('101001001'), '101-001-001');
 assert.equal(fmtTime('12:34:56'), '12:34');
@@ -39,4 +40,18 @@ assert.deepEqual(agrupamento.filtrarFrotaEmpresas(
   [{ situacao: 'REGULAR', nome_empresa: 'VIAÇÃO SÃO JOSÉ', cod: 103 }], 'ativas', 'sao jose'),
   [{ situacao: 'REGULAR', nome_empresa: 'VIAÇÃO SÃO JOSÉ', cod: 103 }]);
 
-console.log(`domain module: ${13 + ESPERADOS.length + 3}/${13 + ESPERADOS.length + 3}`);
+// busca.mjs: mesmo critério — o CONTRATO que o app.js importa, escrito à mão.
+const BUSCA_ESPERADOS = ['yearOf', 'matchEvent', 'localidadesQueCasam', 'orIlike', 'municipiosExatos'];
+for (const nome of BUSCA_ESPERADOS) assert.equal(typeof busca[nome], 'function', `busca.${nome} ausente`);
+assert.equal(busca.yearOf('1974-03-01'), 1974);
+// as DUAS dependências que este módulo resolve no core pelo caminho ESM, uma por família:
+// `norm` (acento/caixa) no filtro de evento e na busca de localidade, e `ilikeTerm` no or=()
+// — sem ele o `)` e o `*` do termo digitado iriam crus para a sintaxe de filtro do PostgREST.
+assert.equal(busca.matchEvent({ descricao: 'REFORMULAÇÃO', data_registro: '2020-06-19' },
+  { text: 'reformulacao', proc: '', ano: 2020 }), true);
+assert.deepEqual(busca.localidadesQueCasam(['SÃO GONÇALO', 'Maricá'], 'sao goncalo'), ['SÃO GONÇALO']);
+assert.equal(busca.orIlike(['via'], ['p)q*']), 'or=(via.ilike.*p%20q%20*)');
+assert.deepEqual(busca.municipiosExatos({ 3303302: { nome: 'Niterói' } }, ['niteroi']), ['3303302']);
+
+const TOTAL = 13 + ESPERADOS.length + 3 + BUSCA_ESPERADOS.length + 5;
+console.log(`domain module: ${TOTAL}/${TOTAL}`);

@@ -6,6 +6,7 @@
 const { fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash, fmtLineName, boolChip, situacaoHTML, isLinhaAtiva, isVigente, norm } = require('../src/domain/core.mjs');
 const { groupBy, countBy, fmtMoney, byCodlinha, rjOrder, scoreEmpresa, dedupEmpresasPorRJ,
         classifyMunLines, terminaisDoMunicipio, resumoFrota, filtrarFrotaEmpresas } = require('../src/domain/agrupamento.mjs');
+const { yearOf, matchEvent, localidadesQueCasam, orIlike, municipiosExatos } = require('../src/domain/busca.mjs');
 
 /* Cópias VERBATIM de funções PURAS do app.js, para teste unitário em Node
    (sem navegador, sem rede, sem dependências).
@@ -14,45 +15,6 @@ const { groupBy, countBy, fmtMoney, byCodlinha, rjOrder, scoreEmpresa, dedupEmpr
    O tests/check.js tem uma guarda anti-drift que avisa se a versão original mudar.
    A linha de origem está citada em cada bloco. */
 
-// app.js:1510
-/* @canon yearOf */
-const yearOf = d => d ? parseInt(String(d).slice(0,4),10) : null;
-/* @endcanon */
-// app.js:1511 — filtro do histórico de eventos (depende de norm e yearOf)
-/* @canon matchEvent */
-function matchEvent(r, c){
-  if (c.text && !norm((r.descricao||'')+' '+(r.observacao||'')).includes(c.text)) return false;
-  if (c.proc && !norm(r.numero_processo||'').includes(c.proc)) return false;
-  if (c.ano!=null){
-    // usa o ano do Registro (campo que ordena); sem registro, cai p/ a publicação
-    const reg = yearOf(r.data_registro);
-    const y = reg!=null ? reg : yearOf(r.data_publicacao);
-    if (y !== c.ano) return false;
-  }
-  return true;
-}
-/* @endcanon */
-// app.js — nomes canônicos da lista de localidades que casam o termo (insensível a acento/caixa) —
-// permite digitar "sao goncalo" e buscar no servidor por "SÃO GONÇALO" (o ilike do PostgREST
-// NÃO ignora acento)
-/* @canon localidadesQueCasam */
-function localidadesQueCasam(lista, term){
-  const nt = norm(term);
-  return nt ? lista.filter(n => norm(n).includes(nt)).slice(0, 5) : [];
-}
-/* @endcanon */
-// app.js — filtro or=() do PostgREST: cada coluna ilike cada termo (depende de ilikeTerm)
-/* @canon orIlike */
-const orIlike = (cols, termos) => 'or=(' + termos.map(t => { const e = ilikeTerm(t); return cols.map(c => `${c}.ilike.*${e}*`).join(','); }).join(',') + ')';
-/* @endcanon */
-// app.js — cod_ibge cujo nome de município é EXATAMENTE um dos termos (insens. a acento/caixa) —
-// exato de propósito: "rio" não pode puxar Rio de Janeiro/Rio Bonito/Rio Claro inteiros
-/* @canon municipiosExatos */
-function municipiosExatos(ibge, termos){
-  const nts = new Set(termos.map(norm).filter(Boolean));
-  return Object.entries(ibge).filter(([,v])=>nts.has(norm(v.nome))).map(([c])=>c);
-}
-/* @endcanon */
 /* app.js:2966 — filtro do Realtime, por ABA (#54). Puro: recebe a aba (com sua própria
    `view` e sua própria `line`) em vez de ler `currentView`/`activeLine` do módulo. */
 /* @canon tabMatchesEvent */

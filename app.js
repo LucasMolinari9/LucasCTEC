@@ -8,6 +8,11 @@ import {
   dedupEmpresasPorRJ, classifyMunLines, terminaisDoMunicipio,
   resumoFrota, filtrarFrotaEmpresas,
 } from './src/domain/agrupamento.mjs';
+// `termosLocalidade` NÃO vem daqui: é async (`await getLocalidades()`), então é I/O e ficou no
+// app.js — ela consome o `localidadesQueCasam` importado abaixo.
+import {
+  yearOf, matchEvent, localidadesQueCasam, orIlike, municipiosExatos,
+} from './src/domain/busca.mjs';
 
 /* ================================================================
    ÍNDICE DO ARQUIVO  —  navegue por `grep` da marca da seção.
@@ -1362,18 +1367,7 @@ function eventFilterBarHTML(){
     <button type="button" class="evf-clear">Limpar filtros</button>
   </div>`;
 }
-const yearOf = d => d ? parseInt(String(d).slice(0,4),10) : null;
-function matchEvent(r, c){
-  if (c.text && !norm((r.descricao||'')+' '+(r.observacao||'')).includes(c.text)) return false;
-  if (c.proc && !norm(r.numero_processo||'').includes(c.proc)) return false;
-  if (c.ano!=null){
-    // usa o ano do Registro (campo que ordena); sem registro, cai p/ a publicação
-    const reg = yearOf(r.data_registro);
-    const y = reg!=null ? reg : yearOf(r.data_publicacao);
-    if (y !== c.ano) return false;
-  }
-  return true;
-}
+// `yearOf`/`matchEvent` (filtro deste paginador) moraram para `src/domain/busca.mjs`.
 // Paginador (um evento por vez) com filtros, "ir para a página N" e callback de filtro p/ PDF.
 // `opts.view`/`opts.gen` guardam a escrita inicial em `container.innerHTML` (ver `isCurrentGen`
 // junto a `paginate`) — filtros digitados depois só alternam `.hid` em nós já commitados, sem
@@ -2495,13 +2489,6 @@ async function getLocalidades(){
   _localidadesList = out;
   return out;
 }
-// nomes canônicos da lista de localidades que casam o termo (insensível a acento/caixa) —
-// permite digitar "sao goncalo" e buscar no servidor por "SÃO GONÇALO" (o ilike do PostgREST
-// NÃO ignora acento)
-function localidadesQueCasam(lista, term){
-  const nt = norm(term);
-  return nt ? lista.filter(n => norm(n).includes(nt)).slice(0, 5) : [];
-}
 // termos p/ o ilike de localidade: nomes canônicos (com acento) + o termo digitado (texto
 // livre, cobre grafias sem acento na base), sem duplicatas
 async function termosLocalidade(term){
@@ -2512,14 +2499,7 @@ async function termosLocalidade(term){
   }
   return out;
 }
-// filtro or=() do PostgREST: cada coluna ilike cada termo
-const orIlike = (cols, termos) => 'or=(' + termos.map(t => { const e = ilikeTerm(t); return cols.map(c => `${c}.ilike.*${e}*`).join(','); }).join(',') + ')';
-// cod_ibge cujo nome de município é EXATAMENTE um dos termos (insens. a acento/caixa) —
-// exato de propósito: "rio" não pode puxar Rio de Janeiro/Rio Bonito/Rio Claro inteiros
-function municipiosExatos(ibge, termos){
-  const nts = new Set(termos.map(norm).filter(Boolean));
-  return Object.entries(ibge).filter(([,v])=>nts.has(norm(v.nome))).map(([c])=>c);
-}
+// `localidadesQueCasam`/`orIlike`/`municipiosExatos` moraram para `src/domain/busca.mjs`.
 // codlinha que casam uma localidade pelo NOME/VIA da linha (tabela_vista), por uma SEÇÃO de
 // tarifa OU por um LOGRADOURO do itinerário — MESMA semântica usada na busca do campo A.
 // Usado p/ cruzar duas localidades de forma simétrica (independe da ordem dos campos).
