@@ -10,8 +10,10 @@ import {
 } from './src/domain/agrupamento.mjs';
 // `termosLocalidade` NÃO vem daqui: é async (`await getLocalidades()`), então é I/O e ficou no
 // app.js — ela consome o `localidadesQueCasam` importado abaixo.
+// `yearOf` NÃO entra: depois da extração só `matchEvent` a usa, e ele foi junto — importá-la
+// aqui seria binding morto. Ela segue exportada pelo módulo porque os testes a exercitam.
 import {
-  yearOf, matchEvent, localidadesQueCasam, orIlike, municipiosExatos,
+  matchEvent, localidadesQueCasam, orIlike, municipiosExatos,
 } from './src/domain/busca.mjs';
 
 /* ================================================================
