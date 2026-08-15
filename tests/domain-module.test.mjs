@@ -10,6 +10,7 @@ import {
 } from '../src/domain/core.mjs';
 import * as agrupamento from '../src/domain/agrupamento.mjs';
 import * as busca from '../src/domain/busca.mjs';
+import * as viewState from '../src/domain/view-state.mjs';
 
 assert.equal(fmtCode('101001001'), '101-001-001');
 assert.equal(fmtTime('12:34:56'), '12:34');
@@ -53,5 +54,29 @@ assert.deepEqual(busca.localidadesQueCasam(['SÃO GONÇALO', 'Maricá'], 'sao go
 assert.equal(busca.orIlike(['via'], ['p)q*']), 'or=(via.ilike.*p%20q%20*)');
 assert.deepEqual(busca.municipiosExatos({ 3303302: { nome: 'Niterói' } }, ['niteroi']), ['3303302']);
 
-const TOTAL = 13 + ESPERADOS.length + 3 + BUSCA_ESPERADOS.length + 5;
+// view-state.mjs: mesmo critério. `MAX_TABS` é constante, não função — entra separado, e é
+// justamente o símbolo que a auditoria de 27/07/2026 achou exportado sem guarda nenhuma.
+const VS_ESPERADOS = ['beginGen', 'isCurrentGen', 'commitViewResult', 'pushDetail', 'popDetail',
+  'makeTab', 'openTabState', 'closeTabState', 'tabMatchesEvent', 'dispatchRealtime',
+  'pageBounds', 'filtrarSituacao'];
+for (const nome of VS_ESPERADOS) assert.equal(typeof viewState[nome], 'function', `view-state.${nome} ausente`);
+assert.equal(viewState.MAX_TABS, 5);
+// o seam em uma linha: geração nova invalida a anterior, e o commit velho é descartado
+{
+  const view = { pdfHTML: null };
+  const gen1 = viewState.beginGen(view), gen2 = viewState.beginGen(view);
+  assert.equal(viewState.commitViewResult(view, gen1, { pdfHTML: 'velho' }), false);
+  assert.equal(viewState.commitViewResult(view, gen2, { pdfHTML: 'novo' }), true);
+  assert.equal(view.pdfHTML, 'novo');
+}
+assert.deepEqual(viewState.pageBounds(0, 25, 9), { page: 1, totalPages: 1, start: 0, end: 0 });
+assert.deepEqual(viewState.dispatchRealtime(
+  [{ id: 1, view: { tables: ['qh_teste'] } }, { id: 2, view: { tables: ['qh_teste'] } }],
+  1, 'qh_teste', {}), { reload: 1, stale: [2] });
+// prova que ESTE módulo resolve a própria dependência (isLinhaAtiva vem do core) pelo caminho ESM
+assert.deepEqual(viewState.filtrarSituacao(
+  [{ cancelado: false, paralisado: false }, { cancelado: true }], 'ativas'),
+  [{ cancelado: false, paralisado: false }]);
+
+const TOTAL = 13 + ESPERADOS.length + 3 + BUSCA_ESPERADOS.length + 5 + VS_ESPERADOS.length + 6;
 console.log(`domain module: ${TOTAL}/${TOTAL}`);

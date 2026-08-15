@@ -42,3 +42,4 @@
 !/src/domain/core.mjs
 !/src/domain/agrupamento.mjs
 !/src/domain/busca.mjs
+!/src/domain/view-state.mjs

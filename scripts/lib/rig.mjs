@@ -105,7 +105,7 @@ const frotaCols = cod => ({
 });
 
 // `nome_ligacao_cresc` (nome no sentido crescente) é pedida pelo card de Localidade
-// (app.js:2589), tanto no filtro `orIlike` quanto na exibição, e faltava aqui.
+// (app.js:2537), tanto no filtro `orIlike` quanto na exibição, e faltava aqui.
 const tarifa = (codlinha, codempresa, secao, tarifa_v) => ({
   codlinha, codempresa, secao, numero_linha: codlinha === '549000001' ? '549M' : '740D',
   nome_ligacao: codlinha === '549000001' ? 'RIO DE JANEIRO X NITEROI' : 'PETROPOLIS X TERESOPOLIS',
@@ -127,7 +127,7 @@ export const FIXTURES = {
     // situação nenhuma funcionando. É a fixture do check_selecao_linha.mjs.
     { ...linha('999000001', '999C', 'NITEROI X SAO GONCALO', '102', 'ALAMEDA'), cancelado: '2020-03-01' },
   ],
-  // `processo` e `data_publicacao` são pedidas pelo Histórico da Empresa (app.js:1937) e
+  // `processo` e `data_publicacao` são pedidas pelo Histórico da Empresa (app.js:1885) e
   // faltavam aqui: a view renderizava `undefined` nos dois campos e passava verde. Enquanto o
   // `serve()` ignorava o `select=`, a ausência era invisível; com a projeção, vira 400.
   codempresa_teste: [
