@@ -80,6 +80,11 @@ exibe e **atualiza ao vivo** (Realtime).
   tela. Hoje `tests/check.js` §[1] deriva os assets pedidos por `app.js` (`import`, `import()`,
   `.src=`, `fetch('/…')`), `index.html` (`href`/`src`) e `styles.css` (`url()`) e reprova se algum
   não sobreviver à allowlist, conferindo pelo próprio git — a mesma engine de padrões da Vercel.
+  A varredura de módulos é **transitiva**: segue cada módulo descoberto resolvendo o
+  especificador **relativo ao arquivo que importa**, porque um módulo publicado que importe outro
+  não publicado quebra o `app.js` inteiro do mesmo jeito. Referência dentro de comentário **não**
+  conta (o navegador não a pede). Os dois vieram da revisão na issue #121, cada um reproduzido
+  antes de corrigir; a bateria de mutação que os guarda tem 18 casos.
 
 ## Supabase
 - Projeto: **`bd_teste`** · ref **`lwzsxuaqqeoamukduhev`** · região sa-east-1.
