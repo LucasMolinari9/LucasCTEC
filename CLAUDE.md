@@ -6,20 +6,20 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > **TRABALHO EM CURSO — leia antes de agir:**
 > **[`docs/historico/contexto-proxima-sessao-2026-08-14.md`](docs/historico/contexto-proxima-sessao-2026-08-14.md)**
 > — plano de 6 sessões respondendo a uma crítica externa. As Sessões **1** (rulesets do Semgrep),
-> **2** (`src/domain/agrupamento.mjs`), **3** (`src/domain/busca.mjs`) e **4**
-> (`src/domain/view-state.mjs`, PR #131) estão **mergeadas**. A próxima é a **Sessão 5**, o
-> documento de custo do processo — sem mudança de código, sem risco para o site.
-> Aquele arquivo traz a especificação de cada sessão, o protocolo combinado (um PR por sessão,
+> **2** (`agrupamento.mjs`), **3** (`busca.mjs`) e **4** (`view-state.mjs`, PR #131) estão
+> **mergeadas**; a **5** é a auditoria de custo em
+> [`docs/planos/2026-08-15-custo-do-processo.md`](docs/planos/2026-08-15-custo-do-processo.md), que
+> propõe um **teto de 550 linhas para este arquivo** e um critério de parada para gates novos.
+> Falta a **Sessão 6** (PR #98). Aquele arquivo traz o protocolo combinado (um PR por sessão,
 > `@codex review`, sem merge por conta própria) e os limites medidos do ambiente do agente.
 > **A cota de code review do Codex está esgotada** desde 15/08: os PRs #130 e #131 pediram
 > `@codex review` e receberam "You have reached your Codex usage limits", três pedidos ao todo.
 > Enquanto não houver upgrade/créditos, o passo 3 do protocolo não roda — a revisão é própria, e
 > **ausência de revisão não é aprovação**: registre os achados no PR, como as duas sessões fizeram.
-> **Ressalva das Sessões 2 e 3:** `norm` saiu na frente e já está em `core.mjs` — a tabela do plano
-> a lista na Sessão 3, mas ela é dependência de `agrupamento.mjs` e não podia esperar, então a
-> Sessão 3 moveu **cinco** funções, não seis. **Ressalva da Sessão 4:** moveu as **treze** da
-> tabela, e a conferência do preview dela inclui **confirmar que a atualização ao vivo chega**, não
-> só que os cards aparecem — ela mexe no despacho do Realtime. Continua valendo o plano vivo
+> **Ressalva das Sessões 2 e 3:** `norm` saiu na frente e já está em `core.mjs` — é dependência de
+> `agrupamento.mjs` e não podia esperar, então a Sessão 3 moveu **cinco** funções, não seis.
+> **Ressalva da Sessão 4:** moveu as **treze** da tabela, e a conferência do preview dela inclui
+> **confirmar que a atualização ao vivo chega** — ela mexe no despacho do Realtime. Continua o plano
 > [`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`](docs/planos/2026-08-14-modularizacao-fatias-3-4.md),
 > que ordena as fases seguintes.
 >

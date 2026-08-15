@@ -4,6 +4,46 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 15/08/2026 — Auditoria de custo do processo: a razão não caiu, e o alvo mudou de lugar
+
+**Sessão 5 do plano de 6** (`docs/historico/contexto-proxima-sessao-2026-08-14.md`). Só documento —
+`docs/planos/2026-08-15-custo-do-processo.md`, com uma linha por gate e por workflow e três colunas:
+o que ele **já pegou de verdade** (evidência citada, não impressão), custo por rodada medido, e
+veredito com a condição que o dispara. Zero código, zero SQL, `version.json` e carimbo intactos.
+
+- **A obra das Sessões 2 a 4 não derrubou a razão processo:produto.** Medido com o mesmo comando em
+  dois commits: **3,03 : 1** em `fb469ea` (pré-Sessão 2) e **3,09 : 1** em `af918e5` (hoje). O
+  `pure.harness.js` caiu de 305 para 34 linhas e os gates ficaram parados (5.941 → 5.935), mas
+  `docs/` cresceu 555 linhas no período. Extrair função pura corta a cópia, não a prosa que descreve
+  o corte. **Se o alvo for a razão, a próxima obra é em `docs/`, não em `tests/`.** (A razão de
+  2,8 : 1 publicada em 14/08 usava contagem de gates mais estreita e não se compara com esta série;
+  o produto, 4.773, bate exatamente.)
+- **Um vermelho falso no gate diário, com diagnóstico enganoso.** O run agendado de 12/08
+  (`31580827667`, job `qualidade`) falhou com `57014 — canceling statement due to statement timeout`
+  e voltou verde sozinho em 13/08. É o `statement_timeout` de 3 s do `anon`; a mensagem do script
+  pergunta se a função existe e tem `GRANT EXECUTE`, mandando investigar o lugar errado. Vermelho
+  que se cura sozinho treina todo mundo a ignorar o próximo. Correção proposta, não feita.
+- **Os 2 workflows extras da API são órfãos de registro, agora por escrito.** A API lista 12; o
+  disco tem 10. `backup-pre-revoke.yml` (26/07) e `deploy-pages.yml` (13/06) não estão na `main`,
+  logo não rodam — o `state: active` da API é que engana. Registrado para ninguém redescobrir.
+- **A pendência da Sessão 1 está fechada:** `.semgrep/vendor/.manifest.json` datado de 14/08 22:04
+  UTC, 173 regras em 4 rulesets, e o wrapper rodou 121 regras com 0 achados e sem aviso de cópia
+  incompleta. **Custo escondido medido:** 208 s locais contra 50 s de mediana no CI — é o gate mais
+  caro por rodada, e o único que alguém tem motivo prático para pular.
+- **Duas aposentadorias com data, nenhuma executada aqui:** o mecanismo `@canon` (`canon.js` 56 +
+  `drift.test.js` 72 + a §[2]) perde o objeto quando as 12 cópias restantes do `harness.js` saírem
+  na Fase B; o `phase3-security.yml` sai com a Fase 3, como o cabeçalho dele já declara.
+- **Duas regras propostas, que dependem do dono:** teto de **550 linhas** para o `CLAUDE.md` (hoje
+  536, crescendo +17 por sessão — 485 → 502 → 515 → 536 nas Sessões 2 a 4) e um **critério de
+  parada** de cinco perguntas antes de escrever gate novo, sendo a última "qual é a condição de
+  aposentadoria?" — porque gate sem ela nasce permanente.
+- **Achado menor:** o placar agregado do `check.js` mostra `?` para `domain-module.test.mjs` e
+  `environment.test.js`, que não imprimem a linha `==== PLACAR ====`. Não é falso verde (o veredito
+  vem do exit code), mas é contagem em prosa sem guarda, num repo cuja tese é justamente essa.
+
+Nada servido ao usuário mudou. O ponteiro do `CLAUDE.md` foi atualizado **sem crescer**: as linhas
+novas entraram tirando outras, que é a regra do teto sendo aplicada a si mesma.
+
 ## 15/08/2026 — `src/domain/busca.mjs`: o corte é pela pureza, não pelo assunto
 
 **Sessão 3 do plano de 6** (`docs/historico/contexto-proxima-sessao-2026-08-14.md`), executada sob
