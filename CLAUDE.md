@@ -224,8 +224,9 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | `ROTAS (hash)` | `syncHash`, `applyRoute` | Deep link (`#/linha/…`, `#/consulta/…`) e Voltar do navegador fechando o modal. |
 
 A lógica **pura** dessas seções tem testes em `tests/`: o que já saiu para `src/domain/` é
-testado direto pelo módulo real; o que ainda mora no `app.js` (hoje só o bloco `SUPABASE CONFIG`,
-no `tests/harness.js`) roda sobre cópia verbatim guardada pelo `check.js`. Render/DOM e PDF não
+testado direto pelo módulo real; o que ainda mora no `app.js` roda sobre cópia verbatim guardada
+pelo `check.js` — são as **12** do `tests/harness.js`, onze do bloco `SUPABASE CONFIG` mais o
+`preencherLookup`, que é de `STATE + CACHES`. Render/DOM e PDF não
 têm teste (exigiriam navegador).
 
 ## Publicação (Vercel) e atualização automática
