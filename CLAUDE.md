@@ -7,7 +7,7 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > **[`docs/historico/contexto-proxima-sessao-2026-08-14.md`](docs/historico/contexto-proxima-sessao-2026-08-14.md)**
 > — plano de 6 sessões respondendo a uma crítica externa. As Sessões **1** (vendorizar os rulesets
 > do Semgrep) e **2** (`src/domain/agrupamento.mjs`) estão **mergeadas**; a **3**
-> (`src/domain/busca.mjs`) está em **PR aberto, aguardando revisão e o merge do dono** — quando
+> (`src/domain/busca.mjs`) está no **PR #130, aguardando revisão e o merge do dono** — quando
 > entrar, a próxima é a **Sessão 4**, `src/domain/view-state.mjs`. Aquele arquivo traz a
 > especificação de cada sessão, o protocolo combinado (um PR por sessão, `@codex review`, sem merge
 > por conta própria) e os limites medidos do ambiente do agente. **Ressalva das Sessões 2 e 3:**
