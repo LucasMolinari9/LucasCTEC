@@ -104,7 +104,7 @@ pelas famílias da C, e é ali que a redundância acaba — daí a precondição
 |---|---|---|---|
 | **0** | **merge do #122** | travessia transitiva no `check.js` — travava B/B2/C | ✅ `e834e58` |
 | 1 | Sessão 3 | `src/domain/busca.mjs` | ✅ PR #130, mergeado em `3aab30f` |
-| 2 | Sessão 4 | `src/domain/view-state.mjs` | PR aberto, aguardando o dono |
+| 2 | Sessão 4 | `src/domain/view-state.mjs` | PR #131, aguardando o dono |
 | 3 | **A** | contexto explícito + bancada de corrida | a fazer |
 | 4 | **B** | `src/data/rest.mjs` — encerra o mecanismo `@canon` | a fazer |
 | 5 | **B2** | helpers compartilhados + o seam de seleção | a fazer |

@@ -5,15 +5,17 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 
 > **TRABALHO EM CURSO — leia antes de agir:**
 > **[`docs/historico/contexto-proxima-sessao-2026-08-14.md`](docs/historico/contexto-proxima-sessao-2026-08-14.md)**
-> — plano de 6 sessões respondendo a uma crítica externa. As Sessões **1** (vendorizar os rulesets
-> do Semgrep) e **2** (`src/domain/agrupamento.mjs`) estão **mergeadas**; a **3**
-> (`src/domain/busca.mjs`) está no **PR #130, aguardando revisão e o merge do dono** — quando
-> entrar, a próxima é a **Sessão 4**, `src/domain/view-state.mjs`. Aquele arquivo traz a
-> especificação de cada sessão, o protocolo combinado (um PR por sessão, `@codex review`, sem merge
-> por conta própria) e os limites medidos do ambiente do agente. **Ressalva das Sessões 2 e 3:**
-> `norm` saiu na frente e já está em `core.mjs` — a tabela do plano a lista na Sessão 3, mas ela é
-> dependência de `agrupamento.mjs` e não podia esperar, então a Sessão 3 moveu **cinco** funções,
-> não seis. Continua valendo o plano vivo
+> — plano de 6 sessões respondendo a uma crítica externa. As Sessões **1** (rulesets do Semgrep),
+> **2** (`src/domain/agrupamento.mjs`) e **3** (`src/domain/busca.mjs`) estão **mergeadas**; a **4**
+> (`src/domain/view-state.mjs`) está no **PR #131, aguardando revisão e o merge do dono** — quando
+> entrar, a próxima é a **Sessão 5**, o documento de custo do processo (sem mudança de código).
+> Aquele arquivo traz a especificação de cada sessão, o protocolo combinado (um PR por sessão,
+> `@codex review`, sem merge por conta própria) e os limites medidos do ambiente do agente.
+> **Ressalva das Sessões 2 e 3:** `norm` saiu na frente e já está em `core.mjs` — a tabela do plano
+> a lista na Sessão 3, mas ela é dependência de `agrupamento.mjs` e não podia esperar, então a
+> Sessão 3 moveu **cinco** funções, não seis. **Ressalva da Sessão 4:** moveu as **treze** da
+> tabela, e a conferência do preview dela inclui **confirmar que a atualização ao vivo chega**, não
+> só que os cards aparecem — ela mexe no despacho do Realtime. Continua valendo o plano vivo
 > [`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`](docs/planos/2026-08-14-modularizacao-fatias-3-4.md),
 > que ordena as fases seguintes.
 >
