@@ -13,7 +13,7 @@ histórico/eventos, empresas e relatórios. Os dados são mantidos pelo dono dir
   `<script src>` clássico no fim do `<body>` — **nada de `<script>` inline**, porque a CSP
   publica `script-src 'self'` e bloquearia.
 - A lógica **pura** vai saindo do `app.js` para módulos ES nativos em [`src/domain/`](src/domain)
-  (hoje `core.mjs` e `agrupamento.mjs`), importados tanto pelo navegador quanto pelos testes —
+  (hoje `core.mjs`, `agrupamento.mjs` e `busca.mjs`), importados tanto pelo navegador quanto pelos testes —
   continua sem build: são `import` nativos, não bundle.
 - As consultas vão direto ao **Supabase via REST** (PostgREST) com `fetch`. O `supabase-js`
   entra **só** para o canal **Realtime**, é **vendorado** em

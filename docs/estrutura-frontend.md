@@ -21,9 +21,12 @@ mudou junto, e o que continua valendo:
 - **Auto-update atômico:** `checarNovaVersao` faz `HEAD` de `/version.json`. Todo deploy que muda
   HTML, CSS, JS ou módulos deve incrementar `version`; assim a lista não cresce a cada módulo.
 - **Zero-build continua.** `app.js` é um ES module nativo carregado com `type="module"`; não há
-  bundler nem dependências. Os seams abertos até aqui, ambos sem DOM, rede ou estado global:
-  **`src/domain/core.mjs`** (formatação, escaping, `norm`, situação da linha) e
-  **`src/domain/agrupamento.mjs`** (agregação, ordenação e filtros de conjunto).
+  bundler nem dependências. Os seams abertos até aqui, todos sem DOM, rede ou estado global:
+  **`src/domain/core.mjs`** (formatação, escaping, `norm`, situação da linha),
+  **`src/domain/agrupamento.mjs`** (agregação, ordenação e filtros de conjunto) e
+  **`src/domain/busca.mjs`** (filtro de evento e preparação do termo de busca). O corte é pela
+  pureza, não pelo assunto: `termosLocalidade` (`app.js:2494`) é da mesma família do
+  `localidadesQueCasam`, mas faz `await getLocalidades()` em `app.js:2495` — é I/O, e ficou.
 - **Regra para extrair:** prefira módulos profundos com interface pequena. Não mova loaders/estado
   apenas para reduzir linhas; extraia quando a dependência puder ser expressa por imports claros.
 - **Extração paga o processo que ela torna desnecessário.** Enquanto a função mora no `app.js`, o

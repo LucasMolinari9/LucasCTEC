@@ -6,11 +6,16 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > **TRABALHO EM CURSO — leia antes de agir:**
 > **[`docs/historico/contexto-proxima-sessao-2026-08-14.md`](docs/historico/contexto-proxima-sessao-2026-08-14.md)**
 > — plano de 6 sessões respondendo a uma crítica externa. As Sessões **1** (vendorizar os rulesets
-> do Semgrep) e **2** (`src/domain/agrupamento.mjs`) estão **mergeadas**; a próxima é a **Sessão 3**,
-> `src/domain/busca.mjs`. Aquele arquivo traz a especificação de cada sessão, o protocolo combinado
-> (um PR por sessão, `@codex review`, sem merge por conta própria) e os limites medidos do ambiente
-> do agente. **Ressalva da Sessão 2:** `norm` saiu na frente e já está em `core.mjs` — a tabela do
-> plano ainda a lista na Sessão 3, mas ela é dependência de `agrupamento.mjs` e não podia esperar.
+> do Semgrep) e **2** (`src/domain/agrupamento.mjs`) estão **mergeadas**; a **3**
+> (`src/domain/busca.mjs`) está no **PR #130, aguardando revisão e o merge do dono** — quando
+> entrar, a próxima é a **Sessão 4**, `src/domain/view-state.mjs`. Aquele arquivo traz a
+> especificação de cada sessão, o protocolo combinado (um PR por sessão, `@codex review`, sem merge
+> por conta própria) e os limites medidos do ambiente do agente. **Ressalva das Sessões 2 e 3:**
+> `norm` saiu na frente e já está em `core.mjs` — a tabela do plano a lista na Sessão 3, mas ela é
+> dependência de `agrupamento.mjs` e não podia esperar, então a Sessão 3 moveu **cinco** funções,
+> não seis. Continua valendo o plano vivo
+> [`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`](docs/planos/2026-08-14-modularizacao-fatias-3-4.md),
+> que ordena as fases seguintes.
 >
 > Continua valendo:
 > **[`docs/historico/contexto-proxima-sessao-2026-08-09.md`](docs/historico/contexto-proxima-sessao-2026-08-09.md)**
@@ -37,10 +42,12 @@ exibe e **atualiza ao vivo** (Realtime).
   (`#/linha/<cod>`, `#/consulta/<view>`) — deep link e Voltar do navegador fecham o modal.
   Racional e regras de navegação: **`docs/estrutura-frontend.md`**.
 - **A lógica PURA vai saindo do `app.js` para `src/domain/*.mjs`**, um módulo por sessão. Hoje são
-  dois: **`core.mjs`** (formatação, escaping, `norm`, e as regras de situação `isLinhaAtiva`/
-  `isVigente`) e **`agrupamento.mjs`** (`groupBy`/`countBy`/`fmtMoney`, as ordenações `byCodlinha`/
+  três: **`core.mjs`** (formatação, escaping, `norm`, e as regras de situação `isLinhaAtiva`/
+  `isVigente`), **`agrupamento.mjs`** (`groupBy`/`countBy`/`fmtMoney`, as ordenações `byCodlinha`/
   `rjOrder`, o desempate `scoreEmpresa`/`dedupEmpresasPorRJ`, os recortes por município
-  `classifyMunLines`/`terminaisDoMunicipio` e a frota `resumoFrota`/`filtrarFrotaEmpresas`).
+  `classifyMunLines`/`terminaisDoMunicipio` e a frota `resumoFrota`/`filtrarFrotaEmpresas`) e
+  **`busca.mjs`** (o filtro do histórico de eventos `yearOf`/`matchEvent` e a preparação do termo
+  que vai ao servidor, `localidadesQueCasam`/`orIlike`/`municipiosExatos`).
   **Regra: função pura extraída deixa de ter cópia em `tests/*.harness.js`** — o harness passa a
   fazer `require` do módulo real, e o bloco `@canon` correspondente é APAGADO, não atualizado. A
   cobrança do `check.js` §[2] não tem lista a manter à mão: ela lê o `require` **de cada harness**
@@ -68,7 +75,7 @@ exibe e **atualiza ao vivo** (Realtime).
   Duas guardas cobram isso: `tests/check.js` §[1] e a regra Semgrep `divat-style-attr-quebra-csp`.
 - **`.vercelignore` é allowlist**: o deploy publica só `index.html`, `app.js`, `styles.css`,
   `manifest.webmanifest`, `vercel.json`, `version.json`, `vendor/` e os módulos de `src/domain/`
-  reabertos um a um (hoje `core.mjs` e `agrupamento.mjs`).
+  reabertos um a um (hoje `core.mjs`, `agrupamento.mjs` e `busca.mjs`).
   Arquivo público novo (ícone, fonte) precisa ser reaberto lá, senão vira 404. **`src/` é reaberto
   arquivo a arquivo**, não com um `!/src` de uma linha: é diretório cujo nome convida a guardar o
   que não se serve, e reabri-lo inteiro publicaria em silêncio o que alguém largar ali. Reabrir só
@@ -192,6 +199,7 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 |---|---|---|
 | *(fora do `app.js`)* `src/domain/core.mjs` | `fmtCode/fmtTime/fmtDate`, `esc/enc/ilikeTerm/orDash`, `norm`, `isLinhaAtiva`/`isVigente` | Formatação, escaping, normalização de texto e as regras de situação da linha. |
 | *(fora do `app.js`)* `src/domain/agrupamento.mjs` | `groupBy`, `countBy`, `fmtMoney`, `byCodlinha`, `rjOrder`, `scoreEmpresa`/`dedupEmpresasPorRJ`, `classifyMunLines`/`terminaisDoMunicipio`, `resumoFrota`/`filtrarFrotaEmpresas` | Agregação, ordenação e filtros de conjunto — importados pelo `app.js` e pelos testes, sem cópia no meio. |
+| *(fora do `app.js`)* `src/domain/busca.mjs` | `yearOf`/`matchEvent`, `localidadesQueCasam`, `orIlike`, `municipiosExatos` | Filtro do histórico de eventos (no cliente) e preparação do termo que vai ao servidor (o `or=()` do PostgREST). O I/O ficou de fora: `termosLocalidade` continua no `app.js` porque faz `await getLocalidades()`. |
 | `SUPABASE CONFIG` | `sbFetch`, `fetchComTimeout`, `selecionarSupabase`, `marcarTrunc`, `bannerTrunc` | Config SB + fetch com timeout/retry. Os helpers de formatação e escape que ficavam aqui moraram para `src/domain/core.mjs` (linha de cima). |
 | `ÍCONES` | objeto `I` | SVGs dos ícones. |
 | `SEÇÕES / CARDS` | array `SECTIONS` | Define os cards `[ícone, título, descrição, view, precisaLinha]`. |
@@ -199,7 +207,7 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | `STATE + CACHES` | `activeLine`, `*Map`, `getIbge/getOrigem/getEmpresas/getEvLookups` | Estado global e caches dos lookups. |
 | `BUSCA DE LINHAS (hero)` | `doSearch`, `closeDropdown` | Busca do topo e dropdown de resultados. |
 | `LINHA ATIVA — BANNER` | `selectLine`, `bannerEmpHTML` | Banner navy da linha selecionada. |
-| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody/loading/errorBox`, `baixarPdf`, `docHead`, `tableHTML`, `paginateEvents`, `matchEvent`, `beginGen`/`isCurrentGen`/`commitViewResult`/`pushDetail`/`popDetail` (seam do ciclo de vida da view), `renderBlankTab`/`renderTabChooser` (seletor de documentos da aba do "+"), todos os `render*` | **Maior bloco**: abre/preenche o modal e renderiza TODOS os documentos. |
+| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody/loading/errorBox`, `baixarPdf`, `docHead`, `tableHTML`, `paginateEvents` (o filtro dele, `matchEvent`, mora em `src/domain/busca.mjs`), `beginGen`/`isCurrentGen`/`commitViewResult`/`pushDetail`/`popDetail` (seam do ciclo de vida da view), `renderBlankTab`/`renderTabChooser` (seletor de documentos da aba do "+"), todos os `render*` | **Maior bloco**: abre/preenche o modal e renderiza TODOS os documentos. |
 | `COMPONENTES AUXILIARES` | `linhasTable`, `bindLineRows`, `searchPanel`, `lineResults`, `pageBounds`, `paginate`, `paginateTable`, `paginateLines` | Tabela de linhas + painel de busca reutilizável + **paginação de tela** (25/pág; ver `docs/estrutura-frontend.md` §4). |
 | `CLIQUE NOS CARDS` | — | Liga o clique do card → abre a view. |
 | `UTILITÁRIOS` | `debounce` | O que sobrou depois que a agregação (`groupBy`/`countBy`/`fmtMoney`) foi para `src/domain/agrupamento.mjs`. |

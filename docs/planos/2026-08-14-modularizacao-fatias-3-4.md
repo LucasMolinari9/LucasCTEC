@@ -35,13 +35,13 @@ do plano de 6 ([`../historico/contexto-proxima-sessao-2026-08-14.md`](../histori
 responderam à crítica **irmã** — a de que o processo virou projeto paralelo. O monólito mal foi
 arranhado.
 
-Medido hoje, no `app.js` de **3.352 linhas**:
+Medido no `app.js` de **3.332 linhas** (remedido em 15/08/2026, depois da Sessão 3):
 
 | bloco | linhas | % |
 |---|---|---|
-| `MODAL / SISTEMA DE VIEWS` (`app.js:755`–`:2710`) | 1.956 | 58,3% |
-| `COMPONENTES AUXILIARES` (`:2711`–`:3009`) | 299 | 8,9% |
-| `SUPABASE CONFIG` (`:26`–`:196`) | 171 | 5,1% |
+| `MODAL / SISTEMA DE VIEWS` (`app.js:760`–`:2690`) | 1.931 | 57,9% |
+| `COMPONENTES AUXILIARES` (`:2691`–`:2989`) | 299 | 9,0% |
+| `SUPABASE CONFIG` (`:31`–`:201`) | 171 | 5,1% |
 
 Dois terços do arquivo, e é onde nenhuma das sessões já planejadas toca. O estudo de 10/08
 ([`../historico/estudo-modularizacao-frontend-2026-08-10.md`](../historico/estudo-modularizacao-frontend-2026-08-10.md))
@@ -50,16 +50,16 @@ chama isso de fatias 3 e 4, e as **condiciona** no item 3 de "Próximas fatias r
 injetar explicitamente estado e render target; não exportar dezenas de variáveis do IIFE".
 
 O diagnóstico que justifica a ordem abaixo: um documento típico lê `currentView` e `activeLine` —
-estado mutável de módulo. O `lineSearchRun` (`app.js:1312`) é o caso típico: abre com
-`const view = currentView, gen = beginGen(view);` em `app.js:1313` e lê `activeLine` em `:1316`. A
-mesma abertura se repete em `:1433`, `:1474` e `:1571`. Enquanto isso for verdade, mover o arquivo
+estado mutável de módulo. O `lineSearchRun` (`app.js:1317`) é o caso típico: abre com
+`const view = currentView, gen = beginGen(view);` em `app.js:1318` e lê `activeLine` em `:1321`. A
+mesma abertura se repete em `:1427`, `:1468` e `:1565`. Enquanto isso for verdade, mover o arquivo
 troca um monólito por módulos rasos acoplados por variável global. Seria piorar com aparência de
 melhorar.
 
 **O padrão de injeção já existe e está em produção.** O seam do `pdfHTML` fez cinco helpers
-receberem `view` e `gen` por parâmetro: `paginate` (`app.js:2741`), `paginateTable` (`:2778`),
-`paginateLines` (`:2789`) e `lineResults` (`:2821`) os declaram na própria assinatura;
-`paginateEvents` (`:1381`) os recebe dentro de `opts` e os lê em `:1382` — nele a assinatura
+receberem `view` e `gen` por parâmetro: `paginate` (`app.js:2721`), `paginateTable` (`:2758`),
+`paginateLines` (`:2769`) e `lineResults` (`:2801`) os declaram na própria assinatura;
+`paginateEvents` (`:1375`) os recebe dentro de `opts` e os lê em `:1376` — nele a assinatura
 sozinha não prova nada, a evidência é a linha seguinte. As fases abaixo estendem essa disciplina —
 não é desenho novo.
 
@@ -130,47 +130,47 @@ As Sessões 5 (custo do processo) e 6 (retomada do PR #98) não conflitam e entr
 
 Nenhum arquivo muda de lugar. Muda o **contrato**: cada `render*`/loader passa a **receber**
 `ctx = { view, gen, pane, host, line }` em vez de abrir com `const view = currentView, …` — a
-abertura de hoje, medida em `app.js:1313`, `:1433`, `:1474` e `:1571`.
+abertura de hoje, medida em `app.js:1318`, `:1427`, `:1468` e `:1565`.
 
 Três coisas que a fase precisa acertar, todas conferidas no código:
 
-**1. Há DUAS invocações de loader, não uma.** `await view.loader();` aparece em **`app.js:1253`**
-(dentro de `runView`) e em **`app.js:3179`** (`reloadTab`, comentada como "views diretas"). Mudar só
+**1. Há DUAS invocações de loader, não uma.** `await view.loader();` aparece em **`app.js:1258`**
+(dentro de `runView`) e em **`app.js:3159`** (`reloadTab`, comentada como "views diretas"). Mudar só
 a primeira faz o card funcionar ao abrir e o mesmo loader receber `undefined` no recarregamento por
 Realtime — falha que só aparece com o portal aberto e o banco mudando. Ou as duas passam `ctx`, ou a
 invocação é centralizada num ponto só.
 
 **2. `line` precisa ser derivável depois do `await`.** Não basta capturar `activeLine` junto com
 `view`/`gen`: no `lineSearchRun` a linha certa **só existe depois** da busca —
-`if (lines.length === 1){ selectLine(lines[0]); return render(host, lines[0]); }` (`app.js:1322`) e
-o clique da lista (`app.js:1325`). Um render que lesse só o `ctx.line` inicial receberia `null` ou
+`if (lines.length === 1){ selectLine(lines[0]); return render(host, lines[0]); }` (`app.js:1327`) e
+o clique da lista (`app.js:1330`). Um render que lesse só o `ctx.line` inicial receberia `null` ou
 **a linha anterior**, pintando o documento da linha errada sem erro nenhum. Logo o contrato precisa
 de `withLine(ctx, linha)` → `{ ...ctx, line: linha }`, **preservando `view` e `gen`**: derivar com
 `gen` novo destruiria a proteção que esta fase existe para dar.
 
 **3. `activeLine` tem mais de um escritor legítimo, e eles ficam.** A escrita não passa só por
-`selectLine`: `setActiveLine` atribui em `app.js:452`, `activateTab` faz `activeLine = t.line` em
-`app.js:959`, e há limpezas em `app.js:729` e `app.js:3330`. A regra desta fase vale para
+`selectLine`: `setActiveLine` atribui em `app.js:457`, `activateTab` faz `activeLine = t.line` em
+`app.js:964`, e há limpezas em `app.js:734` e `app.js:3310`. A regra desta fase vale para
 **documentos**: um documento deixa de ler o global e passa a usar `ctx.line`. O wiring de troca e
 limpeza de abas continua escrevendo — mexer nele é fora de escopo e quebraria a seleção.
 
 **`currentView` tem exatamente o mesmo formato de problema**, e a versão anterior desta seção
 consertou o `activeLine` e deixou a frase gêmea errada ao lado: `setCurrentView` atribui em
-`app.js:1122`, **mas `activateTab` também escreve**, `currentView = t.view`, em `app.js:960`. Vale
+`app.js:1127`, **mas `activateTab` também escreve**, `currentView = t.view`, em `app.js:965`. Vale
 a mesma regra: o que acaba é **ler** essas variáveis de dentro de um documento; o wiring de abas
 continua escrevendo as duas.
 
 **Exceções documentadas — e a razão da primeira estava errada.**
 
 - **`_panelRun` fica fora do seam**, mas *não* porque seja "sempre atribuído antes de qualquer
-  `await`". Isso vale para dois dos três: `LOADERS.localidades` (`app.js:2701`) e `searchPanel`
-  (`app.js:3006`) atribuem antes de qualquer `await` do próprio corpo. **Portarias não**: o loader
-  faz `await getPortariaAnos()` em `app.js:2422` e só atribui `_panelRun` em `app.js:2464`. O que
-  protege ali é o guard explícito — `if (!isCurrentGen(view, gen)) return;` em `app.js:2423`. Quem
+  `await`". Isso vale para dois dos três: `LOADERS.localidades` (`app.js:2681`) e `searchPanel`
+  (`app.js:2986`) atribuem antes de qualquer `await` do próprio corpo. **Portarias não**: o loader
+  faz `await getPortariaAnos()` em `app.js:2416` e só atribui `_panelRun` em `app.js:2458`. O que
+  protege ali é o guard explícito — `if (!isCurrentGen(view, gen)) return;` em `app.js:2417`. Quem
   mexer neste seam **preserva esse guard**: sem ele, uma tentativa velha religa o runner depois de
   uma troca de aba.
-- Os **5** call sites com `pdf:false` seguem passando `view`/`gen`: `app.js:1672`, `:2137`,
-  `:2141`, `:2396` e `:2946`. (Eram descritos como 4 — número herdado e nunca medido.)
+- Os **5** call sites com `pdf:false` seguem passando `view`/`gen`: `app.js:1666`, `:2131`,
+  `:2135`, `:2390` e `:2926`. (Eram descritos como 4 — número herdado e nunca medido.)
 
 ### Entregável obrigatório: a bancada de corrida
 
@@ -205,14 +205,14 @@ eternamente sem o resultado do pane que capturou.
 
 ## Fase B — módulo profundo de acesso REST
 
-`src/data/rest.mjs`, com o que cada símbolo é hoje: `esperar` (`app.js:83`), `SB_TIMEOUT_MS`
-(`:85`), `SB_RETRIES` (`:86`), `CANCELADO` (`:90`), `ehCancelamento` (`:91`), `fetchComTimeout`
-(`:98`), `sbFetch` (`:116`), `SB_MAX_ROWS` (`:160`), `marcarTrunc` (`:168`), `bannerTrunc` (`:181`)
-e `selecionarSupabase` (`:62`).
+`src/data/rest.mjs`, com o que cada símbolo é hoje: `esperar` (`app.js:88`), `SB_TIMEOUT_MS`
+(`:90`), `SB_RETRIES` (`:91`), `CANCELADO` (`:95`), `ehCancelamento` (`:96`), `fetchComTimeout`
+(`:103`), `sbFetch` (`:121`), `SB_MAX_ROWS` (`:165`), `marcarTrunc` (`:173`), `bannerTrunc` (`:186`)
+e `selecionarSupabase` (`:67`).
 Só entra se a interface **esconder** timeout, retry e truncagem — condição literal do estudo.
 Config (URL, chave, `fetch`) injetada, não lida de global.
 
-**Mais `preencherLookup`** (`app.js:537`), que não é REST — pertence a `src/data/lookups.mjs`. Ele
+**Mais `preencherLookup`** (`app.js:542`), que não é REST — pertence a `src/data/lookups.mjs`. Ele
 entra nesta fase mesmo assim porque é uma das cópias `@canon` restantes (`tests/harness.js:136`), e
 deixá-lo para depois anula o marco abaixo. Ou ele sai aqui, ou `canon.js`/`drift.test.js`
 permanecem até que saia.
@@ -237,12 +237,12 @@ a última sair, [`../../tests/canon.js`](../../tests/canon.js) (56 linhas) e
 ## Fase B2 — helpers compartilhados e o seam de seleção
 
 As Fases A e B não bastam para mover um documento: ao virar módulo nativo ele perde acesso aos
-helpers privados do IIFE — que abre em `app.js:25` e fecha em `app.js:3352`, sem uma única
+helpers privados do IIFE — que abre em `app.js:30` e fecha em `app.js:3332`, sem uma única
 instrução `export` no arquivo (`grep -c '^export ' app.js` = 0). Onde cada um é declarado hoje:
-`getIbge` (`app.js:480`), `getOrigem` (`:489`), `getEmpresas` (`:505`), `empNome` (`:518`),
-`preencherLookup` (`:537`), `getEvLookups` (`:547`), `loading` (`:1216`), `emptyBox` (`:1217`),
-`emptyLinha` (`:1226`), `docHead` (`:1261`), `metaRows` (`:1266`), `colClass` (`:1275`),
-`tableHTML` (`:1276`) e os paginadores (`:1381`, `:2741`, `:2778`, `:2789`). Esta fase existe para
+`getIbge` (`app.js:485`), `getOrigem` (`:494`), `getEmpresas` (`:510`), `empNome` (`:523`),
+`preencherLookup` (`:542`), `getEvLookups` (`:552`), `loading` (`:1221`), `emptyBox` (`:1222`),
+`emptyLinha` (`:1231`), `docHead` (`:1266`), `metaRows` (`:1271`), `colClass` (`:1280`),
+`tableHTML` (`:1281`) e os paginadores (`:1375`, `:2721`, `:2758`, `:2769`). Esta fase existe para
 resolver isso, e vem **antes** da C.
 
 Alvos: `src/ui/doc.mjs` (`docHead`, `metaRows`, `tableHTML`, `colClass`, `loading`, `emptyBox`,
@@ -255,16 +255,16 @@ Alvos: `src/ui/doc.mjs` (`docHead`, `metaRows`, `tableHTML`, `colClass`, `loadin
 
 Quem executar decide **como**; o que não é opcional é resolver. Os fatos, conferidos:
 
-- `bindLineRows` (declarado em `app.js:2865`) chama `selectLine` e `closeModal` em `app.js:2869`, e
-  `toast` lendo `activeLine` em `app.js:2870` — é composição de seleção, fechamento de modal e
+- `bindLineRows` (declarado em `app.js:2845`) chama `selectLine` e `closeModal` em `app.js:2849`, e
+  `toast` lendo `activeLine` em `app.js:2850` — é composição de seleção, fechamento de modal e
   rota. Não é paginação: é **ação de shell**.
-- `paginateLines` fixa `afterPaint: bindLineRows` (`app.js:2798`).
-- `lineResults` chama `paginateLines` nos dois ramos (`app.js:2841`, `:2843`), e
-  `renderLocalidadeSecoes` o chama direto (`app.js:2946`).
+- `paginateLines` fixa `afterPaint: bindLineRows` (`app.js:2778`).
+- `lineResults` chama `paginateLines` nos dois ramos (`app.js:2821`, `:2823`), e
+  `renderLocalidadeSecoes` o chama direto (`app.js:2926`).
 - `lineResults` tem **9 call sites**, e eles **não permanecem no `app.js`**: pertencem a famílias
-  que C3 e C4 movem — `:1935` (`openEmpresaLigacoes`), `:1954` (`LOADERS.ligacoesPorEmpresa`),
-  `:2035` (`LOADERS.ligacoesPorLogradouro`), `:2086` (`LOADERS.municipioRegiao`), `:2137` `:2141`
-  `:2179` (`openLinhasPorIbge`), `:2267` `:2311` (`LOADERS.ligacoesPorTerminal`).
+  que C3 e C4 movem — `:1929` (`openEmpresaLigacoes`), `:1948` (`LOADERS.ligacoesPorEmpresa`),
+  `:2029` (`LOADERS.ligacoesPorLogradouro`), `:2080` (`LOADERS.municipioRegiao`), `:2131` `:2135`
+  `:2173` (`openLinhasPorIbge`), `:2261` `:2305` (`LOADERS.ligacoesPorTerminal`).
 
 **Portanto:** um render de C3/C4 que virou ESM não alcança `lineResults`, `paginateLines` nem
 `bindLineRows` se eles continuarem privados. Duas saídas, e a escolha é de quem executa a B2 — com
@@ -293,10 +293,10 @@ reconferidos** — meça antes de dimensionar a sessão:
 | C4 | Municípios · Localidades |
 
 C4 por último, e cada metade traz uma complicação própria. Municípios é a única família com filtro
-de escopo — `#regScope` (`app.js:2064`) e `#munScope` (`app.js:2110`), os dois únicos do arquivo —
-e com dois ramos de PDF na mesma tela (`app.js:2137` e `:2141`, ambos `pdf:false`). Localidades tem
+de escopo — `#regScope` (`app.js:2058`) e `#munScope` (`app.js:2104`), os dois únicos do arquivo —
+e com dois ramos de PDF na mesma tela (`app.js:2131` e `:2135`, ambos `pdf:false`). Localidades tem
 o bloco secundário cujo `pdfHTML` cobre os DOIS blocos: por isso o `paginateLines` dele vai com
-`pdf:false` (`app.js:2946`) e o `commitViewResult` único vem depois, em `:2948`.
+`pdf:false` (`app.js:2926`) e o `commitViewResult` único vem depois, em `:2928`.
 
 **Cada fase C move a SUA família, no mesmo PR.** Não junte numa fase final: migrar tudo de uma vez
 é o que o estudo proíbe, e concentra num commit só a superfície de regressão de ordem/TDZ.
@@ -307,17 +307,17 @@ citar a primeira no lugar da segunda não prova a delegação:
 
 | loader | declarado em | delega em |
 |---|---|---|
-| `LOADERS.historicoLinha` | `app.js:1448` | `app.js:1451` — passa `renderLineHistory` como `render:` do `lineSearchRun` |
-| `LOADERS.quadroHorarios` | `app.js:1676` | `app.js:1682` (despacha `quadroLinhaRun`/`quadroEmpresaRun`) e `:1687` (chama `renderLinhaQuadro` direto) |
-| `LOADERS.tarifas` | `app.js:1782` | `app.js:1788` (despacha `tarifaEmpresaRun`/`lineDocRun`) e `:1794` (chama `renderTarifas` direto) |
+| `LOADERS.historicoLinha` | `app.js:1442` | `app.js:1445` — passa `renderLineHistory` como `render:` do `lineSearchRun` |
+| `LOADERS.quadroHorarios` | `app.js:1670` | `app.js:1676` (despacha `quadroLinhaRun`/`quadroEmpresaRun`) e `:1681` (chama `renderLinhaQuadro` direto) |
+| `LOADERS.tarifas` | `app.js:1776` | `app.js:1782` (despacha `tarifaEmpresaRun`/`lineDocRun`) e `:1788` (chama `renderTarifas` direto) |
 
-Nos one-liners `itinerarios` (`app.js:1504`), `frota` (`:1835`) e `estrutura` (`:1873`) as duas
+Nos one-liners `itinerarios` (`app.js:1498`), `frota` (`:1829`) e `estrutura` (`:1867`) as duas
 coincidem: a delegação via `lineDocView` é a própria linha da declaração. Outros têm a
 implementação dentro do próprio loader. **Não há partição limpa** — uma versão anterior deste plano
 afirmou "3 assim, 14 assado" e estava errada. Abra o loader da família antes de planejar a sessão.
 
 O registro `LOADERS` guarda **loaders**, nunca renders: o valor é invocado como função de carga
-(`app.js:1253`, `:3179`). Depois da Fase A ele recebe `ctx`, e aí um loader exportado por módulo
+(`app.js:1258`, `:3159`). Depois da Fase A ele recebe `ctx`, e aí um loader exportado por módulo
 pode entrar no registro — é o que torna a Fase D possível.
 
 ---
@@ -406,9 +406,9 @@ listeners, rotas, composição — e wiring não é o defeito que a crítica apo
 
 1. **Produção sai apenas da `main`.** Push em branch gera *preview deploy*, em domínio próprio. Os
    únicos caminhos para produção são o merge (auto-deploy) e a promoção manual pelo painel.
-2. **Preview não alcança o banco de produção.** `HOSTS_PROD` (`app.js:56`) é allowlist, e o
-   `selecionarSupabase` (`app.js:62`) decide por pertencimento: `hostsProd.includes(host)` em
-   `app.js:65` e o ternário de `:66`–`:68` mandam todo host fora da lista para o banco de teste.
+2. **Preview não alcança o banco de produção.** `HOSTS_PROD` (`app.js:61`) é allowlist, e o
+   `selecionarSupabase` (`app.js:67`) decide por pertencimento: `hostsProd.includes(host)` em
+   `app.js:70` e o ternário de `:71`–`:73` mandam todo host fora da lista para o banco de teste.
    Branch nova nasce apontando para teste, por desenho fail-closed.
 3. **Zero SQL neste plano.** Nenhuma migração, query, chave ou policy.
 
