@@ -8,9 +8,11 @@ plano **vivo**: atualize-o conforme as fases entrarem, e apague-o quando a últi
 Este documento **declara restrições e mede o presente. Não prevê o futuro.**
 
 Não é preferência de estilo. A 1ª versão previa: dizia quais funções seriam movíveis, quanto cada
-fase encolheria o `app.js`, o que sobraria em cada registro. Foram **seis rodadas de revisão e 25
-achados** — quatro de planejamento no #126 e 21 neste PR (20 P1 e um P2) —, e nenhum deles sobre o
-código: todos sobre afirmações do plano a respeito do código. O motivo é estrutural: a única forma
+fase encolheria o `app.js`, o que sobraria em cada registro. Foram **seis rodadas de revisão e 26
+achados** — quatro de planejamento no #126 e 22 neste PR (21 P1 e um P2), contados nas threads —, e
+nenhum deles sobre o código: todos sobre afirmações do plano a respeito do código. (Este número já
+saiu errado uma vez, como "25 / 21": foi estimado em vez de contado, no mesmo commit que criou a
+regra da citação.) O motivo é estrutural: a única forma
 de saber se `X` é movível é tentar mover `X`, e nenhum gate deste repo distingue uma frase
 verdadeira de uma falsa sobre o `app.js` (`check.js`, `semgrep`, `views` e `smoke` ficaram verdes
 nas seis rodadas).
@@ -203,8 +205,10 @@ eternamente sem o resultado do pane que capturou.
 
 ## Fase B — módulo profundo de acesso REST
 
-`src/data/rest.mjs`: `sbFetch`, `fetchComTimeout`, `esperar`, `SB_TIMEOUT_MS`, `SB_RETRIES`,
-`CANCELADO`, `ehCancelamento`, `marcarTrunc`/`bannerTrunc`, `SB_MAX_ROWS`, `selecionarSupabase`.
+`src/data/rest.mjs`, com o que cada símbolo é hoje: `esperar` (`app.js:83`), `SB_TIMEOUT_MS`
+(`:85`), `SB_RETRIES` (`:86`), `CANCELADO` (`:90`), `ehCancelamento` (`:91`), `fetchComTimeout`
+(`:98`), `sbFetch` (`:116`), `SB_MAX_ROWS` (`:160`), `marcarTrunc` (`:168`), `bannerTrunc` (`:181`)
+e `selecionarSupabase` (`:62`).
 Só entra se a interface **esconder** timeout, retry e truncagem — condição literal do estudo.
 Config (URL, chave, `fetch`) injetada, não lida de global.
 
@@ -348,7 +352,9 @@ Chrome do modal e faixa de abas para `src/ui/`, mais o shell de busca de linha (
 `lineDocRun`, `lineSearchRun`, `searchPanel`) e — se a B2 tiver escolhido a opção 2 — a família de
 listas e os renders que a C tiver adiado.
 
-É a área mais exercitada pelo `check_abas.mjs` e o ganho é menor que o das anteriores.
+É a área que o `check_abas.mjs` exercita diretamente — ele clica `#modalTabAdd` em
+`scripts/check_abas.mjs:34` e `:60`, e lê `.modal-tab` em `:39`, `:53` e `:66` —, e o ganho é menor
+que o das anteriores.
 
 **Se ela é opcional depende do ramo da B2, e dizer "opcional" sem qualificar estava errado:**
 
@@ -387,11 +393,13 @@ listeners, rotas, composição — e wiring não é o defeito que a crítica apo
 
 1. **`.vercelignore`** — uma linha por módulo novo, **sempre**. Import ES é atômico: um 404 mata o
    `app.js` inteiro e a tela fica vazia sem erro no console (10/08/2026). O `check.js` §[1] reprova
-   nomeando o arquivo que ficou de fora. O smoke deriva os módulos dos `import` desde a Sessão 2 —
-   se alguém reintroduzir lista manual em qualquer gate, trate como defeito, não como estilo.
+   nomeando o arquivo que ficou de fora — o `fail` de `tests/check.js:113`–`:115` imprime a lista e
+   o motivo de cada um. O smoke deriva os módulos dos `import` (`scripts/check_deploy.mjs:202`–`:231`)
+   desde a Sessão 2 — o commit é `0841a48`, mergeado no #125 — então se alguém reintroduzir lista
+   manual em qualquer gate, trate como defeito, não como estilo.
 2. **Hoisting/TDZ e ordem do `LOADERS`** — regras em [`../estrutura-frontend.md`](../estrutura-frontend.md).
-3. **Fixtures do `check_views.mjs`** (`scripts/lib/rig.mjs`) — nome de coluna divergente chega
-   `undefined` no render e a tela sai vazia **sem erro**: falso verde.
+3. **Fixtures do `check_views.mjs`** (`scripts/lib/rig.mjs:121`, o `export const FIXTURES`) — nome
+   de coluna divergente chega `undefined` no render e a tela sai vazia **sem erro**: falso verde.
 4. **`version.json` + `#verTag`** a cada fase que mexa em arquivo servido.
 
 ## Por que o site não corre risco enquanto nada entra na `main`
