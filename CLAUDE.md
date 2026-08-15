@@ -6,11 +6,15 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > **TRABALHO EM CURSO — leia antes de agir:**
 > **[`docs/historico/contexto-proxima-sessao-2026-08-14.md`](docs/historico/contexto-proxima-sessao-2026-08-14.md)**
 > — plano de 6 sessões respondendo a uma crítica externa. As Sessões **1** (rulesets do Semgrep),
-> **2** (`src/domain/agrupamento.mjs`) e **3** (`src/domain/busca.mjs`) estão **mergeadas**; a **4**
-> (`src/domain/view-state.mjs`) está no **PR #131, aguardando revisão e o merge do dono** — quando
-> entrar, a próxima é a **Sessão 5**, o documento de custo do processo (sem mudança de código).
+> **2** (`src/domain/agrupamento.mjs`), **3** (`src/domain/busca.mjs`) e **4**
+> (`src/domain/view-state.mjs`, PR #131) estão **mergeadas**. A próxima é a **Sessão 5**, o
+> documento de custo do processo — sem mudança de código, sem risco para o site.
 > Aquele arquivo traz a especificação de cada sessão, o protocolo combinado (um PR por sessão,
 > `@codex review`, sem merge por conta própria) e os limites medidos do ambiente do agente.
+> **A cota de code review do Codex está esgotada** desde 15/08: os PRs #130 e #131 pediram
+> `@codex review` e receberam "You have reached your Codex usage limits", três pedidos ao todo.
+> Enquanto não houver upgrade/créditos, o passo 3 do protocolo não roda — a revisão é própria, e
+> **ausência de revisão não é aprovação**: registre os achados no PR, como as duas sessões fizeram.
 > **Ressalva das Sessões 2 e 3:** `norm` saiu na frente e já está em `core.mjs` — a tabela do plano
 > a lista na Sessão 3, mas ela é dependência de `agrupamento.mjs` e não podia esperar, então a
 > Sessão 3 moveu **cinco** funções, não seis. **Ressalva da Sessão 4:** moveu as **treze** da
