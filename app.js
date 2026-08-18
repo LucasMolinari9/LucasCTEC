@@ -2118,9 +2118,22 @@ async function mostrarLinhasResultado(host, cods, titulo){
   if(!cods.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para este critério.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const slice = cods.slice(0,250);
   const rows = await fetchLinesByCods(slice,{limit:250});
+  // Diferente do modo Localidade (que filtra a seção pelo NOME buscado), aqui não há um nome
+  // pra casar — a busca é geográfica (itinerário). Mostra a tabela de tarifa INTEIRA de cada
+  // linha encontrada.
+  const baseCods = distinctCods(rows, 250);
+  let secByLine = new Map();
+  if(baseCods.length){
+    const secRows = await sbFetch('tarifa_atual_teste',
+      `codlinha=in.(${baseCods.map(enc).join(',')})&select=codlinha,secao,nome_ligacao,nome_ligacao_cresc,tipo_ligacao,tarifa,situacao&order=codlinha,secao&limit=5000`);
+    secByLine = groupBy(secRows, r=>r.codlinha);
+  }
+  const comSecaoN = rows.reduce((n,r)=>n+(secByLine.has(r.codlinha)?1:0),0);
+  const secNote = comSecaoN ? ` · ${comSecaoN} com tarifa cadastrada` : '';
   const extra = cods.length>slice.length ? ` (mostrando ${slice.length})` : '';
-  const prefix = `<p class="doc-count">${cods.length} linha(s) — ${esc(titulo)}${extra}</p>`;
-  lineResults(host, rows, { prefixHTML: prefix, view, gen });
+  const prefix = `<p class="doc-count">${cods.length} linha(s) — ${esc(titulo)}${secNote}${extra}</p>`;
+  renderLocalidadeSecoes(host, rows, secByLine, { prefixHTML: prefix, view, gen,
+    semSecaoSub: '', semSecaoObs: 'Ligam os municípios buscados, mas não têm seção de tarifa cadastrada.' });
 }
 // Município A × Município B — filtro direcional (A→B, respeita a ordem do itinerário) e
 // filtro "trafega pelos dois" (qualquer ordem). `inter` é o próprio resultado não-direcional;
@@ -2801,7 +2814,7 @@ function secoesLocalidadeTable(secoes){
 // `lineResults` (via situacaoSelectHTML/filtrarSituacao): as duas telas listam linha e
 // precisam concordar no que é "ativa". O filtro repinta os DOIS blocos e refaz o
 // `bindLineRows` — quem entra na tela depois de filtrar tem que continuar clicável.
-function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='', view, gen } = {}){
+function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='', view, gen, semSecaoSub, semSecaoObs } = {}){
   host.innerHTML = prefixHTML
     + `<div class="loc-tools">${situacaoSelectHTML()}</div><div id="locSecResult"></div>`;
   const result = host.querySelector('#locSecResult');
@@ -2810,7 +2823,7 @@ function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='', view, ge
     const rows = filtrarSituacao(base, statusSel.value);
     // o contador do `prefixHTML` é o do resultado INTEIRO e fica acima da barra; ao filtrar,
     // repetir só o total mentiria sobre o que está na tela — daí a contagem do recorte.
-    pintarLocalidadeSecoes(result, rows, secByLine, { total: base.length, view, gen });
+    pintarLocalidadeSecoes(result, rows, secByLine, { total: base.length, view, gen, semSecaoSub, semSecaoObs });
   };
   statusSel.addEventListener('change', paint);
   paint();
@@ -2837,7 +2850,7 @@ const LOC_SEM_SECAO_OBS = 'Ligam os pontos buscados, mas não têm uma seção d
 // Como só a fatia atual entra no DOM, o fallback do `baixarPdf` exportaria só a página aberta:
 // por isso o `pdfHTML` é escrito aqui pelo seam (`commitViewResult`), com os dois blocos
 // INTEIROS. Ver CLAUDE.md § "Paginação é SÓ de tela; o PDF sai INTEIRO".
-function pintarLocalidadeSecoes(host, base, secByLine, { total = base.length, view, gen } = {}){
+function pintarLocalidadeSecoes(host, base, secByLine, { total = base.length, view, gen, semSecaoSub = 'por itinerário ou nome', semSecaoObs = LOC_SEM_SECAO_OBS } = {}){
   // filtro que não sobra nada: zera o pdfHTML junto, senão o botão PDF baixaria o recorte anterior
   if(!base.length){ host.innerHTML = emptyBox('Nenhuma linha com esse filtro.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const comSecao = [...groupBy(base.filter(r=>secByLine.has(r.codlinha)), r=>r.codempresa||'—')]
@@ -2845,8 +2858,8 @@ function pintarLocalidadeSecoes(host, base, secByLine, { total = base.length, vi
   const semSecao = base.filter(r=>!secByLine.has(r.codlinha));
   const totais = countBy(comSecao, r=>r.codempresa||'—');
 
-  const cabSemSecao = `<h3 class="loc-emp-head mt22">Outras linhas <span class="loc-emp-rj">por itinerário ou nome · ${semSecao.length} linha(s)</span></h3>`
-    + `<div class="doc-obs tight">${LOC_SEM_SECAO_OBS}</div>`;
+  const cabSemSecao = `<h3 class="loc-emp-head mt22">Outras linhas <span class="loc-emp-rj">${semSecaoSub ? esc(semSecaoSub)+' · ' : ''}${semSecao.length} linha(s)</span></h3>`
+    + `<div class="doc-obs tight">${semSecaoObs}</div>`;
   host.innerHTML = (base.length < total ? `<p class="doc-count">${base.length} de ${total} linha(s) com o filtro escolhido</p>` : '')
     + (comSecao.length ? '<div id="locComSecao"></div>' : '')
     + (semSecao.length ? cabSemSecao + '<div id="locSemSecao"></div>' : '');

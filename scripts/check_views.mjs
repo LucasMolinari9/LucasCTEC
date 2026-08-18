@@ -72,6 +72,16 @@ const VIEWS = [
       await page.fill('.modal-body.active #locA', 'rio');
       await page.click('.modal-body.active #locGo');
     } },
+  // Mesma view do card acima, mas exercitando um dos 2 modos por MUNICÍPIO (idx 4 de
+  // LOC_FILTERS = "Trafegam nos municípios A e B") — cobre o caminho de render que passou a
+  // usar renderLocalidadeSecoes (seções/tarifa por linha) em vez de lineResults.
+  { key: 'localidades', minimo: { '.loc-linha-sec': 1, '.loc-emp-head': 1, 'tbody tr': 2 },
+    driver: async page => {
+      await page.click('.modal-body.active .loc-filter-btn[data-idx="4"]');
+      await page.fill('.modal-body.active #locA', 'Rio de Janeiro');
+      await page.fill('.modal-body.active #locB', 'Niteroi');
+      await page.click('.modal-body.active #locGo');
+    } },
   { key: 'ligacoesPorTerminal',   busca: 'terminal', minimo: { 'tbody tr': 1 } },
   { key: 'secoesPorLigacao',      busca: '549',      minimo: { 'tbody tr': 2 } },
   { key: 'frotaPorEmpresa',       busca: 'alfa',     minimo: { 'tbody tr': 3, '.kpi': 5 } },

@@ -302,7 +302,7 @@ têm teste (exigiriam navegador).
 > quando rodar e **o que quebra se você esquecer** — o detalhe mora junto da ferramenta, que é
 > onde quem a opera vai olhar. Este arquivo é lido no início de toda sessão; runbook de gate não.
 
-2a. **Mexeu em render/loader? `node scripts/check_views.mjs`** — abre as **17 views** num
+2a. **Mexeu em render/loader? `node scripts/check_views.mjs`** — abre as **18 views** num
    navegador headless e falha se alguma explodir, ficar no spinner ou pintar menos que o
    `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~58,3% do `app.js`), que o
    `check.js` **não** cobre. Aceita filtro: `check_views.mjs frota`.
