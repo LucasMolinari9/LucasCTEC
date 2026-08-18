@@ -1,4 +1,4 @@
-# Views (navegador) — laço de fumaça sobre as 17 views + regressões das abas e da seleção de
+# Views (navegador) — laço de fumaça sobre as 18 views + regressões das abas e da seleção de
 # linha, em todo push e PR.
 #
 # Por que em ARQUIVO/JOB SEPARADO e não dentro do ci.yml:
@@ -10,7 +10,7 @@
 #
 # O que cada script responde:
 #   scripts/check_views.mjs — "existe alguma tela que EXPLODE, fica em branco ou pinta MENOS do
-#     que as fixtures dão?" Abre as 17 views por deep link com o PostgREST stubado e falha se
+#     que as fixtures dão?" Abre as 18 views por deep link com o PostgREST stubado e falha se
 #     alguma lançar erro, ficar presa no spinner, pintar só a moldura, não achar nada ou ficar
 #     abaixo do `minimo` declarado para ela. É a rede sob a seção MODAL / SISTEMA DE
 #     VIEWS (~58,3% do app.js), que o tests/check.js não cobre — ele só testa a lógica pura.
@@ -81,7 +81,7 @@ jobs:
       - name: Instalar Chromium (+ dependências de sistema)
         run: playwright install --with-deps chromium
 
-      - name: Laço de fumaça das 17 views
+      - name: Laço de fumaça das 18 views
         run: node scripts/check_views.mjs
 
       - name: Regressão das abas do modal
