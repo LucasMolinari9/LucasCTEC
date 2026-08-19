@@ -4,6 +4,49 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 19/08/2026 — Sessão 5: o custo do processo, medido
+
+**Sessão 5 do plano de 6** (`docs/historico/contexto-proxima-sessao-2026-08-14.md`). Documento
+novo: `docs/planos/2026-08-19-custo-do-processo.md`. **Zero mudança de código, zero SQL, nenhum
+arquivo servido tocado** — por isso sem bump de `version.json` nem de `#verTag`.
+
+- **A razão processo : produto SUBIU**, de 3,03 para 3,20 (mesma régua nas duas datas), apesar das
+  Sessões 2 a 4 existirem para baixá-la. O handoff registrou 2,8 : 1 com um critério que não
+  consegui reproduzir (nenhum recorte dá 4.480); a ressalva está no documento, e a comparação usa
+  uma régua só.
+- **Por que subiu — o achado que organiza o resto:** extração converte cópia em guarda, não reduz o
+  total. O `pure.harness.js` caiu 305 → 34 (**−271**, zero `@canon` restantes), e o líquido de
+  `tests/` + `scripts/` foi **+4**: `check.js` +126 (a guarda que policia a modularização),
+  `domain-module.test.mjs` +62, `check_deploy.mjs` +58, `README` +19, `check_views` +10. Redução
+  real só vem de **aposentadoria**, e a única disponível (`canon.js` + `drift.test.js`, 128 linhas)
+  está bloqueada nos 12 `@canon` de `tests/harness.js` — a Fase B.
+- **`./scripts/semgrep.sh` gasta ~98% do tempo num timeout de rede.** Medido: **>10 min** como está
+  na `main` (o scan termina — *"Ran 121 rules on 110 files: 0 findings"* — e o wrapper fica preso
+  depois disso) contra **12 s** com `SEMGREP_ENABLE_VERSION_CHECK=0`. `--metrics=off` desliga a
+  telemetria, não o version check, que insiste em alcançar `semgrep.dev` (HTTP 000 no ambiente do
+  agente). **A correção de uma linha já existe na branch do PR #98 e não está na `main`.** Não foi
+  portada aqui porque a Sessão 5 é documental por acordo; é a recomendação nº 1 do documento.
+- **Os dois workflows fantasma, confirmados:** a API lista 12, o disco tem 10.
+  `backup-pre-revoke.yml` (id 320886214) e `deploy-pages.yml` (id 295332914) aparecem `active` mas
+  não têm arquivo na `main`, logo não há o que executar; o registro persiste pelo histórico de
+  runs. Registrado para não ser "descoberto" uma terceira vez.
+- **`CLAUDE.md`: 470 → 536 linhas em 5 dias** (~13/dia), lido em toda sessão. Proposto teto de 550
+  com regra de **mover** para o doc especializado, não apagar.
+- **Critério de parada, que não existia:** gate novo só se justifica com (1) modo de falha
+  silencioso documentado, (2) nenhum gate existente cobrindo com uma asserção a mais, (3) custo
+  cabendo no ciclo (~32 s offline + semgrep). Mais a regra de saída: gate de fase/incidente nasce
+  com condição de aposentadoria no cabeçalho.
+
+**Issues conferidas, não mexidas.** A #121 foi **verificada como resolvida**: os quatro defeitos
+foram reproduzidos um a um contra o `check.js` atual e cada caso inverteu de resultado — o
+transitivo e o de aspas simples reprovam nomeando arquivo e importador, o de espaço em `url()` e o
+de comentário passam. As #101, #102, #103 e #104 **já estão corrigidas na branch do PR #98**, e
+três delas tratam de arquivos que sequer existem na `main` (`scripts/lib/auditor.mjs`,
+`tests/check_data_quality.test.js`) — corrigi-las aqui criaria conflito no rebase da Sessão 6.
+
+**Gates:** `check.js` verde (49 links em 20 docs, 232 testes puros), `check_views.mjs` 18/18,
+`check_abas.mjs` OK, `check_selecao_linha.mjs` OK, Semgrep 0 achados em 121 regras.
+
 ## 15/08/2026 — `src/domain/busca.mjs`: o corte é pela pureza, não pelo assunto
 
 **Sessão 3 do plano de 6** (`docs/historico/contexto-proxima-sessao-2026-08-14.md`), executada sob
