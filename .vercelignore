@@ -43,3 +43,11 @@
 !/src/domain/agrupamento.mjs
 !/src/domain/busca.mjs
 !/src/domain/view-state.mjs
+# Painel de administração (PREVIEW). Reaberto ARQUIVO A ARQUIVO pelo mesmo motivo de `src/`:
+# é diretório de aplicação, e um dia vai atrair rascunho de SQL, nota de migração ou fixture.
+# Um `!/admin` de uma linha publicaria em silêncio o que alguém largar ali.
+!/admin
+/admin/*
+!/admin/index.html
+!/admin/admin.js
+!/admin/admin.css

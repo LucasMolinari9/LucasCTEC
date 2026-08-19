@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DIVAT · Painel de Administração</title>
+<!-- Área autenticada: nunca indexar. O portal público é que quer ser achado no Google. -->
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#072a49">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect x='2' y='2' width='20' height='20' rx='4' fill='%23072a49'/%3E%3Cpath d='M12 6.2l4.6 2v3.4c0 2.7-1.9 5.2-4.6 6-2.7-.8-4.6-3.3-4.6-6V8.2z' fill='%231f9d57'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<!-- ============================================================================
+     FAIXA DE MODO PREVIEW
+     Permanente e inescapável, de propósito. Enquanto o banco não tiver o modelo
+     de acesso logado (schema admin, perfis, policies), NADA aqui grava. Esta
+     faixa é a diferença entre "demonstração" e "mentira".
+     ============================================================================ -->
+<div class="preview-bar" role="status">
+  <span class="preview-bar-tag">MODO PREVIEW</span>
+  <span class="preview-bar-txt">
+    Nada é gravado no banco — as edições somem ao recarregar.
+  </span>
+  <button type="button" id="btnSobrePreview" class="preview-bar-btn">o que é isso?</button>
+</div>
+
+<!-- ============================================================================
+     TELA DE LOGIN
+     No preview o botão só entra. No painel real: Supabase Auth (e-mail + senha),
+     signup FECHADO, e a policy confere `admin.perfis`, não só "está logado".
+     ============================================================================ -->
+<div id="telaLogin" class="login-wrap">
+  <div class="login-card">
+    <div class="login-brand">
+      <span class="login-mark" aria-hidden="true"></span>
+      <div class="login-brand-txt">
+        <b>DETRO/RJ · DIVAT</b>
+        <span>Painel de administração</span>
+      </div>
+    </div>
+
+    <p class="login-intro">
+      Acesso restrito aos administradores cadastrados. O cadastro de novos usuários é
+      feito pelo painel do Supabase — não existe auto-cadastro nesta tela.
+    </p>
+
+    <form id="formLogin" class="login-form" autocomplete="on">
+      <label class="campo">
+        <span class="campo-rot">E-mail</span>
+        <input type="email" id="loginEmail" class="campo-in" value="lucas@detro.rj.gov.br" autocomplete="username">
+      </label>
+      <label class="campo">
+        <span class="campo-rot">Senha</span>
+        <input type="password" id="loginSenha" class="campo-in" value="preview" autocomplete="current-password">
+      </label>
+      <label class="campo">
+        <span class="campo-rot">Código de verificação <em class="campo-nota">(2 fatores — recomendado)</em></span>
+        <input type="text" id="loginTotp" class="campo-in campo-in-totp mono" inputmode="numeric" maxlength="6" placeholder="000000">
+      </label>
+      <button type="submit" class="btn btn-primario btn-bloco">Entrar</button>
+    </form>
+
+    <p class="login-rodape">
+      No preview qualquer valor entra — não há autenticação de verdade ligada.
+    </p>
+  </div>
+</div>
+
+<!-- ============================================================================
+     APLICAÇÃO
+     Casca fixa (topbar + navegação + área de conteúdo). Todo o resto é pintado
+     pelo admin.js — sem <script> inline, porque a CSP publica script-src 'self'.
+     ============================================================================ -->
+<div id="telaApp" class="app-wrap oculto">
+
+  <header class="adm-topbar">
+    <div class="adm-topbar-in">
+      <button type="button" id="btnMenu" class="adm-menu-btn" aria-label="Abrir menu"><span></span><span></span><span></span></button>
+      <span class="adm-mark" aria-hidden="true"></span>
+      <div class="adm-brand">
+        <b>DIVAT · Administração</b>
+        <span id="admAmbiente" class="adm-amb">carregando…</span>
+      </div>
+      <div class="adm-topbar-dir">
+        <span class="adm-rt" id="admRt" title="Conexão em tempo real">
+          <span class="adm-rt-dot" id="admRtDot"></span>
+          <span class="adm-rt-txt" id="admRtTxt">conectando…</span>
+        </span>
+        <span class="adm-user" id="admUser"></span>
+        <button type="button" id="btnSair" class="btn btn-fantasma btn-mini">Sair</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="adm-body">
+    <nav id="admNav" class="adm-nav" aria-label="Seções do painel"></nav>
+    <main id="admMain" class="adm-main" tabindex="-1"></main>
+  </div>
+
+</div>
+
+<!-- Camada de diálogos (confirmação, formulários em modal, ajuda) -->
+<div id="admModal" class="adm-modal oculto" role="dialog" aria-modal="true" aria-labelledby="admModalTit">
+  <div class="adm-modal-fundo" id="admModalFundo"></div>
+  <div class="adm-modal-caixa">
+    <header class="adm-modal-topo">
+      <h2 id="admModalTit" class="adm-modal-tit"></h2>
+      <button type="button" id="admModalX" class="adm-modal-x" aria-label="Fechar">&times;</button>
+    </header>
+    <div id="admModalCorpo" class="adm-modal-corpo"></div>
+    <footer id="admModalPe" class="adm-modal-pe"></footer>
+  </div>
+</div>
+
+<!-- Avisos transitórios -->
+<div id="admToast" class="adm-toast" role="status" aria-live="polite"></div>
+
+<script type="module" src="admin.js"></script>
+</body>
+</html>
