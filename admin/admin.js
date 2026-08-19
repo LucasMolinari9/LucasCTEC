@@ -794,12 +794,16 @@ function listaFilhos(aba, linha){
   const cfg = ABAS_LINHA.find(a => a.key === aba);
   const tb = cfg.tab;
   const regs = tabela(tb).filter(r => String(r.codlinha) === String(linha.codlinha));
-  if (!regs.length) return `<div class="tab-vazia">
-    Nenhum registro de <b>${esc(cfg.rot.toLowerCase())}</b> para esta linha.<br>
-    <span class="hint">No portal, isto é exatamente uma tela em branco para o usuário.</span>
-  </div>`;
+  /* A aba vazia é justamente onde mais se precisa do botão de criar — a versão
+     anterior saía daqui sem oferecer nada, deixando o caso mais comum sem saída. */
+  if (!regs.length) return `${barraFilhos(cfg, linha, 0)}
+    <div class="tab-vazia">
+      Nenhum registro de <b>${esc(cfg.rot.toLowerCase())}</b> para esta linha.<br>
+      <span class="hint">No portal, isto é exatamente uma tela em branco para o usuário.</span>
+    </div>`;
   const cols = Object.keys(regs[0]).filter(c => c !== 'id' && c !== 'row_id' && c !== 'codlinha');
-  return `<div class="tab-rolo"><table class="tab">
+  return `${barraFilhos(cfg, linha, regs.length)}
+  <div class="tab-rolo"><table class="tab">
     <thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join('')}<th></th></tr></thead>
     <tbody>${regs.map(r => {
       const problemas = validarRegistro(tb, r);
@@ -807,12 +811,33 @@ function listaFilhos(aba, linha){
         ${cols.map(c => `<td class="${typeof r[c] === 'number' ? 'num' : ''}">${
           c === 'tarifa' ? moeda(r[c]) : esc(String(r[c] ?? '—'))
         }</td>`).join('')}
-        <td class="col-acoes">${problemas.length
-          ? `<span class="eti eti-erro">${problemas.length} problema(s)</span>`
-          : `<button type="button" class="btn btn-secundario btn-mini" data-acao="editar-filho" data-tab="${esc(tb)}" data-chave="${esc(chaveDe(tb, r))}">Editar</button>`}</td>
+        <td class="col-acoes">
+          ${/* O botão de editar vem SEMPRE, inclusive (principalmente) na linha com
+                problema. Antes o aviso substituía o botão, o que era o avesso do útil:
+                a linha defeituosa era a única que não dava para corrigir. */''}
+          ${problemas.length ? `<span class="eti eti-erro">${problemas.length} problema(s)</span> ` : ''}
+          <button type="button" class="btn btn-secundario btn-mini" data-acao="editar-filho" data-tab="${esc(tb)}" data-chave="${esc(chaveDe(tb, r))}">Editar</button>
+          <button type="button" class="btn btn-perigo btn-mini" data-acao="excluir-filho" data-tab="${esc(tb)}" data-chave="${esc(chaveDe(tb, r))}">Excluir</button>
+        </td>
       </tr>`;
     }).join('')}</tbody>
   </table></div>`;
+}
+
+/* Cabeçalho de cada aba-filha: contagem + criar registro novo JÁ AMARRADO à linha
+   aberta. Amarrar importa: `codlinha` chega preenchido e travado, então o caminho
+   mais curto para criar um itinerário órfão — digitar o código errado — deixa de
+   existir na interface. */
+function barraFilhos(cfg, linha, quantos){
+  return `<div class="cartao-topo">
+    <span class="cartao-tit mono">${esc(cfg.tab)}</span>
+    <span class="eti eti-neutra">${num(quantos)} registro(s)</span>
+    <div class="pg-acoes">
+      <button type="button" class="btn btn-primario btn-mini" data-acao="novo-filho"
+              data-tab="${esc(cfg.tab)}" data-linha="${esc(linha.codlinha)}"
+              data-emp="${esc(linha.codempresa)}">${I.mais} Novo</button>
+    </div>
+  </div>`;
 }
 
 /* --- 7.3 Empresas ---------------------------------------------------------- */
@@ -1305,6 +1330,7 @@ async function acao(nome, d){
       abrirModal({ titulo:'Nova linha', corpo:formNovoRegistro('tabela_vista_teste'),
         pe:`<button type="button" class="btn btn-secundario" data-modal="nao">Cancelar</button>
             <button type="button" class="btn btn-primario" data-modal="sim">Criar</button>` });
+      ligarValidacaoModal('tabela_vista_teste');
       modalOk = ok => { if (ok) criarDoModal('tabela_vista_teste'); };
       break;
 
@@ -1312,6 +1338,7 @@ async function acao(nome, d){
       abrirModal({ titulo:'Nova empresa', corpo:formNovoRegistro('codempresa_teste'),
         pe:`<button type="button" class="btn btn-secundario" data-modal="nao">Cancelar</button>
             <button type="button" class="btn btn-primario" data-modal="sim">Criar</button>` });
+      ligarValidacaoModal('codempresa_teste');
       modalOk = ok => { if (ok) criarDoModal('codempresa_teste'); };
       break;
 
@@ -1319,6 +1346,7 @@ async function acao(nome, d){
       abrirModal({ titulo:'Nova portaria', corpo:formNovoRegistro('portaria_teste'),
         pe:`<button type="button" class="btn btn-secundario" data-modal="nao">Cancelar</button>
             <button type="button" class="btn btn-primario" data-modal="sim">Criar</button>` });
+      ligarValidacaoModal('portaria_teste');
       modalOk = ok => { if (ok) criarDoModal('portaria_teste'); };
       break;
 
@@ -1326,6 +1354,7 @@ async function acao(nome, d){
       abrirModal({ titulo:'Novo registro', corpo:formNovoRegistro(d.tab),
         pe:`<button type="button" class="btn btn-secundario" data-modal="nao">Cancelar</button>
             <button type="button" class="btn btn-primario" data-modal="sim">Criar</button>` });
+      ligarValidacaoModal(d.tab);
       modalOk = ok => { if (ok) criarDoModal(d.tab); };
       break;
 
@@ -1333,6 +1362,21 @@ async function acao(nome, d){
     case 'editar-portaria': abrirEdicao('portaria_teste',  r => String(r.id) === d.id); break;
     case 'editar-apoio':    abrirEdicao(d.tab, r => chaveDe(d.tab, r) === d.chave); break;
     case 'editar-filho':    abrirEdicao(d.tab, r => chaveDe(d.tab, r) === d.chave); break;
+
+    case 'novo-filho': {
+      /* codlinha (e codempresa, onde a tabela tem) já vêm preenchidos da linha aberta:
+         é o vínculo com o pai, e digitá-lo à mão é o jeito nº 1 de criar órfã. */
+      const semente = { codlinha: d.linha };
+      if ((CAMPOS[d.tab] || []).includes('codempresa')) semente.codempresa = d.emp;
+      abrirModal({ titulo:`Novo registro — ${d.tab}`, corpo:formNovoRegistro(d.tab, semente),
+        pe:`<button type="button" class="btn btn-secundario" data-modal="nao">Cancelar</button>
+            <button type="button" class="btn btn-primario" data-modal="sim">Criar</button>` });
+      ligarValidacaoModal(d.tab);
+      modalOk = ok => { if (ok) criarDoModal(d.tab); };
+      break;
+    }
+
+    case 'excluir-filho': await excluirGenerico(d.tab, r => chaveDe(d.tab, r) === d.chave); break;
 
     case 'excluir-empresa':  await excluirGenerico('codempresa_teste', r => String(r.id) === d.id); break;
     case 'excluir-portaria': await excluirGenerico('portaria_teste',  r => String(r.id) === d.id); break;
