@@ -1,7 +1,7 @@
 # Estrutura e navegação do frontend (`index.html` + `styles.css` + `app.js`) — Portal DIVAT
 
 > **Por que este arquivo existe:** o frontend tem `index.html` (HTML), `styles.css` (CSS),
-> `app.js` (~3,3k linhas — extraído do HTML e ainda envolto num IIFE) e módulos puros em `src/`. Continua
+> `app.js` (~3,0k linhas — extraído do HTML e ainda envolto num IIFE) e módulos em `src/`. Continua
 > **zero-build**: nada de bundler, framework ou `package.json`. Este doc registra (1) *por que*
 > essa forma, (2) *como navegar* no `app.js` sem se perder, e (3) as **regras de segurança** para
 > reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do `CLAUDE.md` (que lista as
@@ -21,14 +21,30 @@ mudou junto, e o que continua valendo:
 - **Auto-update atômico:** `checarNovaVersao` faz `HEAD` de `/version.json`. Todo deploy que muda
   HTML, CSS, JS ou módulos deve incrementar `version`; assim a lista não cresce a cada módulo.
 - **Zero-build continua.** `app.js` é um ES module nativo carregado com `type="module"`; não há
-  bundler nem dependências. Os seams abertos até aqui, todos sem DOM, rede ou estado global:
-  **`src/domain/core.mjs`** (formatação, escaping, `norm`, situação da linha),
-  **`src/domain/agrupamento.mjs`** (agregação, ordenação e filtros de conjunto),
-  **`src/domain/busca.mjs`** (filtro de evento e preparação do termo de busca) e
-  **`src/domain/view-state.mjs`** (seam do ciclo de vida da view, modelo de abas, despacho do
+  bundler nem dependências. Os seams de `src/domain/`, todos sem DOM, rede ou estado global:
+  **`core.mjs`** (formatação, escaping, `norm`, `debounce`, situação da linha),
+  **`agrupamento.mjs`** (agregação, ordenação e filtros de conjunto),
+  **`busca.mjs`** (filtro de evento e preparação do termo de busca) e
+  **`view-state.mjs`** (seam do ciclo de vida da view, modelo de abas, despacho do
   Realtime por aba e o que cada lista mostra). O corte é pela pureza, não pelo assunto:
-  `termosLocalidade` (`app.js:2442`) é da mesma família do
-  `localidadesQueCasam`, mas faz `await getLocalidades()` em `app.js:2443` — é I/O, e ficou.
+  `termosLocalidade` é da mesma família do `localidadesQueCasam`, mas faz `await
+  getLocalidades()` na linha seguinte à declaração (`grep 'async function termosLocalidade'`) —
+  é I/O, e ficou.
+- **Nem todo módulo é de domínio puro — e o que não é declara a dependência.** A Fase B2 do plano
+  das fatias 3-4 abriu quatro que fazem markup ou guardam cache: **`src/ui/doc.mjs`** (cabeçalho,
+  meta, tabela, estados de tela, `bannerTrunc`), **`src/ui/paginacao.mjs`**
+  (`paginate`/`paginateTable`/`paginateEvents`), **`src/ui/listas.mjs`** (a família de listas de
+  linha, com o seam de seleção) e **`src/data/lookups.mjs`** (os caches de referência).
+  O que eles precisam do `app.js` **não é lido de global: é injetado**, num bootstrap único no
+  topo do IIFE (`grep 'Bootstrap dos módulos'`) — `configurarDoc({logoSVG})`,
+  `configurarLookups({sbFetch})` e `configurarListas({aoSelecionarLinha})`. Três consequências
+  práticas: (a) o módulo é exercitável em Node puro, sem navegador, porque a dependência entra
+  por parâmetro (`tests/ui-data-module.test.mjs`); (b) a dependência aparece na assinatura, em
+  vez de num acesso escondido no meio do corpo; (c) **os três falham fechado** — sem configurar,
+  `docHead`/`getEmpresas`/`bindLineRows` lançam, e o gate de navegador fica vermelho na hora.
+  Regra ao abrir um módulo assim: o que ele **esconde** é o mecanismo (o cache, a paginação, o
+  markup); o que ele **expõe** é o que outra camada precisa decidir (a invalidação do cache, a
+  ação de clicar numa linha).
 - **Regra para extrair:** prefira módulos profundos com interface pequena. Não mova loaders/estado
   apenas para reduzir linhas; extraia quando a dependência puder ser expressa por imports claros.
 - **Extração paga o processo que ela torna desnecessário.** Enquanto a função mora no `app.js`, o
@@ -36,8 +52,9 @@ mudou junto, e o que continua valendo:
   `@canon` para não divergir do original. Extraída, o harness importa o módulo real: cópia e guarda
   são **apagadas** no mesmo commit — o teste passa a exercitar exatamente o código que o navegador
   executa. Quando o último `@canon` sair, `tests/canon.js` e `tests/drift.test.js` se aposentam.
-  O `pure.harness.js` chegou lá na Sessão 4 (zero cópias); as 12 que faltam estão no `harness.js`
-  e dependem da Fase B (`src/data/rest.mjs`).
+  O `pure.harness.js` chegou lá na Sessão 4 (zero cópias); as 10 que faltam estão no `harness.js`
+  e dependem da Fase B (`src/data/rest.mjs`) — eram 12 até a Fase B2 levar `bannerTrunc` para
+  `src/ui/doc.mjs` e `preencherLookup` para `src/data/lookups.mjs`.
 - **Toda extração tem três passos obrigatórios, não um:** mover a função + importar no `app.js`;
   apagar o `@canon` e trocar por `require` no harness; e **reabrir o arquivo no `.vercelignore`**.
   Pular o terceiro derruba o portal inteiro (import ES é atômico — ver §`.vercelignore` no
@@ -78,25 +95,30 @@ abaixo), que agora vivem no `app.js`.
 Números de linha **deslocam** a cada edição; **marcas de comentário não**. A regra de ouro é sempre
 achar por `grep` do texto da marca, nunca por linha.
 
-- **Índice no topo do `<script>`** — logo após `<script>`, um comentário lista as 15 seções na ordem.
+- **Índice no topo do `<script>`** — logo após os `import`, um comentário lista as 14 seções na ordem.
 - **Marcas de seção** (topo de nível), formato de 64 `=`:
   ```
   /* ================================================================
      TÍTULO DA SEÇÃO
      ================================================================ */
   ```
-  As 15: `SUPABASE CONFIG` · `ÍCONES` · `SEÇÕES / CARDS` · `RENDER CARDS` · `STATE + CACHES` ·
+  As 14: `SUPABASE CONFIG` · `ÍCONES` · `SEÇÕES / CARDS` · `RENDER CARDS` · `STATE + CACHES` ·
   `BUSCA DE LINHAS (hero)` · `LINHA ATIVA — BANNER` · `MODAL / SISTEMA DE VIEWS` ·
-  `COMPONENTES AUXILIARES` · `CLIQUE NOS CARDS` · `UTILITÁRIOS` · `TOAST` · `REALTIME` ·
-  `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`.
+  `COMPONENTES AUXILIARES` · `CLIQUE NOS CARDS` · `TOAST` · `REALTIME` ·
+  `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`. Eram 15: `UTILITÁRIOS` guardava só o `debounce`, que foi
+  para `src/domain/core.mjs` na Fase B2 — seção que fica vazia sai, não vira comentário órfão.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~58,3% do JS (~1,9k linhas, ~90 funções).
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~60,4% do JS (~1,8k linhas; 69 declarações
+  `function` + 17 `LOADERS.x`). Ele **subiu** de participação tendo ENCOLHIDO em linhas: a Fase B2
+  tirou 266 linhas do arquivo e 99 dele, então o denominador caiu mais que o numerador —
+  percentual de seção não mede progresso de modularização; o total mede.
 
 ### Sub-marcas do bloco `MODAL / SISTEMA DE VIEWS`
 
 O próprio marcador do bloco traz um **sub-índice**. A ordem das sub-marcas:
 
-`Chrome do modal` · `Dispatcher — runView` · `Helpers de documento e busca de linha` ·
+`Chrome do modal` · `Faixa de abas` · `Dispatcher — runView` ·
+`Busca de linha — wrappers de documento` ·
 `Eventos — helpers compartilhados` · `DOC · Histórico (linha)` ·
 `DOC · Itinerários` · `DOC · Quadro de Horários` · `DOC · Tarifas` · `DOC · Frota` ·
 `DOC · Estrutura Operacional` · `DOC · Empresas` · `DOC · Municípios / entre-municípios` ·
@@ -144,28 +166,34 @@ ordem/TDZ em runtime. Ao mover código, use as 3 camadas:
 
 ## 4. Paginação (só de tela) e completude do PDF
 
-Listas longas são quebradas em **páginas de 25 itens** para não exigir rolagem infinita. Toda a
-paginação vive na seção `COMPONENTES AUXILIARES` (exceto `paginateEvents`, que é do MODAL) e é
-**apenas visual** — os dados e o PDF nunca são cortados.
+Listas longas são quebradas em **páginas de 25 itens** para não exigir rolagem infinita. Desde a
+Fase B2 a paginação **não mora mais no `app.js`**: o núcleo agnóstico de conteúdo está em
+[`src/ui/paginacao.mjs`](../src/ui/paginacao.mjs) e a família de listas de LINHA em
+[`src/ui/listas.mjs`](../src/ui/listas.mjs). Ela é **apenas visual** — os dados e o PDF nunca são
+cortados.
 
 ### As funções (grep pela marca / nome)
 
 - **`pageBounds(total, pageSize, page)`** — matemática **pura** (clampa a página, devolve
   `{page,totalPages,start,end}`). Mora em `src/domain/view-state.mjs` desde a Sessão 4 (era cópia
   no harness); casos em `tests/pure.test.js`. É o único pedaço testável; o resto é DOM.
-- **`paginate(container, total, renderSlice, {pageSize=25, afterPaint, unit})`** — **núcleo** por
-  fatia, agnóstico de conteúdo. Renderiza **só a fatia atual** num `.pg-slot` + uma barra
+- **`paginate(container, total, renderSlice, {pageSize=25, afterPaint, unit})`**
+  (`src/ui/paginacao.mjs`) — **núcleo** por fatia, agnóstico de conteúdo. Renderiza **só a fatia atual** num `.pg-slot` + uma barra
   `.doc-pager` (‹ Anterior · `.pg-info` "Página X de Y · N `unit`" · "ir p/ Nº" · Próxima ›).
   Sem barra quando `total <= pageSize`. `afterPaint(slot)` religa cliques a cada página.
-- **`paginateTable(container, items, {cols, rowHTML, foot, bind, unit, pdf=true})`** — tabelas
-  homogêneas via `tableHTML`. **`rowHTML(item, i)` recebe o índice GLOBAL** (`i` = posição na
+- **`paginateTable(container, items, {cols, rowHTML, foot, bind, unit, pdf=true})`**
+  (`src/ui/paginacao.mjs`) — tabelas homogêneas via `tableHTML`. **`rowHTML(item, i)` recebe o índice GLOBAL** (`i` = posição na
   lista inteira) → `data-idx` continua batendo com a lista completa mesmo paginado (crítico para
   Portarias, cujo clique abre `rows[+idx]`). `foot(total)` monta o rodapé com o **total**.
-- **`paginateLines(container, rows, {grouped, pdf=true})`** — listas de **linha**. `grouped`
-  insere os cabeçalhos de empresa **dentro** de cada página (contagem = total do grupo). Usado por
-  `lineResults` (o hub de ~10 cards de listagem de linha).
-- **`paginateEvents`** (bloco `Eventos — helpers compartilhados`, no MODAL) — o paginador **antigo
-  e diferente**: **um evento por página** (não N itens), com filtros próprios. Só o Histórico usa.
+- **`paginateLines(container, rows, {grouped, pdf=true})`** (`src/ui/listas.mjs`) — listas de
+  **linha**. `grouped` insere os cabeçalhos de empresa **dentro** de cada página (contagem = total
+  do grupo). Usado por `lineResults`, o hub das listagens de linha — hoje **8 call sites**, todos
+  em documentos que as Fases C3/C4 vão mover. Ele fica no módulo (e não no `app.js`) porque a
+  única coisa que o prendia lá era o CLIQUE na linha, que agora entra pelo seam
+  `configurarListas({aoSelecionarLinha})`.
+- **`paginateEvents`** (`src/ui/paginacao.mjs`) — o paginador **antigo e diferente**: **um evento
+  por página** (não N itens), com filtros próprios. Só o Histórico usa; o markup do evento
+  (`evBandHTML`/`evBlocksHTML`) continua no bloco `Eventos — helpers compartilhados` do MODAL.
 
 ### O que é paginado e o que NÃO é
 
@@ -183,7 +211,8 @@ paginação vive na seção `COMPONENTES AUXILIARES` (exceto `paginateEvents`, q
 
 `baixarPdf` monta o documento de `currentView.pdfHTML()`. **Quando `pdfHTML` é `null`, ele faz
 fallback clonando o `.doc` visível** — que, com paginação, teria só a página atual. Por isso
-`paginateTable` e `paginateLines` **definem `currentView.pdfHTML` com a lista COMPLETA**
+`paginateTable` (`src/ui/paginacao.mjs`) e `paginateLines` (`src/ui/listas.mjs`) **definem
+`currentView.pdfHTML` com a lista COMPLETA**
 (`renderSlice(0,total)` + `docHead`). Quem já expõe um PDF próprio mais rico passa **`pdf:false`**
 para não ser sobrescrito — são **4 documentos**: **Quadro "por empresa"** (PDF = todos os quadros),
 **Município** (PDF determinístico = lista completa + meta/aviso; dois call sites, um por ramo do
@@ -226,7 +255,8 @@ dependa do fallback do `.doc` visível.
   saber de regra de negócio. Duas submarcas novas:
   - `/* --- Infraestrutura de acesso a dado (Supabase/fetch) --- */`: `SB_URL`/`SB_KEY`,
     `fetchComTimeout`, `sbFetch`, `marcarTrunc`, `bannerTrunc` — único trecho do arquivo que fala
-    com a rede.
+    com a rede. (Desde a Fase B2 o `bannerTrunc` não está mais aí: ele é markup e foi para
+    `src/ui/doc.mjs`; o `marcarTrunc`, que põe a marca que ele lê, ficou.)
   - `/* --- Regras de domínio e formatação (funções puras) --- */`: `fmtCode`/`fmtTime`/`fmtDate`,
     `esc`/`enc`/`ilikeTerm`/`orDash`/`fmtLineName`/`boolChip`, e sobretudo `situacaoHTML`,
     `isLinhaAtiva` e `isVigente` — a **regra de negócio central** do portal (o que conta como

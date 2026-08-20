@@ -56,10 +56,18 @@ cada teste novo).
 ## Arquivos
 - `check.js` — **runner / gate de pré-publicação** (sintaxe + anti-drift + testes).
 - `harness.js` — cópia das funções do bloco SUPABASE CONFIG + mocks; usado por `sbFetch.test.js`.
-- `sbFetch.test.js` — casos de `sbFetch`/`marcarTrunc`/`bannerTrunc`.
+  Desde a Fase B2 ele também faz `require` de dois módulos reais (`bannerTrunc` de `src/ui/doc.mjs`
+  e `preencherLookup` de `src/data/lookups.mjs`), que saíram do `app.js` e deixaram de ser cópia.
+- `sbFetch.test.js` — casos de `sbFetch`/`marcarTrunc`/`bannerTrunc`/`preencherLookup`.
 - `pure.harness.js` — ponte CommonJS para `src/domain/*.mjs`: desde a Sessão 4 não copia mais
   nada, só faz `require` dos módulos reais (era cópia verbatim de 30 funções, 305 linhas).
 - `pure.test.js` — casos das funções puras.
+- `domain-module.test.mjs` — os módulos de `src/domain/` pelo caminho ESM (o mesmo `import` do
+  navegador), provando que carregam e exportam o que prometem.
+- `ui-data-module.test.mjs` — o mesmo, para `src/ui/` e `src/data/`: markup de documento, caches
+  de lookup e o que a família de listas tem de markup puro. Inclui os três "falha fechado" da
+  injeção (`configurarDoc`/`configurarLookups`/`configurarListas`). O que escreve no DOM não cabe
+  aqui — Node não tem `document` e o repo é zero-dependência — e fica com os gates de navegador.
 - `realtime.test.js` — guarda a sincronização `VIEW_TABLES`/`RT_TABLES` (extrai os literais do `app.js`).
 - `backup_rest.rig.mjs` — paginação keyset, contagem, SHA-256 e headers das chaves opacas.
 - `restore_rest.rig.mjs` — corrupção, confirmação do ref, destino vazio, ordem da FK e contagem final.
@@ -73,16 +81,21 @@ que ainda estiver copiada, atualize a cópia** no harness correspondente, entre 
 `/* @canon <nome> */ … /* @endcanon */`. O `check.js` §[2] compara o texto INTEIRO da cópia com o
 `app.js` e falha nomeando quem divergiu.
 
-O que já foi extraído para `src/domain/*.mjs` (hoje `core.mjs`, `agrupamento.mjs`, `busca.mjs` e
-`view-state.mjs`) **não tem cópia**: o `pure.harness.js` faz `require` do módulo real, que é a
-mesma implementação que o navegador executa. **Extrair uma função é, portanto, apagar o bloco
+O que já foi extraído para `src/` (hoje `domain/core.mjs`, `domain/agrupamento.mjs`,
+`domain/busca.mjs`, `domain/view-state.mjs`, `ui/doc.mjs`, `ui/paginacao.mjs`, `ui/listas.mjs` e
+`data/lookups.mjs`) **não tem cópia**: o harness faz `require` do módulo real, que é a mesma
+implementação que o navegador executa. **Extrair uma função é, portanto, apagar o bloco
 `@canon` dela** — não atualizá-lo.
 
-Depois da Sessão 4 as **12** marcas `@canon` restantes estão todas no `harness.js` (as funções que
-dependem de rede/estado do IIFE, `sbFetch` e companhia). O `pure.harness.js` não tem nenhuma.
+Depois da Fase B2 as **10** marcas `@canon` restantes estão todas no `harness.js`, e todas do
+bloco `SUPABASE CONFIG` (as funções que dependem de rede/estado do IIFE, `sbFetch` e companhia) —
+eram 12 até `bannerTrunc` e `preencherLookup` saírem. O `pure.harness.js` não tem nenhuma.
+Conte pelos MARCADORES (`grep -c '^/\* @canon' tests/harness.js`): o `grep -c '@canon'` conta
+também as menções em prosa do cabeçalho.
 
 A checagem de cobertura do `check.js` §[2] não tem lista a manter à mão: para cada harness ela lê
-os próprios `require` de `src/domain/` e os casa com os `export` do módulo citado. Um símbolo só é
+os próprios `require` de `src/` — o diretório inteiro, não só `src/domain/`, desde a Fase B2 — e
+os casa com os `export` do módulo citado. Um símbolo só é
 isento de marcador quando **aquele** harness realmente o liga ao módulo. Consequências práticas,
 todas provadas por mutação:
 

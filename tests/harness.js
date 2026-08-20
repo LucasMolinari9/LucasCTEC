@@ -1,9 +1,17 @@
 'use strict';
-/* Harness reproducing the SUPABASE CONFIG functions from app.js, plus `preencherLookup`
-   (seção STATE + CACHES) — o cache de lookup precisa de teste porque o bug que ele corrige
-   é silencioso: cachear a FALHA em vez do resultado.
+/* Harness reproducing the SUPABASE CONFIG functions from app.js.
    SB_TIMEOUT_MS is made mutable (let) so the timeout test can shrink it.
-   Everything else is copied verbatim. */
+   Everything else marcado com @canon é copiado verbatim; o resto vem dos módulos reais. */
+
+// Estes dois NÃO são cópias: saíram do app.js na Fase B2 e o `sbFetch.test.js` exercita o módulo
+// real por esta ponte.
+//   `bannerTrunc` → `src/ui/doc.mjs`: é markup, não infraestrutura. O par marcar/pintar continua
+//     testado junto, que é o que importa — `marcarTrunc` (cópia @canon, ainda no app.js) põe
+//     `_trunc`/`_limite`, e o banner os lê.
+//   `preencherLookup` → `src/data/lookups.mjs`: o cache de lookup precisa de teste porque o bug
+//     que ele corrige é silencioso (cachear a FALHA em vez do resultado).
+const { bannerTrunc } = require('../src/ui/doc.mjs');
+const { preencherLookup } = require('../src/data/lookups.mjs');
 
 const SB_URL = 'https://example.invalid';
 const SB_KEY = 'fake-anon-key';
@@ -125,26 +133,6 @@ function marcarTrunc(data, qs){
   return data;
 }
 /* @endcanon */
-/* @canon bannerTrunc */
-function bannerTrunc(rows){
-  return (rows && rows._trunc)
-    ? `<div class="trunc-aviso"><b>Resultado parcial:</b> mostrando os primeiros ${rows._limite}. Refine a busca para encontrar itens mais específicos.</div>`
-    : '';
-}
-/* @endcanon */
-
-/* @canon preencherLookup */
-async function preencherLookup(cache, chave, buscar, coluna){
-  if (cache[chave]) return cache[chave];
-  const rows = await buscar().catch(() => null);   // null = falhou; [] = veio vazio de verdade
-  if (!rows) return null;                          // não cacheia falha
-  const m = {};
-  rows.forEach(x => { m[x.id] = x[coluna]; });
-  cache[chave] = m;
-  return m;
-}
-/* @endcanon */
-
 module.exports = {
   get SB_TIMEOUT_MS(){ return SB_TIMEOUT_MS; },
   set SB_TIMEOUT_MS(v){ SB_TIMEOUT_MS = v; },

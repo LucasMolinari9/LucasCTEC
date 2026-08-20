@@ -294,11 +294,11 @@ console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
   // entre marcadores. Varre os DOIS harness — varrer só um e deixar o irmão aberto é o mesmo
   // bug, adiado (o harness.js ficou descoberto assim até 27/07/2026). Harness NOVO entra aqui.
   //
-  // A exceção legítima é o símbolo que o harness IMPORTA de `src/domain/` em vez de copiar: ali
+  // A exceção legítima é o símbolo que o harness IMPORTA de `src/` em vez de copiar: ali
   // não há cópia para divergir, é a mesma implementação que o navegador executa.
   //
   // A exceção é apurada por harness e por BINDING — não por nome existir em algum lugar de
-  // `src/domain/`. A diferença não é purismo: com a versão por nome, um harness que tirasse
+  // `src/`. A diferença não é purismo: com a versão por nome, um harness que tirasse
   // `groupBy` do seu `require` e reintroduzisse uma cópia local sem marcador continuaria isento,
   // porque `groupBy` segue exportado pelo `agrupamento.mjs`. Medido em 14/08/2026 (achado do
   // Codex no PR #125): o gate saía "todas marcadas e conferidas", VERDE, com a cópia local no
@@ -308,14 +308,24 @@ console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
   // Falha FECHADO em toda ambiguidade: forma de require que o extrator não reconhece (namespace,
   // `require` computado) não isenta ninguém, e o gate reprova pedindo o marcador em vez de
   // adivinhar. Um extrator que erra para o lado permissivo é pior que extrator nenhum.
+  // Varre `src/` INTEIRO, não só `src/domain/`: desde a Fase B2 os módulos moram também em
+  // `src/ui/` e `src/data/`, e uma varredura presa a `domain` deixaria de reconhecer o `require`
+  // do módulo real — reprovando quem fez a coisa certa e empurrando de volta para a cópia local,
+  // que é exatamente o que este mecanismo existe para acabar. A chave é o caminho relativo a
+  // `src/` (`ui/doc.mjs`), porque é assim que o `require` do harness o escreve.
   const exportsPorModulo = () => {
-    const dir = path.join(__dirname, '..', 'src', 'domain');
+    const raizSrc = path.join(__dirname, '..', 'src');
     const porArquivo = new Map();
-    let arquivos = [];
-    try { arquivos = fs.readdirSync(dir).filter(f => f.endsWith('.mjs')); } catch (_) { return null; }
+    const varrer = dir => {
+      let entradas = [];
+      try { entradas = fs.readdirSync(dir, { withFileTypes:true }); } catch (_) { return []; }
+      return entradas.flatMap(e => e.isDirectory() ? varrer(path.join(dir, e.name))
+        : (e.name.endsWith('.mjs') ? [path.join(dir, e.name)] : []));
+    };
+    const arquivos = varrer(raizSrc).map(f => path.relative(raizSrc, f).split(path.sep).join('/')).sort();
     if (!arquivos.length) return null;
     for (const f of arquivos){
-      const src = fs.readFileSync(path.join(dir, f), 'utf8');
+      const src = fs.readFileSync(path.join(raizSrc, f), 'utf8');
       const nomes = new Set();
       for (const m of src.matchAll(/^export\s+(?:async\s+)?(?:function\*?|const|let|var|class)\s+([A-Za-z_$][\w$]*)/gm)) nomes.add(m[1]);
       for (const m of src.matchAll(/^export\s*\{([^}]*)\}/gm)){
@@ -328,10 +338,10 @@ console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
     }
     return porArquivo;
   };
-  // Nomes que ESTE harness liga a um módulo de domínio, lidos dos seus próprios `require`.
+  // Nomes que ESTE harness liga a um módulo de `src/`, lidos dos seus próprios `require`.
   // Só a forma desestruturada é aceita — é a que o repo usa, e é a única em que dá para saber,
   // pelo texto, qual binding veio do módulo.
-  const RE_REQUIRE_DOMINIO = /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\(\s*['"][^'"]*\/src\/domain\/([A-Za-z0-9_.-]+\.mjs)['"]\s*\)/g;
+  const RE_REQUIRE_DOMINIO = /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\(\s*['"][^'"]*\/src\/((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.mjs)['"]\s*\)/g;
   // Comentário é removido ANTES de procurar o `require`, senão declaração MORTA concede isenção
   // viva. Medido em 14/08/2026 (achado do Codex sobre o próprio commit que trocou a isenção por
   // nome pela isenção por binding): bastava tirar `groupBy` do require de verdade, deixar
@@ -344,14 +354,14 @@ console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
   const semComentariosJS = txt => txt
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/(^|\s)\/\/[^\n]*/g, '$1');
-  const ligadosAoDominio = (bruto, porModulo, arquivo) => {
+  const ligadosAModulo = (bruto, porModulo, arquivo) => {
     const src = semComentariosJS(bruto);
     const nomes = new Set();
     for (const m of src.matchAll(RE_REQUIRE_DOMINIO)){
       const modulo = m[2];
       const exportsDele = porModulo.get(modulo);
       if (!exportsDele){
-        fail(`[${arquivo}] require de src/domain/${modulo}, que não existe — corrija o caminho`);
+        fail(`[${arquivo}] require de src/${modulo}, que não existe — corrija o caminho`);
         continue;
       }
       for (const parte of m[1].split(',')){
@@ -362,7 +372,7 @@ console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
         const nomeExportado = origem, nomeLocal = local || origem;
         if (!/^[A-Za-z_$][\w$]*$/.test(nomeExportado) || !/^[A-Za-z_$][\w$]*$/.test(nomeLocal)) continue;
         if (!exportsDele.has(nomeExportado)){
-          fail(`[${arquivo}] desestrutura "${nomeExportado}" de src/domain/${modulo}, que não o exporta `
+          fail(`[${arquivo}] desestrutura "${nomeExportado}" de src/${modulo}, que não o exporta `
              + '— o binding chega undefined e o teste passaria testando nada');
           continue;
         }
@@ -374,7 +384,7 @@ console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
   let totalExportados = 0, falhou = false;
   const porModulo = exportsPorModulo();
   if (!porModulo){
-    fail('não consegui ler os export de src/domain/*.mjs — a guarda de cobertura @canon ficaria cega');
+    fail('não consegui ler os export de src/**/*.mjs — a guarda de cobertura @canon ficaria cega');
     falhou = true;
   }
   for (const arquivo of HARNESSES){
@@ -386,8 +396,8 @@ console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
       .map(s => s.replace(/^(?:get|set)\s+/, '').split(/[:(]/)[0].trim())
       .filter(Boolean);
     totalExportados += new Set(exportados).size;
-    const doDominio = porModulo ? ligadosAoDominio(src, porModulo, arquivo) : new Set();
-    const semMarcador = [...new Set(exportados)].filter(n => !copias.has(n) && !doDominio.has(n));
+    const doModulo = porModulo ? ligadosAModulo(src, porModulo, arquivo) : new Set();
+    const semMarcador = [...new Set(exportados)].filter(n => !copias.has(n) && !doModulo.has(n));
     if (semMarcador.length){
       fail(`[${arquivo}] cópia exportada sem marcador @canon: ${semMarcador.join(', ')} — `
          + 'envolva o bloco em /* @canon <nome> */ … /* @endcanon */ '

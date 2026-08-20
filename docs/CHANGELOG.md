@@ -4,6 +4,58 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 20/08/2026 — Fase B2: helpers compartilhados e o seam de seleção
+
+**Fase B2 do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`), executada **fora
+de ordem** — antes das Fases A e B, e a razão está registrada no plano: ela não depende delas.
+`app.js` **3.264 → 2.998 linhas** (−266, −8,1%); a seção `COMPONENTES AUXILIARES` caiu de 285 para
+155. Quatro módulos novos, nenhuma mudança de comportamento pretendida, zero SQL.
+
+- **`src/ui/doc.mjs`** — markup de documento (`docHead`, `metaRows`, `colClass`, `tableHTML`) e os
+  estados de tela (`loading`, `emptyBox`, `emptyLinha`, `errorBox`), mais o `bannerTrunc`.
+- **`src/data/lookups.mjs`** — os caches de referência (`getIbge`, `getOrigem`, `getTerminais`,
+  `getEmpresas`, `empNome`, `getEvLookups`, `preencherLookup`). Esconde o cache; **expõe** a
+  invalidação, no `INVALIDADORES_LOOKUP` que a seção `REALTIME` do `app.js` espalha dentro do
+  `CACHE_INVALIDATORS` — quem sabe QUANDO invalidar é o Realtime, quem sabe O QUE é o módulo.
+- **`src/ui/paginacao.mjs`** — `paginate`, `paginateTable`, `paginateEvents`.
+- **`src/ui/listas.mjs`** — a família de listas de linha (`situacaoSelectHTML`, `linhasTable`,
+  `bindLineRows`, `paginateLines`, `lineResults`).
+- **`debounce` foi para `src/domain/core.mjs`** (o `app.js` e o `paginateEvents` precisam dele, e
+  cópia local nos dois recriaria a divergência que o módulo existe para evitar). Com ele fora, a
+  seção `UTILITÁRIOS` ficou vazia e **foi apagada**: o `app.js` tem **14** seções, não 15.
+
+**A decisão que o plano deixava em aberto — e que fixa as Fases D e E.** Ele dava duas saídas para
+a família de listas e exigia escolher uma *ajustando a outra ponta*. Escolhida a **opção 1**, o
+seam de seleção exposto: clicar numa linha é ação de shell (`selectLine` + `closeModal` + `toast`),
+e ela chega ao módulo por `configurarListas({ aoSelecionarLinha })` **uma vez, no bootstrap**, não
+encadeada pelos 8 call sites de `lineResults` — nenhum deles mudou. O custo que o plano temia
+("esquecer um call site deixa as linhas renderizadas e não clicáveis, sem erro no console") era do
+encadeamento, não da opção. Consequência declarada no plano: a Fase D grande passa a ser **sinal de
+falha** de alguma fase C, e a Fase E é **de fato opcional** — C3 e C4 saem inteiras.
+
+**Injeção explícita, e falhando fechado.** Os três `configurar*` do bootstrap
+(`grep 'Bootstrap dos módulos' app.js`) passam o que só o `app.js` tem: o SVG do `#brandLogo`, a
+função de rede, a ação de selecionar linha. Sem configuração, `docHead`/`getEmpresas`/
+`bindLineRows` **lançam** em vez de sair mudos — e `bindLineRows` lança na LIGAÇÃO, não no clique,
+porque falhar no clique é o que nenhum gate veria. Efeito colateral que vale mais que a ergonomia:
+com a dependência entrando por parâmetro, os módulos passaram a ser exercitáveis em Node puro
+(`tests/ui-data-module.test.mjs`, 21 casos).
+
+- **Guarda ajustada junto:** a §[2] do `tests/check.js` varria só `src/domain/` para reconhecer o
+  `require` de um harness. Passou a varrer `src/` inteiro — sem isso o
+  `require('../src/ui/doc.mjs')` do `harness.js` seria lido como cópia sem marcador, reprovando
+  quem fez a coisa certa.
+- **`@canon`: 12 → 10**, e as 10 restantes são **todas** do bloco `SUPABASE CONFIG` — ou seja, a
+  aposentadoria de `canon.js`/`drift.test.js` agora depende só da Fase B.
+- **Prova por mutação (a fase não exigia):** sem `configurarDoc`, `check_views frota` vermelho;
+  sem `configurarListas`, `check_selecao_linha` vermelho em 4 checagens; `linhasTable` devolvendo
+  caixa vazia, `check_views ligacoesPorEmpresa` vermelho **e** o teste novo 20/21.
+- **Verificação:** `node tests/check.js` verde, `check_views.mjs` 18/18, `check_abas.mjs` e
+  `check_selecao_linha.mjs` verdes, `./scripts/semgrep.sh` sem achados.
+- **`.vercelignore`:** `src/ui/` e `src/data/` reabertos nível a nível (três linhas por
+  subdiretório novo, mais uma por módulo). Import ES é atômico — foi o que derrubou o portal em
+  10/08/2026.
+
 ## 19/08/2026 — Sessão 5: o custo do processo, medido
 
 **Sessão 5 do plano de 6** (`docs/historico/contexto-proxima-sessao-2026-08-14.md`). Documento

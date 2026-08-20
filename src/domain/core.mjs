@@ -1,5 +1,7 @@
-// Regras puras compartilhadas pelo navegador e pelos testes.
-// Este módulo não acessa DOM, rede, storage ou estado global.
+// Regras puras e primitivas compartilhadas pelo navegador e pelos testes.
+// Este módulo não acessa DOM, rede, storage ou estado global. A única que sai da pureza estrita
+// é `debounce` (no fim do arquivo), que agenda um timer — está aqui, e não numa camada acima,
+// porque é primitiva de composição como `esc`/`norm`, e tanto o app.js quanto `src/ui/` a usam.
 
 export function fmtCode(code) {
   if (!code) return '';
@@ -25,3 +27,9 @@ export const situacaoHTML = r => r.cancelado ? '<span class="chip chip-on">Cance
   : '<span class="chip chip-off">Ativa</span>';
 export const isLinhaAtiva = r => !r.cancelado && !r.paralisado;
 export const isVigente = r => isLinhaAtiva(r) && !r.sub_judice && !r.transferido;
+
+// Agrupa uma rajada de eventos numa chamada só (digitar no campo de busca, filtrar o histórico).
+// Dois consumidores independentes: o app.js (busca do topo, filtros dos painéis) e o paginador
+// de eventos em `src/ui/paginacao.mjs`. Uma cópia local em cada um recriaria a divergência
+// silenciosa que este módulo existe para acabar — daí morar aqui e não em nenhum dos dois.
+export function debounce(fn, ms=150){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
