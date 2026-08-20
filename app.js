@@ -1,6 +1,6 @@
 import {
   fmtCode, fmtTime, fmtDate, esc, enc, ilikeTerm, orDash,
-  fmtLineName, boolChip, situacaoHTML, isLinhaAtiva, isVigente, norm,
+  fmtLineName, boolChip, situacaoHTML, isLinhaAtiva, isVigente, norm, debounce,
 } from './src/domain/core.mjs';
 // `scoreEmpresa` não entra aqui de propósito: só o dedupEmpresasPorRJ a usa, e ele mora no módulo.
 import {
@@ -29,6 +29,20 @@ import {
   configurarDoc, docHead, metaRows, colClass, tableHTML,
   loading, emptyBox, emptyLinha, errorBox, bannerTrunc,
 } from './src/ui/doc.mjs';
+// Caches de referência (municípios, origens, terminais, cadastro de empresas, tipos de evento).
+// A função de rede chega neles por `configurarLookups` no bootstrap logo abaixo.
+import {
+  configurarLookups, getIbge, getOrigem, getTerminais,
+  getEmpresas, empNome, empresasMap, empresasList, empresaPorCod,
+  preencherLookup, getEvLookups, INVALIDADORES_LOOKUP,
+} from './src/data/lookups.mjs';
+// Paginação de tela — o núcleo agnóstico de conteúdo. Só de TELA: dados e PDF saem inteiros.
+import { paginate, paginateTable, paginateEvents } from './src/ui/paginacao.mjs';
+// A família de listas de LINHA. A ação de clicar numa linha (selecionar + fechar o modal + toast)
+// é de shell e chega por `configurarListas` no bootstrap logo abaixo.
+import {
+  configurarListas, situacaoSelectHTML, linhasTable, bindLineRows, paginateLines, lineResults,
+} from './src/ui/listas.mjs';
 
 /* ================================================================
    ÍNDICE DO ARQUIVO  —  navegue por `grep` da marca da seção.
@@ -36,12 +50,15 @@ import {
    SUPABASE CONFIG · ÍCONES · SEÇÕES/CARDS · RENDER CARDS ·
    STATE + CACHES · BUSCA DE LINHAS · LINHA ATIVA — BANNER ·
    MODAL / SISTEMA DE VIEWS (maior bloco — tem sub-índice próprio) ·
-   COMPONENTES AUXILIARES · CLIQUE NOS CARDS · UTILITÁRIOS ·
+   COMPONENTES AUXILIARES · CLIQUE NOS CARDS ·
    TOAST · REALTIME · AUTO-ATUALIZAÇÃO · ROTAS (hash)
    ----------------------------------------------------------------
    O arquivo inteiro roda dentro de um IIFE: nenhuma função/estado
    vaza para window (o vendor supabase-js continua global, é lido
-   aqui dentro normalmente).
+   aqui dentro normalmente). Logo depois do `(() => {` vem o
+   BOOTSTRAP DOS MÓDULOS (grep `Bootstrap dos módulos`), que injeta
+   nos módulos de src/ui e src/data o que só existe aqui: o SVG do
+   logo, a função de rede e a ação de selecionar uma linha.
    ================================================================ */
 (() => {
 /* --- Bootstrap dos módulos (src/ui, src/data) ---------------------
@@ -53,6 +70,16 @@ import {
    ligado. As funções passadas abaixo são todas `function` (hoisted), então referenciá-las aqui
    é seguro mesmo estando declaradas mais adiante — ver docs/estrutura-frontend.md §3. */
 configurarDoc({ logoSVG: document.getElementById('brandLogo').innerHTML });
+configurarLookups({ sbFetch });
+/* O seam de seleção: clicar numa linha de qualquer lista SELECIONA a linha, fecha o modal e
+   avisa. É composição de shell (rota + modal + toast), não markup, e por isso não desce para o
+   módulo — desce a AÇÃO, uma vez. `selectLine`/`closeModal`/`toast` são `function` (hoisted).
+   O `activeLine` lido no toast é o de DEPOIS do `selectLine`, de propósito: é a linha que
+   acabou de ser escolhida, com o formato já normalizado pelo `setActiveLine`. */
+configurarListas({ aoSelecionarLinha: row => {
+  selectLine(row); closeModal();
+  toast('Linha selecionada: '+(activeLine.nome_ligacao||activeLine.codlinha),'info');
+}});
 
 /* ================================================================
    SUPABASE CONFIG
@@ -473,86 +500,20 @@ let activeTabId = tabs[0].id;
 function activeTab(){ return tabs.find(t => t.id === activeTabId); }
 function setActiveLine(row){ activeLine = row; activeTab().line = row; }
 
-let ibgeMap   = null;    // { [codibge]: {nome,regiao,regiaoPrograma} }
-let origemMap = null;    // { [cod_origem]: nome_origem }
-let terminalRows = null; // itinerario_teste com tipo_logradouro='Terminal': [{nome_logradouro,codlinha,cod_municipio_origem}]
-// caches carregados e invalidados JUNTOS → cada grupo num objeto só (ver CACHE_INVALIDATORS)
-const evLookups = { emp:null, lin:null };  // lookups de evento: emp={[id]:evento_empresa}, lin={[id]:evento_linha}
-const empresas  = { map:null, list:null, byCod:null }; // cadastro: map nome↔RJ, byCod registro deduplicado, list crua p/ busca
+// Os CACHES de lookup (municípios, origens, terminais, cadastro de empresas e tipos de evento)
+// e os `get*` que os enchem moram em `src/data/lookups.mjs`, importados no topo. Aqui fica só o
+// que depende de estado desta tela. A invalidação deles continua ligada ao Realtime, pelo
+// INVALIDADORES_LOOKUP que a seção REALTIME espalha no CACHE_INVALIDATORS.
 
-async function getIbge() {
-  if (ibgeMap) return ibgeMap;
-  const rows = await sbFetch('municipio_teste', 'select=cod_ibge,nome_municipio,regiao_municipio,regiao_novo&limit=2000');
-  ibgeMap = {};
-  // `regiao` = regionalização nova (usada na coluna "Região" dos outros cards);
-  // `regiaoPrograma` = Região Programa clássica (regiao_municipio) — é a do print DETRO.
-  rows.forEach(r => { ibgeMap[r.cod_ibge] = { nome:r.nome_municipio, regiao:r.regiao_novo||r.regiao_municipio, regiaoPrograma:r.regiao_municipio }; });
-  return ibgeMap;
-}
-async function getOrigem() {
-  if (origemMap) return origemMap;
-  const rows = await sbFetch('origem_teste', 'select=cod_origem,nome_origem&limit=2000');
-  origemMap = {}; rows.forEach(r => { origemMap[r.cod_origem] = r.nome_origem; });
-  return origemMap;
-}
-// terminais físicos (ex.: "Rodoviário Menezes Côrtes") — trechos de itinerário do tipo "Terminal",
-// conceito distinto de origem_teste (que é o ponto de origem do quadro de horários, quase sempre
-// nome de município). Ver Ligações por Terminais.
-async function getTerminais() {
-  if (terminalRows) return terminalRows;
-  terminalRows = await sbFetch('itinerario_teste', `tipo_logradouro=eq.Terminal&select=nome_logradouro,codlinha,cod_municipio_origem&limit=30000`);
-  return terminalRows;
-}
-// O desempate do cadastro de empresas duplicadas (scoreEmpresa/dedupEmpresasPorRJ) vive em
-// src/domain/agrupamento.mjs — definição única do getEmpresas e do LOADERS.empresasRegulares.
-async function getEmpresas() {
-  if (empresas.map) return empresas.map;
-  const rows = await sbFetch('codempresa_teste', 'select=codempresa,nome_empresa,situacao,cassada,sob_intervencao&limit=2000');
-  empresas.list = rows;
-  empresas.map = {};
-  empresas.byCod = {};
-  dedupEmpresasPorRJ(rows).forEach(r => {
-    empresas.map[r.codempresa] = r.nome_empresa;
-    empresas.byCod[r.codempresa] = r;
-  });
-  return empresas.map;
-}
-// nome da empresa (síncrono; cai no próprio código se o cache ainda não carregou)
-const empNome = cod => (empresas.map && empresas.map[cod]) ? empresas.map[cod] : (cod ?? '—');
-// busca empresas por nome (insensível a acento) ou código — assume getEmpresas() já carregado
+// busca empresas por nome (insensível a acento) ou código — assume getEmpresas() já carregado.
+// Fica AQUI, e não no módulo, porque é busca de INTERFACE (alimenta o chooser de empresa do
+// modal), não parte do cache: ela só lê a lista crua que o módulo expõe.
 function searchEmpresas(term, { limit = 40 } = {}){
   const nt = norm(term);
-  return (empresas.list||[])
+  return empresasList()
     .filter(e => norm(e.nome_empresa).includes(nt) || String(e.codempresa||'').includes(term))
     .sort((a,b)=> String(a.nome_empresa||'').localeCompare(String(b.nome_empresa||'')))
     .slice(0, limit);
-}
-
-/* Preenche um cache de lookup {id → coluna}, gravando SÓ quando o fetch deu certo.
-   A forma anterior (`.catch(()=>[])` seguido de `evLookups.emp={}` incondicional) tinha
-   um bug silencioso: objeto vazio é TRUTHY, então o guard `if(!evLookups.emp)` nunca mais
-   disparava — uma falha transitória de rede deixava os lookups vazios pela sessão INTEIRA,
-   e o Histórico passava a mostrar ids crus no lugar dos nomes de evento, sem erro na tela.
-   Os outros caches (getEmpresas/getIbge/getOrigem) não têm o problema porque NÃO engolem o
-   erro: a exceção sobe e o cache continua null, então a próxima chamada refaz.
-   Aqui o erro continua engolido de propósito — o Histórico deve renderizar mesmo sem os
-   nomes de evento, caindo no '—' —, mas engolir não pode virar cachear. */
-async function preencherLookup(cache, chave, buscar, coluna){
-  if (cache[chave]) return cache[chave];
-  const rows = await buscar().catch(() => null);   // null = falhou; [] = veio vazio de verdade
-  if (!rows) return null;                          // não cacheia falha
-  const m = {};
-  rows.forEach(x => { m[x.id] = x[coluna]; });
-  cache[chave] = m;
-  return m;
-}
-
-async function getEvLookups() {
-  await Promise.all([
-    preencherLookup(evLookups, 'emp', () => sbFetch('evento_empresa_teste','select=id,evento_empresa'), 'evento_empresa'),
-    preencherLookup(evLookups, 'lin', () => sbFetch('evento_linha_teste','select=id,evento_linha'), 'evento_linha'),
-  ]);
-  return evLookups;
 }
 
 /* ================================================================
@@ -733,7 +694,7 @@ function paintBanner(row){
     updateNeedChips(); renderTabs(); syncHash();
   });
   // se o cache de empresas ainda não chegou, atualiza o texto quando carregar
-  if (!empresas.map) getEmpresas().then(() => {
+  if (!empresasMap()) getEmpresas().then(() => {
     if (activeLine === row) { const el = banner.querySelector('.lb-emp'); if (el) el.innerHTML = bannerEmpHTML(row); }
   }).catch(()=>{});
 }
@@ -1283,77 +1244,8 @@ function evBandHTML(r, tipoLabel, tipoVal, showLine){
     <div class="ev-cell"><span class="ev-h">${esc(tipoLabel)}</span><span class="ev-v">${esc(tipoVal)}</span></div>
     <div class="ev-cell"><span class="ev-h">Data da Publicação</span><span class="ev-v mono">${esc(fmtDate(r.data_publicacao))}</span></div></div>`;
 }
-function pagerHTML(total){
-  if (total <= 1) return '';
-  return `<div class="doc-pager">
-    <button class="pg-btn" type="button" data-pg="prev">‹ Evento anterior</button>
-    <span class="pg-info"></span>
-    <span class="pg-goto">ir p/ <input type="number" class="pg-num" min="1" max="${total}" aria-label="Ir para o evento nº"> <button class="pg-btn pg-go" type="button">Ir</button></span>
-    <button class="pg-btn" type="button" data-pg="next">Próximo evento ›</button></div>`;
-}
-// barra de filtros do histórico (texto, nº do processo e ano)
-function eventFilterBarHTML(){
-  return `<div class="ev-filters">
-    <label class="evf evf-wide">Texto (descrição/observação)<input type="text" data-f="text" placeholder="ex.: reformulação"></label>
-    <label class="evf">Nº do processo<input type="text" data-f="proc" placeholder="ex.: 2.599/46"></label>
-    <label class="evf">Ano<input type="number" data-f="ano" min="1900" max="2100" placeholder="aaaa"></label>
-    <button type="button" class="evf-clear">Limpar filtros</button>
-  </div>`;
-}
-// `yearOf`/`matchEvent` (filtro deste paginador) moraram para `src/domain/busca.mjs`.
-// Paginador (um evento por vez) com filtros, "ir para a página N" e callback de filtro p/ PDF.
-// `opts.view`/`opts.gen` guardam a escrita inicial em `container.innerHTML` (ver `isCurrentGen`
-// junto a `paginate`) — filtros digitados depois só alternam `.hid` em nós já commitados, sem
-// reescrever a partir do zero, então não precisam reconferir.
-function paginateEvents(container, rows, buildPage, headerHTML='', opts={}){
-  if (!isCurrentGen(opts.view, opts.gen)) return;
-  const total = rows.length;
-  let visible = rows.map((_,i)=>i);   // índices visíveis após o filtro
-  let page = 1;
-  const filtersHTML = total > 1 ? eventFilterBarHTML() : '';
-  container.innerHTML = (headerHTML||'') + filtersHTML
-    + `<div class="ev-empty hid">Nenhum evento corresponde ao filtro.</div>`
-    + rows.map((r,i)=>`<div class="ev-page" data-idx="${i}">${buildPage(r)}</div>`).join('') + pagerHTML(total);
-  const pages = [...container.querySelectorAll('.ev-page[data-idx]')];
-  const emptyMsg = container.querySelector('.ev-empty');
-  const paint = ()=>{
-    if (page > visible.length) page = visible.length; if (page < 1) page = 1;
-    const cur = visible.length ? visible[page-1] : -1;
-    pages.forEach(p=>p.classList.toggle('hid', (+p.dataset.idx) !== cur));
-    if (emptyMsg) emptyMsg.classList.toggle('hid', visible.length>0);
-    const info = container.querySelector('.pg-info');
-    if (info) info.textContent = !visible.length ? '0 eventos'
-      : (visible.length===total ? `Evento ${page} de ${total}` : `Evento ${page} de ${visible.length} (de ${total})`);
-    const prev = container.querySelector('[data-pg="prev"]'); if (prev) prev.disabled = page <= 1;
-    const next = container.querySelector('[data-pg="next"]'); if (next) next.disabled = page >= visible.length;
-    const num = container.querySelector('.pg-num'); if (num) num.max = visible.length;
-  };
-  paint();
-  container.querySelectorAll('.pg-btn[data-pg]').forEach(b=>b.addEventListener('click',()=>{
-    if (b.disabled) return; page += (b.dataset.pg === 'next' ? 1 : -1); paint();
-    container.scrollIntoView({block:'start'});
-  }));
-  const num = container.querySelector('.pg-num'), go = container.querySelector('.pg-go');
-  const doGo = ()=>{ const v = parseInt(num.value,10); if(!isNaN(v)){ page = v; paint(); container.scrollIntoView({block:'start'}); } };
-  if (go) go.addEventListener('click', doGo);
-  if (num) num.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); doGo(); } });
-  // filtros
-  const fEls = [...container.querySelectorAll('.ev-filters [data-f]')];
-  const readCriteria = ()=>{
-    const g = k => (container.querySelector(`.ev-filters [data-f="${k}"]`)?.value || '').trim();
-    const a=g('ano');
-    return { text:norm(g('text')), proc:norm(g('proc')), ano:a?parseInt(a,10):null };
-  };
-  const applyFilters = ()=>{
-    const c = readCriteria();
-    visible = rows.map((_,i)=>i).filter(i=>matchEvent(rows[i], c));
-    page = 1; paint();
-    if (opts.onFilter) opts.onFilter(visible.map(i=>rows[i]));
-  };
-  fEls.forEach(el=>el.addEventListener('input', debounce(applyFilters)));
-  const clear = container.querySelector('.evf-clear');
-  if (clear) clear.addEventListener('click', ()=>{ fEls.forEach(el=>el.value=''); applyFilters(); });
-}
+// O PAGINADOR de eventos (`paginateEvents`, com a barra de filtros e o pager de "um evento por
+// página") mora em `src/ui/paginacao.mjs`; aqui ficam só os helpers de MARKUP do evento.
 // Renderiza o histórico (paginado) de UMA linha dentro de um container
 /* --- DOC · Histórico (linha) -------------------------------------- */
 async function renderLineHistory(host, line){
@@ -1810,8 +1702,9 @@ LOADERS.empresasRegulares = async () => {
   const cnt = {};
   lineRows.forEach(r=>{ const k=r.codempresa||'—'; cnt[k]=cnt[k]||{total:0,ativas:0}; cnt[k].total++; if(isLinhaAtiva(r))cnt[k].ativas++; });
   // dedup do cadastro por RJ (uma entrada por codempresa) — mesma regra que o getEmpresas usa
-  // para o nome do banner, e por isso a MESMA função: ver dedupEmpresasPorRJ, seção STATE + CACHES
-  const list = dedupEmpresasPorRJ(empresas.list).map(e=>({ ...e, total:(cnt[e.codempresa]?.total)||0, ativas:(cnt[e.codempresa]?.ativas)||0 }));
+  // para o nome do banner, e por isso a MESMA função: ver dedupEmpresasPorRJ, em
+  // src/domain/agrupamento.mjs (o getEmpresas que a usa mora em src/data/lookups.mjs)
+  const list = dedupEmpresasPorRJ(empresasList()).map(e=>({ ...e, total:(cnt[e.codempresa]?.total)||0, ativas:(cnt[e.codempresa]?.ativas)||0 }));
   list.sort((a,b)=> b.total-a.total || String(a.nome_empresa||'').localeCompare(String(b.nome_empresa||'')));
   const semLinha = list.filter(e=>!e.total).length;
   const statusCol = e => [boolChip(e.cassada,'Cassada'), boolChip(e.sob_intervencao,'Interv.')].filter(Boolean).join(' ') || `<span class="chip chip-off">${esc(orDash(e.situacao))}</span>`;
@@ -1873,7 +1766,7 @@ LOADERS.ligacoesPorEmpresa = async () => {
       cods = [term.trim()];
     } else {
       const t = norm(term);
-      cods = Object.entries(empresas.map).filter(([,n])=>norm(n||'').includes(t)).map(([c])=>c);
+      cods = Object.entries(empresasMap()).filter(([,n])=>norm(n||'').includes(t)).map(([c])=>c);
       if(!cods.length){ host.innerHTML=emptyBox('Nenhuma empresa encontrada para "'+esc(term)+'".'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     }
     const filter = cods.length===1 ? `codempresa=eq.${enc(cods[0])}` : `codempresa=in.(${cods.map(enc).join(',')})`;
@@ -2295,7 +2188,7 @@ LOADERS.frotaPorEmpresa = async () => {
   const fmtN = n => n.toLocaleString('pt-BR');
   const { totOp, totRes, porEmp, porHier } = resumoFrota(rows);
   const frotaEmpresas = porEmp.map(e=>{
-    const cadastro = empresas.byCod?.[e.cod];
+    const cadastro = empresaPorCod(e.cod);
     return { ...e, nome_empresa:cadastro?.nome_empresa || empNome(e.cod), situacao:cadastro?.situacao || '' };
   });
   const h3 = t => `<h3 class="doc-h3">${t}</h3>`;
@@ -2647,141 +2540,11 @@ async function fetchLinesByCods(cods, { limit = 300 } = {}){
   ]);
   return rows;
 }
-// As bordas da fatia (`pageBounds`) vêm de `src/domain/view-state.mjs` — matemática pura, testada.
-// Núcleo de paginação POR FATIA, agnóstico de conteúdo. Reusa o visual do paginador de eventos
-// (.doc-pager/.pg-*) e o `pageBounds` (testado). `renderSlice(start,end)` devolve o HTML da
-// página; `afterPaint(slot)` (opcional) religa cliques; `unit` rotula o .pg-info. Sem barra
-// quando total <= pageSize. Usado por paginateLines e paginateTable.
-// `view`/`gen`: guarda a escrita inicial em `container.innerHTML` (não só o pdfHTML — ver
-// `isCurrentGen`) contra uma resposta atrasada de uma busca/troca de linha anterior pintando a
-// tabela errada por cima de uma mais nova, mesmo DENTRO do mesmo painel (host ainda anexado).
-// Cliques de página (prev/next/ir) que rodam DEPOIS não reconferem: já pertencem ao commit
-// vencedor — se uma busca mais nova tivesse ganho, este container nem teria sido escrito.
-function paginate(container, total, renderSlice, { pageSize=25, afterPaint, unit='itens', view, gen } = {}){
-  if (!isCurrentGen(view, gen)) return;
-  if(total <= pageSize){
-    container.innerHTML = renderSlice(0, total);
-    if(afterPaint) afterPaint(container);
-    return;
-  }
-  container.innerHTML = `<div class="pg-slot"></div>
-    <div class="doc-pager">
-      <button class="pg-btn" type="button" data-pg="prev">‹ Anterior</button>
-      <span class="pg-info"></span>
-      <span class="pg-goto">ir p/ <input type="number" class="pg-num" min="1" aria-label="Ir para a página nº"> <button class="pg-btn pg-go" type="button">Ir</button></span>
-      <button class="pg-btn" type="button" data-pg="next">Próxima ›</button></div>`;
-  const slot=container.querySelector('.pg-slot'), info=container.querySelector('.pg-info');
-  const prev=container.querySelector('[data-pg="prev"]'), next=container.querySelector('[data-pg="next"]'), num=container.querySelector('.pg-num');
-  let page=1;
-  const paint = ()=>{
-    const b=pageBounds(total, pageSize, page); page=b.page;
-    slot.innerHTML = renderSlice(b.start, b.end); if(afterPaint) afterPaint(slot);
-    info.textContent = `Página ${b.page} de ${b.totalPages} · ${total} ${unit}`;
-    prev.disabled = b.page<=1; next.disabled = b.page>=b.totalPages; num.max = b.totalPages;
-  };
-  paint();
-  const nav = d => ()=>{ page += d; paint(); container.scrollIntoView({block:'start'}); };
-  prev.addEventListener('click', ()=>{ if(!prev.disabled) nav(-1)(); });
-  next.addEventListener('click', ()=>{ if(!next.disabled) nav(1)(); });
-  const doGo = ()=>{ const v=parseInt(num.value,10); if(!isNaN(v)){ page=v; paint(); container.scrollIntoView({block:'start'}); } };
-  container.querySelector('.pg-go').addEventListener('click', doGo);
-  num.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); doGo(); } });
-}
-// Paginador de TABELA homogênea: cada página é um tableHTML da fatia. `rowHTML(item, i)` recebe
-// o índice GLOBAL (i = posição na lista inteira) — assim data-idx continua batendo com a lista
-// completa mesmo paginado. `foot(total)` monta o rodapé com o TOTAL. `bind(slot)` religa cliques.
-// `view`/`gen` vêm de quem chamou (capturados com `const view = currentView, gen =
-// beginGen(view)` ANTES do próprio await) — paginateTable não tem await próprio, então
-// capturar aqui seria tarde demais, e usar `currentView` (em vez do `view` recebido) escreveria
-// na view ATUAL mesmo que quem chamou já não seja mais ela (troca de view no meio do caminho).
-function paginateTable(container, items, { cols, rowHTML, foot, bind, cls='', pageSize=25, unit='itens', pdf=true, view, gen } = {}){
-  const total = items.length;
-  const renderSlice = (s,e)=>tableHTML(cols, items.slice(s,e).map((it,j)=>rowHTML(it, s+j)).join(''),
-    typeof foot==='function' ? foot(total) : foot, cls);
-  paginate(container, total, renderSlice, { pageSize, afterPaint:bind, unit, view, gen });
-  // PDF = lista INTEIRA (a paginação é só de tela). `pdf:false` p/ quem já define o próprio pdfHTML.
-  if(pdf && view) commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead(view.title)}${renderSlice(0, total)}</div>` });
-}
-// Paginador de LISTAS de linha (25/página). `grouped` insere os cabeçalhos de empresa DENTRO de
-// cada página; a contagem do cabeçalho é a do grupo INTEIRO (não só a da página).
-// `view`/`gen` — mesma observação de paginateTable acima.
-function paginateLines(container, rows, { grouped=false, pageSize=25, pdf=true, view, gen } = {}){
-  const groupTotals = grouped ? countBy(rows, r=>r.codempresa||'—') : null;
-  const renderSlice = (s,e)=>{
-    const slice = rows.slice(s,e);
-    return grouped
-      ? [...groupBy(slice, r=>r.codempresa||'—')].map(([cod,seg])=>
-          `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${groupTotals.get(cod)} linha(s)</span></h3>${linhasTable(seg)}`).join('')
-      : linhasTable(slice);
-  };
-  paginate(container, rows.length, renderSlice, { pageSize, afterPaint:bindLineRows, unit:'linhas', view, gen });
-  // PDF = todas as linhas (a paginação é só de tela). `pdf:false` p/ quem já define um pdfHTML
-  // próprio mais rico (ex.: Município com meta/aviso).
-  if(pdf && view) commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead(view.title)}${renderSlice(0, rows.length)}</div>` });
-}
-// O par que define o filtro de situação continua sendo um só, mas em camadas diferentes: a REGRA
-// (`filtrarSituacao`) vem de `src/domain/view-state.mjs`, o MARKUP fica aqui embaixo. Quem lista
-// linha usa os dois — nunca uma cópia local do `filter(r=>!r.cancelado…)`.
-// markup do seletor Todas/Ativas/Canceladas (id `lrStatus` — a CSS de `.loc-tools` já o cobre)
-function situacaoSelectHTML(){
-  return `<label>Situação <select id="lrStatus"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="canceladas">Canceladas</option></select></label>`;
-}
-// Lista de linhas com barra de filtro (situação) + agrupamento por empresa LIGADO por padrão,
-// com os grupos ordenados pelo RJ (codempresa). Padrão de qualquer consulta que lista linhas.
-// `prefixHTML` entra antes da barra (contadores/banner). Requer getEmpresas() já carregado.
-// `view`/`gen` — repassados pra paginateLines (ver observação lá).
-function lineResults(host, rows, { prefixHTML='', pdf=true, view, gen } = {}){
-  if(!rows || !rows.length){ host.innerHTML = prefixHTML + emptyBox('Nenhuma ligação encontrada.'); return; }
-  // bannerTrunc(rows) uma vez no topo: avisa "Resultado parcial" quando a QUERY atingiu o teto
-  // (limit). A paginação abaixo exibe tudo em páginas — não corta mais no cliente.
-  host.innerHTML = prefixHTML + bannerTrunc(rows)
-    + `<div class="loc-tools">
-         ${situacaoSelectHTML()}
-         <label><input type="checkbox" id="lrGroup" checked> Agrupar por empresa</label>
-       </div>
-       <div id="lrResult"></div>`;
-  const result = host.querySelector('#lrResult');
-  const statusSel = host.querySelector('#lrStatus'), groupChk = host.querySelector('#lrGroup');
-  const paint = ()=>{
-    const f = filtrarSituacao(rows, statusSel.value);
-    if(!f.length){ result.innerHTML = emptyBox('Nenhuma linha com esse filtro.'); return; }
-    if(groupChk.checked){
-      // achata os grupos (empresas por RJ; linhas por codlinha) num array global e pagina
-      // contando TODAS as linhas — os cabeçalhos de empresa entram dentro de cada página.
-      const ordered = [...groupBy(f, r=>r.codempresa||'—')].sort((x,y)=>rjOrder(x[0],y[0]))
-        .flatMap(([,rs])=>[...rs].sort(byCodlinha));
-      paginateLines(result, ordered, { grouped:true, pdf, view, gen });
-    } else {
-      paginateLines(result, [...f].sort(byCodlinha), { grouped:false, pdf, view, gen });
-    }
-  };
-  statusSel.addEventListener('change', paint);
-  groupChk.addEventListener('change', paint);
-  paint();
-}
-function linhasTable(rows){
-  if(!rows.length) return emptyBox('Nenhuma ligação.');
-  const body = [...rows].sort(byCodlinha).map(r=>`<tr class="clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r))}'>
-    <td class="td-logr" data-label="Empresa">${esc(empNome(r.codempresa))}</td>
-    <td class="td-num" data-label="RJ">${esc(r.codempresa||'')}</td>
-    <td class="td-num" data-label="Código">${esc(fmtCode(r.codlinha))}</td>
-    <td class="td-num" data-label="Número">${esc(r.numero_ligacao||'—')}</td>
-    <td class="td-logr" data-label="Nome">${fmtLineName(r.nome_ligacao)}</td>
-    <td class="td-logr" data-label="Via">${esc(r.via||'—')}</td>
-    <td class="td-tipo" data-label="Característica">${esc(r.caracteristica||'—')}</td>
-    <td data-label="Tipo">${esc(r.tipo||'')} ${boolChip(r.cancelado,'canc.')}</td></tr>`).join('');
-  // "Nome" e "Empresa" ficam sem largura fixa (colunas flexíveis); as secundárias têm largura
-  // fixa e enxuta para sobrar mais espaço ao nome da linha.
-  return bannerTrunc(rows) + tableHTML([{t:'Empresa',w:'150px'},{t:'RJ',w:'52px'},{t:'Código',w:'108px'},{t:'Número',w:'82px'},{t:'Nome'},{t:'Via',w:'110px'},{t:'Característica',w:'100px'},{t:'Tipo',w:'95px'}], body, rows.length+' ligação(ões) · clique para abrir', 'stack');
-}
-function bindLineRows(host){
-  // qualquer elemento com data-row (linha <tr> da tabela OU cabeçalho de linha do
-  // relatório de seções) abre a linha ao clicar
-  (host||modalBody).querySelectorAll('[data-row]').forEach(el=>el.addEventListener('click',()=>{
-    selectLine(JSON.parse(el.dataset.row)); closeModal();
-    toast('Linha selecionada: '+(activeLine.nome_ligacao||activeLine.codlinha),'info');
-  }));
-}
+// A PAGINAÇÃO mora em módulos: o núcleo agnóstico de conteúdo (`paginate`, `paginateTable`,
+// `paginateEvents`) em `src/ui/paginacao.mjs`, e a família de listas de LINHA
+// (`situacaoSelectHTML`, `linhasTable`, `bindLineRows`, `paginateLines`, `lineResults`) em
+// `src/ui/listas.mjs`, que recebe a ação de clicar numa linha pelo `configurarListas` do
+// bootstrap. Ver docs/estrutura-frontend.md §4.
 // tabela leve de seções de tarifa (Nome da Seção · Tipo · Tarifa) — formato do relatório
 // oficial "seções que possuem seção em <localidade>"
 function secoesLocalidadeTable(secoes){
@@ -3018,12 +2781,6 @@ app.addEventListener('auxclick', e => {
 });
 
 /* ================================================================
-   UTILITÁRIOS
-   ================================================================ */
-function debounce(fn, ms=150){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
-// groupBy/countBy/fmtMoney (a agregação dos relatórios) vivem em src/domain/agrupamento.mjs.
-
-/* ================================================================
    TOAST
    ================================================================ */
 function toast(msg, type = 'info') {
@@ -3046,16 +2803,13 @@ const RT_TABLES = ['tabela_vista_teste','itinerario_teste','qh_teste','qh_interv
 const rtDot = document.getElementById('rtDot');
 let reloadTimer = null;
 
-// tabela → como invalidar o cache derivado dela (ver STATE + CACHES). Declarativo em vez de
-// cadeia de if: deixa o conjunto de caches invalidáveis visível num lugar só. Ao criar um cache
-// novo derivado de uma tabela do Realtime, adicione a entrada aqui.
+// tabela → como invalidar o cache derivado dela. Declarativo em vez de cadeia de if: deixa o
+// conjunto de caches invalidáveis visível num lugar só. Os caches de LOOKUP moram em
+// `src/data/lookups.mjs` e trazem os invalidadores deles prontos (quem sabe o que limpar é quem
+// guarda); aqui embaixo ficam só os caches desta camada. Cache novo entra do lado certo: de
+// lookup, no módulo; de tela, aqui.
 const CACHE_INVALIDATORS = {
-  municipio_teste:      () => { ibgeMap = null; },
-  origem_teste:         () => { origemMap = null; },
-  itinerario_teste:     () => { terminalRows = null; },
-  evento_empresa_teste: () => { evLookups.emp = null; },
-  evento_linha_teste:   () => { evLookups.lin = null; },
-  codempresa_teste:     () => { empresas.map = null; empresas.list = null; empresas.byCod = null; getEmpresas().catch(()=>{}); },
+  ...INVALIDADORES_LOOKUP,
   portaria_teste:       () => { _portariaAnos = null; },
   localidades_teste:    () => { _localidadesList = null; },
 };

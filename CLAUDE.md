@@ -6,9 +6,9 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > **TRABALHO EM CURSO — leia antes de agir:**
 > **[`docs/historico/contexto-proxima-sessao-2026-08-14.md`](docs/historico/contexto-proxima-sessao-2026-08-14.md)**
 > — plano de 6 sessões respondendo a uma crítica externa. As Sessões **1** (rulesets do Semgrep),
-> **2** (`src/domain/agrupamento.mjs`), **3** (`src/domain/busca.mjs`) e **4**
-> (`src/domain/view-state.mjs`, PR #131) estão **mergeadas**. A próxima é a **Sessão 5**, o
-> documento de custo do processo — sem mudança de código, sem risco para o site.
+> **2** (`src/domain/agrupamento.mjs`), **3** (`src/domain/busca.mjs`), **4**
+> (`src/domain/view-state.mjs`, PR #131) e **5** (auditoria do custo do processo, PR #133) estão
+> **mergeadas**. Sobra a **Sessão 6** (retomada do PR #98), que depende do dono — ver abaixo.
 > Aquele arquivo traz a especificação de cada sessão, o protocolo combinado (um PR por sessão,
 > `@codex review`, sem merge por conta própria) e os limites medidos do ambiente do agente.
 > **A cota de code review do Codex está esgotada** desde 15/08: os PRs #130 e #131 pediram
@@ -21,7 +21,11 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > tabela, e a conferência do preview dela inclui **confirmar que a atualização ao vivo chega**, não
 > só que os cards aparecem — ela mexe no despacho do Realtime. Continua valendo o plano vivo
 > [`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`](docs/planos/2026-08-14-modularizacao-fatias-3-4.md),
-> que ordena as fases seguintes.
+> que ordena as fases seguintes. Dele já entrou a **Fase B2** (helpers compartilhados e o seam de
+> seleção: `src/ui/doc.mjs`, `src/ui/paginacao.mjs`, `src/ui/listas.mjs`, `src/data/lookups.mjs`),
+> **fora de ordem, e a razão está registrada lá**: ela não depende de A nem de B. Ela também
+> **decidiu** a bifurcação que o plano deixava em aberto — opção 1, seam de seleção exposto —, e
+> essa decisão fixa o critério de saída das Fases D e E.
 >
 > Continua valendo:
 > **[`docs/historico/contexto-proxima-sessao-2026-08-09.md`](docs/historico/contexto-proxima-sessao-2026-08-09.md)**
@@ -40,7 +44,7 @@ empresas, relatórios). Os dados são **alimentados pelo dono direto no Supabase
 exibe e **atualiza ao vivo** (Realtime).
 
 ## Arquitetura (importante)
-- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (quase todo o JS, ~3,3k
+- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (quase todo o JS, ~3,0k
   linhas, num IIFE)** — zero-build: sem framework, sem `package.json`, `<script src>` clássico no
   fim do `<body>`. Todo JS novo vai no `app.js` (o `tests/check.js` **falha** se aparecer
   `<script>` inline no `index.html` — a CSP publica `script-src 'self'` e bloquearia) e todo CSS
@@ -48,8 +52,8 @@ exibe e **atualiza ao vivo** (Realtime).
   (`#/linha/<cod>`, `#/consulta/<view>`) — deep link e Voltar do navegador fecham o modal.
   Racional e regras de navegação: **`docs/estrutura-frontend.md`**.
 - **A lógica PURA vai saindo do `app.js` para `src/domain/*.mjs`**, um módulo por sessão. Hoje são
-  quatro: **`core.mjs`** (formatação, escaping, `norm`, e as regras de situação `isLinhaAtiva`/
-  `isVigente`), **`agrupamento.mjs`** (`groupBy`/`countBy`/`fmtMoney`, as ordenações `byCodlinha`/
+  quatro: **`core.mjs`** (formatação, escaping, `norm`, `debounce`, e as regras de situação
+  `isLinhaAtiva`/`isVigente`), **`agrupamento.mjs`** (`groupBy`/`countBy`/`fmtMoney`, as ordenações `byCodlinha`/
   `rjOrder`, o desempate `scoreEmpresa`/`dedupEmpresasPorRJ`, os recortes por município
   `classifyMunLines`/`terminaisDoMunicipio` e a frota `resumoFrota`/`filtrarFrotaEmpresas`),
   **`busca.mjs`** (o filtro do histórico de eventos `yearOf`/`matchEvent` e a preparação do termo
@@ -58,13 +62,30 @@ exibe e **atualiza ao vivo** (Realtime).
   `popDetail`, o modelo de abas `MAX_TABS`/`makeTab`/`openTabState`/`closeTabState`, o despacho do
   Realtime por aba `tabMatchesEvent`/`dispatchRealtime` e o que cada lista mostra, `pageBounds`/
   `filtrarSituacao`).
+- **Desde a Fase B2 há módulos que NÃO são de domínio puro** — eles fazem markup ou guardam
+  cache, e por isso moram fora de `src/domain/`. São quatro: **`src/ui/doc.mjs`** (markup de
+  documento: `docHead`/`metaRows`/`colClass`/`tableHTML` e os estados de tela `loading`/
+  `emptyBox`/`emptyLinha`/`errorBox`, mais o `bannerTrunc`), **`src/ui/paginacao.mjs`**
+  (`paginate`/`paginateTable`/`paginateEvents` — paginação de tela, agnóstica de conteúdo),
+  **`src/ui/listas.mjs`** (a família de listas de LINHA: `situacaoSelectHTML`/`linhasTable`/
+  `bindLineRows`/`paginateLines`/`lineResults`) e **`src/data/lookups.mjs`** (os caches de
+  referência: `getIbge`/`getOrigem`/`getTerminais`/`getEmpresas`/`empNome`/`getEvLookups` +
+  `preencherLookup`, com `INVALIDADORES_LOOKUP` para o Realtime).
+  **O que eles precisam do app.js chega por INJEÇÃO, num bootstrap único no topo do IIFE**
+  (`grep 'Bootstrap dos módulos'`): `configurarDoc({logoSVG})` passa o SVG do `#brandLogo`,
+  `configurarLookups({sbFetch})` passa a função de rede, e `configurarListas({aoSelecionarLinha})`
+  passa a ação de shell de clicar numa linha (selecionar + fechar o modal + toast). Os três
+  **falham fechado**: sem configuração, `docHead`/`getEmpresas`/`bindLineRows` lançam em vez de
+  sair mudos — regressão silenciosa aqui é invisível para todo gate. Módulo que precise de mais
+  de ~6 dependências injetadas é sinal de parar (ver o critério no plano vivo).
   **Regra: função pura extraída deixa de ter cópia em `tests/*.harness.js`** — o harness passa a
   fazer `require` do módulo real, e o bloco `@canon` correspondente é APAGADO, não atualizado. A
   cobrança do `check.js` §[2] não tem lista a manter à mão: ela lê o `require` **de cada harness**
   e o casa com os `export` do módulo citado, isentando o símbolo só quando aquele harness de fato
   o liga ao módulo. Tirar um nome do `require` e recolocar uma cópia local reprova o gate — e
   desestruturar nome que o módulo não exporta também, porque o binding chegaria `undefined`.
-  Módulo novo precisa de linha própria no `.vercelignore` (abaixo) e de `import` no `app.js`.
+  Módulo novo precisa de linha própria no `.vercelignore` (abaixo) e de `import` no `app.js` —
+  e, se ficar fora de `src/domain/`, nada muda no gate: a §[2] varre `src/` inteiro.
 - As consultas usam **REST do Supabase via `fetch`** (PostgREST). O **supabase-js** é usado **só**
   para o canal **Realtime** — é **vendorado** em `vendor/supabase-js-2.110.7.min.js` (versão
   fixa, mesma origem, sem CDN em runtime; ver Armadilhas para atualizar) e **injetado
@@ -84,8 +105,10 @@ exibe e **atualiza ao vivo** (Realtime).
   **CSSOM** — `el.style.x = …` e `setProperty`, que a CSP permite (medido em Chromium headless).
   Duas guardas cobram isso: `tests/check.js` §[1] e a regra Semgrep `divat-style-attr-quebra-csp`.
 - **`.vercelignore` é allowlist**: o deploy publica só `index.html`, `app.js`, `styles.css`,
-  `manifest.webmanifest`, `vercel.json`, `version.json`, `vendor/` e os módulos de `src/domain/`
-  reabertos um a um (hoje `core.mjs`, `agrupamento.mjs`, `busca.mjs` e `view-state.mjs`).
+  `manifest.webmanifest`, `vercel.json`, `version.json`, `vendor/` e os módulos de `src/`
+  reabertos um a um (hoje `domain/core.mjs`, `domain/agrupamento.mjs`, `domain/busca.mjs`,
+  `domain/view-state.mjs`, `ui/doc.mjs`, `ui/paginacao.mjs`, `ui/listas.mjs` e
+  `data/lookups.mjs` — cada subdiretório novo de `src/` também precisa das suas três linhas).
   Arquivo público novo (ícone, fonte) precisa ser reaberto lá, senão vira 404. **`src/` é reaberto
   arquivo a arquivo**, não com um `!/src` de uma linha: é diretório cujo nome convida a guardar o
   que não se serve, e reabri-lo inteiro publicaria em silêncio o que alguém largar ali. Reabrir só
@@ -207,31 +230,35 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 
 | Seção (faça grep do título) | Funções-chave | O que faz |
 |---|---|---|
-| *(fora do `app.js`)* `src/domain/core.mjs` | `fmtCode/fmtTime/fmtDate`, `esc/enc/ilikeTerm/orDash`, `norm`, `isLinhaAtiva`/`isVigente` | Formatação, escaping, normalização de texto e as regras de situação da linha. |
+| *(fora do `app.js`)* `src/domain/core.mjs` | `fmtCode/fmtTime/fmtDate`, `esc/enc/ilikeTerm/orDash`, `norm`, `debounce`, `isLinhaAtiva`/`isVigente` | Formatação, escaping, normalização de texto, o `debounce` compartilhado e as regras de situação da linha. |
 | *(fora do `app.js`)* `src/domain/agrupamento.mjs` | `groupBy`, `countBy`, `fmtMoney`, `byCodlinha`, `rjOrder`, `scoreEmpresa`/`dedupEmpresasPorRJ`, `classifyMunLines`/`terminaisDoMunicipio`, `resumoFrota`/`filtrarFrotaEmpresas` | Agregação, ordenação e filtros de conjunto — importados pelo `app.js` e pelos testes, sem cópia no meio. |
 | *(fora do `app.js`)* `src/domain/busca.mjs` | `yearOf`/`matchEvent`, `localidadesQueCasam`, `orIlike`, `municipiosExatos` | Filtro do histórico de eventos (no cliente) e preparação do termo que vai ao servidor (o `or=()` do PostgREST). O I/O ficou de fora: `termosLocalidade` continua no `app.js` porque faz `await getLocalidades()`. |
 | *(fora do `app.js`)* `src/domain/view-state.mjs` | `beginGen`/`isCurrentGen`/`commitViewResult`/`pushDetail`/`popDetail`, `MAX_TABS`/`makeTab`/`openTabState`/`closeTabState`, `tabMatchesEvent`/`dispatchRealtime`, `pageBounds`, `filtrarSituacao` | Regras puras sobre o ESTADO DO QUE ESTÁ NA TELA: qual tentativa de carga ainda vale, quais abas existem, qual delas se importa com um evento, e que fatia/subconjunto uma lista mostra. Quem APLICA a decisão (DOM, fetch, toast) continua no `app.js`. |
-| `SUPABASE CONFIG` | `sbFetch`, `fetchComTimeout`, `selecionarSupabase`, `marcarTrunc`, `bannerTrunc` | Config SB + fetch com timeout/retry. Os helpers de formatação e escape que ficavam aqui moraram para `src/domain/core.mjs` (linha de cima). |
+| *(fora do `app.js`)* `src/ui/doc.mjs` | `configurarDoc`, `docHead`, `metaRows`, `colClass`, `tableHTML`, `loading`/`emptyBox`/`emptyLinha`/`errorBox`, `bannerTrunc` | Markup de documento e estados de tela — string de HTML, sem DOM nem estado. O SVG do logo chega por `configurarDoc` no bootstrap. |
+| *(fora do `app.js`)* `src/ui/paginacao.mjs` | `paginate`, `paginateTable`, `paginateEvents` | Paginação **só de tela** (25/pág), agnóstica de conteúdo; `paginateEvents` é o de UM evento por página, com filtros. Recebem `view`/`gen` de quem chama. |
+| *(fora do `app.js`)* `src/ui/listas.mjs` | `configurarListas`, `situacaoSelectHTML`, `linhasTable`, `bindLineRows`, `paginateLines`, `lineResults` | A família de listas de LINHA, o hub de ~10 cards. O clique numa linha é ação de shell e chega por `configurarListas({aoSelecionarLinha})`. |
+| *(fora do `app.js`)* `src/data/lookups.mjs` | `configurarLookups`, `getIbge`/`getOrigem`/`getTerminais`/`getEmpresas`/`empNome`/`getEvLookups`, `preencherLookup`, `INVALIDADORES_LOOKUP` | Caches de referência que quase todo card lê por baixo. Esconde o cache; **expõe** a invalidação, porque quem sabe QUANDO invalidar é o Realtime. |
+| `SUPABASE CONFIG` | `sbFetch`, `fetchComTimeout`, `selecionarSupabase`, `marcarTrunc` | Config SB + fetch com timeout/retry. Os helpers de formatação e escape moraram para `src/domain/core.mjs`; o `bannerTrunc` que pinta a truncagem, para `src/ui/doc.mjs` (marcar é dado, pintar é markup). |
 | `ÍCONES` | objeto `I` | SVGs dos ícones. |
 | `SEÇÕES / CARDS` | array `SECTIONS` | Define os cards `[ícone, título, descrição, view, precisaLinha]`. |
 | `RENDER CARDS` | `selectTopic`, `renderSideNav`, `renderSideContent` | Monta o **painel lateral** (sidebar de tópicos + painel de conteúdo) a partir de `SECTIONS`; `selectTopic` troca o tópico ativo (clique na sidebar, busca do topo e rota `#/topico/<key>`). |
-| `STATE + CACHES` | `activeLine`, `*Map`, `getIbge/getOrigem/getEmpresas/getEvLookups` | Estado global e caches dos lookups. |
+| `STATE + CACHES` | `activeLine`, `tabs`/`activeTab`/`setActiveLine`, `searchEmpresas` | Estado global desta tela. Os caches de lookup foram para `src/data/lookups.mjs` (linha acima); ficou a busca de empresa do modal, que só lê a lista que o módulo expõe. |
 | `BUSCA DE LINHAS (hero)` | `doSearch`, `closeDropdown` | Busca do topo e dropdown de resultados. |
 | `LINHA ATIVA — BANNER` | `selectLine`, `bannerEmpHTML` | Banner navy da linha selecionada. |
-| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody/loading/errorBox`, `baixarPdf`, `docHead`, `tableHTML`, `paginateEvents` (o filtro dele, `matchEvent`, mora em `src/domain/busca.mjs`; o seam `beginGen`/`commitViewResult` que ele usa, em `src/domain/view-state.mjs`), `setCurrentView`/`activateTab` (wiring das abas, sobre o modelo puro do `view-state.mjs`), `renderBlankTab`/`renderTabChooser` (seletor de documentos da aba do "+"), todos os `render*` | **Maior bloco**: abre/preenche o modal e renderiza TODOS os documentos. |
-| `COMPONENTES AUXILIARES` | `linhasTable`, `bindLineRows`, `searchPanel`, `lineResults`, `situacaoSelectHTML`, `paginate`, `paginateTable`, `paginateLines` (o `pageBounds` e o `filtrarSituacao` que eles usam moram em `src/domain/view-state.mjs`) | Tabela de linhas + painel de busca reutilizável + **paginação de tela** (25/pág; ver `docs/estrutura-frontend.md` §4). |
+| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody`, `baixarPdf`, `evBandHTML`/`evBlocksHTML` (o paginador de eventos que os consome, `paginateEvents`, mora em `src/ui/paginacao.mjs`), `setCurrentView`/`activateTab` (wiring das abas, sobre o modelo puro do `view-state.mjs`), `renderBlankTab`/`renderTabChooser` (seletor de documentos da aba do "+"), todos os `render*` | **Maior bloco**: abre/preenche o modal e renderiza TODOS os documentos. |
+| `COMPONENTES AUXILIARES` | `searchPanel`, `distinctCods`/`fetchLinesByCods`, `empresaChooserHTML`/`bindEmpresaRows`, `renderLocalidadeSecoes`/`pintarLocalidadeSecoes` | Painel de busca reutilizável e os helpers de listagem que ainda dependem de estado desta tela. A tabela de linhas e a paginação moraram para `src/ui/listas.mjs` e `src/ui/paginacao.mjs`. |
 | `CLIQUE NOS CARDS` | — | Liga o clique do card → abre a view. |
-| `UTILITÁRIOS` | `debounce` | O que sobrou depois que a agregação (`groupBy`/`countBy`/`fmtMoney`) foi para `src/domain/agrupamento.mjs`. |
 | `TOAST` | `toast` | Avisos transitórios. |
-| `REALTIME` | `RT_TABLES`, `invalidateCaches`, `scheduleReload`/`reloadTab`, `markStale`, `onRealtime`, `initRealtime` (a decisão de quem recarrega, `dispatchRealtime`, vem de `src/domain/view-state.mjs`) | Assina mudanças do Supabase e despacha por aba: a aba ativa recarrega ao vivo, as de segundo plano só ficam `stale` (recarregam ao serem reativadas). supabase-js injetado dinamicamente aqui. |
+| `REALTIME` | `RT_TABLES`, `CACHE_INVALIDATORS` (espalha o `INVALIDADORES_LOOKUP` do módulo e acrescenta os caches desta camada), `invalidateCaches`, `scheduleReload`/`reloadTab`, `markStale`, `onRealtime`, `initRealtime` (a decisão de quem recarrega, `dispatchRealtime`, vem de `src/domain/view-state.mjs`) | Assina mudanças do Supabase e despacha por aba: a aba ativa recarrega ao vivo, as de segundo plano só ficam `stale` (recarregam ao serem reativadas). supabase-js injetado dinamicamente aqui. |
 | `AUTO-ATUALIZAÇÃO` | `checarNovaVersao` | Detector de novo deploy (`HEAD /version.json`, compara o ETag) que recarrega sozinho. |
 | `ROTAS (hash)` | `syncHash`, `applyRoute` | Deep link (`#/linha/…`, `#/consulta/…`) e Voltar do navegador fechando o modal. |
 
 A lógica **pura** dessas seções tem testes em `tests/`: o que já saiu para `src/domain/` é
 testado direto pelo módulo real; o que ainda mora no `app.js` roda sobre cópia verbatim guardada
-pelo `check.js` — são as **12** do `tests/harness.js`, onze do bloco `SUPABASE CONFIG` mais o
-`preencherLookup`, que é de `STATE + CACHES`. Render/DOM e PDF não
-têm teste (exigiriam navegador).
+pelo `check.js` — são as **10** do `tests/harness.js`, todas do bloco `SUPABASE CONFIG` (o
+`preencherLookup` e o `bannerTrunc`, que eram as duas de fora, saíram na Fase B2). Render/DOM e
+PDF não têm teste em Node; o que os módulos de `src/ui/` têm de markup puro é exercitado em
+`tests/ui-data-module.test.mjs`, e o resto fica com os gates de navegador.
 
 ## Publicação (Vercel) e atualização automática
 - **Host: Vercel** (único host em uso). A ligação com o Supabase é toda **client-side**; o host
@@ -304,7 +331,7 @@ têm teste (exigiriam navegador).
 
 2a. **Mexeu em render/loader? `node scripts/check_views.mjs`** — abre as **18 views** num
    navegador headless e falha se alguma explodir, ficar no spinner ou pintar menos que o
-   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~58,3% do `app.js`), que o
+   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~60,4% do `app.js`), que o
    `check.js` **não** cobre. Aceita filtro: `check_views.mjs frota`.
    **O que quebra se esquecer:** view nova sem entrada em `VIEWS` (a checagem anti-drift do final
    pega); `select=` alterado sem ajustar a fixture em `scripts/lib/rig.mjs` — nome de coluna
@@ -403,12 +430,14 @@ têm teste (exigiriam navegador).
   portaria). As duas cópias andam juntas porque **o import de CSV alimenta as duas**. Até
   08/08/2026 esta linha afirmava que "o rebuild do ETL desfaz", como se houvesse um mecanismo
   automático; não há. Detalhe em `docs/etl.md` §3.
-- **Truncagem silenciosa:** a maioria dos loaders avisa via `marcarTrunc`/`bannerTrunc`, mas
+- **Truncagem silenciosa:** a maioria dos loaders avisa via `marcarTrunc` (`app.js`, marca o
+  array) + `bannerTrunc` (`src/ui/doc.mjs`, pinta o aviso), mas
   cortes por `slice(0,N)` no cliente **perdem** a flag não-enumerável `_trunc` (o `slice` não a
   copia). Ao criar/editar view que faz `slice` no cliente, **reponha a flag** (ou avise o
   usuário) quando o limite for atingido.
 - **Paginação é SÓ de tela; o PDF sai INTEIRO:** listas longas são paginadas (25/pág) por
-  `paginateTable`/`paginateLines` (núcleo `paginate` + o `pageBounds` do `view-state.mjs`). Como só a fatia atual
+  `paginateTable` (`src/ui/paginacao.mjs`) e `paginateLines` (`src/ui/listas.mjs`) — núcleo
+  `paginate` + o `pageBounds` do `view-state.mjs`. Como só a fatia atual
   entra no DOM, o fallback do `baixarPdf` exportaria só a página aberta — por isso os wrappers
   **escrevem `pdfHTML` (via `commitViewResult`) com a lista completa**. Quem tem PDF próprio mais
   rico passa **`pdf:false`** — são **4 documentos**: Quadro "por empresa"; Município (dois call
@@ -426,7 +455,8 @@ têm teste (exigiriam navegador).
   atrasada pode acertar a view ERRADA, a que está aberta agora, não a que a busca pertencia). Sem
   isso, uma resposta atrasada de uma busca/troca de linha anterior pode sobrescrever o resultado de
   uma busca mais nova (ex.: digitar "101", trocar pra "202" antes da 1ª resposta voltar → PDF sai
-  da linha errada). `paginateTable`/`paginateLines`/`lineResults` escrevem `pdfHTML` DEPOIS do
+  da linha errada). `paginateTable` (`src/ui/paginacao.mjs`) e `paginateLines`/`lineResults`
+  (`src/ui/listas.mjs`) escrevem `pdfHTML` DEPOIS do
   `await` de quem os chama — por isso recebem `view` e `gen` como opções em vez de capturar os
   próprios (capturar ali seria tarde demais, e um `view`/`gen` frescos ali dentro não identificam
   qual tentativa é a mais recente). Painéis com lista+detalhe (hoje só Portarias) usam
@@ -459,10 +489,17 @@ têm teste (exigiriam navegador).
   lembre: qualquer estado que a rota carrega e que mude com o modal aberto tem a mesma
   armadilha.**
 - **Filtro de situação das listas de linha:** a barra Todas/Ativas/Canceladas tem **definição
-  única**, em duas camadas — `situacaoSelectHTML()` (markup, no `app.js`) + `filtrarSituacao()`
-  (regra, sobre `isLinhaAtiva`, em `src/domain/view-state.mjs`), usadas pelo `lineResults` e pelo
-  `renderLocalidadeSecoes`. **Tela nova que lista linha usa
+  única**, em duas camadas — `situacaoSelectHTML()` (markup, em `src/ui/listas.mjs`) +
+  `filtrarSituacao()` (regra, sobre `isLinhaAtiva`, em `src/domain/view-state.mjs`), usadas pelo
+  `lineResults` e pelo `renderLocalidadeSecoes`. **Tela nova que lista linha usa
   esses dois**, não uma quarta cópia do `filter(r=>!r.cancelado…)`.
+- **Clicar numa linha de qualquer lista passa por UM seam só:** `bindLineRows`
+  (`src/ui/listas.mjs`) não sabe o que é selecionar uma linha — ele chama a ação que o
+  `configurarListas({aoSelecionarLinha})` do bootstrap injetou, e que é composta no `app.js`
+  (`selectLine` + `closeModal` + `toast`). **Tela nova não escreve o próprio `onclick` de linha**:
+  usa `linhasTable`/`lineResults`, e o clique vem junto. Sem a configuração, `bindLineRows`
+  **lança na hora de ligar** — de propósito: linha renderizada e não clicável é falha silenciosa,
+  e falhar no clique deixaria o defeito passar por todo gate.
 - **supabase-js vendorado:** para atualizar a versão: `npm pack @supabase/supabase-js@<v>`,
   extrair `dist/umd/supabase.js`, conferir a integridade contra o registro, trocar o arquivo em
   `vendor/` e a tag `<script src>` no `index.html`.

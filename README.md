@@ -8,13 +8,16 @@ histórico/eventos, empresas e relatórios. Os dados são mantidos pelo dono dir
 ## Como funciona (resumo)
 
 - **Frontend = três arquivos estáticos:** [`index.html`](index.html) (HTML),
-  [`styles.css`](styles.css) (todo o CSS) e [`app.js`](app.js) (~3,3k linhas num
+  [`styles.css`](styles.css) (todo o CSS) e [`app.js`](app.js) (~3,0k linhas num
   IIFE). Não há build, framework nem `package.json`: é só servir a pasta. O JS entra por
   `<script src>` clássico no fim do `<body>` — **nada de `<script>` inline**, porque a CSP
   publica `script-src 'self'` e bloquearia.
 - A lógica **pura** vai saindo do `app.js` para módulos ES nativos em [`src/domain/`](src/domain)
-  (hoje `core.mjs`, `agrupamento.mjs` e `busca.mjs`), importados tanto pelo navegador quanto pelos testes —
-  continua sem build: são `import` nativos, não bundle.
+  (hoje `core.mjs`, `agrupamento.mjs`, `busca.mjs` e `view-state.mjs`), importados tanto pelo
+  navegador quanto pelos testes — continua sem build: são `import` nativos, não bundle. Ao lado
+  deles, [`src/ui/`](src/ui) (markup de documento, paginação e listas de linha) e
+  [`src/data/`](src/data) (os caches de lookup) guardam o que não é puro mas também não é desta
+  tela; o que essas peças precisam do `app.js` chega por injeção, num bootstrap único.
 - As consultas vão direto ao **Supabase via REST** (PostgREST) com `fetch`. O `supabase-js`
   entra **só** para o canal **Realtime**, é **vendorado** em
   [`vendor/`](vendor/) (versão fixa, mesma origem) e é injetado dinamicamente pelo `app.js`.

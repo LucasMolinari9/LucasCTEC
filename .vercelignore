@@ -46,3 +46,8 @@
 !/src/ui
 /src/ui/*
 !/src/ui/doc.mjs
+!/src/ui/paginacao.mjs
+!/src/ui/listas.mjs
+!/src/data
+/src/data/*
+!/src/data/lookups.mjs
