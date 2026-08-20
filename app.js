@@ -1421,6 +1421,7 @@ async function renderItinerarios(host, line){
     sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=${ITINERARIO_FIELDS}&order=id`),
     getIbge(), getEmpresas()
   ]);
+  if (!isCurrentGen(view, gen)) return;   // tentativa velha: descarta (a mais nova já pintou)
   if (!rows.length) { host.innerHTML = emptyLinha('itinerário'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const codEmp = rows[0]?.codempresa || line.codempresa || '';
   const meta = metaRows([['Empresa',esc(empNome(codEmp)),true],['Registro','RJ-'+esc(codEmp)],
@@ -1522,6 +1523,7 @@ async function renderLinhaQuadro(host, line){
       sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=${TARIFA_LINHA_FIELDS}&order=secao`),
       getOrigem(), getEmpresas()
     ]);
+    if (!isCurrentGen(view, gen)) return;   // tentativa velha: descarta (a mais nova já pintou)
     if (!interv.length && !predet.length){ host.innerHTML = emptyLinha('quadro de horários'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const ultima = qh[0]?.ultima_alteracao;
     // bloco de Seções e Tarifas da linha (mesma tabela/builder da Estrutura), fora do #qhResult
@@ -1562,6 +1564,7 @@ async function quadroEmpresaRun(term, host){
     commitViewResult(view, gen, { pdfHTML:null }); return;
   }
   await getEmpresas();
+  if (!isCurrentGen(view, gen)) return;   // tentativa velha: descarta (a mais nova já pintou)
   const emps = searchEmpresas(term);
   if(emps.length > 1){
     host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para abrir os quadros' });
@@ -1654,6 +1657,7 @@ async function renderTarifas(host, line){
   const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=${TARIFA_LINHA_FIELDS}&order=secao`);
+  if (!isCurrentGen(view, gen)) return;   // tentativa velha: descarta (a mais nova já pintou)
   if (!rows.length) { host.innerHTML = emptyLinha('tarifa'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]]);
   const inner = `${meta}${secoesTarifasHTML(rows)}`;            // documento completo (p/ PDF)
@@ -1682,6 +1686,7 @@ async function tarifaEmpresaRun(term, host){
     commitViewResult(view, gen, { pdfHTML:null }); return;
   }
   await getEmpresas();
+  if (!isCurrentGen(view, gen)) return;   // tentativa velha: descarta (a mais nova já pintou)
   const emps = searchEmpresas(term);
   if(emps.length > 1){
     host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para ver as tarifas' });
@@ -1766,6 +1771,7 @@ async function renderFrota(host, line){
     sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=${FROTA_FIELDS}&limit=1`),
     getEmpresas()
   ]);
+  if (!isCurrentGen(view, gen)) return;   // tentativa velha: descarta (a mais nova já pintou)
   if (!rows.length) { host.innerHTML = emptyLinha('frota'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const f = rows[0];
   const inner = `${metaRows([['Empresa',esc(empNome(f.codempresa)),true],['Registro','RJ-'+esc(orDash(f.codempresa))],
@@ -1792,6 +1798,7 @@ async function renderEstrutura(host, line){
     sbFetch('qh_teste', `codlinha=eq.${cod}&select=${FROTA_FIELDS}&limit=1`),
     getOrigem(), getIbge(), getEmpresas()
   ]);
+  if (!isCurrentGen(view, gen)) return;   // tentativa velha: descarta (a mais nova já pintou)
   const L = lineRows[0] || line;
   const f = qh[0] || {};
   const h3 = t => `<h3 class="doc-h3-rule">${t}</h3>`;
@@ -1946,6 +1953,7 @@ LOADERS.historicoEmpresa = async () => {
       if(!term){ host.innerHTML=emptyBox('Busque pelo nome ou código da empresa.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
       // busca client-side sobre o cadastro completo → insensível a maiúsc./minúsc. E acento
       await getEmpresas();
+      if (!isCurrentGen(view, gen)) return;   // tentativa velha: descarta (a mais nova já pintou)
       const emps = searchEmpresas(term);
       if(emps.length === 1){ await renderEmpresaHistory(host, emps[0].codempresa, emps[0].nome_empresa); return; }
       if(emps.length > 1){

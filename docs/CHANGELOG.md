@@ -4,6 +4,42 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 20/08/2026 — A tela mostrava uma linha e o PDF baixava outra; os 8 renders ganham guard
+
+**Parte 2 da Fase A**, e o primeiro PR desta série que toca arquivo servido: `app.js` +8 linhas.
+`version.json` 5 → 6 e `#verTag` `build 15/08-B` → `build 20/08-A`. **Zero SQL.**
+
+- **O defeito, achado pela bancada da entrada anterior.** Com as respostas chegando FORA DE ORDEM
+  (duas buscas no mesmo documento, a 1ª voltando depois da 2ª), a tela e o PDF **discordavam**: o
+  pane ficava com a linha obsoleta e o `pdfHTML` com a vigente. O usuário conferia o documento na
+  tela, clicava em PDF e baixava outro. Nada estourava.
+- **A causa.** O seam `beginGen`/`commitViewResult` guardava a escrita do **PDF** e não a escrita
+  final no **DOM**. Os paginadores (`paginate`/`paginateEvents`) já aplicavam `isCurrentGen` por
+  dentro, mas quem escreve `innerHTML` direto não passava por eles. Eram **8** dos 28:
+  `renderItinerarios`, `renderLinhaQuadro`, `quadroEmpresaRun`, `renderTarifas`,
+  `tarifaEmpresaRun`, `renderFrota`, `renderEstrutura` e `LOADERS.historicoEmpresa`.
+- **O conserto:** o mesmo guard explícito que as Portarias já usavam —
+  `if (!isCurrentGen(view, gen)) return;` — logo depois do primeiro `await` e antes de qualquer
+  escrita. Uma linha por render, nada mais; nenhuma query, chave ou estrutura mudou.
+- **TDD de verdade, com a rede pronta antes.** O cenário `(d)` entrou na bancada **vermelho**
+  (`(d)` e `(d3)` reprovando contra a `main`), e o conserto o levou a verde. A bancada foi de 9
+  para 15 asserções.
+- **Prova por mutação, duas, independentes:** remover só o guard do `renderItinerarios` reprova
+  `(d·itinerários)` e `(d3·itinerários)`; remover só o do `renderTarifas` reprova
+  `(d·tarifas)` e `(d3·tarifas)`. Controle restaurado volta a verde nas duas.
+- **O que NÃO está provado, dito sem arredondar:** a bancada exercita **2** dos 8 renders —
+  escolhidos por terem formatos diferentes (`Promise.all` × um `sbFetch` só). Os outros **6**
+  receberam a mesma linha na mesma posição, conferida por leitura, e o `check_views.mjs` prova que
+  nenhum deles quebrou o render normal. A bancada aceita documento novo sem código novo: é mais
+  uma chamada de `corridaMesmaAba`.
+- **A guarda de citações cobrou o próprio conserto:** as 8 linhas novas no `app.js` deslocaram
+  **82** citações dos docs vivos, e o gate reprovou nomeando cada uma até serem re-ancoradas. É
+  exatamente o comportamento que ela foi criada para ter — cinco dias antes, o mesmo deslocamento
+  teria passado em silêncio.
+
+**Gates:** `check.js`, `check_corrida_view` (15), `check_views` (18), `check_abas`,
+`check_selecao_linha` e `semgrep` (121 regras, 0 findings) — todos verdes.
+
 ## 20/08/2026 — Bancada de corrida: o seam do `pdfHTML` finalmente tem teste (e um achado)
 
 **Parte 1 da Fase A**, entregue ANTES da fase — a rede vem antes do salto. **Zero mudança em

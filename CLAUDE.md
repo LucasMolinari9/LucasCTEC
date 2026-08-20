@@ -453,6 +453,10 @@ têm teste (exigiriam navegador).
   busca mais nova tivesse ganho, o container nem teria sido escrito. Isso vale mesmo pra quem
   passa `pdf:false` (o guard da tela é independente de escrever PDF ou não) — todo call site de
   `paginateTable`/`paginateLines`/`lineResults`/`paginateEvents` passa `view`+`gen`, sem exceção.
+  **Render que escreve `innerHTML` direto (sem paginador) põe o guard ele mesmo, logo depois do
+  1º `await` e ANTES de qualquer escrita** — 8 hoje. Até 20/08/2026 nenhum tinha, e com respostas
+  fora de ordem **a tela mostrava uma linha e o PDF baixava outra**, sem aviso. Guardado por
+  `scripts/check_corrida_view.mjs` (cenário `d`); a lista dos 8 está no plano vivo.
 - **Selecionar linha DENTRO do modal × `history.back()`:** `bindLineRows` faz `selectLine(...)`
   e logo `closeModal()`. O `selectLine` grava a linha nova por **replaceState — na entrada de
   histórico DO MODAL**; o `closeModal` desfazia essa entrada com `history.back()`, caindo na

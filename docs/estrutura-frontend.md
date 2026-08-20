@@ -27,8 +27,8 @@ mudou junto, e o que continua valendo:
   **`src/domain/busca.mjs`** (filtro de evento e preparação do termo de busca) e
   **`src/domain/view-state.mjs`** (seam do ciclo de vida da view, modelo de abas, despacho do
   Realtime por aba e o que cada lista mostra). O corte é pela pureza, não pelo assunto:
-  `termosLocalidade` (`app.js:2457`) é da mesma família do
-  `localidadesQueCasam`, mas faz `await getLocalidades()` em `app.js:2458` — é I/O, e ficou.
+  `termosLocalidade` (`app.js:2465`) é da mesma família do
+  `localidadesQueCasam`, mas faz `await getLocalidades()` em `app.js:2466` — é I/O, e ficou.
 - **Regra para extrair:** prefira módulos profundos com interface pequena. Não mova loaders/estado
   apenas para reduzir linhas; extraia quando a dependência puder ser expressa por imports claros.
 - **Extração paga o processo que ela torna desnecessário.** Enquanto a função mora no `app.js`, o

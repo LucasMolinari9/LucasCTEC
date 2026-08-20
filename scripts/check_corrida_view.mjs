@@ -139,6 +139,53 @@ try {
   const pdf1 = await pdfDaAbaEmFoco();
   check(/Itiner/.test(pdf1) && pdf1.includes(B.itinerario) && !pdf1.includes(A.itinerario),
     `(c2) o PDF da aba 1 é o documento da linha ${B.fmt}, não o da anterior`);
+
+  // ---- (d) corrida na MESMA aba, com as respostas FORA DE ORDEM
+  // A rede não promete ordem: a busca 1 pode voltar DEPOIS da busca 2. É o cenário original do
+  // seam ("digitar 101, trocar pra 202 antes da 1ª resposta voltar"), e o que separa um guard de
+  // escrita de verdade de um que só funciona quando as respostas chegam bem-comportadas.
+  // A exigência é de CONSISTÊNCIA: tela e PDF têm de contar a mesma história, a da busca vigente.
+  // Tela com a linha obsoleta e PDF com a vigente é o pior dos mundos — o usuário confere na
+  // tela e baixa outra coisa, sem nenhum aviso. Foi assim que este repo estava até 20/08/2026:
+  // o `commitViewResult` guardava o PDF e a escrita final no DOM não tinha guard nenhum.
+  //
+  // Roda para DOIS documentos de formato diferente de propósito: o Itinerários resolve um
+  // `Promise.all` e o Tarifas um `sbFetch` só. O guard é a mesma linha, mas o LUGAR dela é
+  // decidido por render, e é o lugar que erra.
+  async function corridaMesmaAba({ paneId, tabela, obsoleta, vigente, rotulo }) {
+    rede.segurar(tabela);
+    await page.fill('.modal-body.active #spInput', obsoleta.numero);   // busca 1 — fica OBSOLETA
+    await page.click('.modal-body.active #spBtn');
+    await rede.esperarPresos(1);
+    await page.fill('.modal-body.active #spInput', vigente.numero);    // busca 2 — a VIGENTE
+    await page.click('.modal-body.active #spBtn');
+    await rede.esperarPresos(2);
+    rede.soltar({ inverso: true });                       // a vigente volta ANTES da obsoleta
+    await page.waitForTimeout(1200);
+
+    const pane = await paneHTML(paneId);
+    const pdf = await pdfDaAbaEmFoco();
+    check(pane.includes(vigente.fmt) && !pane.includes(obsoleta.fmt),
+      `(d·${rotulo}) a tela mostra a busca VIGENTE (${vigente.numero}), não a obsoleta que chegou depois`);
+    check(pdf.includes(vigente.fmt) && !pdf.includes(obsoleta.fmt),
+      `(d2·${rotulo}) o PDF mostra a busca vigente (${vigente.numero})`);
+    check(pane.includes(vigente.fmt) === pdf.includes(vigente.fmt),
+      `(d3·${rotulo}) tela e PDF concordam sobre qual linha está aberta`);
+  }
+
+  // a aba 1 já está em foco e mostrando os Itinerários da linha B
+  await corridaMesmaAba({ paneId: 1, tabela: 'itinerario_teste', obsoleta: A, vigente: B, rotulo: 'itinerários' });
+
+  // aba 3: Tarifas, o outro formato de render
+  await page.click('#modalTabAdd');
+  await page.waitForSelector('.modal-body.active .card[data-view="tarifas"]', { timeout: 10000 });
+  await page.click('.modal-body.active .card[data-view="tarifas"]');
+  await page.waitForSelector('.modal-body.active #spInput', { timeout: 10000 });
+  await page.fill('.modal-body.active #spInput', A.numero);
+  await page.click('.modal-body.active #spBtn');
+  await page.waitForFunction(t => (document.getElementById('pane-3') || {}).innerHTML?.includes(t),
+    A.fmt, { timeout: 15000 });
+  await corridaMesmaAba({ paneId: 3, tabela: 'tarifa_atual_teste', obsoleta: B, vigente: A, rotulo: 'tarifas' });
 } catch (e) {
   check(false, 'bancada concluiu sem erro', e.message);
 } finally {
