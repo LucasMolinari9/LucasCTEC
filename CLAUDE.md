@@ -10,15 +10,18 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > são **decisão do dono** e só a do teto do `CLAUDE.md` foi aplicada. Sobra a **Sessão 6** (PR #98,
 > abaixo). O que ordena o resto é o plano vivo
 > [`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`](docs/planos/2026-08-14-modularizacao-fatias-3-4.md):
-> a próxima fase dele é a **B2** (helpers compartilhados + o seam de seleção). Já entraram: a
+> a próxima fase dele é a **B2** (helpers compartilhados + o seam de seleção). Já entraram a
 > bancada de corrida (`scripts/check_corrida_view.mjs`), o guard de tela nos 8 renders que
-> escreviam DOM sem `isCurrentGen`, e a **Fase B** — `src/data/rest.mjs` + `src/data/lookups.mjs`,
-> que tirou 112 linhas do `app.js` e aposentou o `@canon` (−378 de processo). Da Fase A falta só o
-> **contexto explícito `ctx`** (**28** aberturas `const view = currentView`), que não bloqueia a
-> B2. Protocolo (um PR por fase, `@codex review`, **sem merge próprio**): naquele arquivo.
-> **Onde o monólito está hoje:** `app.js` = 3.160 linhas, das quais **1.917 (60,7%)** são o bloco
-> `MODAL / SISTEMA DE VIEWS` — 1.287 de documentos (C1–C4) e 597 de infra do modal (E). Nenhuma
-> extração até aqui tocou esse bloco; todas vieram dos outros 39%.
+> escreviam DOM sem `isCurrentGen`, e a **Fase B** (`src/data/rest.mjs` + `src/data/lookups.mjs`:
+> −112 no `app.js`, `@canon` aposentado, −378 de processo). Da Fase A falta só o **contexto
+> explícito `ctx`** (**28** aberturas `const view = currentView`), que não bloqueia a B2.
+> Protocolo (um PR por fase, `@codex review`, **sem merge próprio**): naquele arquivo.
+> **ALVO, decidido pelo dono em 20/08:** o `app.js` cai **pela metade** — 3.160 → **≤ 1.580**.
+> Torna a **opção 1 da B2 um REQUISITO** (expor o seam de seleção, encadeando o callback pelos 8
+> call sites de `lineResults`); a opção 2 não alcança. Junto vale a regra anti-fraude: linha movida
+> sem acoplamento reduzido não conta. Hoje o `app.js` tem **1.917 (60,7%)** no bloco
+> `MODAL / SISTEMA DE VIEWS` — 1.287 de documentos (C1–C4) e 597 de infra do modal (E); **nenhuma
+> extração até aqui tocou esse bloco**, todas vieram dos outros 39%.
 > **A cota do Codex está esgotada** desde 15/08: o passo 3 do protocolo não roda, a revisão é
 > própria, e **ausência de revisão não é aprovação** — registre os achados no PR.
 > **Citação `arquivo:linha` em doc vivo é cobrada pelo `tests/check.js` §[2b]** desde 20/08, quando

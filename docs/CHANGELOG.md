@@ -4,6 +4,36 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 20/08/2026 — O plano ganha linha de chegada: o `app.js` cai pela metade
+
+**Decisão do dono**, tomada depois de as três opções serem medidas e apresentadas. Só documentação.
+
+- **Alvo:** `app.js` de **3.160 → ≤ 1.580** linhas. Até hoje o plano dizia "não há meta de linhas,
+  de propósito", e o critério era só de acoplamento. Isso deixava a pergunta "quando o monólito
+  estará resolvido?" sem resposta escrita — e refatoração sem linha de chegada é indistinguível de
+  uma que não termina. O texto antigo fica registrado no lugar, com o motivo da troca.
+- **Consequência imediata: a opção 1 da Fase B2 virou REQUISITO**, não escolha. O ramo da opção 2
+  (família de listas fica no `app.js`) tem piso ~1.730 e não alcança a metade. Quem executar a B2
+  expõe o seam de seleção como callback e o encadeia pelos **8** call sites de `lineResults`. As
+  duas pontas ficaram escritas, como o plano exige: C3/C4 **mantêm** escopo e a Fase E segue
+  **opcional**.
+- **A B2 não fecha sem bancada nova.** Esquecer um dos 8 call sites deixa as linhas daquela tela
+  renderizadas e **não clicáveis, sem erro no console** — modo de falha silencioso, que é o
+  critério do §8 da auditoria de custo para exigir guarda. O `check_selecao_linha.mjs` hoje cobre
+  só o card de Localidade.
+- **Regra anti-fraude, e ela vale mais que o número:** linha movida sem acoplamento reduzido **não
+  conta**. Partir o `app.js` em pedaços que continuam lendo `currentView`/`activeLine` por baixo
+  bateria a meta e pioraria o projeto. O critério é conjuntivo — ≤ 1.580 **E** os sinais de
+  acoplamento respeitados.
+- **Dito antes de decidir, e registrado:** o total de código servido **sobe**, não desce. Medido na
+  Fase B — `app.js` −112, módulos +195, líquido **+83** —, e dos 195 só 100 são código; o resto é o
+  cabeçalho que explica o contrato. Quem quiser "menos código no total" não consegue por este
+  caminho.
+
+**Nada disto foi para a `main` ainda.** Os seis commits desta série vivem em
+`claude/identify-monoliths-t0hp1y`, sem PR aberto e portanto **sem nenhum gate de CI executado** —
+neste repo o gate dispara em `pull_request` ou push na `main`, não em push de branch.
+
 ## 20/08/2026 — Fase B: a camada de dado sai do `app.js`, e o mecanismo `@canon` se aposenta
 
 **A primeira mudança desta série em que o monólito ENCOLHE.** `version.json` 6 → 7, `#verTag`

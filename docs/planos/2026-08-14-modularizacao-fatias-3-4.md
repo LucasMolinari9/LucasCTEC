@@ -362,16 +362,21 @@ Quem executar decide **como**; o que não é opcional é resolver. Os fatos, con
   o de `mostrarLinhasResultado`, que aquele PR trocou por `renderLocalidadeSecoes`.
 
 **Portanto:** um render de C3/C4 que virou ESM não alcança `lineResults`, `paginateLines` nem
-`bindLineRows` se eles continuarem privados. Duas saídas, e a escolha é de quem executa a B2 — com
-a obrigação de **mexer nas duas pontas**:
+`bindLineRows` se eles continuarem privados. Havia duas saídas; **o dono decidiu pela 1 em
+20/08/2026**, ao escolher o alvo de conclusão (o `app.js` caindo pela metade). A opção 2 não
+alcança esse alvo — sem os 285 do `COMPONENTES AUXILIARES` o piso é ~1.730 —, então ela deixou de
+estar disponível. Fica registrada porque o raciocínio ainda importa se o alvo for revisto:
 
-1. **expor o seam de seleção** — mover a família de listas com a ação de seleção injetada como
-   callback. Custo: encadear o callback por `lineResults` até os 9 call sites. Esquecer um deixa
-   as linhas daquela tela **renderizadas e não clicáveis**, sem erro no console;
-2. **manter a família no `app.js`** — e então **reduzir o escopo declarado de C3/C4** para os
-   renders que não listam linha, e dizer explicitamente em qual fase esses renders saem.
+1. ✅ **expor o seam de seleção** — mover a família de listas com a ação de seleção injetada como
+   callback. Custo: encadear o callback por `lineResults` até os **8** call sites. Esquecer um
+   deixa as linhas daquela tela **renderizadas e não clicáveis**, sem erro no console. **É modo de
+   falha silencioso, então a B2 não fecha sem bancada que clique numa linha de cada família e
+   exija que a seleção aconteça** — o `check_selecao_linha.mjs` hoje cobre só o card de Localidade;
+2. ❌ **manter a família no `app.js`** — exigiria **reduzir o escopo declarado de C3/C4** para os
+   renders que não listam linha, e dizer em qual fase esses renders saem. Descartada pelo alvo.
 
-Escolher um lado sem ajustar a outra ponta é o erro que este plano já cometeu duas vezes.
+Escolher um lado sem ajustar a outra ponta é o erro que este plano já cometeu duas vezes. A ponta
+da opção 1: C3 e C4 **mantêm** o escopo declarado, e a Fase E segue **opcional**.
 
 ---
 
@@ -466,11 +471,8 @@ Em qualquer um dos dois: quem cortar a E escreve aqui o que ficou.
 
 ---
 
-## Critério de parada
-
-Refatoração sem critério de parada é a mesma doença da crítica que originou este plano.
-
-Uma fase só se justifica se **reduzir acoplamento**, não linhas. Sinais de parar e registrar:
+Refatoração sem critério de parada é a mesma doença da crítica que originou este plano. Por isso
+este plano tem os dois: um alvo de CONCLUSÃO (abaixo) e sinais de PARADA (mais abaixo).
 
 - o módulo novo precisar receber mais de ~6 dependências **injetadas** — estado passado em
   parâmetro. `import` de módulo declarado **não conta**: importar `docHead` de `src/ui/doc.mjs` é
@@ -479,8 +481,53 @@ Uma fase só se justifica se **reduzir acoplamento**, não linhas. Sinais de par
 - o `app.js` passar a **exportar estado do IIFE** para alimentar o módulo;
 - a fase exigir mudar query, chave ou schema (nenhuma exige — se exigir, o plano está errado).
 
-Não há meta de linhas, de propósito. O que sobra no fim é wiring — bootstrap, referências de DOM,
-listeners, rotas, composição — e wiring não é o defeito que a crítica apontou.
+## Critério de CONCLUSÃO — decisão do dono, 20/08/2026
+
+Até esta data o plano dizia "não há meta de linhas, de propósito". **O dono pediu um alvo
+verificável**, porque sem ele a pergunta "quando o monólito estará resolvido?" não tinha resposta
+escrita em lugar nenhum — e uma refatoração sem linha de chegada é indistinguível de uma que não
+termina. O alvo escolhido, entre as três opções medidas e apresentadas:
+
+> **O `app.js` cai pela METADE: de 3.160 linhas (medidas em 20/08/2026, pós-Fase B) para
+> ≤ 1.580.**
+
+O caminho medido até lá, e é por isso que a escolha do dono decide a B2:
+
+| fase | o que sai | medido |
+|---|---|---:|
+| **B2**, ramo da **opção 1** (seam de seleção exposto) | helpers de documento, helpers de evento e o bloco `COMPONENTES AUXILIARES` inteiro | até **445** |
+| **C1–C4** | os 10 documentos, menos os 17 registros `LOADERS.*` que ficam | ~**1.265** |
+
+**A opção 1 da B2 deixa de ser escolha e passa a ser requisito.** O ramo da opção 2 (família de
+listas fica no `app.js`) não alcança a metade: sem os 285 do `COMPONENTES AUXILIARES`, o piso é
+~1.730. Quem executar a B2 **expõe o seam de seleção como callback injetado** e encadeia por
+`lineResults` até os **8** call sites. As duas pontas, como o plano exige:
+
+- **ponta A** — o callback chega aos 8 call sites. Esquecer um deixa as linhas daquela tela
+  **renderizadas e não clicáveis, sem erro no console**: é modo de falha silencioso, então a B2 não
+  fecha sem um caso de bancada que clique numa linha de cada família e exija que a seleção aconteça;
+- **ponta B** — C3 e C4 mantêm o escopo declarado (nada de reduzi-lo), e a **E continua opcional**:
+  cortá-la deixa no `app.js` o shell do modal e o de busca de linha, que é escolha de escopo
+  declarada, não dívida escondida.
+
+### A regra anti-fraude, que vale mais que o número
+
+Linha movida sem acoplamento reduzido **não conta**. Especificamente: dividir o `app.js` em pedaços
+que continuam lendo `currentView`/`activeLine` por baixo bateria a meta e pioraria o projeto — é
+exatamente o que o estudo de 10/08 proíbe, e o motivo de a Fase A existir. Por isso o critério é
+**conjuntivo**: ≤ 1.580 linhas **E** os sinais de acoplamento abaixo, todos respeitados. Bater o
+número violando qualquer um deles é falhar, não concluir.
+
+Vale também o inverso, e é honesto dizer: **o total de código servido vai SUBIR**, não descer.
+Medido na Fase B — `app.js` −112, módulos +195, líquido **+83** —, e dos 195 apenas 100 são código;
+o resto é o cabeçalho que explica o contrato de cada módulo. Quem quiser "menos código no total"
+não vai conseguir por aqui, e isso foi dito antes de a decisão ser tomada.
+
+## Sinais de parar e registrar (valem em toda fase)
+
+Uma fase só se justifica se **reduzir acoplamento**, não linhas:
+
+
 
 ---
 
