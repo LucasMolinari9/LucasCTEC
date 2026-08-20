@@ -536,9 +536,9 @@ viram 400 e derrubam o `check_views` — que é o comportamento certo, e agora p
 
 | Coluna | Pedida em | Fixture |
 |---|---|---|
-| `codempresa_teste.processo` | `app.js:1943` | `rig.mjs:121-124` |
-| `codempresa_teste.data_publicacao` | `app.js:1943` | idem |
-| `tarifa_atual_teste.nome_ligacao_cresc` | `app.js:2609` | fixture de tarifa |
+| `codempresa_teste.processo` | `app.js:1943` <!-- deriva-ok: plano encerrado em 09/08/2026 (22/22 na main, não normativo) — as citações são do app.js daquela data e não se re-ancoram --> | `rig.mjs:121-124` |
+| `codempresa_teste.data_publicacao` | `app.js:1943` <!-- deriva-ok: plano encerrado em 09/08/2026 (22/22 na main, não normativo) — as citações são do app.js daquela data e não se re-ancoram --> | idem |
+| `tarifa_atual_teste.nome_ligacao_cresc` | `app.js:2609` <!-- deriva-ok: plano encerrado em 09/08/2026 (22/22 na main, não normativo) — as citações são do app.js daquela data e não se re-ancoram --> | fixture de tarifa |
 
 **Files:**
 - Modify: `scripts/lib/rig.mjs:121-124` e a fixture de `tarifa_atual_teste`
@@ -976,12 +976,12 @@ evento. É o combustível do modo de falha silencioso: a coluna diverge num luga
 **Files:** Modify: `app.js` (seção `SUPABASE CONFIG`, junto de `LINE_FIELDS`)
 
 > ⚠️ **Extraia SÓ os 7 pares abaixo.** As mesmas tabelas têm outros call sites com listas
-> **deliberadamente diferentes** — `getTerminais` (`app.js:516`) pede 3 colunas de
-> `itinerario_teste`; `filtrarFrotaEmpresas` (`app.js:2359`) pede 4 de `qh_teste`. Colapsar esses
+> **deliberadamente diferentes** — `getTerminais` (`app.js:516`) pede 3 colunas de <!-- deriva-ok: plano encerrado em 09/08/2026 (22/22 na main, não normativo) — as citações são do app.js daquela data e não se re-ancoram -->
+> `itinerario_teste`; `filtrarFrotaEmpresas` (`app.js:2359`) pede 4 de `qh_teste`. Colapsar esses <!-- deriva-ok: plano encerrado em 09/08/2026 (22/22 na main, não normativo) — as citações são do app.js daquela data e não se re-ancoram -->
 > nas constantes faria o portal pedir colunas que não precisa e, depois da Task 2, **derrubaria a
 > bancada com 400**. Foram conferidos par a par: os 7 são idênticos hoje; os demais não são.
 
-- [ ] **Step 1: Declarar as constantes** ao lado de `LINE_FIELDS` (`app.js:574`). Os valores abaixo
+- [ ] **Step 1: Declarar as constantes** ao lado de `LINE_FIELDS` (`app.js:574`). <!-- deriva-ok: plano encerrado em 09/08/2026 (22/22 na main, não normativo) — as citações são do app.js daquela data e não se re-ancoram --> Os valores abaixo
   foram **extraídos do `app.js` atual**, não escritos de memória:
 
 ```js
@@ -1003,7 +1003,7 @@ const EVENTO_FIELDS       = 'data_registro,codlinha,numero_processo,evento_linha
 
 | Constante | Call sites |
 |---|---|
-| `ITINERARIO_FIELDS` | `app.js:1433` ↔ `1801` |
+| `ITINERARIO_FIELDS` | `app.js:1433` <!-- deriva-ok: plano encerrado em 09/08/2026 (22/22 na main, não normativo) — as citações são do app.js daquela data e não se re-ancoram --> ↔ `1801` |
 | `QH_INTERVALO_FIELDS` | `1531` ↔ `1802` |
 | `QH_PREDET_FIELDS` | `1532` ↔ `1803` |
 | `TARIFA_LINHA_FIELDS` | `1534` ↔ `1800`, e `1668` ↔ `1800` |

@@ -4,6 +4,52 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 20/08/2026 — As citações do plano vivo estavam todas erradas; o gate passa a cobrá-las
+
+**Zero mudança de código servido, zero SQL** — `app.js`, `index.html`, `styles.css`, `src/` e
+`vendor/` intactos, por isso sem bump de `version.json` nem de `#verTag`. O que mudou foram docs
+vivos e o `tests/check.js`.
+
+- **O achado.** O plano vivo `docs/planos/2026-08-14-modularizacao-fatias-3-4.md` declara como
+  método que "toda afirmação sobre comportamento de código cita `arquivo:linha` — e a linha é
+  aberta antes de a frase ser escrita. Citação é falsificável; prosa afirmativa não é". Medido:
+  **as 28 citações `app.js:NNN` conferíveis estavam TODAS exatamente 2 linhas baixas**, sem uma
+  única exceção, e assim desde o dia em que foram escritas — nenhum commit da história tem
+  `selecionarSupabase` em 75 nem `lineSearchRun` em 1265. As citações de **outros** arquivos
+  estavam certas, o que localiza o erro: transcrição de um buffer velho, de uma vez só. Depois o
+  PR #132 somou +13 a partir de `app.js:2118` e deslocou os dois lados.
+- **Por que nada pegou.** Seis rodadas de revisão e quatro gates verdes (`check.js`, `semgrep`,
+  `views`, `smoke`): **nenhum deles abria a linha citada.** O §[2b] conferia fato numérico e link
+  markdown; âncora de código, não. Quem seguisse o plano procurando `const view = currentView` em
+  `app.js:1266` encontrava um comentário — o dano é invisível, que é o critério do §8 da Sessão 5.
+- **Conserto — 106 citações re-ancoradas** no plano vivo, mais `docs/estrutura-frontend.md`
+  (`termosLocalidade` 2442 → 2457) e três citações do `tests/check.js` que estavam 45 linhas fora
+  (§[2b] 356 → 403, `FATOS` 457 → 504, o episódio do `matchEvent` 221 → 268). O plano **encerrado**
+  de 08/08 (22/22 na `main`, não normativo) não foi re-ancorado: suas 7 citações são do `app.js`
+  daquela data e ficaram marcadas com `<!-- deriva-ok: … -->`, o mesmo escape hatch da guarda de
+  `SB_URL`. Re-ancorar documento não-normativo é arqueologia, não manutenção.
+- **Guarda nova — extensão do §[2b], não gate novo** (critério 2 do §8: preferir estender). Confere
+  a citação no formato estreito `` `SÍMBOLO` (`arquivo:NNN`) ``: se a linha citada não contém o
+  símbolo, reprova nomeando a linha do markdown. Faixa `` `f:A`–`:B` `` procura no intervalo;
+  seletor `#regScope` casa também com `id="regScope"`; `` `:NNN` `` herda o último arquivo citado.
+  **Fora dessa forma a regra não opina** — a lição das 61 falsas positivas da 1ª guarda de links.
+  Medido ao entrar: **55 citações no formato, 55 conferidas, 0 falsos positivos**, custo desprezível
+  (leitura de arquivo já em cache).
+- **Prova por mutação, quatro casos, todos vermelhos:** citação deslocada em 1 linha; citação fora
+  do arquivo; faixa que deixa de conter o símbolo; e a linha-fantasma do `\n` final (que a 1ª versão
+  aceitava — `split('\n')` dava 3265 numa `app.js` de 3.264). Controle restaurado volta a verde.
+  A guarda pegou, ainda durante esta sessão, **duas** derivas reais: uma citação imprecisa escrita
+  aqui mesmo e o deslocamento causado por editar o cabeçalho do próprio `check.js`.
+- **Correções de fato medidas no plano:** `app.js` 3.252 → **3.264** linhas; `MODAL` 1.896 → **1.909**
+  (58,3% → **58,5%**, atualizado também em `CLAUDE.md`, `estrutura-frontend.md`, `check_views.mjs` e
+  `views.yml`); a superfície da Fase A é de **28** aberturas `const view = currentView`, não as 4
+  que o texto dava como exemplo; `lineResults` tem **8** call sites, não 9 — o 9º não estava em
+  `openLinhasPorIbge` como a lista afirmava, era o de `mostrarLinhasResultado`, que o PR #132 trocou
+  por `renderLocalidadeSecoes`. Este último passou a ter **dois** chamadores e deixou de ser só da
+  família Localidades: quem partir C3/C4 decide onde ele mora antes de mover as duas.
+- **`CLAUDE.md`: ponteiro obsoleto reescrito** (dizia "a próxima é a Sessão 5", mergeada no #133) e
+  o arquivo ficou em **538** linhas, abaixo do teto de 550 proposto pela Sessão 5.
+
 ## 19/08/2026 — Sessão 5: o custo do processo, medido
 
 **Sessão 5 do plano de 6** (`docs/historico/contexto-proxima-sessao-2026-08-14.md`). Documento

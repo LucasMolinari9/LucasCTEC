@@ -7,6 +7,8 @@
          maiúsculas — o GitHub rejeita o workflow e o run morre com zero jobs;
      [2] guarda anti-drift: confere que as funções copiadas nos *.harness.js ainda
          existem iguais no app.js (avisa se a original mudou e a cópia ficou velha);
+    [2b] deriva docs x codigo: fatos numericos, links markdown e citacoes
+         `arquivo:linha` dos docs vivos, conferidos contra o codigo de verdade;
      [3] roda todos os *.test.js desta pasta.
    Sai com código != 0 se QUALQUER etapa falhar. Node puro, sem dependências. */
 const fs = require('fs');
@@ -650,6 +652,76 @@ console.log('\n[2b] Deriva docs × código');
     }
   }
   if (!quebrados) okline(`links markdown resolvem (${refs} links em ${DOCS_VIVOS.length} docs)`);
+
+  // --- toda citação `SÍMBOLO` (`arquivo:NNN`) aponta para a linha onde o símbolo está ---
+  // Irmã da checagem de link acima: link markdown é promessa de NAVEGABILIDADE; citação
+  // `arquivo:linha` é promessa de EVIDÊNCIA. O plano vivo da modularização declara, como método,
+  // que "toda afirmação sobre comportamento de código cita `arquivo:linha` — e a linha é aberta
+  // antes de a frase ser escrita. Citação é falsificável; prosa afirmativa não é". Era falso:
+  // em 20/08/2026 as 28 citações `app.js:NNN` conferíveis daquele documento estavam TODAS
+  // exatamente 2 linhas baixas, desde o dia em que foram escritas — os números vieram de uma
+  // árvore de trabalho intermediária e nunca foram reconferidos. Seis rodadas de revisão e os
+  // quatro gates verdes não pegaram, porque nenhum deles abria a linha citada. Quem seguisse o
+  // plano encontrava um comentário onde ele prometia `const view = currentView`.
+  //
+  // O formato conferido é DELIBERADAMENTE ESTREITO — a mesma lição da checagem de link, que na
+  // 1ª versão varreu todo backtick e deu 61 falsos positivos contra 0 verdadeiros. Só entra a
+  // citação em que um IDENTIFICADOR em backtick é seguido, com no máximo um conector curto
+  // ("em", "de", "declarado em", "atribui em") e pontuação de amarração, da própria citação.
+  // Fora dessa forma a regra não opina: prosa que cita uma linha SEM nomear o símbolo dela
+  // ("o guard explícito em `app.js:2380`") continua sendo responsabilidade de quem escreve.
+  // Medido ao entrar: 55 citações no formato, 55 conferidas, 0 falsos positivos.
+  //
+  // Faixa (`f:A`–`:B`) procura no intervalo inteiro: quem cita um bloco está apontando o bloco,
+  // não a 1ª linha dele. Seletor (`#regScope`) casa também com `id="regScope"`, que é como o
+  // markup o escreve. Escape hatch: `<!-- deriva-ok: <motivo> -->` na linha, o mesmo marcador
+  // que a guarda de SB_URL usa — hoje só o plano ENCERRADO de 08/08 o usa, porque re-ancorar
+  // documento não-normativo é arqueologia, não manutenção.
+  {
+    const RE_CIT = /`([\w./-]*):(\d+)`(?:\s*[–-]\s*`:(\d+)`)?/g;
+    const RE_SIMB = /^[#.]?[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/;
+    const RE_CONECTOR = /^[\s(|,]*(?:declarado em|atribui em|em|de)?[\s(|,]*$/;
+    const cacheLinhas = new Map();
+    const linhasDe = f => {
+      // tira o elemento vazio do \n final: sem isso a última linha "existe" uma a mais que o
+      // arquivo, e uma citação para o fim dele passaria batido.
+      if (!cacheLinhas.has(f)) cacheLinhas.set(f, existe(f) ? ler(f).replace(/\n$/, '').split('\n') : null);
+      return cacheLinhas.get(f);
+    };
+    let conferidas = 0, erradas = 0;
+    for (const doc of DOCS_VIVOS){
+      const txt = ler(doc);
+      const linhasDoDoc = txt.split('\n');
+      let ultimoArquivo = null;                  // `:NNN` sem arquivo herda o último citado
+      for (const m of txt.matchAll(RE_CIT)){
+        const arquivo = m[1] || ultimoArquivo;
+        if (m[1]) ultimoArquivo = m[1];
+        if (!arquivo || !existe(arquivo)) continue;   // caminho que não é deste repo: não opina
+        const nMd = txt.slice(0, m.index).split('\n').length;
+        if (/deriva-ok/.test(linhasDoDoc[nMd - 1] || '')) continue;
+        const L = linhasDe(arquivo);
+        const ini = +m[2], fim = m[3] ? +m[3] : ini;
+        if (ini < 1 || fim > L.length || fim < ini){
+          fail(`[${doc}:${nMd}] cita ${arquivo}:${m[2]}${m[3] ? '–' + m[3] : ''}, fora de 1..${L.length}`);
+          erradas++; continue;
+        }
+        // o símbolo é o último `…` ANTES da citação, e só vale se for identificador colado nela
+        const mm = /`([^`\n]{1,60})`([^`\n]{0,16})$/.exec(txt.slice(Math.max(0, m.index - 140), m.index));
+        if (!mm || !RE_SIMB.test(mm[1]) || !RE_CONECTOR.test(mm[2])) continue;
+        const simb = mm[1];
+        const alvos = [simb];
+        if (simb[0] === '#') alvos.push(`id="${simb.slice(1)}"`, `id='${simb.slice(1)}'`);
+        conferidas++;
+        if (L.slice(ini - 1, fim).some(l => alvos.some(t => l.includes(t)))) continue;
+        const onde = L.findIndex(l => alvos.some(t => l.includes(t)));
+        fail(`[${doc}:${nMd}] cita \`${simb}\` em ${arquivo}:${m[2]}${m[3] ? '–' + m[3] : ''}, `
+           + `mas o símbolo não está ali${onde >= 0 ? ` (a 1ª ocorrência está em :${onde + 1})` : ''}`
+           + ' — mova a citação, não a apague');
+        erradas++;
+      }
+    }
+    if (!erradas) okline(`citações arquivo:linha conferidas (${conferidas} no formato \`SÍMBOLO\` (\`arquivo:NNN\`))`);
+  }
 
   // --- SB_URL/SB_KEY nunca mais apontados para o index.html ---
   // A deriva concreta: o passo 5 do runbook de restauração mandava editá-los no index.html

@@ -3,25 +3,25 @@
 Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este arquivo descreve o
 **estado atual + regras**; a cronologia de como se chegou aqui está em **`docs/CHANGELOG.md`**.
 
-> **TRABALHO EM CURSO — leia antes de agir:**
-> **[`docs/historico/contexto-proxima-sessao-2026-08-14.md`](docs/historico/contexto-proxima-sessao-2026-08-14.md)**
-> — plano de 6 sessões respondendo a uma crítica externa. As Sessões **1** (rulesets do Semgrep),
-> **2** (`src/domain/agrupamento.mjs`), **3** (`src/domain/busca.mjs`) e **4**
-> (`src/domain/view-state.mjs`, PR #131) estão **mergeadas**. A próxima é a **Sessão 5**, o
-> documento de custo do processo — sem mudança de código, sem risco para o site.
-> Aquele arquivo traz a especificação de cada sessão, o protocolo combinado (um PR por sessão,
-> `@codex review`, sem merge por conta própria) e os limites medidos do ambiente do agente.
-> **A cota de code review do Codex está esgotada** desde 15/08: os PRs #130 e #131 pediram
-> `@codex review` e receberam "You have reached your Codex usage limits", três pedidos ao todo.
-> Enquanto não houver upgrade/créditos, o passo 3 do protocolo não roda — a revisão é própria, e
-> **ausência de revisão não é aprovação**: registre os achados no PR, como as duas sessões fizeram.
-> **Ressalva das Sessões 2 e 3:** `norm` saiu na frente e já está em `core.mjs` — a tabela do plano
-> a lista na Sessão 3, mas ela é dependência de `agrupamento.mjs` e não podia esperar, então a
-> Sessão 3 moveu **cinco** funções, não seis. **Ressalva da Sessão 4:** moveu as **treze** da
-> tabela, e a conferência do preview dela inclui **confirmar que a atualização ao vivo chega**, não
-> só que os cards aparecem — ela mexe no despacho do Realtime. Continua valendo o plano vivo
-> [`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`](docs/planos/2026-08-14-modularizacao-fatias-3-4.md),
-> que ordena as fases seguintes.
+> **TRABALHO EM CURSO — leia antes de agir:** o plano de 6 sessões de
+> [`docs/historico/contexto-proxima-sessao-2026-08-14.md`](docs/historico/contexto-proxima-sessao-2026-08-14.md)
+> (resposta a uma crítica externa) está com as Sessões **1 a 5 mergeadas** — a última é o PR #133,
+> a auditoria de custo do processo, em
+> [`docs/planos/2026-08-19-custo-do-processo.md`](docs/planos/2026-08-19-custo-do-processo.md);
+> as 7 recomendações dela são **decisão do dono** e nenhuma foi aplicada. Sobra a **Sessão 6**
+> (PR #98, abaixo). O que ordena o resto é o plano vivo
+> [`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`](docs/planos/2026-08-14-modularizacao-fatias-3-4.md):
+> a próxima fase dele é a **A** (contexto explícito `ctx` + bancada de corrida), e a superfície
+> medida são **28** aberturas `const view = currentView` no `app.js`, não as 4 que o texto do plano
+> dava como exemplo. Aquele arquivo traz o protocolo (um PR por fase, `@codex review`, **sem merge
+> por conta própria**) e os limites medidos do ambiente do agente.
+> **A cota de code review do Codex está esgotada** desde 15/08 (três pedidos, todos com "You have
+> reached your Codex usage limits"). Sem upgrade/créditos o passo 3 do protocolo não roda — a
+> revisão é própria, e **ausência de revisão não é aprovação**: registre os achados no PR.
+> **Citação `arquivo:linha` em doc vivo agora é cobrada pelo `tests/check.js` §[2b]** (desde
+> 20/08/2026, quando se mediu que as 28 citações `app.js:NNN` do plano vivo estavam TODAS 2 linhas
+> baixas desde o dia em que foram escritas, com os quatro gates verdes). Ao mover código,
+> **atualize o número; não apague a citação.**
 >
 > Continua valendo:
 > **[`docs/historico/contexto-proxima-sessao-2026-08-09.md`](docs/historico/contexto-proxima-sessao-2026-08-09.md)**
@@ -304,7 +304,7 @@ têm teste (exigiriam navegador).
 
 2a. **Mexeu em render/loader? `node scripts/check_views.mjs`** — abre as **18 views** num
    navegador headless e falha se alguma explodir, ficar no spinner ou pintar menos que o
-   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~58,3% do `app.js`), que o
+   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~58,5% do `app.js`), que o
    `check.js` **não** cobre. Aceita filtro: `check_views.mjs frota`.
    **O que quebra se esquecer:** view nova sem entrada em `VIEWS` (a checagem anti-drift do final
    pega); `select=` alterado sem ajustar a fixture em `scripts/lib/rig.mjs` — nome de coluna
@@ -333,10 +333,12 @@ têm teste (exigiriam navegador).
    Irmã do `check_deriva.mjs`: ele guarda docs×**banco**, esta guarda docs×**código**. Cobra, nos
    **docs vivos** (`CLAUDE.md`, `README.md`, `docs/*.md` de topo, `docs/adr/`, `docs/planos/` —
    o `CHANGELOG` e `docs/historico/` ficam fora de propósito, são snapshots datados): fatos
-   numéricos batendo com o código, links markdown resolvendo, `SB_URL`/`SB_KEY` nunca associadas
-   ao `index.html` <!-- deriva-ok: enuncia a regra -->, mapa tabela→card cobrindo `RT_TABLES`,
-   composição de `.claude/skills/`, e nenhum arquivo terminando com tag de ferramenta de IA
-   vazada. Os fatos numéricos varrem também os comentários de `.github/workflows/*.yml` e os
+   numéricos batendo com o código, links markdown resolvendo, **citações `arquivo:linha`
+   apontando para a linha onde o símbolo citado de fato está** (só no formato estreito
+   `` `SÍMBOLO` (`arquivo:NNN`) ``; faixa `` `f:A`–`:B` `` procura no intervalo), `SB_URL`/`SB_KEY`
+   nunca associadas ao `index.html` <!-- deriva-ok: enuncia a regra -->, mapa tabela→card cobrindo
+   `RT_TABLES`, composição de `.claude/skills/`, e nenhum arquivo terminando com tag de ferramenta
+   de IA vazada. Os fatos numéricos varrem também os comentários de `.github/workflows/*.yml` e os
    cabeçalhos de `scripts/*.mjs` — prosa viva que ninguém relê porque não abre em leitor de
    markdown, e foi assim que o `views.yml` pôde afirmar "23 views" e o `check_views.mjs` "~62% do
    app.js" com o gate verde.
