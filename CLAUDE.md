@@ -5,23 +5,25 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 
 > **TRABALHO EM CURSO — leia antes de agir:** o plano de 6 sessões de
 > [`docs/historico/contexto-proxima-sessao-2026-08-14.md`](docs/historico/contexto-proxima-sessao-2026-08-14.md)
-> (resposta a uma crítica externa) está com as Sessões **1 a 5 mergeadas** — a última é o PR #133,
-> a auditoria de custo do processo, em
-> [`docs/planos/2026-08-19-custo-do-processo.md`](docs/planos/2026-08-19-custo-do-processo.md);
-> as 7 recomendações dela são **decisão do dono** e nenhuma foi aplicada. Sobra a **Sessão 6**
-> (PR #98, abaixo). O que ordena o resto é o plano vivo
+> (resposta a uma crítica externa) está com as Sessões **1 a 5 mergeadas**; as 7 recomendações da
+> auditoria de custo ([`docs/planos/2026-08-19-custo-do-processo.md`](docs/planos/2026-08-19-custo-do-processo.md))
+> são **decisão do dono** e só a do teto do `CLAUDE.md` foi aplicada. Sobra a **Sessão 6** (PR #98,
+> abaixo). O que ordena o resto é o plano vivo
 > [`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`](docs/planos/2026-08-14-modularizacao-fatias-3-4.md):
-> a próxima fase dele é a **A** (contexto explícito `ctx` + bancada de corrida), e a superfície
-> medida são **28** aberturas `const view = currentView` no `app.js`, não as 4 que o texto do plano
-> dava como exemplo. Aquele arquivo traz o protocolo (um PR por fase, `@codex review`, **sem merge
-> por conta própria**) e os limites medidos do ambiente do agente.
-> **A cota de code review do Codex está esgotada** desde 15/08 (três pedidos, todos com "You have
-> reached your Codex usage limits"). Sem upgrade/créditos o passo 3 do protocolo não roda — a
-> revisão é própria, e **ausência de revisão não é aprovação**: registre os achados no PR.
-> **Citação `arquivo:linha` em doc vivo agora é cobrada pelo `tests/check.js` §[2b]** (desde
-> 20/08/2026, quando se mediu que as 28 citações `app.js:NNN` do plano vivo estavam TODAS 2 linhas
-> baixas desde o dia em que foram escritas, com os quatro gates verdes). Ao mover código,
-> **atualize o número; não apague a citação.**
+> a próxima fase dele é a **B2** (helpers compartilhados + o seam de seleção). Já entraram: a
+> bancada de corrida (`scripts/check_corrida_view.mjs`), o guard de tela nos 8 renders que
+> escreviam DOM sem `isCurrentGen`, e a **Fase B** — `src/data/rest.mjs` + `src/data/lookups.mjs`,
+> que tirou 112 linhas do `app.js` e aposentou o `@canon` (−378 de processo). Da Fase A falta só o
+> **contexto explícito `ctx`** (**28** aberturas `const view = currentView`), que não bloqueia a
+> B2. Protocolo (um PR por fase, `@codex review`, **sem merge próprio**): naquele arquivo.
+> **Onde o monólito está hoje:** `app.js` = 3.160 linhas, das quais **1.917 (60,7%)** são o bloco
+> `MODAL / SISTEMA DE VIEWS` — 1.287 de documentos (C1–C4) e 597 de infra do modal (E). Nenhuma
+> extração até aqui tocou esse bloco; todas vieram dos outros 39%.
+> **A cota do Codex está esgotada** desde 15/08: o passo 3 do protocolo não roda, a revisão é
+> própria, e **ausência de revisão não é aprovação** — registre os achados no PR.
+> **Citação `arquivo:linha` em doc vivo é cobrada pelo `tests/check.js` §[2b]** desde 20/08, quando
+> se mediu que as 28 do plano vivo estavam TODAS 2 linhas baixas desde o dia em que foram escritas,
+> com os quatro gates verdes. Ao mover código, **atualize o número; não apague a citação.**
 >
 > Continua valendo:
 > **[`docs/historico/contexto-proxima-sessao-2026-08-09.md`](docs/historico/contexto-proxima-sessao-2026-08-09.md)**
@@ -29,9 +31,9 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > código**: são dois passos do dono que precisam de rede e de secrets, com runbook naquele arquivo.
 > Ele é a **Sessão 6**, por decisão do dono — as obras sem SQL vêm antes.
 >
-> **O dono opera pelo CELULAR:** "rode `node …` na sua máquina" não é instrução executável para ele
-> — o caminho é a aba Actions ou o painel do Supabase, no navegador (o **app** do GitHub não mostra
-> o botão *Run workflow*; só o site). Ao fechar esses passos, atualize este ponteiro ou remova-o.
+> **O dono opera pelo CELULAR:** "rode `node …` na sua máquina" não é instrução executável — o
+> caminho é a aba Actions ou o painel do Supabase, no navegador (o **app** do GitHub não mostra o
+> botão *Run workflow*; só o site).
 
 ## O que é
 Portal **público de consulta (somente leitura)** do DETRO/RJ · DIVAT. Os usuários buscam linhas

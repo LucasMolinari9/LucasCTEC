@@ -124,12 +124,21 @@ pelas famílias da C, e é ali que a redundância acaba — daí a precondição
 | **0** | **merge do #122** | travessia transitiva no `check.js` — travava B/B2/C | ✅ `e834e58` |
 | 1 | Sessão 3 | `src/domain/busca.mjs` | ✅ PR #130, mergeado em `3aab30f` |
 | 2 | Sessão 4 | `src/domain/view-state.mjs` | ✅ PR #131 |
-| 3 | **A** | contexto explícito + bancada de corrida | a fazer |
-| 4 | **B** | `src/data/rest.mjs` — encerra o mecanismo `@canon` | a fazer |
-| 5 | **B2** | helpers compartilhados + o seam de seleção | a fazer |
+| 3a | **A** — bancada de corrida | `scripts/check_corrida_view.mjs` + trava de rede no rig | ✅ 20/08 |
+| 3b | **A** — guard de tela | os 8 renders sem `isCurrentGen` na escrita do DOM | ✅ 20/08 |
+| 3c | **A** — contexto explícito | `ctx` nas 28 aberturas `const view = currentView` | **a fazer** |
+| 4 | **B** | `src/data/rest.mjs` + `lookups.mjs` — aposentou o `@canon` | ✅ 20/08, −112 no `app.js`, −378 de processo |
+| 5 | **B2** | helpers compartilhados + o seam de seleção | **PRÓXIMA** |
 | 6–9 | **C1…C4** | documentos por família | a fazer |
 | 10 | **D** | `LOADERS` como composição explícita | a fazer |
 | 11 | **E** | infra do modal (opcional) | a fazer |
+
+**A Fase A foi partida em três, e a ordem não foi capricho.** A bancada (3a) veio primeiro e
+sozinha porque a rede tem de existir antes do salto: sem ela, mover 28 aberturas seria mover no
+escuro. A bancada então ACHOU um defeito real — tela e PDF discordando com respostas fora de
+ordem — e o 3b o consertou nos 8 renders. Sobra o 3c, a injeção de `ctx` propriamente dita, que
+agora reescreve um padrão uniforme em vez de oito exceções. **A B e a B2 não dependem do 3c**: a B
+já entrou sem ele.
 
 **Sessão 4 antes da Fase A:** ela extraiu `beginGen`/`isCurrentGen`/`commitViewResult` como módulo
 puro sobre um objeto `view`. É o seam que a Fase A injeta — fazer A antes seria injetar um contrato
