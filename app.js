@@ -23,6 +23,12 @@ import {
   MAX_TABS, makeTab, openTabState, closeTabState,
   dispatchRealtime, pageBounds, filtrarSituacao,
 } from './src/domain/view-state.mjs';
+// Markup de documento (cabeçalho, meta, tabela, estados de tela) — string de HTML, sem DOM nem
+// estado. O SVG do logo chega por `configurarDoc` no bootstrap logo abaixo.
+import {
+  configurarDoc, docHead, metaRows, colClass, tableHTML,
+  loading, emptyBox, emptyLinha, errorBox, bannerTrunc,
+} from './src/ui/doc.mjs';
 
 /* ================================================================
    ÍNDICE DO ARQUIVO  —  navegue por `grep` da marca da seção.
@@ -38,6 +44,16 @@ import {
    aqui dentro normalmente).
    ================================================================ */
 (() => {
+/* --- Bootstrap dos módulos (src/ui, src/data) ---------------------
+   Um lugar só para LIGAR os módulos ao que só o app.js tem: um nó do DOM, uma função que fala
+   com a rede, uma ação de shell. O que os módulos NÃO fazem é ir buscar essas coisas por conta
+   própria — daí a injeção ser explícita e acontecer aqui, antes de qualquer render.
+   Roda no topo do IIFE de propósito: `renderSideNav`/`renderSideContent` pintam no load, e
+   configurar depois deles deixaria uma janela em que um helper já pode ser chamado sem estar
+   ligado. As funções passadas abaixo são todas `function` (hoisted), então referenciá-las aqui
+   é seguro mesmo estando declaradas mais adiante — ver docs/estrutura-frontend.md §3. */
+configurarDoc({ logoSVG: document.getElementById('brandLogo').innerHTML });
+
 /* ================================================================
    SUPABASE CONFIG
    ================================================================ */
@@ -192,12 +208,9 @@ function marcarTrunc(data, qs){
   }
   return data;
 }
-// Banner de aviso quando a lista foi truncada (atingiu o limite da consulta).
-function bannerTrunc(rows){
-  return (rows && rows._trunc)
-    ? `<div class="trunc-aviso"><b>Resultado parcial:</b> mostrando os primeiros ${rows._limite}. Refine a busca para encontrar itens mais específicos.</div>`
-    : '';
-}
+// O BANNER que avisa o usuário sobre essa truncagem é markup, não infraestrutura: mora em
+// `src/ui/doc.mjs` (`bannerTrunc`). O contrato entre os dois são os campos não-enumeráveis
+// `_trunc`/`_limite` marcados logo acima — mexeu num lado, leia o outro.
 
 /* --- Regras de domínio e formatação (funções puras) ---
    Daqui pra baixo, nenhuma função toca rede/DOM — só recebem dado e devolvem
@@ -768,7 +781,7 @@ async function refreshActiveLine(){
    ----------------------------------------------------------------
    SUB-ÍNDICE (grep `--- ` para pular). Na ordem atual do arquivo:
      Chrome do modal · Faixa de abas · Dispatcher — runView ·
-     Helpers de documento e busca de linha ·
+     Busca de linha — wrappers de documento ·
      Eventos — helpers compartilhados · DOC · Histórico (linha) ·
      DOC · Itinerários · DOC · Quadro de Horários · DOC · Tarifas ·
      DOC · Frota · DOC · Estrutura Operacional ·
@@ -1168,18 +1181,8 @@ btnBack.addEventListener('click', () => {
   runView(prev, { silent: false });
 });
 function setBody(html){ modalBody.innerHTML = html; }
-function loading(msg='Carregando…'){ return `<div class="m-loading"><div class="spin"></div>${esc(msg)}</div>`; }
-function emptyBox(msg){ return `<div class="m-loading">${esc(msg)}</div>`; }
-/* Estado vazio de DOCUMENTO DE LINHA: o usuário já escolheu a linha e a consulta voltou vazia.
-   O texto não pode afirmar que o dado NÃO EXISTE, porque o portal não sabe disso. As codlinhas
-   órfãs medidas contra o banco em 27/07/2026 (filhos em itinerario_teste, qh_teste,
-   qh_predeterminado_teste e evento_teste apontando para codlinha ausente do cadastro) fazem a
-   view renderizar vazia SEM erro nenhum — e "nenhum itinerário cadastrado para esta linha" é,
-   para o cidadão, indistinguível de linha que realmente não tem itinerário. Definição única
-   para não divergir mensagem a mensagem; use em toda tela que responde por linha já escolhida.
-   Ver docs/planos/2026-08-08-correcoes-auditoria.md (Task 13) e CLAUDE.md (2e). */
-function emptyLinha(oQue){ return emptyBox(`Nenhum registro de ${oQue} foi localizado para esta linha.`); }
-function errorBox(msg){ return `<div class="m-loading err">Erro ao carregar: ${esc(msg)}</div>`; }
+// `loading`/`emptyBox`/`emptyLinha`/`errorBox` (os estados de tela) são markup puro e moram em
+// `src/ui/doc.mjs`, importados no topo. `setBody` fica aqui porque escreve no DOM.
 
 /* --- Dispatcher — runView ---------------------------------------- */
 async function runView(view, { silent=false } = {}){
@@ -1209,29 +1212,9 @@ async function runView(view, { silent=false } = {}){
   catch(e){ view._pane.innerHTML = errorBox(e.message); }
 }
 
-// header institucional reutilizável — o SVG do logo vive no index.html (header #brandLogo);
-// aqui só reaproveitamos o markup (recolorável via currentColor + classe .brand-logo-doc).
-const DETRO_LOGO_SVG = document.getElementById('brandLogo').innerHTML;
-/* --- Helpers de documento e busca de linha ----------------------- */
-function docHead(subtitle){
-  return `<div class="doc-head">
-    <span class="brand-logo brand-logo-doc" role="img" aria-label="DETRO — Departamento de Transportes Rodoviários do RJ">${DETRO_LOGO_SVG}</span>
-    <div class="doc-head-titles"><div class="sub">DIVAT · ${esc(subtitle)}</div></div></div>`;
-}
-function metaRows(pairs){
-  return `<div class="doc-meta">${pairs.map(([k,v,full])=> k===''? '<div class="row"></div>' : `<div class="row${full?' full':''}"><b>${esc(k)}:</b><span>${v}</span></div>`).join('')}</div>`;
-}
-// Largura de coluna vira CLASSE, não `style="width:…"`: a CSP publica `style-src-attr 'none'`
-// e atributo style em markup é ignorado pelo navegador (verificado em Chromium headless).
-// `c.w` é sempre constante do próprio código — nunca dado do usuário —, então o conjunto é
-// FECHADO e cabe numa allowlist. Valor sem classe correspondente em styles.css derruba o
-// gate (tests/check.js, seção [2b]): sem essa guarda, uma largura nova viraria classe
-// inexistente e a coluna sairia torta EM SILÊNCIO.
-const colClass = w => (w ? ` class="w-${String(w).replace('px','').replace('%','p')}"` : '');
-function tableHTML(cols, bodyRows, foot, cls=''){
-  return `<div class="doc-table-wrap"><table class="doc-table${cls?' '+cls:''}"><thead><tr>${cols.map(c=>`<th${colClass(c.w)}>${esc(c.t)}</th>`).join('')}</tr></thead>
-    <tbody>${bodyRows}</tbody></table></div>${foot?`<div class="doc-foot">${esc(foot)}</div>`:''}`;
-}
+/* --- Busca de linha — wrappers de documento ---------------------- */
+// `docHead`/`metaRows`/`colClass`/`tableHTML` moraram para `src/ui/doc.mjs` (markup sem estado);
+// o SVG do logo chega lá pelo `configurarDoc` do bootstrap, no topo do arquivo.
 
 /* ----------------------------------------------------------------
    LOADERS POR CARD — cada um desenha em modalBody e é re-executável

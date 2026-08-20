@@ -5,6 +5,12 @@
    SB_TIMEOUT_MS is made mutable (let) so the timeout test can shrink it.
    Everything else is copied verbatim. */
 
+// `bannerTrunc` NÃO é cópia: ele saiu do app.js na Fase B2 e mora em `src/ui/doc.mjs` (é markup,
+// não infraestrutura). O `sbFetch.test.js` exercita o módulo real por esta ponte — o par
+// marcar/pintar continua testado junto, que é o que importa: `marcarTrunc` (cópia @canon, ainda
+// no app.js) põe `_trunc`/`_limite`, e o banner os lê.
+const { bannerTrunc } = require('../src/ui/doc.mjs');
+
 const SB_URL = 'https://example.invalid';
 const SB_KEY = 'fake-anon-key';
 const SB = { url: SB_URL, key: SB_KEY };
@@ -125,14 +131,6 @@ function marcarTrunc(data, qs){
   return data;
 }
 /* @endcanon */
-/* @canon bannerTrunc */
-function bannerTrunc(rows){
-  return (rows && rows._trunc)
-    ? `<div class="trunc-aviso"><b>Resultado parcial:</b> mostrando os primeiros ${rows._limite}. Refine a busca para encontrar itens mais específicos.</div>`
-    : '';
-}
-/* @endcanon */
-
 /* @canon preencherLookup */
 async function preencherLookup(cache, chave, buscar, coluna){
   if (cache[chave]) return cache[chave];

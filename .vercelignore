@@ -43,3 +43,6 @@
 !/src/domain/agrupamento.mjs
 !/src/domain/busca.mjs
 !/src/domain/view-state.mjs
+!/src/ui
+/src/ui/*
+!/src/ui/doc.mjs
