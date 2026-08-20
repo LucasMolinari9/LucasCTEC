@@ -781,7 +781,7 @@ ALTER TABLE public.portaria_teste       REPLICA IDENTITY FULL;
 -- num restore, o tempo que uma consulta anônima pode segurar o banco.
 --
 -- ⚠️ Ao criar consulta com `limit` maior que 30000, suba o teto NA MESMA TAREFA
--- — aqui, no banco, e na constante SB_MAX_ROWS do app.js (ver CLAUDE.md).
+-- — aqui, no banco, e na constante SB_MAX_ROWS de src/data/rest.mjs (ver CLAUDE.md).
 --
 -- NÃO versionado de propósito: `session_preload_libraries=supautils, safeupdate`
 -- no `authenticator`. É configuração da plataforma Supabase, posta por ela em

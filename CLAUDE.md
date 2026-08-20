@@ -58,8 +58,14 @@ exibe e **atualiza ao vivo** (Realtime).
   `popDetail`, o modelo de abas `MAX_TABS`/`makeTab`/`openTabState`/`closeTabState`, o despacho do
   Realtime por aba `tabMatchesEvent`/`dispatchRealtime` e o que cada lista mostra, `pageBounds`/
   `filtrarSituacao`).
-  **Regra: função pura extraída deixa de ter cópia em `tests/*.harness.js`** — o harness passa a
-  fazer `require` do módulo real, e o bloco `@canon` correspondente é APAGADO, não atualizado. A
+- **A camada de DADO saiu junto**, na Fase B: `src/data/rest.mjs` (acesso REST — `criarRest`
+  devolve `sbFetch` e esconde timeout, retry e truncagem; config injetada) e
+  `src/data/lookups.mjs` (`preencherLookup`, o cache que não cacheia falha). `SB_URL`/`SB_KEY`
+  ficam literais no `app.js` de propósito: quatro scripts de auditoria as extraem de lá por regex.
+  **Regra: função extraída deixa de ter cópia em `tests/*.harness.js`** — o harness passa a
+  fazer `require` do módulo real. Desde a Fase B **não há mais nenhuma cópia**: os dois harness são
+  pontes, e o mecanismo `@canon` (`canon.js`, `drift.test.js`, §[2] do `check.js`) foi aposentado
+  por perder o objeto. A
   cobrança do `check.js` §[2] não tem lista a manter à mão: ela lê o `require` **de cada harness**
   e o casa com os `export` do módulo citado, isentando o símbolo só quando aquele harness de fato
   o liga ao módulo. Tirar um nome do `require` e recolocar uma cópia local reprova o gate — e
@@ -85,23 +91,17 @@ exibe e **atualiza ao vivo** (Realtime).
   Duas guardas cobram isso: `tests/check.js` §[1] e a regra Semgrep `divat-style-attr-quebra-csp`.
 - **`.vercelignore` é allowlist**: o deploy publica só `index.html`, `app.js`, `styles.css`,
   `manifest.webmanifest`, `vercel.json`, `version.json`, `vendor/` e os módulos de `src/domain/`
-  reabertos um a um (hoje `core.mjs`, `agrupamento.mjs`, `busca.mjs` e `view-state.mjs`).
-  Arquivo público novo (ícone, fonte) precisa ser reaberto lá, senão vira 404. **`src/` é reaberto
-  arquivo a arquivo**, não com um `!/src` de uma linha: é diretório cujo nome convida a guardar o
-  que não se serve, e reabri-lo inteiro publicaria em silêncio o que alguém largar ali. Reabrir só
-  o arquivo **não basta** — o git não desce em diretório excluído, então cada nível precisa ser
-  reaberto e ter o conteúdo fechado de novo (medido, não suposto).
-  **Esquecer isso derrubou o portal inteiro em 10/08/2026**: o `app.js` virou ES module e importa
-  `src/domain/core.mjs`; sem `src/` na allowlist o import deu 404 e — porque **import ES é
-  atômico** — o `app.js` inteiro deixou de executar, com `<main id="app">` vazio e nenhum card na
-  tela. Hoje `tests/check.js` §[1] deriva os assets pedidos por `app.js` (`import`, `import()`,
-  `.src=`, `fetch('/…')`), `index.html` (`href`/`src`) e `styles.css` (`url()`) e reprova se algum
-  não sobreviver à allowlist, conferindo pelo próprio git — a mesma engine de padrões da Vercel.
-  A varredura de módulos é **transitiva**: segue cada módulo descoberto resolvendo o
-  especificador **relativo ao arquivo que importa**, porque um módulo publicado que importe outro
-  não publicado quebra o `app.js` inteiro do mesmo jeito. Referência dentro de comentário **não**
-  conta (o navegador não a pede). Os dois vieram da revisão na issue #121, cada um reproduzido
-  antes de corrigir; a bateria de mutação que os guarda tem 18 casos.
+  reabertos um a um (hoje `domain/` com `core.mjs`, `agrupamento.mjs`, `busca.mjs` e
+  `view-state.mjs`; `data/` com `rest.mjs` e `lookups.mjs`).
+  Arquivo público novo (ícone, fonte, módulo) precisa ser reaberto lá, senão vira 404 — e **`src/`
+  é reaberto arquivo a arquivo**, três linhas por arquivo, nunca com um `!/src` de uma linha.
+  **Esquecer isso derrubou o portal inteiro em 10/08/2026**: import ES é **atômico**, então um
+  módulo em 404 faz o `app.js` inteiro deixar de executar, com a tela vazia e nada no console.
+  Hoje o `tests/check.js` §[1] deriva os assets pedidos por `app.js`/`index.html`/`styles.css`,
+  atravessa os imports de módulo para módulo e reprova nomeando o que ficou de fora — conferindo
+  pelo próprio git, a mesma engine de padrões da Vercel. O racional completo de cada regra (por
+  que arquivo a arquivo, por que reabrir o nível não basta, os 18 casos da bateria de mutação)
+  está no **cabeçalho do próprio `.vercelignore`**, que é onde quem for editá-lo já está olhando.
 
 ## Supabase
 - Projeto: **`bd_teste`** · ref **`lwzsxuaqqeoamukduhev`** · região sa-east-1.
@@ -146,11 +146,12 @@ exibe e **atualiza ao vivo** (Realtime).
   - **Teto do PostgREST:** `pgrst.db_max_rows = 30000` no role `authenticator` (igual ao maior
     `limit` do front). **Ao criar query com `limit` > 30000, suba o teto junto**
     (`ALTER ROLE authenticator SET pgrst.db_max_rows = '<n>'; NOTIFY pgrst, 'reload config';`)
-    **e suba, na mesma tarefa, a constante `SB_MAX_ROWS` do `app.js`** (seção `SUPABASE CONFIG`):
+    **e suba, na mesma tarefa, a constante `SB_MAX_ROWS` de `src/data/rest.mjs`** (ela saiu do
+    `app.js` na Fase B):
     o `marcarTrunc` a usa como segundo critério de truncagem — é o que impede uma resposta cortada
     pelo SERVIDOR de passar sem banner, já que `data.length` nunca alcança um `limit` maior que o
     teto. Deixá-la para trás faz o portal avisar "resultado parcial" num teto que não é mais o
-    real. **São TRÊS lugares a mudar juntos:** o banco, o `SB_MAX_ROWS` do `app.js` e o
+    real. **São TRÊS lugares a mudar juntos:** o banco, o `SB_MAX_ROWS` de `src/data/rest.mjs` e o
     `docs/backup_schema.sql` (onde os `ALTER ROLE` passaram a ser versionados em 09/08/2026).
   - **Timeouts por role** (medidos em 09/08/2026, versionados na baseline): `anon` = **3s**,
     `authenticated` = **8s**, `authenticator` = 8s + `lock_timeout` 8s. Não são iguais de
@@ -229,9 +230,9 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 
 A lógica **pura** dessas seções tem testes em `tests/`: o que já saiu para `src/domain/` é
 testado direto pelo módulo real; o que ainda mora no `app.js` roda sobre cópia verbatim guardada
-pelo `check.js` — são as **12** do `tests/harness.js`, onze do bloco `SUPABASE CONFIG` mais o
-`preencherLookup`, que é de `STATE + CACHES`. Render/DOM e PDF não
-têm teste (exigiriam navegador).
+pelo `check.js`. **Desde a Fase B não sobrou nenhuma cópia**: os dois harness (`pure.harness.js` e
+`harness.js`) são pontes CommonJS para `src/domain/` e `src/data/`, e o mecanismo `@canon` foi
+aposentado junto. Render/DOM e PDF não têm teste (exigiriam navegador).
 
 ## Publicação (Vercel) e atualização automática
 - **Host: Vercel** (único host em uso). A ligação com o Supabase é toda **client-side**; o host
@@ -285,12 +286,11 @@ têm teste (exigiriam navegador).
    **push numa branch sem PR aberto não dispara gate nenhum.** Rode `node tests/check.js` local,
    ou dispare pela aba Actions → Run workflow (`workflow_dispatch`, que os cinco têm).
 2. **Antes de publicar, rode `node tests/check.js`** — valida a sintaxe do `app.js`, garante que
-   não voltou `<script>` inline no `index.html`, confere as cópias de teste (anti-drift), cobra a
+   não voltou `<script>` inline no `index.html`, cobra a
    **deriva docs×código** (seção `[2b]`, ver abaixo) e roda todos os testes. Só publique tudo
-   verde. (Ao alterar função com cópia em `tests/*.harness.js`, atualize a cópia — e se criar
-   cópia nova, **adicione a guarda no `canon`**: o `check.js` agora falha se um símbolo exportado
-   pelo harness não tiver guarda, porque foi assim que `ilikeTerm` e `MAX_TABS` ficaram
-   descobertos.) **Ao mexer nas abas do modal / no seletor de documentos**, rode também
+   verde. (Precisa testar função nova? **Extraia-a para `src/domain/` ou `src/data/` e faça
+   `require` dela no harness.** Recolar cópia verbatim é regressão: o mecanismo que as guardava
+   foi aposentado na Fase B por não haver mais o que guardar.) **Ao mexer nas abas do modal / no seletor de documentos**, rode também
    `node scripts/check_abas.mjs` — checagem de regressão em navegador headless (Playwright, com
    o PostgREST stubado); fica fora do `check.js` porque este é offline e sem dependências, mas
    **roda no CI** junto com o `check_views.mjs` (workflow `views.yml`).
@@ -310,7 +310,7 @@ têm teste (exigiriam navegador).
 
 2a. **Mexeu em render/loader? `node scripts/check_views.mjs`** — abre as **18 views** num
    navegador headless e falha se alguma explodir, ficar no spinner ou pintar menos que o
-   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~58,5% do `app.js`), que o
+   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~60,6% do `app.js`), que o
    `check.js` **não** cobre. Aceita filtro: `check_views.mjs frota`.
    **O que quebra se esquecer:** view nova sem entrada em `VIEWS` (a checagem anti-drift do final
    pega); `select=` alterado sem ajustar a fixture em `scripts/lib/rig.mjs` — nome de coluna

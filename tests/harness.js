@@ -1,153 +1,46 @@
 'use strict';
-/* Harness reproducing the SUPABASE CONFIG functions from app.js, plus `preencherLookup`
-   (seção STATE + CACHES) — o cache de lookup precisa de teste porque o bug que ele corrige
-   é silencioso: cachear a FALHA em vez do resultado.
-   SB_TIMEOUT_MS is made mutable (let) so the timeout test can shrink it.
-   Everything else is copied verbatim. */
+/* Ponte CommonJS para `src/data/` — irmã do `pure.harness.js`, e pelo mesmo motivo: o que o
+   `sbFetch.test.js` e o `environment.test.js` exercitam é a MESMA implementação que o navegador
+   executa, não uma cópia dela.
 
-const SB_URL = 'https://example.invalid';
-const SB_KEY = 'fake-anon-key';
-const SB = { url: SB_URL, key: SB_KEY };
+   Este arquivo já foi 153 linhas com DOZE blocos `@canon` — cópias verbatim da seção
+   `SUPABASE CONFIG` do `app.js` mais o `preencherLookup`, cada uma guardada contra deriva pelo
+   mecanismo `tests/canon.js` + `tests/drift.test.js` + §[2] do `check.js`. As cópias existiam só
+   porque a camada de dado morava dentro do IIFE. A Fase B do plano das fatias 3-4 a extraiu para
+   `src/data/rest.mjs` e `src/data/lookups.mjs`, e com a última cópia foi embora o mecanismo
+   inteiro: `canon.js`, `drift.test.js` e a §[2] se aposentaram por PERDER O OBJETO, não por corte
+   de rigor. Processo que existia para compensar código não-modular morre quando o código vira
+   módulo — é o único jeito de a conta de processo cair de verdade.
 
-/* @canon selecionarSupabase */
-function selecionarSupabase(hostname, config){
-  const host = String(hostname || '').trim().toLowerCase().replace(/\.$/, '');
-  const hostsProd = (config.hostsProd || []).map(h => String(h).trim().toLowerCase().replace(/\.$/, ''));
-  const producao = hostsProd.includes(host);
-  const alvo = producao
-    ? { url: config.prodUrl,  key: config.prodKey,  ambiente: 'producao' }
-    : { url: config.testeUrl, key: config.testeKey, ambiente: 'teste' };
-  if (!alvo.url || !alvo.key) {
-    throw new Error(`Configuração Supabase ausente para o ambiente de ${alvo.ambiente}.`);
-  }
-  return Object.freeze({ ...alvo, hostname: host });
-}
-/* @endcanon */
+   REGRA, se alguém precisar testar função nova de acesso a dado: extraia-a para `src/data/` e
+   faça `require` dela aqui. Recolar uma cópia local é regressão, não atalho.
 
-/* @canon esperar */
-const esperar = ms => new Promise(r => setTimeout(r, ms));
-/* @endcanon */
+   `SB_TIMEOUT_MS` continua settable porque o teste de timeout precisa encurtá-lo — mas agora a
+   escrita RECRIA o cliente com o teto novo, em vez de mutar uma variável de módulo. É a diferença
+   que a injeção de config comprou. */
+const rest = require('../src/data/rest.mjs');
+const { preencherLookup } = require('../src/data/lookups.mjs');
 
-/* @canon-adaptado SB_TIMEOUT_MS — `let` em vez de `const`: o teste de timeout precisa encurtá-lo */
-let SB_TIMEOUT_MS = 20000;   // copied; made `let` to allow shrinking in timeout test
-/* @endcanon */
-/* @canon SB_RETRIES */
-const SB_RETRIES    = 2;
-/* @endcanon */
-
-/* @canon CANCELADO */
-const CANCELADO = 'RequisicaoCancelada';
-/* @endcanon */
-/* @canon ehCancelamento */
-const ehCancelamento = e => e && e.name === CANCELADO;
-/* @endcanon */
-
-// fetch com timeout via AbortController — cancela a requisição se passar do teto.
-// `sinal` (opcional) é um AbortSignal EXTERNO, de quem quer cancelar antes disso (busca obsoleta).
-// Os dois são compostos, e a distinção entre eles é preservada: timeout vira mensagem para o
-// usuário, cancelamento externo é engolido. Sem essa distinção, trocar de termo de busca pintaria
-// "Tempo de resposta esgotado" na tela.
-/* @canon fetchComTimeout */
-async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal){
-  if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  const repassar = () => ctrl.abort();
-  if (sinal) sinal.addEventListener('abort', repassar, { once: true });
-  try {
-    return await fetch(url, { ...opts, signal: ctrl.signal });
-  } catch (e) {
-    // o abort veio de fora, não do relógio
-    if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-    throw e;
-  } finally {
-    clearTimeout(t);
-    if (sinal) sinal.removeEventListener('abort', repassar);
-  }
-}
-/* @endcanon */
-
-/* @canon sbFetch */
-async function sbFetch(table, qs = '', sinal) {
-  const url = `${SB.url}/rest/v1/${table}?${qs}`;
-  let ultimoErro;
-  for (let tentativa = 0; tentativa <= SB_RETRIES; tentativa++) {
-    try {
-      const res = await fetchComTimeout(url, {
-        headers: { apikey: SB.key, Authorization: `Bearer ${SB.key}` }
-      }, SB_TIMEOUT_MS, sinal);
-      if (!res.ok) {
-        // 5xx/429 são transitórios → vale repetir; demais 4xx são definitivos
-        if ((res.status >= 500 || res.status === 429) && tentativa < SB_RETRIES) {
-          ultimoErro = new Error(`HTTP ${res.status}`);
-          await esperar(400 * 2 ** tentativa);          // backoff: 400ms, 800ms
-          // o cancelamento pode chegar DURANTE o backoff: sem esta conferência, a tentativa
-          // seguinte sairia para a rede depois de a busca já ter sido abandonada.
-          if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-          continue;
-        }
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || `HTTP ${res.status}`);
-      }
-      return marcarTrunc(await res.json(), qs);
-    } catch (e) {
-      // cancelamento nunca repete: foi pedido, não é falha.
-      if (ehCancelamento(e)) throw e;
-      ultimoErro = e;
-      const transitorio = (e.name === 'AbortError') || (e instanceof TypeError); // timeout ou falha de rede
-      if (transitorio && tentativa < SB_RETRIES) {
-        await esperar(400 * 2 ** tentativa);
-        if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-        continue;
-      }
-      if (e.name === 'AbortError') throw new Error('Tempo de resposta esgotado — verifique a conexão e tente novamente.');
-      throw ultimoErro;
-    }
-  }
-  throw ultimoErro;
-}
-/* @endcanon */
-
-/* @canon SB_MAX_ROWS */
-const SB_MAX_ROWS = 30000;
-/* @endcanon */
-/* @canon marcarTrunc */
-function marcarTrunc(data, qs){
-  if (!Array.isArray(data)) return data;
-  const m = /(?:^|&)limit=(\d+)/.exec(qs || '');
-  if (m){
-    const teto = Math.min(+m[1], SB_MAX_ROWS);
-    if (teto >= 50 && data.length >= teto){
-      Object.defineProperty(data, '_trunc',  { value:true, enumerable:false });
-      Object.defineProperty(data, '_limite', { value:teto, enumerable:false });
-    }
-  }
-  return data;
-}
-/* @endcanon */
-/* @canon bannerTrunc */
-function bannerTrunc(rows){
-  return (rows && rows._trunc)
-    ? `<div class="trunc-aviso"><b>Resultado parcial:</b> mostrando os primeiros ${rows._limite}. Refine a busca para encontrar itens mais específicos.</div>`
-    : '';
-}
-/* @endcanon */
-
-/* @canon preencherLookup */
-async function preencherLookup(cache, chave, buscar, coluna){
-  if (cache[chave]) return cache[chave];
-  const rows = await buscar().catch(() => null);   // null = falhou; [] = veio vazio de verdade
-  if (!rows) return null;                          // não cacheia falha
-  const m = {};
-  rows.forEach(x => { m[x.id] = x[coluna]; });
-  cache[chave] = m;
-  return m;
-}
-/* @endcanon */
+const SB = { url: 'https://example.invalid', key: 'fake-anon-key' };
+let timeoutMs = rest.SB_TIMEOUT_MS;
+let cliente = rest.criarRest({ url: SB.url, key: SB.key, timeoutMs });
 
 module.exports = {
-  get SB_TIMEOUT_MS(){ return SB_TIMEOUT_MS; },
-  set SB_TIMEOUT_MS(v){ SB_TIMEOUT_MS = v; },
-  SB_RETRIES, SB_MAX_ROWS, selecionarSupabase, esperar, fetchComTimeout, sbFetch, marcarTrunc, bannerTrunc,
-  CANCELADO, ehCancelamento, preencherLookup,
+  get SB_TIMEOUT_MS(){ return timeoutMs; },
+  set SB_TIMEOUT_MS(v){
+    timeoutMs = v;
+    cliente = rest.criarRest({ url: SB.url, key: SB.key, timeoutMs });
+  },
+  SB_RETRIES: rest.SB_RETRIES,
+  SB_MAX_ROWS: rest.SB_MAX_ROWS,
+  selecionarSupabase: rest.selecionarSupabase,
+  esperar: rest.esperar,
+  fetchComTimeout: rest.fetchComTimeout,
+  // delega no cliente ATUAL (o setter acima pode tê-lo trocado), não numa referência congelada
+  sbFetch: (...args) => cliente.sbFetch(...args),
+  marcarTrunc: rest.marcarTrunc,
+  bannerTrunc: rest.bannerTrunc,
+  CANCELADO: rest.CANCELADO,
+  ehCancelamento: rest.ehCancelamento,
+  preencherLookup,
 };

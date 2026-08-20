@@ -43,3 +43,7 @@
 !/src/domain/agrupamento.mjs
 !/src/domain/busca.mjs
 !/src/domain/view-state.mjs
+!/src/data
+/src/data/*
+!/src/data/rest.mjs
+!/src/data/lookups.mjs

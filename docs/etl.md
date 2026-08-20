@@ -161,7 +161,7 @@ não é ETL: passa pela skill `db-change` e por uma migração em `supabase/migr
   Diagrama em [`schema.md`](schema.md).
 - **Coluna nova numa tabela grande que o portal vá filtrar precisa de índice** (btree; `pg_trgm`
   + GIN para `ilike`). Sem ele a consulta degrada silenciosamente conforme a tabela cresce.
-- **`limit` maior que 30000** exige subir o teto do PostgREST **e** a constante `SB_MAX_ROWS` do
-  `app.js` na mesma tarefa — ver a seção Supabase do [`../CLAUDE.md`](../CLAUDE.md).
+- **`limit` maior que 30000** exige subir o teto do PostgREST **e** a constante `SB_MAX_ROWS` de
+  `src/data/rest.mjs` na mesma tarefa — ver a seção Supabase do [`../CLAUDE.md`](../CLAUDE.md).
 - **Nada de dado no git.** CSVs e dumps ficam **fora** do repositório; o `.gitignore` barra `*.csv`
   como rede de segurança. O git versiona só código.

@@ -23,6 +23,16 @@ import {
   MAX_TABS, makeTab, openTabState, closeTabState,
   dispatchRealtime, pageBounds, filtrarSituacao,
 } from './src/domain/view-state.mjs';
+// Acesso à rede e cache de lookup — a camada de dado, fora do IIFE desde a Fase B. A interface
+// esconde timeout, retry e truncagem: aqui embaixo ninguém decide sobre AbortController nem
+// backoff. `SB_URL`/`SB_KEY` continuam literais logo abaixo de propósito — quatro scripts de
+// auditoria as extraem daqui por regex.
+// `marcarTrunc`, `CANCELADO` e `SB_MAX_ROWS` NÃO entram: depois da extração só o próprio
+// `rest.mjs` os usa (o `criarRest` marca a truncagem por dentro, e `ehCancelamento` já responde
+// a pergunta que `CANCELADO` respondia). Importá-los aqui seria binding morto — o mesmo motivo
+// que deixou `yearOf` fora do import do `busca.mjs`.
+import { criarRest, selecionarSupabase, bannerTrunc, ehCancelamento } from './src/data/rest.mjs';
+import { preencherLookup } from './src/data/lookups.mjs';
 
 /* ================================================================
    ÍNDICE DO ARQUIVO  —  navegue por `grep` da marca da seção.
@@ -74,19 +84,6 @@ const HOSTS_PROD   = ['divatdetro.vercel.app',
 const SB_TESTE_URL = 'https://gontnlfmothfglssbyyk.supabase.co';
 const SB_TESTE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdvbnRubGZtb3RoZmdsc3NieXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNTU0OTAsImV4cCI6MjEwMDgzMTQ5MH0.NMEaXXeWxI6A50KuA1euHpSH3Mi53CXU71N16zrjhH4';
 
-function selecionarSupabase(hostname, config){
-  const host = String(hostname || '').trim().toLowerCase().replace(/\.$/, '');
-  const hostsProd = (config.hostsProd || []).map(h => String(h).trim().toLowerCase().replace(/\.$/, ''));
-  const producao = hostsProd.includes(host);
-  const alvo = producao
-    ? { url: config.prodUrl,  key: config.prodKey,  ambiente: 'producao' }
-    : { url: config.testeUrl, key: config.testeKey, ambiente: 'teste' };
-  if (!alvo.url || !alvo.key) {
-    throw new Error(`Configuração Supabase ausente para o ambiente de ${alvo.ambiente}.`);
-  }
-  return Object.freeze({ ...alvo, hostname: host });
-}
-
 const SB = selecionarSupabase(location.hostname, {
   hostsProd: HOSTS_PROD,
   prodUrl: SB_URL,
@@ -95,109 +92,10 @@ const SB = selecionarSupabase(location.hostname, {
   testeKey: SB_TESTE_KEY
 });
 
-const esperar = ms => new Promise(r => setTimeout(r, ms));
-
-const SB_TIMEOUT_MS = 20000;   // teto por requisição: evita a tela presa em "Carregando…" pra sempre
-const SB_RETRIES    = 2;       // tentativas extras só p/ erros transitórios (rede / 5xx / 429)
-
-// Erro de requisição CANCELADA de propósito (busca ficou obsoleta), distinto de timeout e de
-// falha de rede. Quem chama trata isto como "ignore em silêncio", não como erro para exibir.
-const CANCELADO = 'RequisicaoCancelada';
-const ehCancelamento = e => e && e.name === CANCELADO;
-
-// fetch com timeout via AbortController — cancela a requisição se passar do teto.
-// `sinal` (opcional) é um AbortSignal EXTERNO, de quem quer cancelar antes disso (busca obsoleta).
-// Os dois são compostos, e a distinção entre eles é preservada: timeout vira mensagem para o
-// usuário, cancelamento externo é engolido. Sem essa distinção, trocar de termo de busca pintaria
-// "Tempo de resposta esgotado" na tela.
-async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal){
-  if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  const repassar = () => ctrl.abort();
-  if (sinal) sinal.addEventListener('abort', repassar, { once: true });
-  try {
-    return await fetch(url, { ...opts, signal: ctrl.signal });
-  } catch (e) {
-    // o abort veio de fora, não do relógio
-    if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-    throw e;
-  } finally {
-    clearTimeout(t);
-    if (sinal) sinal.removeEventListener('abort', repassar);
-  }
-}
-
-async function sbFetch(table, qs = '', sinal) {
-  const url = `${SB.url}/rest/v1/${table}?${qs}`;
-  let ultimoErro;
-  for (let tentativa = 0; tentativa <= SB_RETRIES; tentativa++) {
-    try {
-      const res = await fetchComTimeout(url, {
-        headers: { apikey: SB.key, Authorization: `Bearer ${SB.key}` }
-      }, SB_TIMEOUT_MS, sinal);
-      if (!res.ok) {
-        // 5xx/429 são transitórios → vale repetir; demais 4xx são definitivos
-        if ((res.status >= 500 || res.status === 429) && tentativa < SB_RETRIES) {
-          ultimoErro = new Error(`HTTP ${res.status}`);
-          await esperar(400 * 2 ** tentativa);          // backoff: 400ms, 800ms
-          // o cancelamento pode chegar DURANTE o backoff: sem esta conferência, a tentativa
-          // seguinte sairia para a rede depois de a busca já ter sido abandonada.
-          if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-          continue;
-        }
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || `HTTP ${res.status}`);
-      }
-      return marcarTrunc(await res.json(), qs);
-    } catch (e) {
-      // cancelamento nunca repete: foi pedido, não é falha.
-      if (ehCancelamento(e)) throw e;
-      ultimoErro = e;
-      const transitorio = (e.name === 'AbortError') || (e instanceof TypeError); // timeout ou falha de rede
-      if (transitorio && tentativa < SB_RETRIES) {
-        await esperar(400 * 2 ** tentativa);
-        if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-        continue;
-      }
-      if (e.name === 'AbortError') throw new Error('Tempo de resposta esgotado — verifique a conexão e tente novamente.');
-      throw ultimoErro;
-    }
-  }
-  throw ultimoErro;
-}
-
-// Teto do PostgREST: `pgrst.db_max_rows` do role `authenticator`. Confirmado contra o banco vivo
-// em 09/08/2026 e versionado em docs/backup_schema.sql (bloco LIMITES DE ROLE), além de descrito
-// no CLAUDE.md (seção Supabase). Subir o teto exige mudar os TRÊS na mesma tarefa: o banco, esta
-// constante e a baseline — a baseline porque um restore sem ela devolve o banco sem teto nenhum,
-// e sem sintoma; esta constante porque o marcarTrunc a usa como segundo critério de truncagem.
-const SB_MAX_ROWS = 30000;
-// Marca (sem alterar o conteúdo) um array de resultados que provavelmente foi CORTADO:
-// só sinaliza quando a consulta tinha um limit "de lista" (>=50) e veio cheio até o teto.
-// A flag é não-enumerável → JSON.stringify/map/spread ignoram; só quem checa rows._trunc vê.
-// O teto efetivo é o MENOR entre o limit pedido e o do servidor: um `limit` maior que
-// SB_MAX_ROWS sairia cortado em silêncio pelo critério antigo, porque data.length (30000)
-// nunca alcança lim (50000) — sem banner e sem toast. Hoje não dispara (os 5 maiores limits
-// do app.js são exatamente 30000); é armadilha armada para a próxima consulta grande.
-function marcarTrunc(data, qs){
-  if (!Array.isArray(data)) return data;
-  const m = /(?:^|&)limit=(\d+)/.exec(qs || '');
-  if (m){
-    const teto = Math.min(+m[1], SB_MAX_ROWS);
-    if (teto >= 50 && data.length >= teto){
-      Object.defineProperty(data, '_trunc',  { value:true, enumerable:false });
-      Object.defineProperty(data, '_limite', { value:teto, enumerable:false });
-    }
-  }
-  return data;
-}
-// Banner de aviso quando a lista foi truncada (atingiu o limite da consulta).
-function bannerTrunc(rows){
-  return (rows && rows._trunc)
-    ? `<div class="trunc-aviso"><b>Resultado parcial:</b> mostrando os primeiros ${rows._limite}. Refine a busca para encontrar itens mais específicos.</div>`
-    : '';
-}
+// `sbFetch(tabela, query, sinal)` — o único caminho de rede do portal. Timeout (20s), retry com
+// backoff para erro transitório, cancelamento externo e marcação de resultado truncado ficam
+// TODOS dentro de `criarRest`; ver src/data/rest.mjs.
+const { sbFetch } = criarRest({ url: SB.url, key: SB.key });
 
 /* --- Regras de domínio e formatação (funções puras) ---
    Daqui pra baixo, nenhuma função toca rede/DOM — só recebem dado e devolvem
@@ -524,16 +422,6 @@ function searchEmpresas(term, { limit = 40 } = {}){
    erro: a exceção sobe e o cache continua null, então a próxima chamada refaz.
    Aqui o erro continua engolido de propósito — o Histórico deve renderizar mesmo sem os
    nomes de evento, caindo no '—' —, mas engolir não pode virar cachear. */
-async function preencherLookup(cache, chave, buscar, coluna){
-  if (cache[chave]) return cache[chave];
-  const rows = await buscar().catch(() => null);   // null = falhou; [] = veio vazio de verdade
-  if (!rows) return null;                          // não cacheia falha
-  const m = {};
-  rows.forEach(x => { m[x.id] = x[coluna]; });
-  cache[chave] = m;
-  return m;
-}
-
 async function getEvLookups() {
   await Promise.all([
     preencherLookup(evLookups, 'emp', () => sbFetch('evento_empresa_teste','select=id,evento_empresa'), 'evento_empresa'),

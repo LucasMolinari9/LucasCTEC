@@ -4,6 +4,64 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 20/08/2026 — Fase B: a camada de dado sai do `app.js`, e o mecanismo `@canon` se aposenta
+
+**A primeira mudança desta série em que o monólito ENCOLHE.** `version.json` 6 → 7, `#verTag`
+`build 20/08-A` → `build 20/08-B`. Zero SQL.
+
+| | antes | depois | delta |
+|---|---:|---:|---:|
+| **`app.js`** (o monólito) | 3.272 | **3.160** | **−112** |
+| seção `SUPABASE CONFIG` | 171 | **59** | −112 |
+| **`tests/` + `scripts/`** (processo) | 6.280 | **5.902** | **−378** |
+| razão processo : produto | 3,48 : 1 | **3,37 : 1** | −0,11 |
+
+- **`src/data/rest.mjs`** — `criarRest({ url, key, fetch })` devolve `{ sbFetch }` e **esconde
+  timeout, retry e truncagem**, que era a condição literal do estudo para a fase valer a pena.
+  Config injetada, não lida de global: é o que torna o módulo testável sem navegador e sem rede.
+  Junto vieram `selecionarSupabase`, `fetchComTimeout`, `marcarTrunc`, `bannerTrunc`, `esperar`,
+  `CANCELADO`/`ehCancelamento` e as constantes de teto.
+- **`src/data/lookups.mjs`** — `preencherLookup`, o cache que **não cacheia falha** (a distinção
+  entre "falhou" e "veio vazio" é o ponto inteiro dele). O cache chega por parâmetro; um cache de
+  módulo daria ao arquivo um estado global escondido, o oposto do que a extração veio fazer.
+- **O que NÃO saiu, e é deliberado:** `SB_URL`, `SB_KEY`, `SB_TESTE_*` e `HOSTS_PROD` continuam
+  literais no topo do `app.js`. `check_deriva.mjs`, `check_realtime.mjs`, `check_data_quality.mjs`
+  e `check_grants.mjs` extraem as duas primeiras de lá por regex — movê-las cegaria os quatro de
+  uma vez, e em silêncio.
+- **Três imports recusados** (`marcarTrunc`, `CANCELADO`, `SB_MAX_ROWS`): depois da extração só o
+  próprio `rest.mjs` os usa, e importá-los seria binding morto.
+
+### O mecanismo `@canon` foi aposentado — −378 linhas de processo
+
+Era o marco declarado da Fase B e a recomendação nº 4 da auditoria de custo da Sessão 5. O
+`tests/harness.js` tinha **12** marcas `@canon` (cópias verbatim da seção `SUPABASE CONFIG` mais o
+`preencherLookup`). Todas saíram; ele virou ponte de 46 linhas. Com a última cópia foram embora
+`tests/canon.js` (56), `tests/drift.test.js` (72) e a **§[2] do `check.js`** (141).
+
+A Sessão 5 projetava −128 (contava só os dois arquivos). O medido foi **−378**, porque a §[2] e o
+encolhimento do próprio harness não estavam na conta. **Nenhum caso de teste deixou de rodar:**
+`sbFetch.test.js` segue 49/49 e `environment.test.js` segue passando — agora exercitando a
+implementação que o navegador executa, em vez de uma cópia dela.
+
+Processo apagado por **perder o objeto**, não por corte de rigor. É o argumento central a favor de
+extrair em vez de podar, e agora está medido: as guardas existiam para compensar código
+não-modular, e morreram quando o código virou módulo.
+
+### Runbooks movidos com a constante
+
+`SB_MAX_ROWS` mudou de arquivo, então as quatro instruções que mandavam editá-la no `app.js`
+mudaram junto — `CLAUDE.md` (duas), `docs/etl.md` e `docs/backup_schema.sql`. Nenhum gate do repo
+menciona `SB_MAX_ROWS`: esquecer isso só apareceria quando alguém subisse o teto do PostgREST e a
+truncagem ficasse no valor velho, sem sintoma. Por isso saiu no mesmo commit.
+
+**O `CLAUDE.md` ficou em 548 linhas** (bateu 555 no meio do caminho): o detalhe do `.vercelignore`
+foi movido para o cabeçalho do próprio arquivo, que é onde quem for editá-lo já está olhando. É a
+regra do §6.1 da auditoria de custo aplicada pela primeira vez — mover, não apagar.
+
+**Gates:** `check.js`, `check_corrida_view` (15), `check_views` (18), `check_abas`,
+`check_selecao_linha` e `semgrep` (121 regras, 0 findings) — todos verdes. A guarda de citações
+cobrou 131 re-ancoragens causadas pelas 112 linhas que saíram do `app.js`.
+
 ## 20/08/2026 — A tela mostrava uma linha e o PDF baixava outra; os 8 renders ganham guard
 
 **Parte 2 da Fase A**, e o primeiro PR desta série que toca arquivo servido: `app.js` +8 linhas.

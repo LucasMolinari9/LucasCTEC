@@ -54,11 +54,12 @@ cada teste novo).
   (a checagem **viva** contra o banco fica em `scripts/check_realtime.mjs`, que precisa de rede).
 
 ## Arquivos
-- `check.js` — **runner / gate de pré-publicação** (sintaxe + anti-drift + testes).
-- `harness.js` — cópia das funções do bloco SUPABASE CONFIG + mocks; usado por `sbFetch.test.js`.
+- `check.js` — **runner / gate de pré-publicação** (sintaxe + allowlist + deriva docs×código + testes).
+- `harness.js` — ponte CommonJS para `src/data/*.mjs`; usado por `sbFetch.test.js` e
+  `environment.test.js`. Era cópia verbatim da seção SUPABASE CONFIG (153 linhas, 12 `@canon`).
 - `sbFetch.test.js` — casos de `sbFetch`/`marcarTrunc`/`bannerTrunc`.
 - `pure.harness.js` — ponte CommonJS para `src/domain/*.mjs`: desde a Sessão 4 não copia mais
-  nada, só faz `require` dos módulos reais (era cópia verbatim de 30 funções, 305 linhas).
+  nada (era cópia verbatim de 30 funções, 305 linhas).
 - `pure.test.js` — casos das funções puras.
 - `realtime.test.js` — guarda a sincronização `VIEW_TABLES`/`RT_TABLES` (extrai os literais do `app.js`).
 - `backup_rest.rig.mjs` — paginação keyset, contagem, SHA-256 e headers das chaves opacas.
@@ -67,31 +68,31 @@ cada teste novo).
 > `scripts/check_views.mjs` e `check_abas.mjs` também usam fixtures locais por desenho. Eles
 > validam renderização determinística, não substituem um preview ligado a um banco restaurado.
 
-## ⚠️ Regra de ouro (anti-drift)
-Os harness ainda copiam à mão o código que continua dentro do `app.js`. **Ao editar uma função
-que ainda estiver copiada, atualize a cópia** no harness correspondente, entre os marcadores
-`/* @canon <nome> */ … /* @endcanon */`. O `check.js` §[2] compara o texto INTEIRO da cópia com o
-`app.js` e falha nomeando quem divergiu.
+## ⚠️ Regra de ouro: NÃO copie — extraia
 
-O que já foi extraído para `src/domain/*.mjs` (hoje `core.mjs`, `agrupamento.mjs`, `busca.mjs` e
-`view-state.mjs`) **não tem cópia**: o `pure.harness.js` faz `require` do módulo real, que é a
-mesma implementação que o navegador executa. **Extrair uma função é, portanto, apagar o bloco
-`@canon` dela** — não atualizá-lo.
+Não há mais nenhuma cópia verbatim aqui. Os dois harness são **pontes**: `pure.harness.js` faz
+`require` de `src/domain/*.mjs` e `harness.js` de `src/data/*.mjs`. O que os testes exercitam é,
+literalmente, o mesmo código que o navegador executa.
 
-Depois da Sessão 4 as **12** marcas `@canon` restantes estão todas no `harness.js` (as funções que
-dependem de rede/estado do IIFE, `sbFetch` e companhia). O `pure.harness.js` não tem nenhuma.
+**Precisa testar função que ainda mora no `app.js`? Extraia-a** para `src/domain/` (se for pura)
+ou `src/data/` (se falar com a rede ou guardar cache), importe-a no `app.js`, faça `require` dela
+no harness — e **reabra o arquivo no `.vercelignore`**, senão o portal inteiro para de executar
+(import ES é atômico). Recolar uma cópia local é regressão, não atalho.
 
-A checagem de cobertura do `check.js` §[2] não tem lista a manter à mão: para cada harness ela lê
-os próprios `require` de `src/domain/` e os casa com os `export` do módulo citado. Um símbolo só é
-isento de marcador quando **aquele** harness realmente o liga ao módulo. Consequências práticas,
-todas provadas por mutação:
+### O mecanismo `@canon`, e por que ele não existe mais
 
-- tirar um nome do `require` e recolocar uma cópia local sem marcador **reprova** — mesmo que a
-  cópia esteja fiel no dia em que foi escrita, que é justamente quando ela passaria despercebida;
-- desestruturar nome que o módulo não exporta **reprova**, porque o binding chegaria `undefined` e
-  o teste passaria testando nada;
-- forma de `require` que o extrator não reconhece (namespace, caminho computado) **não isenta
-  ninguém**: o gate pede o marcador em vez de adivinhar.
+Enquanto o código não era modular, cada função testada tinha uma cópia à mão no harness, guardada
+contra deriva por marcadores `/* @canon <nome> */` que o `tests/canon.js` extraía, o
+`tests/drift.test.js` comparava e a §[2] do `check.js` cobrava. Funcionou: pegou deriva de
+verdade, e a versão dele que só olhava a assinatura (e por isso deixava `matchEvent` passar com o
+corpo trocado por `return false`) foi consertada depois de medida.
+
+Ele foi **aposentado na Fase B do plano das fatias 3-4**, quando a última das 12 cópias saiu para
+`src/data/`. Não foi corte de rigor — foi perda de objeto: `canon.js` (56 linhas),
+`drift.test.js` (72), a §[2] do `check.js` (141) e 107 linhas do `harness.js` sumiram no mesmo
+commit, **−376 no total**, sem que um único caso de teste deixasse de rodar. Fica registrado aqui
+porque é o argumento central a favor de extrair em vez de podar: processo que existe para
+compensar código não-modular morre quando o código vira módulo.
 
 > Observação: estes testes cobrem a camada de dados/lógica pura. A renderização (DOM)
 > e o PDF não são testados aqui — exigiriam um navegador headless.

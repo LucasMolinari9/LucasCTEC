@@ -27,19 +27,20 @@ mudou junto, e o que continua valendo:
   **`src/domain/busca.mjs`** (filtro de evento e preparação do termo de busca) e
   **`src/domain/view-state.mjs`** (seam do ciclo de vida da view, modelo de abas, despacho do
   Realtime por aba e o que cada lista mostra). O corte é pela pureza, não pelo assunto:
-  `termosLocalidade` (`app.js:2465`) é da mesma família do
-  `localidadesQueCasam`, mas faz `await getLocalidades()` em `app.js:2466` — é I/O, e ficou.
+  `termosLocalidade` (`app.js:2353`) é da mesma família do
+  `localidadesQueCasam`, mas faz `await getLocalidades()` em `app.js:2354` — é I/O, e ficou.
 - **Regra para extrair:** prefira módulos profundos com interface pequena. Não mova loaders/estado
   apenas para reduzir linhas; extraia quando a dependência puder ser expressa por imports claros.
-- **Extração paga o processo que ela torna desnecessário.** Enquanto a função mora no `app.js`, o
-  teste unitário roda sobre uma **cópia** em `tests/*.harness.js`, e essa cópia precisa da guarda
-  `@canon` para não divergir do original. Extraída, o harness importa o módulo real: cópia e guarda
-  são **apagadas** no mesmo commit — o teste passa a exercitar exatamente o código que o navegador
-  executa. Quando o último `@canon` sair, `tests/canon.js` e `tests/drift.test.js` se aposentam.
-  O `pure.harness.js` chegou lá na Sessão 4 (zero cópias); as 12 que faltam estão no `harness.js`
-  e dependem da Fase B (`src/data/rest.mjs`).
+- **Extração paga o processo que ela torna desnecessário — e isso foi MEDIDO até o fim.** Enquanto
+  a função morava no `app.js`, o teste unitário rodava sobre uma **cópia** em `tests/*.harness.js`,
+  guardada contra deriva pelo mecanismo `@canon`. Cada extração apagava cópia e guarda juntas. Com
+  a Fase B (`src/data/rest.mjs` + `src/data/lookups.mjs`) saiu a última das 12, e o mecanismo
+  inteiro foi aposentado: `tests/canon.js` (56), `tests/drift.test.js` (72), a §[2] do `check.js`
+  (141) e 107 linhas do próprio `harness.js` — **−376 linhas de processo num commit**, por ter
+  perdido o objeto. É o único caminho pelo qual a conta de processo cai de verdade: extrair, não
+  podar.
 - **Toda extração tem três passos obrigatórios, não um:** mover a função + importar no `app.js`;
-  apagar o `@canon` e trocar por `require` no harness; e **reabrir o arquivo no `.vercelignore`**.
+  trocar a cópia por `require` no harness; e **reabrir o arquivo no `.vercelignore`**.
   Pular o terceiro derruba o portal inteiro (import ES é atômico — ver §`.vercelignore` no
   `CLAUDE.md`); o `check.js` §[1] reprova nomeando o arquivo que ficou de fora.
 - **CSS em `styles.css`** (extraído do `<style>` em 22/07/2026): cacheável separado do HTML e
@@ -90,7 +91,7 @@ achar por `grep` do texto da marca, nunca por linha.
   `COMPONENTES AUXILIARES` · `CLIQUE NOS CARDS` · `UTILITÁRIOS` · `TOAST` · `REALTIME` ·
   `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~58,5% do JS (~1,9k linhas, ~90 funções).
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~60,6% do JS (~1,9k linhas, ~90 funções).
 
 ### Sub-marcas do bloco `MODAL / SISTEMA DE VIEWS`
 
