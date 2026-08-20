@@ -4,6 +4,54 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 20/08/2026 — Bancada de corrida: o seam do `pdfHTML` finalmente tem teste (e um achado)
+
+**Parte 1 da Fase A**, entregue ANTES da fase — a rede vem antes do salto. **Zero mudança em
+arquivo servido, zero SQL**; sem bump de `version.json` nem de `#verTag`.
+
+- **O buraco que ela fecha.** O seam `beginGen`/`isCurrentGen`/`commitViewResult` nasceu de
+  raciocínio, não de teste, e **nenhum** dos três gates de navegador conseguia sequer CRIAR a
+  ordenação que define o bug: o `check_views.mjs` abre cada view numa página limpa e em sequência,
+  o `check_abas.mjs` dá `waitForTimeout` DEPOIS de cada ação e o `check_selecao_linha.mjs` espera
+  o pane parar de girar. E o stub do PostgREST respondia na hora. Os três podiam ficar verdes com
+  o seam quebrado.
+- **`scripts/check_corrida_view.mjs`** (novo, no `views.yml`): segura a resposta na rede, troca de
+  aba e só então solta. Nove asserções, cobrindo as três do plano — (a) o pane da aba 2 não é
+  pintado pelo render da aba 1; (b) o `pdfHTML` da aba 2 não é sobrescrito; (c) o pane **e** o
+  `pdfHTML` da aba 1 RECEBEM a resposta atrasada. A (c) não é decorativa: sem ela a bancada
+  aprovaria uma implementação que descarta toda resposta pós-troca-de-aba.
+- **`criarControleDeRede`** em `scripts/lib/rig.mjs`: trava, não atraso em milissegundos. O teste
+  segura, confirma que a requisição saiu (`esperarPresos`), troca de aba e solta — determinístico.
+  `setTimeout` faria a corrida depender do relógio da máquina e o gate piscaria.
+- **O pdfHTML é observado por FORA.** Ele mora no IIFE e não vai para `window`; a bancada clica o
+  botão de PDF e captura o `.pdf-export` que o `baixarPdf` monta, substituindo `window.print`. É a
+  consequência que o usuário vê, não um espião no estado interno.
+- **Prova por mutação, duas, ambas vermelhas com asserção NOMEADA:** (1) voltar o `pdfHTML` a ser
+  escrito em `currentView` (código pré-seam) reprova (b), (b2) e (c2); (2) fazer o render reler o
+  pane ativo em vez do `host` capturado reprova (a), (a2) e (c). Controle restaurado volta a verde.
+  A segunda só nomeia o defeito porque a espera passou a aceitar o resultado em QUALQUER pane —
+  esperar só pelo pane certo dava timeout genérico, que é vermelho sem ser diagnóstico.
+
+**Achado, ABERTO, para a Fase A fechar.** Sondando a corrida na MESMA aba (duas buscas, a 1ª
+voltando DEPOIS da 2ª), a tela e o PDF **discordam**: o pane fica com a linha obsoleta e o
+`pdfHTML` com a vigente. O seam guarda a escrita do PDF, mas a escrita final no DOM não tem
+guard nenhum — são **8 renders** dos 28 (`renderItinerarios`, `renderLinhaQuadro`,
+`quadroEmpresaRun`, `renderTarifas`, `tarifaEmpresaRun`, `renderFrota`, `renderEstrutura` e
+`LOADERS.historicoEmpresa`); os outros 19 já estão cobertos por guard próprio ou por delegação a
+`paginate`/`lineResults`. Só aparece com respostas fora de ordem, por isso passou despercebido.
+O conserto é o mesmo `isCurrentGen` que as Portarias já usam, e cabe na Fase A — que reescreve a
+abertura desses mesmos oito. **Não foi feito aqui de propósito:** mexer no `app.js` muda o perfil
+de risco desta parte, que é zero.
+
+**Guarda de citações, estendida no mesmo PR** (nasceu na entrada anterior): passou a varrer também
+workflows e cabeçalhos de `scripts/*.mjs`, e o conector agora aceita o prefixo de comentário
+(`//`, `*`, `>`, `#`) — sem isso, **quebrar a linha entre o símbolo e a citação DESLIGAVA a
+conferência em silêncio**, que é o defeito que a guarda existe para impedir. Medido: +5 citações
+cobertas, 0 falsos positivos; total de 55 → **70** conferidas em 43 arquivos. Ela pegou, durante
+esta sessão, três derivas: a citação do próprio `rig.mjs` que escrevi errada (288 → 304), uma
+citação mal pareada no plano (`check_views.mjs` onde o símbolo em `rig.mjs:121` é o `FIXTURES`) e
+uma tabela nova em que citei a abertura do seam pareada com o NOME da função.
+
 ## 20/08/2026 — As citações do plano vivo estavam todas erradas; o gate passa a cobrá-las
 
 **Zero mudança de código servido, zero SQL** — `app.js`, `index.html`, `styles.css`, `src/` e

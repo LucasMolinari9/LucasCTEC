@@ -188,7 +188,43 @@ continua escrevendo as duas.
 - Os **5** call sites com `pdf:false` seguem passando `view`/`gen`: `app.js:1616`, `:2081`,
   `:2085`, `:2353` e `:2875`. (Eram descritos como 4 — número herdado e nunca medido.)
 
-### Entregável obrigatório: a bancada de corrida
+### ✅ Entregável obrigatório: a bancada de corrida — ENTREGUE ANTES DA FASE
+
+`scripts/check_corrida_view.mjs`, mergeado como parte separada, **antes** de a Fase A tocar
+qualquer render. A ordem é deliberada: a bancada é a rede que torna a fase verificável, e
+construir a rede depois do salto é construir rede nenhuma. Ela já roda no CI (`views.yml`).
+
+As nove asserções passam contra o código de hoje, e **mordem**: duas mutações foram medidas —
+(1) voltar o `pdfHTML` a ser escrito em `currentView` (o código pré-seam) reprova (b), (b2) e
+(c2); (2) fazer o render reler o pane ativo em vez do `host` capturado reprova (a), (a2) e (c).
+Controle restaurado volta a verde.
+
+**Achado da bancada, ainda ABERTO — a Fase A tem de fechá-lo.** Ao sondar a corrida na MESMA aba
+(duas buscas, a 1ª voltando DEPOIS da 2ª), a tela e o PDF **discordam**: o pane fica com a linha
+obsoleta e o `pdfHTML`, com a vigente. A causa é que o seam guarda a escrita do PDF
+(`commitViewResult`) mas **não** a escrita final no DOM — em `renderItinerarios` o
+`host.innerHTML` (`app.js:1437`) roda sem `isCurrentGen`. São **8** renders assim, todos com
+`await` antes de escreverem `innerHTML` e sem guard próprio nem delegação a
+`paginate`/`lineResults`:
+
+| render | declarado em | abertura do seam |
+|---|---|---|
+| `renderItinerarios` | `app.js:1417` | `:1418` |
+| `renderLinhaQuadro` | `app.js:1513` | `:1515` |
+| `quadroEmpresaRun` | `app.js:1556` | `:1557` |
+| `renderTarifas` | `app.js:1653` | `:1654` |
+| `tarifaEmpresaRun` | `app.js:1676` | `:1677` |
+| `renderFrota` | `app.js:1762` | `:1763` |
+| `renderEstrutura` | `app.js:1782` | `:1783` |
+| `LOADERS.historicoEmpresa` | `app.js:1940` | `:1944` |
+
+Os outros 19 dos 28 já estão cobertos (guard próprio ou via `paginate`/`paginateEvents`/
+`lineResults`, que o aplicam por dentro). O conserto é o mesmo guard explícito que as Portarias
+já usam — `isCurrentGen` (`app.js:2380`) — e cabe na Fase A, que reescreve a abertura desses
+mesmos oito. **Só é observável com respostas fora de ordem**, por isso passou despercebido: o
+caminho comum entrega na ordem do pedido e a divergência não aparece.
+
+### O registro de por que ela precisou existir
 
 Os gates de hoje **não cobrem** esta fase, e vale registrar por quê: nenhum dos três **cria a
 ordenação** que define o bug.
@@ -421,7 +457,7 @@ listeners, rotas, composição — e wiring não é o defeito que a crítica apo
    desde a Sessão 2 — o commit é `0841a48`, mergeado no #125 — então se alguém reintroduzir lista
    manual em qualquer gate, trate como defeito, não como estilo.
 2. **Hoisting/TDZ e ordem do `LOADERS`** — regras em [`../estrutura-frontend.md`](../estrutura-frontend.md).
-3. **Fixtures do `check_views.mjs`** (`scripts/lib/rig.mjs:121`, o `export const FIXTURES`) — nome
+3. **Fixtures do `check_views.mjs`** — o `FIXTURES` (`scripts/lib/rig.mjs:121`) — nome
    de coluna divergente chega `undefined` no render e a tela sai vazia **sem erro**: falso verde.
 4. **`version.json` + `#verTag`** a cada fase que mexa em arquivo servido.
 

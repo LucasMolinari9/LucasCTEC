@@ -20,7 +20,11 @@
 #   scripts/check_selecao_linha.mjs — regressão do "clicar na linha seleciona a linha" (o
 #     history.back() do closeModal apagava a seleção recém-feita) e da barra de situação
 #     Todas/Ativas/Canceladas do card Linhas por Localidade e Município.
-# Os três usam a mesma bancada (scripts/lib/rig.mjs) e o mesmo Chromium: com o navegador já
+#   scripts/check_corrida_view.mjs — "uma resposta ATRASADA de uma aba escreve no pane ou no PDF
+#     da aba que está em foco?" É o único que força ORDENAÇÃO: os outros três esperam a
+#     requisição assentar antes da próxima ação, então podiam ficar verdes com o seam
+#     beginGen/commitViewResult quebrado. Usa a trava de rede do rig (criarControleDeRede).
+# Os quatro usam a mesma bancada (scripts/lib/rig.mjs) e o mesmo Chromium: com o navegador já
 # instalado no job, rodar os seguintes sai quase de graça.
 #
 # Nenhum dos dois fala com o Supabase: toda resposta do PostgREST vem das fixtures do rig.
@@ -89,3 +93,6 @@ jobs:
 
       - name: Regressão da seleção de linha e do filtro de situação
         run: node scripts/check_selecao_linha.mjs
+
+      - name: Corrida — resposta atrasada não escreve na aba errada
+        run: node scripts/check_corrida_view.mjs

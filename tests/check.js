@@ -680,7 +680,12 @@ console.log('\n[2b] Deriva docs × código');
   {
     const RE_CIT = /`([\w./-]*):(\d+)`(?:\s*[–-]\s*`:(\d+)`)?/g;
     const RE_SIMB = /^[#.]?[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/;
-    const RE_CONECTOR = /^[\s(|,]*(?:declarado em|atribui em|em|de)?[\s(|,]*$/;
+    // O `//` e o `*`/`>`/`#` entram porque a citação pode cair na linha seguinte de um
+    // comentário de script, de uma bandeira markdown ou de um bloco de destaque — e aí o
+    // prefixo da linha se interpõe entre o símbolo e a citação. Sem isto, quebrar a linha
+    // DESLIGA a conferência daquela citação em silêncio: exatamente o defeito que esta guarda
+    // existe para impedir. Medido ao acrescentar: +5 citações cobertas, 0 falsos positivos.
+    const RE_CONECTOR = /^[\s(|,]*(?:\/\/|[*>#]+)?[\s(|,]*(?:declarado em|atribui em|em|de)?[\s(|,]*(?:\/\/|[*>#]+)?[\s(|,]*$/;
     const cacheLinhas = new Map();
     const linhasDe = f => {
       // tira o elemento vazio do \n final: sem isso a última linha "existe" uma a mais que o
@@ -689,7 +694,10 @@ console.log('\n[2b] Deriva docs × código');
       return cacheLinhas.get(f);
     };
     let conferidas = 0, erradas = 0;
-    for (const doc of DOCS_VIVOS){
+    // Workflows e cabeçalhos de script entram pelo mesmo motivo que já entram na conferência de
+    // fato numérico: são prosa viva que ninguém relê, porque não abrem em leitor de markdown — e
+    // citação num cabeçalho de gate é lida como medição por quem for operá-lo.
+    for (const doc of [...DOCS_VIVOS, ...PROSA_VIVA]){
       const txt = ler(doc);
       const linhasDoDoc = txt.split('\n');
       let ultimoArquivo = null;                  // `:NNN` sem arquivo herda o último citado
@@ -720,7 +728,7 @@ console.log('\n[2b] Deriva docs × código');
         erradas++;
       }
     }
-    if (!erradas) okline(`citações arquivo:linha conferidas (${conferidas} no formato \`SÍMBOLO\` (\`arquivo:NNN\`))`);
+    if (!erradas) okline(`citações arquivo:linha conferidas (${conferidas} no formato \`SÍMBOLO\` (\`arquivo:NNN\`), em ${DOCS_VIVOS.length + PROSA_VIVA.length} arquivos)`);
   }
 
   // --- SB_URL/SB_KEY nunca mais apontados para o index.html ---

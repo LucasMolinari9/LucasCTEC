@@ -298,6 +298,12 @@ têm teste (exigiriam navegador).
    das listas de linha**, rode `node scripts/check_selecao_linha.mjs` — mesma bancada, guarda
    o bug em que o `history.back()` do `closeModal` apagava a linha recém-selecionada dentro do
    modal (ver Armadilhas) e a barra Todas/Ativas/Canceladas do card de Localidade.
+   **Ao mexer em QUALQUER `render*`/loader que faça `await` e depois escreva na tela ou no
+   `pdfHTML`**, rode `node scripts/check_corrida_view.mjs` — a **bancada de corrida**: segura a
+   resposta na rede, troca de aba e só então solta, exigindo que o resultado atrasado caia no
+   pane e no PDF da aba que o PEDIU, não na que está em foco. É o único gate que força
+   ordenação; os outros três esperam a requisição assentar antes da próxima ação, então ficavam
+   verdes com o seam quebrado. Roda no CI junto dos outros (`views.yml`).
 > Os cinco gates abaixo (2a–2e) têm **runbook no cabeçalho do próprio script**. Aqui fica só
 > quando rodar e **o que quebra se você esquecer** — o detalhe mora junto da ferramenta, que é
 > onde quem a opera vai olhar. Este arquivo é lido no início de toda sessão; runbook de gate não.

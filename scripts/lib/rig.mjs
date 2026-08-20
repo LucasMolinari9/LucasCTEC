@@ -285,16 +285,74 @@ export function serve(table, qs) {
 /* ================================================================
    NAVEGADOR
    ================================================================ */
-export async function launchPage(chromium) {
+// Controle de rede — SEGURA a resposta de um alvo até o teste mandar soltar.
+//
+// Por que existe: sem ele o stub responde na hora (o `route.fulfill` abaixo é síncrono, sem
+// atraso nenhum), e por isso NENHUM dos gates de navegador deste repo consegue criar a
+// ordenação que define o bug do seam `beginGen`/`commitViewResult`: o `check_views.mjs` abre
+// cada view numa página limpa e em sequência, o `check_abas.mjs` dá `waitForTimeout` DEPOIS de
+// cada ação e o `check_selecao_linha.mjs` espera o pane parar de girar antes de seguir. Os três
+// podem ficar verdes enquanto um render atrasado pinta o pane ERRADO.
+//
+// É uma trava, não um atraso em milissegundos, de propósito: `setTimeout` faz a corrida
+// depender do relógio da máquina e o teste passa a piscar. Aqui o teste segura, confirma que a
+// requisição de fato saiu (`esperarPresos`), troca de aba e só então solta — determinístico.
+//
+// Cuidado ao usar: o `sbFetch` do app.js tem timeout de 20s (`SB_TIMEOUT_MS`). Segurar por mais
+// que isso não testa corrida nenhuma — testa o timeout, e o `route.fulfill` tardio falha porque
+// o AbortController já cancelou a requisição.
+export function criarControleDeRede() {
+  const presos = [];
+  let padrao = null;
+  const casa = (alvo, qs) =>
+    padrao instanceof RegExp ? padrao.test(`${alvo}?${qs}`) : String(alvo).includes(padrao);
+  return {
+    // `padrao`: string (substring do nome da tabela/RPC) ou RegExp (testada contra "alvo?query")
+    segurar(padraoNovo) { padrao = padraoNovo; },
+    presos: () => presos.length,
+    // espera até `n` requisições estarem presas — a prova de que o fetch SAIU antes de o teste
+    // trocar de aba. Sem isto o teste trocaria de aba antes de haver corrida e passaria à toa.
+    async esperarPresos(n, timeoutMs = 10000) {
+      const t0 = Date.now();
+      while (presos.length < n) {
+        if (Date.now() - t0 > timeoutMs) {
+          throw new Error(`esperei ${n} requisição(ões) presa(s) em "${padrao}"; ficaram ${presos.length}`);
+        }
+        await new Promise(r => setTimeout(r, 25));
+      }
+      return presos.length;
+    },
+    // `inverso` solta na ordem CONTRÁRIA à de chegada. A rede não promete ordem: a 1ª
+    // requisição pode voltar depois da 2ª, e é justamente essa ordenação que separa um guard de
+    // escrita de verdade de um que só funciona quando as respostas chegam bem-comportadas.
+    soltar({ inverso = false } = {}) {
+      padrao = null;
+      const fila = presos.splice(0);
+      (inverso ? fila.reverse() : fila).forEach(f => f());
+      return fila.length;
+    },
+    _filtrar(alvo, qs, responder) {
+      if (padrao !== null && casa(alvo, qs)) { presos.push(responder); return; }
+      responder();
+    },
+  };
+}
+
+export async function launchPage(chromium, { rede } = {}) {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
   await page.route('**/rest/v1/**', route => {
     const u = new URL(route.request().url());
-    const res = serve(u.pathname.split('/rest/v1/')[1], u.search.slice(1));
-    route.fulfill({
+    const alvo = u.pathname.split('/rest/v1/')[1];
+    const qs = u.search.slice(1);
+    const res = serve(alvo, qs);
+    // a resposta é calculada AGORA (o `serve` é puro) e só a entrega é adiada — assim segurar
+    // não muda o conteúdo, só o momento.
+    const responder = () => route.fulfill({
       status: res.status, contentType: 'application/json',
       body: JSON.stringify(res.body),
     });
+    if (rede) rede._filtrar(alvo, qs, responder); else responder();
   });
   return { browser, page };
 }
