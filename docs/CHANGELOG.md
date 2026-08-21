@@ -52,9 +52,15 @@ comportamento pretendida.
 - **Limpeza fora da família, declarada:** `matchEvent`, `pageBounds` e `preencherLookup` estavam
   no `import` do `app.js` sem uso no corpo desde a B2 — binding morto, o mesmo defeito que dois
   comentários do topo do arquivo existem para evitar. Removidos porque esta fase edita esse bloco.
+- **Correção de um fato do plano, medida aqui:** o plano vivo afirmava que "a falha do
+  `.vercelignore` é invisível no CI e só aparece na tela". **Não é** — o job `smoke` rodou contra o
+  preview desta branch e buscou os quatro módulos novos por HTTP (200 nos quatro), com os arquivos
+  internos em 404. A frase era stale desde a Sessão 2, e contradizia a seção "Riscos" do mesmo
+  documento. O preview segue sendo condição de merge, mas por COMPORTAMENTO (o documento
+  renderiza? a atualização ao vivo chega?), não mais pelo risco de 404.
 - Gates: `check.js`, `check_views` 18/18, `check_abas`, `check_selecao_linha`,
-  `check_corrida_abas` e `semgrep` (121 regras, 0 achados) verdes. `version.json` 7 → 8,
-  carimbo `build 21/08-B`.
+  `check_corrida_abas` e `semgrep` (121 regras, 0 achados) verdes; no CI, os 10 checks do PR #137
+  verdes, `smoke` incluído. `version.json` 7 → 8, carimbo `build 21/08-B`.
 
 ## 21/08/2026 — Fase A: contexto explícito (`ctx`) e a bancada de corrida
 

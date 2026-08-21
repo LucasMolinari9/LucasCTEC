@@ -627,8 +627,23 @@ listeners, rotas, composição — e wiring não é o defeito que a crítica apo
 3. **Zero SQL neste plano.** Nenhuma migração, query, chave ou policy.
 
 A ressalva que mantém isso honesto: não mergear protege o **site**, não o **repositório**. O único
-risco real mora no **merge** — a falha do `.vercelignore` é invisível no CI e só aparece na tela.
-Daí a conferência do preview ser condição de merge, não formalidade.
+risco real mora no **merge**.
+
+**Correção medida na Fase C1: a falha do `.vercelignore` NÃO é invisível no CI.** Esta frase dizia
+que era, e que só apareceria na tela — o que tornava a conferência do preview a única rede contra
+o acidente de 10/08/2026. É falso desde a Sessão 2, e a própria seção "Riscos" logo acima já dizia
+o contrário (o smoke deriva os módulos dos `import`); as duas afirmações conviveram sem ninguém
+notar. O job `smoke` do PR #137 rodou contra o **preview desta branch**
+(`DEPLOY_ENVIRONMENT: Preview`, com o bypass da Vercel) e buscou cada módulo novo por HTTP:
+`/src/ui/blocos.mjs`, `/src/data/campos.mjs`, `/src/documentos/shell.mjs` e
+`/src/documentos/frota-historico-itinerarios.mjs` → **200**, mais `/CLAUDE.md`, `/tests/check.js` e
+`/docs/backup_schema.sql` → **404** (o default-deny intacto) e a matriz de ambiente confirmando que
+o preview aponta para o banco de TESTE.
+
+O que a conferência do preview **ainda** compra, e por isso segue sendo condição de merge: o smoke
+prova que o arquivo é SERVIDO, não que o documento RENDERIZA. Um módulo publicado que quebre em
+runtime, um render que pinte vazio, ou a atualização ao vivo que não chega — nada disso o smoke vê.
+É por comportamento que o preview vale, não mais pelo 404.
 
 ## Protocolo
 
