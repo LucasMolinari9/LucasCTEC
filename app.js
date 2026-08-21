@@ -10,10 +10,12 @@ import {
 } from './src/domain/agrupamento.mjs';
 // `termosLocalidade` NÃO vem daqui: é async (`await getLocalidades()`), então é I/O e ficou no
 // app.js — ela consome o `localidadesQueCasam` importado abaixo.
-// `yearOf` NÃO entra: depois da extração só `matchEvent` a usa, e ele foi junto — importá-la
-// aqui seria binding morto. Ela segue exportada pelo módulo porque os testes a exercitam.
+// `yearOf` e `matchEvent` NÃO entram: quem os usa é o `paginateEvents` de src/ui/paginacao.mjs,
+// que os importa por conta própria desde a Fase B2 — aqui seriam binding morto, o mesmo motivo
+// pelo qual `beginGen` ficou de fora acima. (O `matchEvent` FICOU nesta lista por engano na B2 e
+// só foi removido na Fase C1; os dois seguem exportados porque os testes os exercitam.)
 import {
-  matchEvent, localidadesQueCasam, orIlike, municipiosExatos,
+  localidadesQueCasam, orIlike, municipiosExatos,
 } from './src/domain/busca.mjs';
 // Estado do que está na tela — o seam do ciclo de vida da view, o modelo de abas, o despacho do
 // Realtime por aba e o que cada lista mostra. A camada de UI (renderTabs/activateTab/markStale/
@@ -25,8 +27,10 @@ import {
   isCurrentGen, commitViewResult, pushDetail, popDetail,
   makeCtx, withLine, withHost, nextGen,
   MAX_TABS, makeTab, openTabState, closeTabState,
-  dispatchRealtime, pageBounds, filtrarSituacao,
+  dispatchRealtime, filtrarSituacao,
 } from './src/domain/view-state.mjs';
+// `pageBounds` também não entra, pelo mesmo motivo: quem o usa é o `paginate` de
+// src/ui/paginacao.mjs. Ficou nesta lista por engano na B2 e saiu na C1.
 // Markup de documento (cabeçalho, meta, tabela, estados de tela) — string de HTML, sem DOM nem
 // estado. O SVG do logo chega por `configurarDoc` no bootstrap logo abaixo.
 import {
@@ -35,10 +39,12 @@ import {
 } from './src/ui/doc.mjs';
 // Caches de referência (municípios, origens, terminais, cadastro de empresas, tipos de evento).
 // A função de rede chega neles por `configurarLookups` no bootstrap logo abaixo.
+// `preencherLookup` NÃO entra: quem o usa é o próprio módulo (e o tests/harness.js, que o
+// importa direto). Terceiro binding morto herdado da B2, removido na C1 junto com os outros dois.
 import {
   configurarLookups, getIbge, getOrigem, getTerminais,
   getEmpresas, empNome, empresasMap, empresasList, empresaPorCod,
-  preencherLookup, getEvLookups, INVALIDADORES_LOOKUP,
+  getEvLookups, INVALIDADORES_LOOKUP,
 } from './src/data/lookups.mjs';
 // Paginação de tela — o núcleo agnóstico de conteúdo. Só de TELA: dados e PDF saem inteiros.
 import { paginate, paginateTable, paginateEvents } from './src/ui/paginacao.mjs';
@@ -47,6 +53,25 @@ import { paginate, paginateTable, paginateEvents } from './src/ui/paginacao.mjs'
 import {
   configurarListas, situacaoSelectHTML, linhasTable, bindLineRows, paginateLines, lineResults,
 } from './src/ui/listas.mjs';
+// Blocos de documento compartilhados por MAIS DE UMA família da Fase C (evento, itinerário,
+// frota). Ficam fora de qualquer módulo de família de propósito — a razão (um ciclo entre
+// famílias, via o documento consolidado Estrutura) está escrita no cabeçalho do módulo.
+// O `app.js` importa só o que os documentos que AINDA não saíram usam.
+import { evBandHTML, evBlocksHTML, itinerarioTableHTML, frotaBlockHTML } from './src/ui/blocos.mjs';
+// As listas de colunas do `select=`. São dado, não estado; saíram na Fase C1 junto com o
+// primeiro documento, para não existirem em duas cópias (a do módulo e a daqui).
+import {
+  LINE_FIELDS, ITINERARIO_FIELDS, QH_INTERVALO_FIELDS, QH_PREDET_FIELDS,
+  TARIFA_LINHA_FIELDS, FROTA_FIELDS, EVENTO_FIELDS,
+} from './src/data/campos.mjs';
+// FASE C1 — a primeira família de documentos a sair inteira do arquivo. O que fica aqui embaixo
+// são os registros `LOADERS.*`, que são shell (wrappers de busca de linha) e saem nas Fases D/E.
+// `configurarDocumentos` é o seam ÚNICO de `src/documentos/`: injeta a rede e a ação de shell
+// para TODAS as famílias da Fase C, e é onde o critério de parada do plano se mede.
+import { configurarDocumentos } from './src/documentos/shell.mjs';
+import {
+  renderLineHistory, renderItinerarios, renderFrota,
+} from './src/documentos/frota-historico-itinerarios.mjs';
 
 /* ================================================================
    ÍNDICE DO ARQUIVO  —  navegue por `grep` da marca da seção.
@@ -84,6 +109,12 @@ configurarListas({ aoSelecionarLinha: row => {
   selectLine(row); closeModal();
   toast('Linha selecionada: '+(activeLine.nome_ligacao||activeLine.codlinha),'info');
 }});
+/* Os documentos de `src/documentos/` (Fase C). Duas coisas, e só duas: a função de rede e a ação
+   de tornar uma linha a ativa. `renderLineHistory` chama a segunda para sincronizar o banner do
+   topo com a linha cujo histórico está na tela — é shell, como o `aoSelecionarLinha` acima, e por
+   isso desce injetada em vez de o módulo ir buscá-la. O `sbFetch` aqui é ANDAIME: some quando a
+   Fase B criar `src/data/rest.mjs` e os documentos passarem a importá-lo. */
+configurarDocumentos({ sbFetch, selecionarLinha: selectLine });
 
 /* ================================================================
    SUPABASE CONFIG
@@ -539,23 +570,11 @@ searchInput.setAttribute('aria-controls', 'searchResults');
 function openDropdown(){ dropdown.classList.add('open'); searchInput.setAttribute('aria-expanded','true'); }
 function closeDropdown(){ dropdown.classList.remove('open'); searchInput.setAttribute('aria-expanded','false'); }
 
-const LINE_FIELDS = 'codlinha,numero_ligacao,nome_ligacao,nome_lig_cresc,via,codempresa,tipo,caracteristica,licitado,cancelado,paralisado,sub_judice,transferido,data_criacao,processo_criacao';
-
-/* Listas de colunas pedidas por MAIS DE UM documento — o segundo é sempre a Estrutura
-   Operacional, que consolida os outros. Mantê-las em definição única é o que impede a
-   divergência silenciosa: coluna que muda num `select=` e não no gêmeo chega `undefined`
-   no render e a tela fica VAZIA SEM ERRO (o modo de falha que o CLAUDE.md chama de pior
-   possível). Desde 08/08/2026 a bancada headless também responde 400 para coluna que não
-   existe, então divergir passou a doer no gate em vez de doer no usuário.
-   NÃO use estas constantes em consultas que pedem MENOS colunas de propósito —
-   `getTerminais` (3 colunas de itinerario_teste) e `filtrarFrotaEmpresas` (4 de qh_teste)
-   são consultas de listagem, não de documento: pedir coluna a mais ali é regressão. */
-const ITINERARIO_FIELDS     = 'id,sentido,tipo_logradouro,nome_logradouro,cod_municipio_origem,codempresa';
-const QH_INTERVALO_FIELDS   = 'cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo';
-const QH_PREDET_FIELDS      = 'cod_origem,nome_origem,dia_semana,saida';
-const TARIFA_LINHA_FIELDS   = 'secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia';
-const FROTA_FIELDS          = 'codempresa,hierarquia,ultima_alteracao,frota_operacional,reserva,frota_a,frota_sa,frota_ac,frota_sac,frota_e,frota_micro_a,frota_micro_sa,frota_micro_ac,frota_micro_sac,frota_micro_e';
-const EVENTO_FIELDS         = 'data_registro,codlinha,numero_processo,evento_linha,evento_empresa,data_publicacao,descricao,observacao';
+/* As listas de colunas do `select=` (LINE_FIELDS, ITINERARIO_FIELDS, QH_*, TARIFA_LINHA_FIELDS,
+   FROTA_FIELDS, EVENTO_FIELDS) moraram para `src/data/campos.mjs` na Fase C1 e são importadas no
+   topo — inclusive o comentário que explica por que a definição é única. Elas seguem sendo lidas
+   aqui (busca de linha, rota, banner, e os documentos que ainda não saíram) e lá (os que saíram);
+   é o mesmo binding, não duas cópias. */
 
 // consultas (cards) cujo título casa o termo — a busca do topo também navega para os cards,
 // não só para linhas ("tarifa" acha o card Tarifas, "horário" acha Quadro de Horários).
@@ -755,11 +774,21 @@ async function refreshActiveLine(){
    SUB-ÍNDICE (grep `--- ` para pular). Na ordem atual do arquivo:
      Chrome do modal · Faixa de abas · Dispatcher — runView ·
      Busca de linha — wrappers de documento ·
-     Eventos — helpers compartilhados · DOC · Histórico (linha) ·
-     DOC · Itinerários · DOC · Quadro de Horários · DOC · Tarifas ·
-     DOC · Frota · DOC · Estrutura Operacional ·
-     DOC · Empresas · DOC · Municípios / entre-municípios ·
-     DOC · Portaria · DOC · Localidades
+     DOC · Histórico (linha) · DOC · Itinerários ·
+     DOC · Quadro de Horários · DOC · Tarifas · DOC · Frota ·
+     DOC · Estrutura Operacional · DOC · Empresas ·
+     DOC · Municípios / entre-municípios · DOC · Portaria · DOC · Localidades
+   Sob três dessas marcas sobrou só o registro `LOADERS.*`: Histórico (linha), Itinerários e
+   Frota são a família C1, e os renders delas moraram para
+   `src/documentos/frota-historico-itinerarios.mjs`. A marca fica porque o CARD continua sendo
+   servido daqui — é por ela que se acha o registro.
+   A marca "Eventos — helpers compartilhados" SUMIU: o markup do evento foi para
+   `src/ui/blocos.mjs`, junto com o da tabela de itinerário e o da grade de frota.
+   AVISO, medido em 21/08/2026 e NÃO consertado (não é desta família): três marcas abaixo
+   abrigam registro de outra. `LOADERS.empresasRegulares` mora sob `DOC · Estrutura
+   Operacional`, `LOADERS.municipioRegiao` mora sob `DOC · Empresas`, e `ligacoesPorTerminal`,
+   `secoesPorLigacao` e `frotaPorEmpresa` moram sob `DOC · Municípios`. Não dimensione uma fase
+   pela marca: meça por SÍMBOLO. Quem mover essas famílias (C2, C3, C4) conserta as suas.
    ================================================================ */
 /* --- Chrome do modal --------------------------------------------- */
 const overlay       = document.getElementById('modalOverlay');
@@ -1262,41 +1291,11 @@ function lineDocRun(ctx, term, render){
   return lineSearchRun(ctx, term, { render, emptyMsg:'Busque a linha pelo nome, número ou código.', prompt:'clique para abrir o documento' });
 }
 
-/* Histórico (linha e empresa): um evento por página, descrição/observação por extenso.
-   A impressão e o PDF saem com todos os eventos, um por página. */
-/* --- Eventos — helpers compartilhados ---------------------------- */
-function evBlocksHTML(r){
-  return `<div class="ev-block"><div class="ev-label">Descrição:</div><div class="ev-text${r.descricao?'':' empty'}">${r.descricao?esc(r.descricao):'—'}</div></div>
-    <div class="ev-block"><div class="ev-label">Observação:</div><div class="ev-text${r.observacao?'':' empty'}">${r.observacao?esc(r.observacao):'—'}</div></div>`;
-}
-function evBandHTML(r, tipoLabel, tipoVal, showLine){
-  return `<div class="ev-grid${showLine?' ev5':''}">
-    <div class="ev-cell"><span class="ev-h">Data do Registro</span><span class="ev-v mono">${esc(fmtDate(r.data_registro))}</span></div>
-    ${showLine?`<div class="ev-cell"><span class="ev-h">Linha</span><span class="ev-v mono">${esc(fmtCode(r.codlinha))}</span></div>`:''}
-    <div class="ev-cell"><span class="ev-h">Nº do Processo/Doc.</span><span class="ev-v mono">${esc(orDash(r.numero_processo))}</span></div>
-    <div class="ev-cell"><span class="ev-h">${esc(tipoLabel)}</span><span class="ev-v">${esc(tipoVal)}</span></div>
-    <div class="ev-cell"><span class="ev-h">Data da Publicação</span><span class="ev-v mono">${esc(fmtDate(r.data_publicacao))}</span></div></div>`;
-}
-// O PAGINADOR de eventos (`paginateEvents`, com a barra de filtros e o pager de "um evento por
-// página") mora em `src/ui/paginacao.mjs`; aqui ficam só os helpers de MARKUP do evento.
-// Renderiza o histórico (paginado) de UMA linha dentro de um container
-/* --- DOC · Histórico (linha) -------------------------------------- */
-async function renderLineHistory(ctx){
-  const { view, gen, host, line } = ctx;
-  selectLine(line);   // sincroniza a linha ativa e o banner do topo
-  const [rows, lk] = await Promise.all([
-    sbFetch('evento_teste', `codlinha=eq.${enc(line.codlinha)}&select=${EVENTO_FIELDS}&order=data_registro.asc&limit=2000`),
-    getEvLookups(), getEmpresas()
-  ]);
-  const head = docHead('Histórico da Linha');
-  const meta = metaRows([['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(orDash(line.codempresa))],['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—'),true]]);
-  if (!rows.length){ host.innerHTML = meta + emptyLinha('evento'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  const build = r => evBandHTML(r, 'Tipo Evento da Linha', lk.lin?.[r.evento_linha] || lk.emp?.[r.evento_empresa] || '—', false) + evBlocksHTML(r);
-  // PDF/impressão: um evento por página (cabeçalho repetido); segue o filtro aplicado na tela
-  const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
-  paginateEvents(host, rows, build, meta, { view, gen, onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
-  commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(rows) });
-}
+/* --- DOC · Histórico (linha) --------------------------------------
+   O RENDER mora em `src/documentos/frota-historico-itinerarios.mjs` (Fase C1). Aqui fica o
+   registro, que é shell: o painel de busca de linha e o `lineSearchRun` que resolve o termo.
+   O MARKUP do evento (`evBandHTML`/`evBlocksHTML`) mora em `src/ui/blocos.mjs`, porque o
+   Histórico da EMPRESA (mais abaixo, família C3) usa os mesmos dois blocos. */
 LOADERS.historicoLinha = async (ctx) => {
   const pre = ctx.line ? (ctx.line.numero_ligacao || ctx.line.codlinha || '') : '';
   searchPanel(ctx, { title:'Histórico da Linha', placeholder:'Nome, número ou código da linha', value:pre,
@@ -1304,55 +1303,9 @@ LOADERS.historicoLinha = async (ctx) => {
       emptyMsg:'Busque pelo nome, número ou código da linha.', prompt:'clique para ver o histórico' }) });
 };
 
-/* --- DOC · Itinerários ---------------------------------------- */
-const SENTIDO_ORDER = { 'Ida':1, 'Volta':2, 'Circular':3 };
-const normSentido = s => { const t=String(s||'').trim().toLowerCase(); if(t.startsWith('ida'))return'Ida'; if(t.startsWith('volta'))return'Volta'; if(t.startsWith('circ'))return'Circular'; return s?String(s):'—'; };
-
-function itinerarioTableHTML(rows, ibge){
-  if(!rows.length) return emptyLinha('itinerário');
-  rows.forEach(r=>r._sn=normSentido(r.sentido));
-  rows.sort((a,b)=>{ const oa=SENTIDO_ORDER[a._sn]||9, ob=SENTIDO_ORDER[b._sn]||9; return oa!==ob?oa-ob:(a.id-b.id); });
-  let last=null;
-  const body = rows.map(r=>{
-    let sep=''; if(r._sn!==last){ sep=`<tr class="sentido-sep"><td colspan="4">Sentido: ${esc(r._sn)}</td></tr>`; last=r._sn; }
-    const mun = (ibge[r.cod_municipio_origem]?.nome) || (r.cod_municipio_origem?String(r.cod_municipio_origem):'');
-    return sep+`<tr><td class="td-sentido">${esc(r._sn||'')}</td><td class="td-tipo">${esc(r.tipo_logradouro||'')}</td>
-      <td class="td-logr">${esc(r.nome_logradouro||'—')}</td><td class="td-mun">${esc(mun)}</td></tr>`;
-  }).join('');
-  return tableHTML([{t:'Sentido',w:'62px'},{t:'Tipo',w:'84px'},{t:'Nome do Logradouro'},{t:'Município',w:'110px'}], body, `${rows.length} logradouro(s) · cadastro DETRO-RJ`);
-}
-
-async function renderItinerarios(ctx){
-  const { view, gen, host, line } = ctx;
-  host.innerHTML = loading();
-  const [rows, ibge] = await Promise.all([
-    sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=${ITINERARIO_FIELDS}&order=id`),
-    getIbge(), getEmpresas()
-  ]);
-  if (!rows.length) { host.innerHTML = emptyLinha('itinerário'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  const codEmp = rows[0]?.codempresa || line.codempresa || '';
-  const meta = metaRows([['Empresa',esc(empNome(codEmp)),true],['Registro','RJ-'+esc(codEmp)],
-      ['Código da Ligação',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
-      ['Ligação',esc(line.nome_ligacao||'—'),true],['Via',esc(orDash(line.via))],
-      ['Característica',esc(orDash(line.caracteristica))],['Tipo da Ligação',esc(orDash(line.tipo))],
-      ['Situação',situacaoHTML(line),true]]);
-  const inner = `${meta}${itinerarioTableHTML(rows, ibge)}`;   // documento completo (p/ PDF)
-  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Cadastro de Linhas: Itinerários')}${inner}</div>` });
-  // filtro por sentido — o PDF segue com os dois sentidos
-  rows.forEach(r=>r._sn=normSentido(r.sentido));
-  const sentidos = [...new Set(rows.map(r=>r._sn))].filter(Boolean).sort((a,b)=>(SENTIDO_ORDER[a]||9)-(SENTIDO_ORDER[b]||9));
-  const tools = sentidos.length>1 ? `<div class="loc-tools"><label>Sentido <select id="itiSent"><option value="">Todos</option>${sentidos.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select></label></div>` : '';
-  host.innerHTML = `${meta}${tools}<div id="itiResult"></div>`;
-  const result = host.querySelector('#itiResult'), sel = host.querySelector('#itiSent');
-  const paint = ()=>{
-    const s = sel?sel.value:'';
-    const f = s ? rows.filter(r=>r._sn===s) : rows;
-    result.innerHTML = itinerarioTableHTML(f, ibge);
-  };
-  if(sel) sel.addEventListener('change', paint);
-  paint();
-}
-
+/* --- DOC · Itinerários --------------------------------------------
+   Render em `src/documentos/frota-historico-itinerarios.mjs`; a tabela e a normalização de
+   sentido, em `src/ui/blocos.mjs` (a Estrutura Operacional, família C2, também as usa). */
 LOADERS.itinerarios = (ctx) => lineDocView(ctx, { subtitle:'Cadastro de Linhas: Itinerários', render:renderItinerarios });
 
 /* --- DOC · Quadro de Horários --------------------------------- */
@@ -1650,41 +1603,9 @@ LOADERS.tarifas = (ctx) => {
   }
 };
 
-/* --- DOC · Frota ---------------------------------------------- */
-function frotaBlockHTML(f){
-  return `<div class="kpi-grid">
-      <div class="kpi"><b>${esc(orDash(f.frota_operacional))}</b><span>Operacional</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_a))}</b><span>Comum (A)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_sa))}</b><span>Comum (SA)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_ac))}</b><span>Ar cond. (AC)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_sac))}</b><span>Ar cond. (SAC)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_micro_a))}</b><span>Micro (A)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_micro_sa))}</b><span>Micro (SA)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_micro_ac))}</b><span>Micro (AC)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_micro_sac))}</b><span>Micro (SAC)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_micro_e))}</b><span>Micro (E)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.frota_e))}</b><span>Especial (E)</span></div>
-      <div class="kpi"><b>${esc(orDash(f.reserva))}</b><span>Reserva</span></div>
-    </div>`;
-}
-
-async function renderFrota(ctx){
-  const { view, gen, host, line } = ctx;
-  host.innerHTML = loading();
-  const [rows] = await Promise.all([
-    sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=${FROTA_FIELDS}&limit=1`),
-    getEmpresas()
-  ]);
-  if (!rows.length) { host.innerHTML = emptyLinha('frota'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  const f = rows[0];
-  const inner = `${metaRows([['Empresa',esc(empNome(f.codempresa)),true],['Registro','RJ-'+esc(orDash(f.codempresa))],
-      ['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],
-      ['Ligação',esc(line.nome_ligacao||'—'),true],['Hierarquia',esc(orDash(f.hierarquia))],['Última alteração',fmtDate(f.ultima_alteracao)]])}
-    ${frotaBlockHTML(f)}`;
-  host.innerHTML = inner;
-  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Frota da Linha')}${inner}</div>` });
-}
-
+/* --- DOC · Frota --------------------------------------------------
+   Render em `src/documentos/frota-historico-itinerarios.mjs`; a grade de KPIs
+   (`frotaBlockHTML`), em `src/ui/blocos.mjs` — a Estrutura Operacional, logo abaixo, a repete. */
 LOADERS.frota = (ctx) => lineDocView(ctx, { subtitle:'Frota da Linha', render:renderFrota });
 
 /* --- DOC · Estrutura Operacional ------------------------------ */

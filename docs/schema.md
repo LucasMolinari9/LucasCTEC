@@ -102,14 +102,14 @@ erDiagram
 | `tabela_vista_teste` | (`codlinha`, `codempresa`) | Cadastro de linhas. **Hub** — origem do `codlinha` que amarra tudo. |
 
 ### Fatos (ligam ao hub por `codlinha`)
-| Tabela | Chave de join → hub | Tipo | Onde no código (`app.js`) |
+| Tabela | Chave de join → hub | Tipo | Onde no código |
 |---|---|---|---|
 | `tarifa_atual_teste` | `codlinha` (+`codempresa`) | **FK REAL** `fk_tarifa_linha` | `renderTarifas`, `renderFolhaRosto`, `renderLinhaQuadro` |
-| `itinerario_teste` | `codlinha` | convenção | `renderItinerarios` |
+| `itinerario_teste` | `codlinha` | convenção | `renderItinerarios` (`src/documentos/frota-historico-itinerarios.mjs`) |
 | `qh_intervalo_teste` | `codlinha` | convenção | `fetchQHByLines`, `renderLinhaQuadro` |
 | `qh_predeterminado_teste` | `codlinha` | convenção | `fetchQHByLines`, `renderLinhaQuadro` |
-| `qh_teste` (frota) | `codlinha` | convenção | `renderFrota`, folha de rosto |
-| `evento_teste` | `codlinha` | convenção | `renderLineHistory`, pesquisa de evento |
+| `qh_teste` (frota) | `codlinha` | convenção | `renderFrota` (`src/documentos/frota-historico-itinerarios.mjs`), folha de rosto |
+| `evento_teste` | `codlinha` | convenção | `renderLineHistory` (`src/documentos/frota-historico-itinerarios.mjs`), pesquisa de evento |
 
 > **`fk_tarifa_linha` é composta e "cruzada":** a constraint declara os dois pares
 > (`codlinha`↔`codlinha` e `codempresa`↔`codempresa`) contra a PK `(codlinha, codempresa)`
@@ -136,7 +136,8 @@ erDiagram
   - Em `itinerario_teste` → a coluna que antes se chamava `cod_origem` foi **renomeada** para
     **`cod_municipio_origem`** (tipo `int`): **NÃO é terminal** — o código faz
     `ibge[r.cod_municipio_origem]`, ou seja, é um **código de município (IBGE)** → `municipio_teste`
-    (ver `renderItinerarios` / `classifyMunLines` no `app.js`).
+    (ver `renderItinerarios`, em `src/documentos/frota-historico-itinerarios.mjs`, e
+    `classifyMunLines`, em `src/domain/agrupamento.mjs`).
 - **`codlinha` e `codempresa` são strings** (`varchar`), não inteiros — comparar/encodar
   como texto nas queries.
 - **`nome_origem` vem denormalizado e às vezes trocado** nas tabelas de QH; o código dá

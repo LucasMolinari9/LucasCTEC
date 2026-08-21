@@ -4,6 +4,11 @@
    dependência chega por injeção (`configurarDoc`/`configurarLookups`/`configurarListas`), e é
    justamente o que torna possível testá-los aqui, em Node puro, sem navegador.
 
+   A Fase C1 acrescentou três: `src/ui/blocos.mjs` (o markup que MAIS DE UMA família usa),
+   `src/data/campos.mjs` (as listas de coluna do `select=`) e `src/documentos/shell.mjs` (o seam
+   único de injeção dos documentos, e o lugar onde o critério de parada do plano vira asserção).
+   Os RENDERS da C1 não entram aqui — escrevem no DOM, e ficam com os gates de navegador.
+
    O que NÃO cabe neste arquivo: tudo que escreve no DOM (paginate, paginateTable,
    paginateEvents, paginateLines, lineResults, bindLineRows). Node não tem `document`, e o repo é
    zero-dependência (não há jsdom). Esses ficam com os gates de navegador — `check_views.mjs`,
@@ -16,6 +21,9 @@ import * as doc from '../src/ui/doc.mjs';
 import * as lookups from '../src/data/lookups.mjs';
 import * as paginacao from '../src/ui/paginacao.mjs';
 import * as listas from '../src/ui/listas.mjs';
+import * as blocos from '../src/ui/blocos.mjs';
+import * as campos from '../src/data/campos.mjs';
+import * as shell from '../src/documentos/shell.mjs';
 
 let pass = 0, fail = 0;
 const fails = [];
@@ -218,6 +226,123 @@ t('configurarListas liga a ação de seleção, e o bind passa a funcionar', () 
   listas.bindLineRows({ querySelectorAll: () => [el] });
   el._ouvintes.click();
   assert.deepEqual(escolhidas, [{ codlinha:'1' }]);
+});
+
+/* ================================================================
+   src/ui/blocos.mjs  (Fase C1)
+   ================================================================ */
+// Markup puro compartilhado por MAIS DE UMA família: entra dado, sai string. Não depende de
+// injeção — só do `configurarDoc` acima, que o `itinerarioTableHTML` usa via `emptyLinha`.
+t('evBandHTML: 4 células sem a da linha; 5 e a classe ev5 quando showLine', () => {
+  const r = { data_registro:'2026-01-15', codlinha:'101001001', numero_processo:'E-99/2026',
+    data_publicacao:'2026-02-01' };
+  const sem = blocos.evBandHTML(r, 'Tipo Evento da Linha', 'Criação', false);
+  assert.equal((sem.match(/class="ev-cell"/g) || []).length, 4);
+  assert.doesNotMatch(sem, /ev5/);
+  const com = blocos.evBandHTML(r, 'Tipo Evento Empresa', 'Transferência', true);
+  assert.equal((com.match(/class="ev-cell"/g) || []).length, 5);
+  assert.match(com, /ev-grid ev5/);
+  assert.match(com, /101-001-001/);                       // fmtCode, via src/domain/core.mjs
+});
+t('evBandHTML escapa o rótulo e o valor do tipo (vêm de lookup, não de literal)', () => {
+  const h = blocos.evBandHTML({}, '<b>rot</b>', '<img src=x onerror=1>', false);
+  assert.doesNotMatch(h, /<b>rot<\/b>/);
+  assert.doesNotMatch(h, /<img/);
+  assert.match(h, /&lt;b&gt;rot/);
+});
+t('evBlocksHTML: campo vazio ganha a classe empty e o travessão', () => {
+  const vazio = blocos.evBlocksHTML({});
+  assert.equal((vazio.match(/ev-text empty/g) || []).length, 2);
+  assert.equal((vazio.match(/—/g) || []).length, 2);
+  const cheio = blocos.evBlocksHTML({ descricao:'Criada', observacao:'Sem ônus' });
+  assert.doesNotMatch(cheio, /ev-text empty/);
+  assert.match(cheio, /Criada/);
+});
+t('normSentido normaliza os três sentidos por prefixo, e preserva o desconhecido', () => {
+  assert.equal(blocos.normSentido('IDA'), 'Ida');
+  assert.equal(blocos.normSentido(' voltando '), 'Volta');
+  assert.equal(blocos.normSentido('Circular 1'), 'Circular');
+  assert.equal(blocos.normSentido('Retorno'), 'Retorno');   // não inventa: devolve o que veio
+  assert.equal(blocos.normSentido(null), '—');
+});
+t('itinerarioTableHTML: vazio vira caixa vazia de LINHA', () => {
+  assert.match(blocos.itinerarioTableHTML([], {}), /itinerário/);
+});
+t('itinerarioTableHTML ordena por sentido (Ida→Volta→Circular) e separa em faixas', () => {
+  const rows = [
+    { id:3, sentido:'volta', tipo_logradouro:'RUA', nome_logradouro:'B', cod_municipio_origem:'3304557' },
+    { id:1, sentido:'IDA',   tipo_logradouro:'AV',  nome_logradouro:'A', cod_municipio_origem:'3304557' },
+    { id:2, sentido:'circ',  tipo_logradouro:'RUA', nome_logradouro:'C', cod_municipio_origem:'0000000' },
+  ];
+  const h = blocos.itinerarioTableHTML(rows, { '3304557': { nome:'Rio de Janeiro' } });
+  const faixas = [...h.matchAll(/Sentido: ([^<]+)</g)].map(m => m[1]);
+  assert.deepEqual(faixas, ['Ida', 'Volta', 'Circular']);
+  assert.ok(h.indexOf('>A<') < h.indexOf('>B<'), 'a Ida vem antes da Volta');
+  assert.match(h, /Rio de Janeiro/);                       // resolveu pelo lookup do IBGE
+  assert.match(h, /<td class="td-mun">0000000<\/td>/);      // sem lookup, cai no código cru
+  assert.match(h, /3 logradouro\(s\)/);
+});
+t('itinerarioTableHTML escapa o nome do logradouro (vem do banco)', () => {
+  const h = blocos.itinerarioTableHTML([{ id:1, sentido:'Ida', tipo_logradouro:'RUA',
+    nome_logradouro:'<script>x</script>', cod_municipio_origem:null }], {});
+  assert.doesNotMatch(h, /<script>/);
+});
+t('frotaBlockHTML traz as 12 KPIs que o check_views.mjs exige, com — no ausente', () => {
+  const h = blocos.frotaBlockHTML({ frota_operacional:40, frota_a:10 });
+  assert.equal((h.match(/class="kpi"/g) || []).length, 12);
+  assert.match(h, /<b>40<\/b><span>Operacional<\/span>/);
+  assert.match(h, /<b>—<\/b><span>Reserva<\/span>/);
+});
+
+/* ================================================================
+   src/data/campos.mjs  (Fase C1)
+   ================================================================ */
+// A razão de a constante existir é ser ÚNICA: a Estrutura Operacional consolida os outros
+// documentos e pede as mesmas colunas. Uma coluna que se perca aqui chega `undefined` no render
+// e a tela sai vazia SEM ERRO — daí conferir a presença, não só que a string não é vazia.
+t('campos: toda lista de select é string não-vazia, sem espaço e sem item repetido', () => {
+  for (const [nome, v] of Object.entries(campos)){
+    assert.equal(typeof v, 'string', nome + ' deveria ser string');
+    assert.ok(v.length, nome + ' está vazia');
+    assert.doesNotMatch(v, /\s/, nome + ' tem espaço (o PostgREST rejeita)');
+    const cols = v.split(',');
+    assert.equal(new Set(cols).size, cols.length, nome + ' repete coluna');
+  }
+});
+t('campos: as colunas que a Estrutura consolida estão nas listas gêmeas', () => {
+  // cada par abaixo é (constante, coluna que um render lê por nome) — o elo que some em silêncio
+  assert.ok(campos.ITINERARIO_FIELDS.split(',').includes('cod_municipio_origem'));
+  assert.ok(campos.FROTA_FIELDS.split(',').includes('frota_micro_sac'));
+  assert.ok(campos.EVENTO_FIELDS.split(',').includes('evento_empresa'));
+  assert.ok(campos.LINE_FIELDS.split(',').includes('nome_lig_cresc'));
+  assert.ok(campos.TARIFA_LINHA_FIELDS.split(',').includes('piso_i'));
+});
+
+/* ================================================================
+   src/documentos/shell.mjs  (Fase C1)
+   ================================================================ */
+// O seam ÚNICO de src/documentos/. Como os três `configurar*` da B2, ele falha FECHADO: um
+// documento sem rede pintaria tela vazia sem erro — invisível para todo gate deste repo.
+t('sbFetch e selecionarLinha lançam antes de configurarDocumentos', () => {
+  assert.throws(() => shell.sbFetch('evento_teste', ''), /configurarDocumentos/);
+  assert.throws(() => shell.selecionarLinha({}), /configurarDocumentos/);
+});
+t('configurarDocumentos liga os dois slots, e ambos repassam os argumentos', () => {
+  const chamadas = [];
+  shell.configurarDocumentos({
+    sbFetch: (tabela, qs) => { chamadas.push(['fetch', tabela, qs]); return 'ROWS'; },
+    selecionarLinha: row => { chamadas.push(['linha', row]); },
+  });
+  assert.equal(shell.sbFetch('qh_teste', 'codlinha=eq.1'), 'ROWS');
+  shell.selecionarLinha({ codlinha:'1' });
+  assert.deepEqual(chamadas, [['fetch', 'qh_teste', 'codlinha=eq.1'], ['linha', { codlinha:'1' }]]);
+});
+t('src/documentos/shell.mjs tem no máximo 6 slots injetados (critério de parada do plano)', () => {
+  // O plano vivo manda PARAR quando um módulo passa de ~6 dependências injetadas. Como todas as
+  // famílias da Fase C passam por este seam, a conta é o número de slots dele — e esta asserção
+  // é o lugar em que o critério deixa de ser prosa. Hoje são 2.
+  const slots = Object.keys(shell).filter(k => k !== 'configurarDocumentos');
+  assert.ok(slots.length <= 6, `slots injetados: ${slots.join(', ')} — o plano manda parar acima de ~6`);
 });
 
 console.log('\n==== PLACAR:', pass + '/' + (pass + fail), '====');

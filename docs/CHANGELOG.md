@@ -4,6 +4,58 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 21/08/2026 — Fase C1: a primeira família de documentos sai do `app.js`
+
+**Fase C1 do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`): Frota ·
+Histórico da linha · Itinerários. É a primeira fase em que um documento inteiro deixa o `app.js` —
+possível porque a Fase A, no mesmo dia, deu `ctx` a todo render. Zero SQL, nenhuma mudança de
+comportamento pretendida.
+
+**Medido:** `app.js` 3.053 → **2.974** (−79); o bloco `MODAL / SISTEMA DE VIEWS` 1.844 → **1.746**
+(−98), e pela primeira vez o **percentual dele caiu** (60,4% → 58,7%). Total de JS do projeto
+3.879 → 4.060 (+181). O fator "sai do `app.js` → aparece em módulo" ficou em ≈1,8x, o mesmo da B2.
+
+- **Quatro módulos novos**, cada um por um motivo distinto:
+  `src/documentos/frota-historico-itinerarios.mjs` (os três renders);
+  `src/ui/blocos.mjs` (o markup que MAIS DE UMA família usa: `evBandHTML`/`evBlocksHTML`,
+  `itinerarioTableHTML` + `SENTIDO_ORDER`/`normSentido`, `frotaBlockHTML`);
+  `src/data/campos.mjs` (as 7 listas de coluna do `select=`);
+  `src/documentos/shell.mjs` (o seam de injeção). Os quatro reabertos no `.vercelignore` —
+  `src/documentos/` custou as suas três linhas, como o risco de 10/08 exige.
+- **A DECISÃO que a sessão tinha de fechar: markup compartilhado vai para `src/ui/`, nunca para o
+  módulo de uma família.** Não é estética — é um ciclo. O documento consolidado (Estrutura, C2)
+  consome markup de C1 e C3, enquanto o Quadro (C3) consome markup de C2: famílias exportando umas
+  para as outras poriam dois módulos em ciclo, com TDZ à espreita. Critério de entrada do
+  `blocos.mjs`: **duas** famílias, não uma. Isso **desfaz a aresta para trás** do grafo — C2 e C3
+  podem entrar em qualquer ordem.
+- **Um seam de injeção para toda a Fase C, não um por família.** `configurarDocumentos({ sbFetch,
+  selecionarLinha })`, chamado uma vez no bootstrap. Dois slots: `sbFetch` é andaime (sai na Fase
+  B) e `selecionarLinha` é ação de shell (até a Fase E). É onde o critério de parada do plano
+  ("mais de ~6 dependências injetadas") passou a ser **medível** — e virou asserção em
+  `tests/ui-data-module.test.mjs`, que foi de 21 para 34 casos.
+- **O que NÃO saiu, e não é falha:** os três registros `LOADERS.*` são one-liners de shell
+  (`lineDocView`/`searchPanel`) e saem nas Fases D/E. As três marcas `DOC ·` ficaram, guardando só
+  o registro, cada uma dizendo em comentário para onde o resto foi. A sub-marca `Eventos — helpers
+  compartilhados` sumiu junto com o markup que a batizava.
+- **Prova por mutação: cinco tentativas, três morderam** — `renderFrota` esvaziado →
+  `check_views frota` vermelho; `evBlocksHTML` esvaziado → historicoLinha **E** historicoEmpresa
+  vermelhos (a prova de que o módulo compartilhado serve duas famílias); bootstrap removido → 3
+  views vermelhas, uma exibindo a mensagem do próprio módulo (falha fechado).
+- **Dois verdes que não morderam, e o que se fez com cada um.** (1) A asserção (c) do ATO 1 do
+  `check_corrida_abas.mjs` não distinguia o `pdfHTML` committado do **fallback** do `baixarPdf`:
+  o título que ela procurava vem também do `searchPanel`, que chama o mesmo `docHead`. Tirar o
+  `commitViewResult` do `renderItinerarios` deixava a bancada verde. **Consertado:** passou a
+  exigir a ausência do campo de busca (`id="spInput"`) no PDF. (2) A bancada não cobre a corrida de
+  gerações DENTRO da mesma view — cada aba tem o seu objeto `view`, então o guard nunca é exercido
+  ali. **Não consertado**, de propósito: é buraco pré-existente, sem relação com mover a família, e
+  virar um terceiro ato é trabalho próprio. Registrado no plano.
+- **Limpeza fora da família, declarada:** `matchEvent`, `pageBounds` e `preencherLookup` estavam
+  no `import` do `app.js` sem uso no corpo desde a B2 — binding morto, o mesmo defeito que dois
+  comentários do topo do arquivo existem para evitar. Removidos porque esta fase edita esse bloco.
+- Gates: `check.js`, `check_views` 18/18, `check_abas`, `check_selecao_linha`,
+  `check_corrida_abas` e `semgrep` (121 regras, 0 achados) verdes. `version.json` 7 → 8,
+  carimbo `build 21/08-B`.
+
 ## 21/08/2026 — Fase A: contexto explícito (`ctx`) e a bancada de corrida
 
 **Fase A do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`). **Nenhum arquivo
