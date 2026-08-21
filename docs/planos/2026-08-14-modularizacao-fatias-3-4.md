@@ -42,19 +42,20 @@ do plano de 6 ([`../historico/contexto-proxima-sessao-2026-08-14.md`](../histori
 responderam à crítica **irmã** — a de que o processo virou projeto paralelo. O monólito mal foi
 arranhado.
 
-Medido no `app.js` de **2.974 linhas** (`wc -l`; remedido em 21/08/2026, sobre a branch da Fase
-C1). Cada faixa vai da **marca da seção** até a linha anterior à marca seguinte — a
-convenção que o extrator do `tests/check.js` §[2b] usa, e que as faixas anteriores desta tabela
-erravam por duas linhas:
+Medido no `app.js` de **2.764 linhas** (`split('\n').length`, a mesma conta do `tests/check.js`
+§[2b]; remedido em 21/08/2026, sobre a branch da Fase C2). Cada faixa vai da **marca da seção**
+até a linha anterior à marca seguinte — a convenção que o extrator do `tests/check.js` §[2b] usa,
+e que as faixas anteriores desta tabela erravam por duas linhas:
 
 | bloco | linhas | % |
 |---|---|---|
-| `MODAL / SISTEMA DE VIEWS` (`app.js:743`–`:2488`) | 1.746 | 58,7% |
-| `COMPONENTES AUXILIARES` (`:2489`–`:2652`) | 164 | 5,5% |
-| `SUPABASE CONFIG` (`:119`–`:286`) | 168 | 5,6% |
+| `MODAL / SISTEMA DE VIEWS` (`app.js:758`–`:2283`) | 1.527 | 55,2% |
+| `COMPONENTES AUXILIARES` (`:2285`–`:2441`) | 158 | 5,7% |
+| `SUPABASE CONFIG` (`:142`–`:308`) | 168 | 6,1% |
 
 Antes da C1, sobre um `app.js` de 3.053: `MODAL` = 1.844 (60,4%), `COMPONENTES AUXILIARES` = 164
-(5,4%), `SUPABASE CONFIG` = 168 (5,5%).
+(5,4%), `SUPABASE CONFIG` = 168 (5,5%). Depois da C1 e antes da C2, sobre um `app.js` de 2.974:
+`MODAL` = 1.746 (58,7%).
 
 O `MODAL` subiu de 58,3% para 60,3% na Fase B2 tendo PERDIDO 98 linhas — a B2 tirou 263 do arquivo
 inteiro, e o denominador encolheu mais que o numerador. A Fase A fez o contrário: **acrescentou**
@@ -65,10 +66,14 @@ dizem a mesma coisa: percentual de seção não é medida de progresso da modula
 A **Fase C1** é o primeiro caso em que o percentual do `MODAL` CAI (60,4% → 58,7%), porque foi a
 primeira vez que a saída foi quase toda dele: o bloco perdeu 98 linhas e o arquivo, 79. A conta
 não fecha por acaso — fora do `MODAL` entraram 19 linhas líquidas (os `import` novos e o
-bootstrap, menos o bloco de constantes de campo que saiu daqui).
+bootstrap, menos o bloco de constantes de campo que saiu daqui). A **Fase C2** repetiu o padrão
+(58,7% → 55,2%): o bloco perdeu 219 linhas e o arquivo, 210 — a diferença de 9 é o `import`/
+bootstrap novo (a 3ª chamada de `configurarDocumentos` some, é a mesma linha; entrou o slot
+`novoCtx` e as importações da nova família) menos o comentário-tombstone que substituiu cada
+função removida.
 
-Quase dois terços do arquivo (era "dois terços" quando o `MODAL` estava em 60,4%; a C1 o levou a
-58,7%), e é onde nenhuma das sessões já planejadas toca. O estudo de 10/08
+Pouco mais da metade do arquivo (era "dois terços" quando o `MODAL` estava em 60,4%; C1 o levou a
+58,7%; C2, a 55,2%), e é onde só C3/C4/D/E ainda tocam. O estudo de 10/08
 ([`../historico/estudo-modularizacao-frontend-2026-08-10.md`](../historico/estudo-modularizacao-frontend-2026-08-10.md))
 chama isso de fatias 3 e 4, e as **condiciona** no item 3 de "Próximas fatias recomendadas"
 (`docs/historico/estudo-modularizacao-frontend-2026-08-10.md:29`): separar documentos "somente após
@@ -131,7 +136,8 @@ pelas famílias da C, e é ali que a redundância acaba — daí a precondição
 | 4 | **A** | contexto explícito + bancada de corrida | ✅ feita — ver a seção da fase |
 | 5 | **B** | `src/data/rest.mjs` — encerra o mecanismo `@canon` | a fazer |
 | 6 | **C1** | Frota · Histórico da linha · Itinerários | ✅ feita — ver a seção da fase |
-| 7–9 | **C2…C4** | documentos por família | a fazer |
+| 7 | **C2** | Estrutura · Tarifas · Portaria | ✅ feita — ver a seção da fase |
+| 8–9 | **C3…C4** | documentos por família | a fazer |
 | 10 | **D** | `LOADERS` como composição explícita | a fazer |
 | 11 | **E** | infra do modal (opcional) | a fazer |
 
@@ -378,7 +384,7 @@ reconferidos** — meça antes de dimensionar a sessão:
 | # | famílias | estado |
 |---|---|---|
 | C1 | Frota · Histórico da linha · Itinerários | ✅ feita — ver abaixo |
-| C2 | Estrutura · Tarifas · Portaria | a fazer |
+| C2 | Estrutura · Tarifas · Portaria | ✅ feita — ver abaixo |
 | C3 | Quadro de Horários · Empresas | a fazer |
 | C4 | Municípios · Localidades | a fazer |
 
@@ -537,6 +543,98 @@ nenhum uso no corpo — binding morto desde a B2, que moveu os dois primeiros pa
 que os comentários de `app.js:23`–`:25` e `:13`–`:16` existem para evitar, e escaparam. Removidos
 aqui porque esta fase edita justamente esse bloco de `import`; qualquer outra coisa fora da C1
 ficou de fora.
+
+---
+
+### ✅ C2 — Estrutura Operacional · Tarifas · Portaria (FEITA)
+
+A segunda família a sair inteira, num módulo novo — `src/documentos/estrutura-tarifas-portaria.mjs`
+(251 linhas): `renderTarifas`/`tarifaEmpresaRun`/`renderTarifasEmpresa`/`linhaTarifaRowHTML` (Tarifas),
+`renderEstrutura` (Estrutura) e `getPortariaAnos`/`renderPortarias`/`showPortaria`/`invalidarPortariaAnos`
+(Portaria).
+
+**O que a sessão MEDIU antes de mover, como o plano cobra:** os dois casos que a seção da C1 já
+apontava — `secoesTarifasHTML` (`app.js:1510` antes desta fase) e `quadroHorariosBodyHTML`
+(`app.js:1312`) — eram de fato a aresta que faltava fechar. Os dois foram para `src/ui/blocos.mjs`
+(que ganhou também `tarifaRowHTML`/`TARIFA_COLS`, dependência direta de `secoesTarifasHTML`, pelo
+mesmo motivo que `SENTIDO_ORDER`/`normSentido` foram com `itinerarioTableHTML` na C1). Com isso a
+aresta C2↔C3 (Estrutura↔Quadro) morreu como aresta ENTRE FASES — C3 fica livre para entrar depois
+sem depender desta.
+
+**Um terceiro achado, que o plano não previa:** o modo "por empresa" de Tarifas
+(`tarifaEmpresaRun`/`renderTarifasEmpresa`) usa `searchEmpresas`/`empresaChooserHTML`/
+`bindEmpresaRows` — e os três já eram usados por MAIS DE UMA família antes desta sessão (o modo
+"por empresa" do Quadro de Horários e o Histórico da Empresa, os dois C3, ainda no `app.js`).
+Mesmo critério do `blocos.mjs`, endereço diferente: `bindEmpresaRows` toca DOM
+(`querySelectorAll`/`addEventListener`), e o contrato do `blocos.mjs` é "nada de DOM". Foram para
+`src/ui/empresas.mjs` (39 linhas, novo), pelo mesmo precedente que já existia em `src/ui/listas.mjs`
+(markup + bind convivem lá). Sem esse módulo, Tarifas não saía inteira — ficaria dependendo de
+funções que só existem dentro do IIFE do `app.js`, que não exporta nada.
+
+**O terceiro slot do `src/documentos/shell.mjs`:** o painel de Portarias monta o PRÓPRIO ctx a
+cada busca (`novoCtx(view, pane, host)`, `app.js:1216` antes desta fase) porque não passa pelo
+`searchPanel` — é o único painel que não passa. `novoCtx` é `const` do `app.js`, lê o `activeLine`
+global, e por isso não podia sair (é ação de shell de verdade, igual `selecionarLinha`, até a
+Fase E). Passou a ser o 3º slot injetado por `configurarDocumentos`. Ainda longe do critério de
+parada (~6); registrado no cabeçalho do `shell.mjs` e em `tests/ui-data-module.test.mjs`.
+
+**O que ficou no `app.js`, por medição, não por omissão:** `LOADERS.estrutura` é one-liner
+(`lineDocView`, igual C1). `LOADERS.tarifas` **tem corpo** — a composição do `searchPanel` com
+dois modos (linha/empresa) — e o plano põe essa composição na Fase D; mover só o corpo sem mover
+a decisão de qual render chamar seria antecipar duas fases dentro desta. `LOADERS.portarias`, ao
+contrário, era corpo de PAINEL PRÓPRIO sem nenhuma composição de Fase D a proteger — virou o
+one-liner `LOADERS.portarias = renderPortarias;`.
+
+**A armadilha da Portaria foi preservada:** `showPortaria` continua usando `pushDetail`/
+`popDetail`, não `commitViewResult` (é o único documento de lista+detalhe da Fase C); o guard
+`if (!isCurrentGen(view, gen)) return;` logo após o `await getPortariaAnos()` foi junto, intacto.
+
+**Custo em linhas, medido:** `app.js` 2.974 → **2.763** (`wc -l`; −211); `MODAL` 1.746 → **1.527**
+(−219, 58,7% → 55,2%); total de JS do projeto (`app.js` + `src/**/*.mjs`) foi de **4.060** (pós-C1)
+para **4.211** (+151 líquidas — cada linha que sai do `app.js` deixa um comentário-tombstone
+curto no lugar, então a soma do projeto cresce menos que o `src/` sozinho). O `src/` sozinho foi
+de 1.086 para **1.448** (+362): `estrutura-tarifas-portaria.mjs` (251, novo),
+`src/ui/empresas.mjs` (39, novo) e o crescimento de `blocos.mjs` (+66) e `shell.mjs` (+17). Fator
+"sai do `app.js` → aparece em módulo" = 362/211 ≈ **1,7x** — no mesmo patamar do ~1,8x de B2/C1.
+
+### O achado dos 4 loaders órfãos, decidido nesta sessão
+
+A sessão anterior (C1) registrou que C2+C3+C4 (992 linhas, na tabela do plano) não fecham as
+1.746 linhas que o `MODAL` tinha então — sobravam 182 linhas em quatro loaders fora de qualquer
+família declarada: `ligacoesPorLogradouro` (18), `ligacoesPorTerminal` (74), `secoesPorLigacao`
+(27) e `frotaPorEmpresa` (63).
+
+**Decisão para `secoesPorLigacao`:** fica com **C4** (Municípios · Localidades), não com C2. É
+parente de Tarifas por nome, mas o loader em si (`app.js`, hoje sob a marca `DOC · Municípios`)
+lista SEÇÕES por município/logradouro, não por linha — não usa `renderTarifas`/`secoesTarifasHTML`
+nem qualquer coisa que esta sessão moveu, e mora fisicamente na área de Município. Mover pelo nome
+em vez do conteúdo teria sido o mesmo erro que a regra do `blocos.mjs` existe para evitar.
+
+**Os outros três (`ligacoesPorLogradouro`, `ligacoesPorTerminal`, `frotaPorEmpresa`) seguem sem
+decisão** — a restrição, como o plano cobra: são candidatos naturais de C4 (as duas primeiras
+citam Logradouro/Terminal, que são vocabulário de C4) e C3 (`frotaPorEmpresa`, parente de
+"Frota", mas Frota já saiu na C1 sem eles — o loader é de Empresa, não de Frota, então C3 é o
+palpite, não a decisão). Quem executar C3/C4 mede o conteúdo antes de mover, como esta sessão
+mediu `secoesPorLigacao`.
+
+### O que ficou provado, e como
+
+- `node tests/check.js` verde; `check_views.mjs` 18/18; `check_abas.mjs`, `check_selecao_linha.mjs`
+  e `check_corrida_abas.mjs` verdes; `./scripts/semgrep.sh` 0 achados em 121 regras.
+  `tests/ui-data-module.test.mjs` foi de 34 para **42** casos.
+- **Prova por mutação — duas tentativas, as duas morderam** (o plano exige uma; a segunda prova
+  o critério das "duas famílias"): (1) `secoesTarifasHTML` esvaziado em `src/ui/blocos.mjs` →
+  `check_views.mjs` vermelho em **tarifas, estrutura E quadroHorarios** — as três telas que a
+  consomem, direta ou via `secBlock`/consolidação; (2) corpo de `renderEstrutura` trocado por uma
+  caixa vazia → `check_views.mjs estrutura` vermelho (`0 "tbody tr"` e `0 ".kpi"`, contra os
+  mínimos de 9 e 12).
+
+### Revisão própria — achados registrados (Codex esgotado desde 15/08)
+
+Nenhum achado além do que já está registrado acima (o 3º slot do `shell.mjs`, o módulo
+`src/ui/empresas.mjs` fora do escopo original da sessão, e a decisão parcial dos 4 órfãos). Os
+dois primeiros são exigidos pelo próprio código — sem eles a família não saía inteira — e estão
+justificados nos respectivos cabeçalhos de módulo, não só aqui.
 
 ---
 

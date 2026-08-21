@@ -54,10 +54,17 @@ import {
   configurarListas, situacaoSelectHTML, linhasTable, bindLineRows, paginateLines, lineResults,
 } from './src/ui/listas.mjs';
 // Blocos de documento compartilhados por MAIS DE UMA família da Fase C (evento, itinerário,
-// frota). Ficam fora de qualquer módulo de família de propósito — a razão (um ciclo entre
-// famílias, via o documento consolidado Estrutura) está escrita no cabeçalho do módulo.
-// O `app.js` importa só o que os documentos que AINDA não saíram usam.
-import { evBandHTML, evBlocksHTML, itinerarioTableHTML, frotaBlockHTML } from './src/ui/blocos.mjs';
+// frota, quadro de horários, seções/tarifas). Ficam fora de qualquer módulo de família de
+// propósito — a razão (um ciclo entre famílias, via o documento consolidado Estrutura) está
+// escrita no cabeçalho do módulo. O `app.js` importa só o que os documentos que AINDA não saíram
+// (Quadro de Horários, C3) usam — `secoesTarifasHTML` entra aqui porque o bloco "Seções e
+// Tarifas" do Quadro a chama; `tarifaRowHTML`/`TARIFA_COLS` NÃO entram, porque só o Quadro
+// consolida a tabela via `secoesTarifasHTML` — quem lê as duas peças soltas é a família de
+// Tarifas, em `src/documentos/estrutura-tarifas-portaria.mjs`.
+import {
+  evBandHTML, evBlocksHTML, itinerarioTableHTML, frotaBlockHTML,
+  quadroHorariosBodyHTML, secoesTarifasHTML,
+} from './src/ui/blocos.mjs';
 // As listas de colunas do `select=`. São dado, não estado; saíram na Fase C1 junto com o
 // primeiro documento, para não existirem em duas cópias (a do módulo e a daqui).
 import {
@@ -72,6 +79,17 @@ import { configurarDocumentos } from './src/documentos/shell.mjs';
 import {
   renderLineHistory, renderItinerarios, renderFrota,
 } from './src/documentos/frota-historico-itinerarios.mjs';
+// FASE C2 — Estrutura Operacional · Tarifas · Portaria. `LOADERS.estrutura` (one-liner) e
+// `LOADERS.tarifas` (tem corpo — a composição do `searchPanel`, que é trabalho de Fase D) ainda
+// ficam aqui embaixo; `LOADERS.portarias` virou o one-liner `renderPortarias`.
+import {
+  renderTarifas, tarifaEmpresaRun, renderEstrutura, renderPortarias, invalidarPortariaAnos,
+} from './src/documentos/estrutura-tarifas-portaria.mjs';
+// O chooser de empresa (busca + tabela de escolha + bind de clique), usado por MAIS DE UMA
+// família: Tarifas (acima), o modo "por empresa" do Quadro de Horários e o Histórico da Empresa
+// (as duas últimas, C3, ainda abaixo). Critério igual ao de `blocos.mjs`; endereço diferente
+// porque `bindEmpresaRows` toca DOM — ver o cabeçalho de `src/ui/empresas.mjs`.
+import { searchEmpresas, empresaChooserHTML, bindEmpresaRows } from './src/ui/empresas.mjs';
 
 /* ================================================================
    ÍNDICE DO ARQUIVO  —  navegue por `grep` da marca da seção.
@@ -114,7 +132,11 @@ configurarListas({ aoSelecionarLinha: row => {
    topo com a linha cujo histórico está na tela — é shell, como o `aoSelecionarLinha` acima, e por
    isso desce injetada em vez de o módulo ir buscá-la. O `sbFetch` aqui é ANDAIME: some quando a
    Fase B criar `src/data/rest.mjs` e os documentos passarem a importá-lo. */
-configurarDocumentos({ sbFetch, selecionarLinha: selectLine });
+// `novoCtx` chega por FECHO (não por referência direta): é `const`, declarada mais abaixo no
+// arquivo, e passá-la aqui por valor bateria em TDZ — o bootstrap roda no TOPO do IIFE, antes da
+// declaração existir. O fecho só a lê quando de fato CHAMADO, muito depois de o arquivo inteiro
+// já ter sido avaliado (nenhum documento abre no load).
+configurarDocumentos({ sbFetch, selecionarLinha: selectLine, novoCtx: (view, pane, host) => novoCtx(view, pane, host) });
 
 /* ================================================================
    SUPABASE CONFIG
@@ -540,17 +562,9 @@ function setActiveLine(row){ activeLine = row; activeTab().line = row; }
 // e os `get*` que os enchem moram em `src/data/lookups.mjs`, importados no topo. Aqui fica só o
 // que depende de estado desta tela. A invalidação deles continua ligada ao Realtime, pelo
 // INVALIDADORES_LOOKUP que a seção REALTIME espalha no CACHE_INVALIDATORS.
-
-// busca empresas por nome (insensível a acento) ou código — assume getEmpresas() já carregado.
-// Fica AQUI, e não no módulo, porque é busca de INTERFACE (alimenta o chooser de empresa do
-// modal), não parte do cache: ela só lê a lista crua que o módulo expõe.
-function searchEmpresas(term, { limit = 40 } = {}){
-  const nt = norm(term);
-  return empresasList()
-    .filter(e => norm(e.nome_empresa).includes(nt) || String(e.codempresa||'').includes(term))
-    .sort((a,b)=> String(a.nome_empresa||'').localeCompare(String(b.nome_empresa||'')))
-    .slice(0, limit);
-}
+// `searchEmpresas` saiu na Fase C2 para `src/ui/empresas.mjs`, importado no topo — usado por
+// mais de uma família (Tarifas, Quadro de Horários, Histórico da Empresa), o mesmo critério do
+// `src/ui/blocos.mjs`.
 
 /* ================================================================
    BUSCA DE LINHAS (hero)
@@ -1308,38 +1322,9 @@ LOADERS.historicoLinha = async (ctx) => {
    sentido, em `src/ui/blocos.mjs` (a Estrutura Operacional, família C2, também as usa). */
 LOADERS.itinerarios = (ctx) => lineDocView(ctx, { subtitle:'Cadastro de Linhas: Itinerários', render:renderItinerarios });
 
-/* --- DOC · Quadro de Horários --------------------------------- */
-function quadroHorariosBodyHTML(interv, predet, orig){
-  if(!interv.length && !predet.length) return emptyLinha('quadro de horários');
-  // Rótulo do SENTIDO: a origem AUTORITATIVA (origem_teste, via `orig`) tem prioridade sobre o
-  // nome_origem denormalizado das tabelas de QH (que vem inconsistente/trocado na base). Agrupa
-  // pelo rótulo resolvido → códigos diferentes com a mesma origem não geram blocos repetidos.
-  const sentidoKey = (cod, nome) => orig[cod] || nome || ('Origem '+orDash(cod));
-  let html='';
-  if (interv.length){
-    html += `<h3 class="doc-h3">Por intervalo / frequência</h3>`;
-    for (const [label, list] of groupBy(interv, r=>sentidoKey(r.cod_origem, r.nome_origem))){
-      html += `<div class="qh-sentido">Sentido · partidas de ${esc(label)}</div>`;
-      for (const [dia, rows] of groupBy(list, r=>r.dia_semana||'—')){
-        const body = rows.map(r=>`<tr><td class="td-num">${esc(fmtTime(r.hora_inicio))}</td>
-          <td class="td-num">${esc(fmtTime(r.hora_fim))}</td><td class="td-tipo">${esc(orDash(r.intervalo))} min</td></tr>`).join('');
-        html += `<div class="mt6"><div class="sentido-sep sm">${esc(dia)}</div>
-          <div class="doc-table-wrap"><table class="doc-table"><thead><tr><th class="w-33p">Início</th><th class="w-33p">Fim</th><th>Intervalo</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
-      }
-    }
-  }
-  if (predet.length){
-    html += `<h3 class="doc-h3">Horários predeterminados</h3>`;
-    for (const [label, list] of groupBy(predet, r=>sentidoKey(r.cod_origem, r.nome_origem))){
-      html += `<div class="qh-sentido">Sentido · partidas de ${esc(label)}</div>`;
-      for (const [dia, rows] of groupBy(list, r=>r.dia_semana||'—')){
-        const horas = rows.map(r=>`<span class="mono qh-hora">${esc(fmtTime(r.saida))}</span>`).join('');
-        html += `<div class="mt6"><div class="sentido-sep sm">${esc(dia)} · ${rows.length} partida(s)</div><div class="qh-horas">${horas}</div></div>`;
-      }
-    }
-  }
-  return html;
-}
+/* --- DOC · Quadro de Horários ---------------------------------
+   `quadroHorariosBodyHTML` mora em `src/ui/blocos.mjs` desde a Fase C2 — a Estrutura Operacional
+   (`src/documentos/estrutura-tarifas-portaria.mjs`) o usa também; ver o cabeçalho do módulo. */
 
 // Corpo de UM quadro (meta + tabelas) para uma linha qualquer — reusado na linha ativa,
 // no clique da lista por empresa e na montagem do PDF de todos os quadros.
@@ -1494,97 +1479,13 @@ LOADERS.quadroHorarios = async (ctx) => {
   }
 };
 
-/* --- DOC · Tarifas -------------------------------------------- */
-const TARIFA_COLS = [{t:'Seção',w:'60px'},{t:'Nº Linha',w:'80px'},{t:'Ligação'},{t:'Via',w:'90px'},{t:'Caract.',w:'90px'},{t:'Tipo',w:'90px'},{t:'RM',w:'55px'},{t:'Tarifa',w:'80px'},{t:'Piso I (km)',w:'90px'},{t:'Situação',w:'90px'},{t:'Criação',w:'90px'},{t:'Status',w:'150px'}];
-function tarifaRowHTML(r){
-  // chip de status com a data do evento ao lado (quando a coluna de data está disponível)
-  const dChip = (v,label,date) => v ? `<span class="chip chip-on">${label}${date?' '+fmtDate(date):''}</span>` : '';
-  const st = [ dChip(r.cancelado,'Canc.',r.data_cancelamento), dChip(r.paralisado,'Paral.',r.data_paralisacao), dChip(r.sub_judice,'Sub jud.',r.data_sub_judice), dChip(r.transferido,'Transf.',r.data_transferencia) ].filter(Boolean).join(' ') || '<span class="chip chip-off">OK</span>';
-  // "Piso I" é quilometragem (extensão da seção), não valor monetário — sem "R$"
-  const pisoTxt = (r.piso_i===null||r.piso_i===undefined||r.piso_i==='') ? '—' : `${fmtMoney(r.piso_i)} km`;
-  return `<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-num">${esc(orDash(r.numero_linha))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td>
-  <td class="td-tipo">${esc(orDash(r.via))}</td><td class="td-tipo">${esc(orDash(r.caracteristica))}</td><td class="td-tipo">${esc(orDash(r.tipo_ligacao))}</td><td class="td-num">${esc(orDash(r.rm))}</td>
-  <td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td><td class="td-num">${esc(pisoTxt)}</td>
-  <td class="td-tipo">${esc(orDash(r.situacao))}</td><td class="td-num">${fmtDate(r.data_criacao)}</td><td>${st}</td></tr>`;
-}
-function secoesTarifasHTML(rows){
-  if(!rows.length) return emptyLinha('seção ou tarifa');
-  return tableHTML(TARIFA_COLS, rows.map(tarifaRowHTML).join(''), rows.length+' seção(ões)');
-}
-
-async function renderTarifas(ctx){
-  const { view, gen, host, line } = ctx;
-  host.innerHTML = loading();
-  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=${TARIFA_LINHA_FIELDS}&order=secao`);
-  if (!rows.length) { host.innerHTML = emptyLinha('tarifa'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]]);
-  const inner = `${meta}${secoesTarifasHTML(rows)}`;            // documento completo (p/ PDF)
-  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Tarifas Vigentes')}${inner}</div>` });
-  // filtro por situação da seção — reusa isVigente (critério estrito compartilhado; ver junto a isLinhaAtiva)
-  const temInativa = rows.some(r=>!isVigente(r));
-  const tools = temInativa ? `<div class="loc-tools"><label>Situação <select id="tarSit"><option value="todas">Todas</option><option value="vigentes">Vigentes</option><option value="inativas">Canceladas/inativas</option></select></label></div>` : '';
-  host.innerHTML = `${meta}${tools}<div id="tarResult"></div>`;
-  const result = host.querySelector('#tarResult'), sel = host.querySelector('#tarSit');
-  const paint = ()=>{
-    const s = sel?sel.value:'todas';
-    const f = s==='vigentes' ? rows.filter(isVigente) : s==='inativas' ? rows.filter(r=>!isVigente(r)) : rows;
-    result.innerHTML = f.length ? secoesTarifasHTML(f) : emptyBox('Nenhuma seção com esse filtro.');
-  };
-  if(sel) sel.addEventListener('change', paint);
-  paint();
-}
-
-// Modo empresa: resolve a empresa e lista as tarifas de TODAS as linhas dela
-async function tarifaEmpresaRun(ctx, term){
-  const { view, gen, host, line } = ctx;
-  term = (term||'').trim();
-  if(!term){
-    if(line) return renderTarifasEmpresa(ctx, line.codempresa, empNome(line.codempresa));
-    host.innerHTML = emptyBox('Busque por uma empresa (nome ou código RJ), ou troque para "Por linha".');
-    commitViewResult(view, gen, { pdfHTML:null }); return;
-  }
-  await getEmpresas();
-  const emps = searchEmpresas(term);
-  if(emps.length > 1){
-    host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para ver as tarifas' });
-    bindEmpresaRows(host, (cod,nome)=>renderTarifasEmpresa(ctx, cod, nome));
-    commitViewResult(view, gen, { pdfHTML:null }); return;
-  }
-  const cod = emps.length===1 ? emps[0].codempresa : term;
-  const nome = emps.length===1 ? emps[0].nome_empresa : null;
-  await renderTarifasEmpresa(ctx, cod, nome);
-}
-// Lista (paginada) as tarifas de todas as linhas de UMA empresa
-const LINHA_TARIFA_COLS = [{t:'Número',w:'100px'},{t:'Ligação'},{t:'Código',w:'120px'},{t:'Seções',w:'80px'},{t:'Tarifa',w:'150px'}];
-// uma linha por LIGAÇÃO (deduplicado), mesmo quando ela tem várias seções de tarifa
-function linhaTarifaRowHTML(l){
-  return `<tr><td class="td-num">${esc(orDash(l.numero_linha||fmtCode(l.codlinha)))}</td><td class="td-logr">${esc(orDash(l.nome_ligacao))}</td><td class="td-num">${esc(fmtCode(l.codlinha))}</td><td class="td-num">${l.nsec}</td><td class="td-sentido">${esc(l.tarifaTxt)}</td></tr>`;
-}
-async function renderTarifasEmpresa(ctx, cod, nome){
-  const { view, gen, host } = ctx;
-  host.innerHTML = loading();
-  const rows = await sbFetch('tarifa_atual_teste', `codempresa=eq.${enc(cod)}&select=codlinha,secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=codlinha,secao&limit=3000`);
-  const nomeEmp = nome || empNome(cod);
-  const nLinhas = new Set(rows.map(r=>r.codlinha)).size;
-  const meta = metaRows([['Empresa',esc(nomeEmp||'—'),true],['Registro','RJ-'+esc(cod)],['Total',nLinhas+' linha(s) · '+rows.length+' seção(ões)']]);
-  if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhuma tarifa cadastrada para a empresa '+esc(nomeEmp||cod)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  // agrupa por linha — cada linha aparece 1x, com a qtd. de seções e a TARIFA DA LINHA
-  // (a da 1ª seção, mesma convenção da Folha de Rosto — não o intervalo das seções).
-  const linhas = [...groupBy(rows, r=>r.codlinha)].map(([codlinha,secs])=>{
-    const tarifaTxt = secs[0].tarifa != null ? 'R$ '+fmtMoney(secs[0].tarifa) : '—';
-    return { codlinha, numero_linha:secs[0].numero_linha, nome_ligacao:secs[0].nome_ligacao, nsec:secs.length, tarifaTxt };
-  });
-  const tools = `<div class="loc-tools"><label>Ver <select id="tarEmpModo"><option value="secoes" selected>Linhas com seção</option><option value="linhas">Somente linhas</option></select></label></div>`;
-  host.innerHTML = `${meta}${tools}<div id="tarEmpResult"></div>`;
-  const result = host.querySelector('#tarEmpResult'), sel = host.querySelector('#tarEmpModo');
-  const paint = ()=>{
-    if(sel.value==='linhas') paginateTable(result, linhas, { cols:LINHA_TARIFA_COLS, rowHTML:linhaTarifaRowHTML, foot:t=>t+' linha(s)', unit:'linhas', view, gen });
-    else paginateTable(result, rows, { cols:TARIFA_COLS, rowHTML:tarifaRowHTML, foot:t=>t+' seção(ões)', unit:'seções', view, gen });
-  };
-  sel.addEventListener('change', paint);
-  paint();
-}
-
+/* --- DOC · Tarifas --------------------------------------------
+   Os renders (`renderTarifas`, `tarifaEmpresaRun`, `renderTarifasEmpresa`) e o markup só de
+   Tarifas (`linhaTarifaRowHTML`/`LINHA_TARIFA_COLS`) moraram para
+   `src/documentos/estrutura-tarifas-portaria.mjs` na Fase C2. `secoesTarifasHTML`/`tarifaRowHTML`/
+   `TARIFA_COLS`, que o Quadro de Horários (logo acima) TAMBÉM usa, foram para `src/ui/blocos.mjs`.
+   Aqui fica só o registro — que É trabalho de shell (composição do `searchPanel` com dois
+   modos), não um one-liner; mover essa composição é trabalho da Fase D, não desta. */
 LOADERS.tarifas = (ctx) => {
   searchPanel(ctx, {
     title:'Tarifas Vigentes',
@@ -1608,42 +1509,10 @@ LOADERS.tarifas = (ctx) => {
    (`frotaBlockHTML`), em `src/ui/blocos.mjs` — a Estrutura Operacional, logo abaixo, a repete. */
 LOADERS.frota = (ctx) => lineDocView(ctx, { subtitle:'Frota da Linha', render:renderFrota });
 
-/* --- DOC · Estrutura Operacional ------------------------------ */
-async function renderEstrutura(ctx){
-  const { view, gen, host, line } = ctx;
-  host.innerHTML = loading();
-  const cod = enc(line.codlinha);
-  const [lineRows, secoes, itin, interv, predet, qh, orig, ibge] = await Promise.all([
-    sbFetch('tabela_vista_teste', `codlinha=eq.${cod}&select=${LINE_FIELDS}&limit=1`),
-    sbFetch('tarifa_atual_teste', `codlinha=eq.${cod}&select=${TARIFA_LINHA_FIELDS}&order=secao`),
-    sbFetch('itinerario_teste', `codlinha=eq.${cod}&select=${ITINERARIO_FIELDS}&order=id`),
-    sbFetch('qh_intervalo_teste', `codlinha=eq.${cod}&select=${QH_INTERVALO_FIELDS}&order=id`),
-    sbFetch('qh_predeterminado_teste', `codlinha=eq.${cod}&select=${QH_PREDET_FIELDS}&order=id`),
-    sbFetch('qh_teste', `codlinha=eq.${cod}&select=${FROTA_FIELDS}&limit=1`),
-    getOrigem(), getIbge(), getEmpresas()
-  ]);
-  const L = lineRows[0] || line;
-  const f = qh[0] || {};
-  const h3 = t => `<h3 class="doc-h3-rule">${t}</h3>`;
-  const frotaMeta = metaRows([['Hierarquização',esc(orDash(f.hierarquia))],['Frota operacional',esc(orDash(f.frota_operacional))],['Reserva',esc(orDash(f.reserva))],['Última alteração',fmtDate(f.ultima_alteracao)]]);
-  const inner = `${metaRows([
-      ['Empresa',esc(empNome(L.codempresa)),true],['Registro','RJ-'+esc(orDash(L.codempresa))],
-      ['Código da Ligação',esc(fmtCode(L.codlinha))],['Número da Ligação',esc(orDash(L.numero_ligacao))],
-      ['Ligação',esc(L.nome_ligacao||'—'),true],['Via',esc(orDash(L.via))],
-      ['Característica',esc(orDash(L.caracteristica))],['Tipo da Ligação',esc(orDash(L.tipo))],
-      ['Data de criação',fmtDate(L.data_criacao)],['Processo Nº',esc(orDash(L.processo_criacao)),true],
-      ['Situação',situacaoHTML(L),true],
-    ])}
-    ${h3('Seções e Tarifas')}${secoesTarifasHTML(secoes)}
-    ${h3('Itinerário')}${itinerarioTableHTML(itin, ibge)}
-    ${h3('Quadro de Horários e Frota')}${frotaMeta}${f&&Object.keys(f).length?frotaBlockHTML(f):''}${quadroHorariosBodyHTML(interv, predet, orig)}
-    <div class="doc-foot">Fonte: cadastro DETRO-RJ · DIVAT</div>`;
-  host.innerHTML = inner;
-  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Cadastro de Linhas: Estrutura Operacional')}${inner}</div>` });
-}
-
-// Documento consolidado (igual ao Relatório oficial): cadastro + Seções/Tarifas +
-// Itinerário + Quadro de Horários e Frota, num único .doc (também usado no PDF).
+/* --- DOC · Estrutura Operacional ------------------------------
+   Render em `src/documentos/estrutura-tarifas-portaria.mjs` (Fase C2) — o documento consolidado
+   (igual ao Relatório oficial): cadastro + Seções/Tarifas + Itinerário + Quadro de Horários e
+   Frota, num único `.doc` (também usado no PDF). Aqui fica só o registro, one-liner de shell. */
 LOADERS.estrutura = (ctx) => lineDocView(ctx, { subtitle:'Cadastro de Linhas: Estrutura Operacional', render:renderEstrutura });
 
 /* ---- Empresas ---- */
@@ -2186,86 +2055,12 @@ LOADERS.frotaPorEmpresa = async ({ view, gen, pane }) => {
   inp.addEventListener('input', debounce(paint));
   paint();
 };
-let _portariaAnos = null;
-/* --- DOC · Portaria ----------------------------------------------- */
-async function getPortariaAnos(){
-  if(_portariaAnos) return _portariaAnos;
-  const maxAno = new Date().getFullYear();
-  let minAno = 1975;
-  try{
-    const r = await sbFetch('portaria_teste', 'select=data_portaria&data_portaria=not.is.null&order=data_portaria.asc&limit=1');
-    if(r[0]?.data_portaria){ const m=String(r[0].data_portaria).match(/^(\d{4})/); if(m) minAno=+m[1]; }
-  }catch(_){}
-  _portariaAnos = []; for(let a=maxAno; a>=minAno; a--) _portariaAnos.push(a);
-  return _portariaAnos;
-}
-LOADERS.portarias = async (ctx) => {
-  // A CASCA deste painel escreve DEPOIS do await de getPortariaAnos() — trocar de aba nesse
-  // intervalo repintava o pane errado. O guard abaixo é o que impede isso, e ele PRECISA
-  // continuar existindo: `_panelRun` fica fora do seam, então aqui não há nada mais protegendo.
-  const { view, gen, pane } = ctx;
-  const anos = await getPortariaAnos();
-  if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
-  pane.innerHTML = `<div class="doc">${docHead('Portarias / Legislação')}
-    <div class="ev-filters">
-      <label class="evf">Número<input id="pNum" type="text" placeholder="ex.: 1975" autocomplete="off"></label>
-      <label class="evf">Ano<select id="pAno"><option value="">Todos</option>${anos.map(a=>`<option value="${a}">${a}</option>`).join('')}</select></label>
-      <label class="evf">Situação<select id="pVig"><option value="">Todas</option><option value="vigor">Em vigor</option><option value="revog">Revogadas</option></select></label>
-      <label class="evf evf-wide">Texto (assunto / conteúdo)<input id="pTxt" type="text" placeholder="palavra no assunto ou no texto da portaria" autocomplete="off"></label>
-      <button class="evf-clear" id="pClear" type="button">Limpar</button>
-    </div>
-    <div id="pHost"></div></div>`;
-  const num=pane.querySelector('#pNum'), ano=pane.querySelector('#pAno'),
-        vig=pane.querySelector('#pVig'), txt=pane.querySelector('#pTxt'), host=pane.querySelector('#pHost');
-  // Este painel tem o `run` dele (não passa pelo searchPanel), então monta o próprio ctx: cada
-  // busca é uma tentativa nova, com o pane e o host DESTE painel.
-  const run = async()=>{
-    const rctx = novoCtx(view, pane, host);
-    const { gen } = rctx;
-    host.innerHTML = loading();
-    try{
-      let qs='';
-      const n=num.value.trim(); if(n) qs+=`numero_portaria=ilike.*${ilikeTerm(n)}*&`;
-      if(ano.value) qs+=`data_portaria=gte.${ano.value}-01-01&data_portaria=lte.${ano.value}-12-31&`;
-      if(vig.value==='vigor') qs+='vigor=is.true&'; else if(vig.value==='revog') qs+='vigor=is.false&';
-      const tx=txt.value.trim(); if(tx){ const e=ilikeTerm(tx); qs+=`or=(assunto.ilike.*${e}*,conteudo.ilike.*${e}*)&`; }
-      const rows = await sbFetch('portaria_teste', `${qs}select=numero_portaria,data_portaria,data_publicacao,tipo_portaria,tipo_legislacao,assunto,conteudo,vigor,portaria_anterior&order=data_portaria.desc.nullslast&limit=300`);
-      if(!rows.length){ host.innerHTML=emptyBox('Nenhuma portaria para os filtros informados.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-      paginateTable(host, rows, {
-        cols:[{t:'Número',w:'110px'},{t:'Data',w:'90px'},{t:'Tipo',w:'120px'},{t:'Assunto'},{t:'Vigor',w:'90px'}],
-        // i = índice GLOBAL na `rows` completa → data-idx continua batendo mesmo paginado
-        rowHTML:(r,i)=>`<tr class="clickable" tabindex="0" role="button" data-idx="${i}"><td class="td-num">${esc(orDash(r.numero_portaria))}</td><td class="td-num">${esc(fmtDate(r.data_portaria))}</td><td class="td-tipo">${esc(orDash(r.tipo_portaria||r.tipo_legislacao))}</td><td class="td-logr">${esc(orDash(r.assunto))}</td><td>${r.vigor?'<span class="chip chip-off">Em vigor</span>':'<span class="chip chip-on">Revogada</span>'}</td></tr>`,
-        foot:t=>t+' portaria(s)'+(t>=300?' (mostrando 300)':'')+' · clique para ler',
-        bind:c=>c.querySelectorAll('tr[data-idx]').forEach(tr=>{
-          const open=()=>showPortaria(rctx, rows[+tr.dataset.idx]);
-          tr.addEventListener('click', open);
-          tr.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } });
-        }),
-        unit:'portarias',
-        view, gen,
-      });
-    }catch(e){ host.innerHTML=errorBox(e.message); }
-  };
-  [num,txt].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
-  [ano,vig].forEach(el=>el.addEventListener('change', run));
-  pane.querySelector('#pClear').addEventListener('click', ()=>{ num.value=''; ano.value=''; vig.value=''; txt.value=''; run(); });
-  if(view) view._panelRun = run;
-  run();
-};
-// `ctx` = o da LISTA (o `rctx` da busca que abriu o item) — pushDetail/popDetail trocam só o
-// pdfHTML da view, preservando a busca/paginação por baixo (ver o contrato do seam acima).
-function showPortaria(ctx, r){
-  const { view, host } = ctx;
-  const inner = `${metaRows([['Portaria',esc(orDash(r.numero_portaria))],['Tipo',esc(orDash(r.tipo_portaria||r.tipo_legislacao))],
-      ['Data',esc(fmtDate(r.data_portaria))],['Publicação',esc(fmtDate(r.data_publicacao))],
-      ['Situação', r.vigor?'Em vigor':'Revogada'], r.portaria_anterior?['Portaria anterior',esc(r.portaria_anterior)]:['','']])}
-    <div class="ev-block"><div class="ev-label">Assunto</div><div class="ev-text${r.assunto?'':' empty'}">${r.assunto?esc(r.assunto):'—'}</div></div>
-    <div class="ev-block"><div class="ev-label">Conteúdo</div><div class="ev-text${r.conteudo?'':' empty'}">${r.conteudo?esc(r.conteudo):'—'}</div></div>`;
-  pushDetail(view, { pdfHTML: ()=>`<div class="doc">${docHead('Portaria')}${inner}</div>` });
-  host.innerHTML = `<button class="loc-btn mb12" id="pbBack">← Voltar aos resultados</button>
-    <div class="doc flush">${inner}</div>`;
-  const b=host.querySelector('#pbBack'); if(b) b.addEventListener('click', ()=>{ popDetail(view); if(view&&view._panelRun) view._panelRun(); });
-}
+/* --- DOC · Portaria -----------------------------------------------
+   `getPortariaAnos`/`renderPortarias`/`showPortaria` moraram para
+   `src/documentos/estrutura-tarifas-portaria.mjs` na Fase C2 — é o único documento de
+   lista+detalhe da Fase C (a razão de usar pushDetail/popDetail está no cabeçalho de lá).
+   `LOADERS.portarias` virou o one-liner `renderPortarias` (import no topo do arquivo). */
+LOADERS.portarias = renderPortarias;
 
 /* ---- Linhas por Localidade (cruza nome em tabela_vista_teste; enriquece com qh_teste) ---- */
 let _localidadesList = null;
@@ -2584,16 +2379,10 @@ function pintarLocalidadeSecoes(host, base, secByLine, { total = base.length, vi
     + (semSecao.length ? cabSemSecao + linhasTable([...semSecao].sort(byCodlinha)) : '')
     + '</div>' });
 }
-// tabela de empresas p/ escolher (código/nome/situação) — `extraChips(e)` acrescenta chips à situação
-function empresaChooserHTML(emps, { prompt, sitWidth = '150px', extraChips } = {}){
-  const body = emps.map(e=>`<tr class="clickable" tabindex="0" role="button" data-emp="${esc(e.codempresa)}" data-nome="${esc(e.nome_empresa||'')}">
-    <td class="td-num">${esc(e.codempresa)}</td><td class="td-logr">${esc(e.nome_empresa||'—')}</td><td class="td-tipo">${esc(orDash(e.situacao))}${extraChips? ' '+extraChips(e):''}</td></tr>`).join('');
-  return `<p class="doc-note">${emps.length} empresa(s) encontradas — ${prompt}:</p>`
-    + tableHTML([{t:'Código',w:'90px'},{t:'Empresa'},{t:'Situação',w:sitWidth}], body, emps.length+' empresa(s)');
-}
-function bindEmpresaRows(host, fn){
-  host.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>fn(tr.dataset.emp, tr.dataset.nome)));
-}
+// `empresaChooserHTML`/`bindEmpresaRows` moraram para `src/ui/empresas.mjs` na Fase C2 —
+// importados no topo do arquivo. Usados por mais de uma família (Tarifas, Quadro de Horários,
+// Histórico da Empresa), mesmo critério do `src/ui/blocos.mjs`; endereço diferente porque
+// `bindEmpresaRows` toca DOM (ver o cabeçalho do módulo).
 // Painel com input de busca dentro do modal; o run() é re-executável (realtime).
 // Recebe o `ctx` do documento e escreve no `ctx.pane` — não no `modalBody` ao vivo. A diferença
 // aparece quando o loader faz `await` ANTES de montar o painel (ligacoesPorLogradouro espera o
@@ -2778,7 +2567,7 @@ let reloadTimer = null;
 // lookup, no módulo; de tela, aqui.
 const CACHE_INVALIDATORS = {
   ...INVALIDADORES_LOOKUP,
-  portaria_teste:       () => { _portariaAnos = null; },
+  portaria_teste:       invalidarPortariaAnos,
   localidades_teste:    () => { _localidadesList = null; },
 };
 function invalidateCaches(table){
