@@ -3,7 +3,7 @@
 // O que ele responde: "existe alguma tela que EXPLODE, fica em branco ou renderiza MENOS do que
 // as fixtures dão, e eu não sei?"
 //
-// Por que existe: ~60,4% do app.js é a seção MODAL / SISTEMA DE VIEWS (render/DOM). O
+// Por que existe: ~60,3% do app.js é a seção MODAL / SISTEMA DE VIEWS (render/DOM). O
 // tests/check.js é offline e sem dependências de propósito, então só cobre a lógica PURA
 // copiada nos *.harness.js — nada do render. Este script fecha esse buraco pela borda mais
 // barata: em vez de 17 testes escritos à mão, UM laço genérico que abre cada view e falha se

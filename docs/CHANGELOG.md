@@ -8,7 +8,7 @@ de auditoria em `docs/`).
 
 **Fase B2 do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`), executada **fora
 de ordem** — antes das Fases A e B, e a razão está registrada no plano: ela não depende delas.
-`app.js` **3.264 → 2.998 linhas** (−266, −8,1%); a seção `COMPONENTES AUXILIARES` caiu de 285 para
+`app.js` **3.264 → 3.001 linhas** (−263, −8,1%); a seção `COMPONENTES AUXILIARES` caiu de 285 para
 155. Quatro módulos novos, nenhuma mudança de comportamento pretendida, zero SQL.
 
 - **`src/ui/doc.mjs`** — markup de documento (`docHead`, `metaRows`, `colClass`, `tableHTML`) e os
@@ -54,7 +54,14 @@ com a dependência entrando por parâmetro, os módulos passaram a ser exercitá
   `check_selecao_linha.mjs` verdes, `./scripts/semgrep.sh` sem achados.
 - **`.vercelignore`:** `src/ui/` e `src/data/` reabertos nível a nível (três linhas por
   subdiretório novo, mais uma por módulo). Import ES é atômico — foi o que derrubou o portal em
-  10/08/2026.
+  10/08/2026. O smoke confirmou **HTTP 200 nos quatro módulos novos** no preview e, depois do
+  merge, em produção (`divatdetro.vercel.app`) — que é exatamente o risco que nenhum outro gate vê.
+- **Correção pós-merge (21/08):** os números desta entrada saíram errados por 3 linhas
+  (`2.998`/`−266`, quando é `3.001`/`−263`) e as **42 citações `app.js:linha` do plano vivo foram
+  para a `main` deslocadas**. Causa: as citações foram conferidas e, DEPOIS disso, o `app.js` ainda
+  recebeu 4 linhas (o ponteiro do bootstrap no índice e um comentário). Nenhum gate acusa — a §[2b]
+  confere fato numérico por regex, não citação. Virou a regra 3 do "Como este plano é escrito":
+  reconferir citação depois da última edição, não antes.
 
 ## 19/08/2026 — Sessão 5: o custo do processo, medido
 
