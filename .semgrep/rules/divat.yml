@@ -16,17 +16,18 @@ rules:
   # Escrever em `currentView` DEPOIS de um await pode acertar a view ERRADA: se o usuário
   # buscou "101", trocou pra "202" e só então a 1ª resposta voltou, o PDF sai da linha
   # errada. O seam (beginGen/commitViewResult) carrega a view capturada + a geração, e
-  # descarta a escrita atrasada. As únicas escritas legítimas em `.pdfHTML` são as de
-  # dentro do próprio seam, que usam a view CAPTURADA (`view.pdfHTML`), não `currentView`.
+  # descarta a escrita atrasada. Desde a Fase A a view e a geração chegam ao documento
+  # dentro do `ctx` que ele RECEBE — nenhum render lê `currentView`. As únicas escritas
+  # legítimas em `.pdfHTML` são as de dentro do próprio seam, que usam `view.pdfHTML`.
   - id: divat-pdfhtml-fora-do-seam
     patterns:
       - pattern: currentView.pdfHTML = $X
     message: >-
-      Atribuição direta a `currentView.pdfHTML`. Use o seam do ciclo de vida da view:
-      capture `const view = currentView, gen = beginGen(view);` ANTES do seu await e
-      troque por `commitViewResult(view, gen, { pdfHTML: ... })` (ou pushDetail/popDetail
-      em painel lista+detalhe). Sem isso, uma resposta atrasada de uma busca anterior
-      sobrescreve o resultado da busca mais nova. Ver CLAUDE.md § Armadilhas.
+      Atribuição direta a `currentView.pdfHTML`. Use o seam do ciclo de vida da view: o
+      `ctx = { view, gen, pane, host, line }` que todo render/loader RECEBE já traz a view
+      e a geração — escreva com `commitViewResult(view, gen, { pdfHTML: ... })` (ou
+      pushDetail/popDetail em painel lista+detalhe). Sem isso, uma resposta atrasada de uma
+      busca anterior sobrescreve o resultado da busca mais nova. Ver CLAUDE.md § Armadilhas.
     languages: [javascript]
     severity: ERROR
 

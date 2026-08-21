@@ -21,11 +21,17 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > tabela, e a conferência do preview dela inclui **confirmar que a atualização ao vivo chega**, não
 > só que os cards aparecem — ela mexe no despacho do Realtime. Continua valendo o plano vivo
 > [`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`](docs/planos/2026-08-14-modularizacao-fatias-3-4.md),
-> que ordena as fases seguintes. Dele já entrou a **Fase B2** (helpers compartilhados e o seam de
+> que ordena as fases seguintes. Dele já entraram a **Fase B2** (helpers compartilhados e o seam de
 > seleção: `src/ui/doc.mjs`, `src/ui/paginacao.mjs`, `src/ui/listas.mjs`, `src/data/lookups.mjs`),
 > **fora de ordem, e a razão está registrada lá**: ela não depende de A nem de B. Ela também
 > **decidiu** a bifurcação que o plano deixava em aberto — opção 1, seam de seleção exposto —, e
-> essa decisão fixa o critério de saída das Fases D e E.
+> essa decisão fixa o critério de saída das Fases D e E. E a **Fase A** (contexto explícito): todo
+> `render*`/loader do modal RECEBE `ctx = { view, gen, pane, host, line }`, nenhum lê
+> `currentView`/`activeLine`/`modalBody`, e a bancada `scripts/check_corrida_abas.mjs` guarda isso
+> criando a ordenação que os outros gates não criam. **A Fase A não encolheu o `app.js`** (3.001 →
+> 3.053) e nunca prometeu: ela é a precondição da Fase C, que é a próxima e onde o bloco `MODAL`
+> (1.844 linhas, 60,4%) começa a sair, uma família por PR. Falta ainda a **Fase B**
+> (`src/data/rest.mjs`), que encerra o mecanismo `@canon`.
 >
 > Continua valendo:
 > **[`docs/historico/contexto-proxima-sessao-2026-08-09.md`](docs/historico/contexto-proxima-sessao-2026-08-09.md)**
@@ -59,7 +65,8 @@ exibe e **atualiza ao vivo** (Realtime).
   **`busca.mjs`** (o filtro do histórico de eventos `yearOf`/`matchEvent` e a preparação do termo
   que vai ao servidor, `localidadesQueCasam`/`orIlike`/`municipiosExatos`) e **`view-state.mjs`**
   (o seam do ciclo de vida da view `beginGen`/`isCurrentGen`/`commitViewResult`/`pushDetail`/
-  `popDetail`, o modelo de abas `MAX_TABS`/`makeTab`/`openTabState`/`closeTabState`, o despacho do
+  `popDetail`, o CONTEXTO que todo documento recebe `makeCtx`/`withLine`/`withHost`/`nextGen`,
+  o modelo de abas `MAX_TABS`/`makeTab`/`openTabState`/`closeTabState`, o despacho do
   Realtime por aba `tabMatchesEvent`/`dispatchRealtime` e o que cada lista mostra, `pageBounds`/
   `filtrarSituacao`).
 - **Desde a Fase B2 há módulos que NÃO são de domínio puro** — eles fazem markup ou guardam
@@ -233,7 +240,7 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | *(fora do `app.js`)* `src/domain/core.mjs` | `fmtCode/fmtTime/fmtDate`, `esc/enc/ilikeTerm/orDash`, `norm`, `debounce`, `isLinhaAtiva`/`isVigente` | Formatação, escaping, normalização de texto, o `debounce` compartilhado e as regras de situação da linha. |
 | *(fora do `app.js`)* `src/domain/agrupamento.mjs` | `groupBy`, `countBy`, `fmtMoney`, `byCodlinha`, `rjOrder`, `scoreEmpresa`/`dedupEmpresasPorRJ`, `classifyMunLines`/`terminaisDoMunicipio`, `resumoFrota`/`filtrarFrotaEmpresas` | Agregação, ordenação e filtros de conjunto — importados pelo `app.js` e pelos testes, sem cópia no meio. |
 | *(fora do `app.js`)* `src/domain/busca.mjs` | `yearOf`/`matchEvent`, `localidadesQueCasam`, `orIlike`, `municipiosExatos` | Filtro do histórico de eventos (no cliente) e preparação do termo que vai ao servidor (o `or=()` do PostgREST). O I/O ficou de fora: `termosLocalidade` continua no `app.js` porque faz `await getLocalidades()`. |
-| *(fora do `app.js`)* `src/domain/view-state.mjs` | `beginGen`/`isCurrentGen`/`commitViewResult`/`pushDetail`/`popDetail`, `MAX_TABS`/`makeTab`/`openTabState`/`closeTabState`, `tabMatchesEvent`/`dispatchRealtime`, `pageBounds`, `filtrarSituacao` | Regras puras sobre o ESTADO DO QUE ESTÁ NA TELA: qual tentativa de carga ainda vale, quais abas existem, qual delas se importa com um evento, e que fatia/subconjunto uma lista mostra. Quem APLICA a decisão (DOM, fetch, toast) continua no `app.js`. |
+| *(fora do `app.js`)* `src/domain/view-state.mjs` | `beginGen`/`isCurrentGen`/`commitViewResult`/`pushDetail`/`popDetail`, `makeCtx`/`withLine`/`withHost`/`nextGen`, `MAX_TABS`/`makeTab`/`openTabState`/`closeTabState`, `tabMatchesEvent`/`dispatchRealtime`, `pageBounds`, `filtrarSituacao` | Regras puras sobre o ESTADO DO QUE ESTÁ NA TELA: qual tentativa de carga ainda vale, quais abas existem, qual delas se importa com um evento, e que fatia/subconjunto uma lista mostra. Quem APLICA a decisão (DOM, fetch, toast) continua no `app.js`. |
 | *(fora do `app.js`)* `src/ui/doc.mjs` | `configurarDoc`, `docHead`, `metaRows`, `colClass`, `tableHTML`, `loading`/`emptyBox`/`emptyLinha`/`errorBox`, `bannerTrunc` | Markup de documento e estados de tela — string de HTML, sem DOM nem estado. O SVG do logo chega por `configurarDoc` no bootstrap. |
 | *(fora do `app.js`)* `src/ui/paginacao.mjs` | `paginate`, `paginateTable`, `paginateEvents` | Paginação **só de tela** (25/pág), agnóstica de conteúdo; `paginateEvents` é o de UM evento por página, com filtros. Recebem `view`/`gen` de quem chama. |
 | *(fora do `app.js`)* `src/ui/listas.mjs` | `configurarListas`, `situacaoSelectHTML`, `linhasTable`, `bindLineRows`, `paginateLines`, `lineResults` | A família de listas de LINHA, o hub de ~10 cards. O clique numa linha é ação de shell e chega por `configurarListas({aoSelecionarLinha})`. |
@@ -325,13 +332,18 @@ PDF não têm teste em Node; o que os módulos de `src/ui/` têm de markup puro 
    das listas de linha**, rode `node scripts/check_selecao_linha.mjs` — mesma bancada, guarda
    o bug em que o `history.back()` do `closeModal` apagava a linha recém-selecionada dentro do
    modal (ver Armadilhas) e a barra Todas/Ativas/Canceladas do card de Localidade.
+   **Ao mexer no `ctx` dos documentos — `runView`, `reloadTab`, `searchPanel`, ou a assinatura de
+   qualquer `render*`/loader**, rode `node scripts/check_corrida_abas.mjs`. Mesma bancada, e é o
+   único gate que **cria** a ordenação do bug: o stub segura a resposta até a troca de aba ter
+   acontecido. Os outros três esperam a requisição assentar antes de agir e por isso podem ficar
+   verdes com um render pintando o pane errado. Roda no CI, no mesmo `views.yml`.
 > Os cinco gates abaixo (2a–2e) têm **runbook no cabeçalho do próprio script**. Aqui fica só
 > quando rodar e **o que quebra se você esquecer** — o detalhe mora junto da ferramenta, que é
 > onde quem a opera vai olhar. Este arquivo é lido no início de toda sessão; runbook de gate não.
 
 2a. **Mexeu em render/loader? `node scripts/check_views.mjs`** — abre as **18 views** num
    navegador headless e falha se alguma explodir, ficar no spinner ou pintar menos que o
-   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~60,3% do `app.js`), que o
+   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~60,4% do `app.js`), que o
    `check.js` **não** cobre. Aceita filtro: `check_views.mjs frota`.
    **O que quebra se esquecer:** view nova sem entrada em `VIEWS` (a checagem anti-drift do final
    pega); `select=` alterado sem ajustar a fixture em `scripts/lib/rig.mjs` — nome de coluna
@@ -445,14 +457,27 @@ PDF não têm teste em Node; o que os módulos de `src/ui/` têm de markup puro 
   cobre os DOIS blocos e por isso não pode ser sobrescrito pelo paginador. Detalhes:
   `docs/estrutura-frontend.md` §4. Em tela nova que lista muita coisa, **use esses helpers** em
   vez de `tableHTML` cru.
+- **Todo `render*`/loader do modal RECEBE `ctx = { view, gen, pane, host, line }`; nenhum lê
+  `currentView`, `activeLine` ou `modalBody`.** É o contrato da Fase A (21/08/2026) — runbook
+  completo em `docs/estrutura-frontend.md` §5, definição em `src/domain/view-state.mjs`
+  (`makeCtx`/`withLine`/`withHost`/`nextGen`). Em uma frase: quem MONTA um ctx é o shell, em três
+  pontos e só neles — `runView`, `reloadTab` (**são DUAS invocações de loader**, e mudar só a
+  primeira faz o recarregamento ao vivo receber `undefined`) e o `run()` de cada painel de busca,
+  todos via `novoCtx(view, pane, host)`, o único ponto que ainda lê `activeLine` para isso. Quem
+  RECEBE é o documento, e por receber não tem como ler o global ERRADO depois de um `await`.
+  Deriva-se com `withLine(ctx, linha)` (a linha que a busca resolveu, **mesma geração** — geração
+  nova aqui devolve a corrida), `withHost(ctx, el)` e `nextGen(ctx)`; `beginGen` à mão dentro de um
+  documento é regressão. `activeLine`/`currentView` continuam com mais de um escritor legítimo (o
+  wiring de abas, as limpezas) e isso **fica**: o que acabou foi um documento os LER. Guardado por
+  `scripts/check_corrida_abas.mjs`, o único gate que CRIA a ordenação do bug.
 - **NUNCA atribua `currentView.pdfHTML` direto — use o seam do ciclo de vida da view:**
   `beginGen`/`commitViewResult`/`pushDetail`/`popDetail` (em `src/domain/view-state.mjs`,
   importados no topo do `app.js`; o `let currentView` a que eles se aplicam continua na seção
   `MODAL / SISTEMA DE VIEWS`). Todo loader/run/render que faz `await` e depois escreve um
-  resultado captura `const view = currentView, gen = beginGen(view);` **antes** do seu próprio
-  `await`, e troca a atribuição por `commitViewResult(view, gen, { pdfHTML: fn ou null })` — usando
-  o `view` CAPTURADO, nunca `currentView` de novo (se reler `currentView` no fim, uma escrita
-  atrasada pode acertar a view ERRADA, a que está aberta agora, não a que a busca pertencia). Sem
+  resultado usa o `view` e o `gen` que vieram no **ctx** (montado antes do seu próprio `await`) e
+  troca a atribuição por `commitViewResult(view, gen, { pdfHTML: fn ou null })` — nunca relendo
+  `currentView` no fim, porque uma escrita atrasada acertaria a view ERRADA, a que está aberta
+  agora e não a dona da busca. Sem
   isso, uma resposta atrasada de uma busca/troca de linha anterior pode sobrescrever o resultado de
   uma busca mais nova (ex.: digitar "101", trocar pra "202" antes da 1ª resposta voltar → PDF sai
   da linha errada). `paginateTable` (`src/ui/paginacao.mjs`) e `paginateLines`/`lineResults`
@@ -463,9 +488,12 @@ PDF não têm teste em Node; o que os módulos de `src/ui/` têm de markup puro 
   `pushDetail`/`popDetail` em vez de `commitViewResult`, pra não perder o `pdfHTML`/busca da lista
   quando um item é aberto (bug original: `showPortaria` nunca reescrevia `pdfHTML`, então o PDF
   baixava a lista errada e o Realtime bouncava o usuário sem aviso). **`_panelRun` fica de fora do
-  seam de propósito** — é só a referência à função de busca do painel, atribuída uma vez,
-  **antes** de qualquer `await`, direto de dentro do loader (`if(currentView) currentView._panelRun
-  = run;`); não é resultado de operação assíncrona, então não há janela de corrida a proteger.
+  seam de propósito** — é só a referência à função de busca do painel (`if(view) view._panelRun =
+  run;`), não é resultado de operação assíncrona, então não há janela de corrida a proteger. **A
+  CASCA de um painel, porém, pode escrever depois de um `await`:** o loader de Portarias faz
+  `await getPortariaAnos()` antes de pintar, e o que o protege é um `if (!isCurrentGen(view, gen))
+  return;` explícito. **Esse guard tem de ser preservado** — sem ele uma tentativa velha religa o
+  runner depois de uma troca de aba.
   **A pintura em TELA usa o mesmo guard, via `isCurrentGen(view, gen)`** (a mesma pergunta que
   `commitViewResult` faz, extraída porque `paginate`/`paginateEvents` também precisam dela):
   `paginate` (núcleo de `paginateTable`/`paginateLines`) e `paginateEvents` recebem `view`/`gen`

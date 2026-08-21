@@ -2,8 +2,8 @@
 // abas existem, qual delas se importa com um evento do Realtime, e que fatia/subconjunto de
 // linhas uma lista mostra. Todas recebem o estado por parâmetro (a `view`, o array de abas, as
 // linhas já buscadas) em vez de ler `currentView`/`activeLine`/`tabs` do IIFE — é isso que as
-// torna testáveis sem navegador, e é o mesmo contrato que a Fase A do plano vai injetar nos
-// documentos.
+// torna testáveis sem navegador, e é o mesmo contrato que a Fase A injetou nos documentos: o
+// `ctx` do bloco "o CONTEXTO explícito de um documento", mais abaixo.
 // Como o core.mjs, o agrupamento.mjs e o busca.mjs: sem DOM, sem rede, sem storage, sem estado
 // global. O que é DOM/runtime fica do lado de fora — `renderTabs`, `activateTab`, `markStale` e
 // `scheduleReload` continuam no app.js, e são eles que aplicam o que estas funções decidem.
@@ -15,9 +15,10 @@ import { isLinhaAtiva } from './core.mjs';
 // resultado de uma tentativa mais nova (ex.: digitar "101" e trocar pra "202" antes de a 1ª
 // resposta voltar).
 //
-// Uso: no INÍCIO de todo loader/run que vai fazer `await` e depois escrever pdfHTML — antes desse
-// await, não depois — capture `const view = currentView, gen = beginGen(view);`. Ao terminar,
-// troque `currentView.pdfHTML = X` por `commitViewResult(view, gen, { pdfHTML: X })`.
+// Uso: `beginGen` não é mais chamado à mão pelos documentos — quem o chama é o `makeCtx`/
+// `nextGen` abaixo, que embrulham a geração no `ctx` que todo loader/render recebe. Ao terminar,
+// `commitViewResult(view, gen, { pdfHTML: X })` com o `view`/`gen` que vieram no ctx (nunca
+// relendo `currentView`, que já pode ser outra aba).
 // Helpers que escrevem pdfHTML DEPOIS do await de quem os chama (paginateTable, paginateLines,
 // lineResults) recebem `gen` como opção em vez de capturar a própria — capturar ali seria tarde
 // demais pra distinguir qual tentativa é a mais recente.
@@ -48,6 +49,34 @@ export function popDetail(view){
   view.pdfHTML = view._detail.pdfHTML;
   view._detail = null;
 }
+
+// --- o CONTEXTO explícito de um documento (Fase A do plano de modularização) ---
+// `ctx = { view, gen, pane, host, line }` — tudo que um render/loader precisa saber sobre onde,
+// para quem e por conta de qual tentativa ele está desenhando. Passado por PARÂMETRO em vez de
+// lido de `currentView`/`activeLine`/`modalBody`: quem MONTA um ctx é o shell (o dispatcher, o
+// recarregamento por Realtime e cada busca de painel); quem o RECEBE é o documento, e ele deixa
+// de ter como ler o global errado depois de um await.
+//   view … a view dona da tentativa — a mesma que beginGen/commitViewResult recebem
+//   gen  … a geração desta tentativa: o que descarta uma resposta atrasada
+//   pane … o `.modal-body` da ABA que pediu (nó fixo — não muda quando o usuário troca de aba)
+//   host … o container DENTRO do pane onde este documento desenha (null = o pane inteiro)
+//   line … a linha DESTA tentativa, não "a linha ativa agora"
+export function makeCtx(view, { pane = null, host = null, line = null } = {}){
+  return { view, gen: beginGen(view), pane, host, line };
+}
+// Deriva o ctx para a linha que a busca ACABOU de resolver, PRESERVANDO `view` e `gen`. A linha
+// certa só existe depois do await (1 resultado, ou o clique na lista de N), e derivar com geração
+// NOVA destruiria exatamente a proteção que o seam existe para dar: a tentativa velha voltaria a
+// poder escrever por cima da mais nova, que é o bug "digitei 101, troquei pra 202, o PDF saiu da
+// 101" com outra roupa.
+export function withLine(ctx, line){ return { ...ctx, line }; }
+// Mesma tentativa, outro container — o `#spHost` que o painel de busca acabou de criar dentro do
+// pane. Não mexe em `gen`: continua sendo a mesma tentativa.
+export function withHost(ctx, host){ return { ...ctx, host }; }
+// Mesma view/pane/host/linha, geração NOVA: para o que o usuário dispara DE NOVO dentro de um
+// documento já aberto (trocar o escopo do Município, refiltrar as Portarias) e cujo await pode
+// ser ultrapassado pelo clique seguinte. É o `beginGen(view)` que esses pontos já faziam à mão.
+export function nextGen(ctx){ return { ...ctx, gen: beginGen(ctx.view) }; }
 
 // --- abas do modal (#51 prefactor + #52 faixa de abas) ---
 // Cada aba guarda sua própria linha, sua própria view aberta e sua própria pilha de navegação do

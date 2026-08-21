@@ -285,12 +285,24 @@ export function serve(table, qs) {
 /* ================================================================
    NAVEGADOR
    ================================================================ */
-export async function launchPage(chromium) {
+// `segurar(table, qs)` (opcional) devolve uma Promise que ATRASA a resposta daquela requisição,
+// ou null/undefined para responder na hora (o comportamento de sempre, e o padrão).
+//
+// Por que existe: sem ele o stub responde SÍNCRONO, e nenhuma checagem deste repo consegue criar
+// a ordenação que define a corrida entre abas — a resposta sempre chega antes de o usuário
+// conseguir trocar de aba. check_views abre cada view numa página limpa, check_abas espera cada
+// ação assentar e check_selecao_linha espera o pane parar de girar: os três podem ficar verdes
+// enquanto um render atrasado pinta o pane da aba ERRADA. É o buraco que o check_corrida_abas.mjs
+// fecha, e o atraso controlável é a peça que faltava para isso.
+export async function launchPage(chromium, { segurar } = {}) {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
-  await page.route('**/rest/v1/**', route => {
+  await page.route('**/rest/v1/**', async route => {
     const u = new URL(route.request().url());
-    const res = serve(u.pathname.split('/rest/v1/')[1], u.search.slice(1));
+    const tabela = u.pathname.split('/rest/v1/')[1], qs = u.search.slice(1);
+    const espera = segurar && segurar(tabela, qs);
+    if (espera) await espera;
+    const res = serve(tabela, qs);
     route.fulfill({
       status: res.status, contentType: 'application/json',
       body: JSON.stringify(res.body),

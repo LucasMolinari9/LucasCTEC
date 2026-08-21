@@ -57,6 +57,7 @@ assert.deepEqual(busca.municipiosExatos({ 3303302: { nome: 'Niterói' } }, ['nit
 // view-state.mjs: mesmo critério. `MAX_TABS` é constante, não função — entra separado, e é
 // justamente o símbolo que a auditoria de 27/07/2026 achou exportado sem guarda nenhuma.
 const VS_ESPERADOS = ['beginGen', 'isCurrentGen', 'commitViewResult', 'pushDetail', 'popDetail',
+  'makeCtx', 'withLine', 'withHost', 'nextGen',
   'makeTab', 'openTabState', 'closeTabState', 'tabMatchesEvent', 'dispatchRealtime',
   'pageBounds', 'filtrarSituacao'];
 for (const nome of VS_ESPERADOS) assert.equal(typeof viewState[nome], 'function', `view-state.${nome} ausente`);
@@ -69,6 +70,40 @@ assert.equal(viewState.MAX_TABS, 5);
   assert.equal(viewState.commitViewResult(view, gen2, { pdfHTML: 'novo' }), true);
   assert.equal(view.pdfHTML, 'novo');
 }
+// o CONTEXTO (Fase A): `makeCtx` cunha a geração; `withLine`/`withHost` PRESERVAM view+gen.
+// A preservação é o invariante da fase, não detalhe: derivar com geração nova devolveria a
+// corrida — a busca velha, que resolve depois, voltaria a poder escrever por cima da nova.
+{
+  const view = { pdfHTML: null };
+  const pane = { id: 'pane1' }, host = { id: 'host1' };
+  const ctx = viewState.makeCtx(view, { pane, line: { codlinha: '1' } });
+  assert.deepEqual(ctx, { view, gen: 1, pane, host: null, line: { codlinha: '1' } });
+  const comLinha = viewState.withLine(ctx, { codlinha: '2' });
+  assert.equal(comLinha.gen, ctx.gen);          // MESMA geração
+  assert.equal(comLinha.view, view);
+  assert.equal(comLinha.pane, pane);
+  assert.equal(comLinha.line.codlinha, '2');
+  const comHost = viewState.withHost(ctx, host);
+  assert.equal(comHost.gen, ctx.gen);
+  assert.equal(comHost.host, host);
+  // as derivações não mutam o ctx de origem
+  assert.equal(ctx.host, null);
+  assert.equal(ctx.line.codlinha, '1');
+  // `nextGen` é o oposto: MESMA view/pane/host, geração NOVA — e a anterior deixa de valer
+  const novo = viewState.nextGen(ctx);
+  assert.equal(novo.gen, ctx.gen + 1);
+  assert.equal(novo.pane, pane);
+  assert.equal(viewState.commitViewResult(ctx.view, ctx.gen, { pdfHTML: 'velho' }), false);
+  assert.equal(viewState.commitViewResult(novo.view, novo.gen, { pdfHTML: 'novo' }), true);
+  // com a geração preservada, o commit de um ctx derivado por withLine ainda vence
+  const derivado = viewState.withLine(novo, { codlinha: '3' });
+  assert.equal(viewState.commitViewResult(derivado.view, derivado.gen, { pdfHTML: 'derivado' }), true);
+  assert.equal(view.pdfHTML, 'derivado');
+  // modal já fechado: makeCtx não explode, e o commit é no-op
+  const semView = viewState.makeCtx(null, {});
+  assert.equal(semView.gen, null);
+  assert.equal(viewState.commitViewResult(semView.view, semView.gen, { pdfHTML: 'x' }), false);
+}
 assert.deepEqual(viewState.pageBounds(0, 25, 9), { page: 1, totalPages: 1, start: 0, end: 0 });
 assert.deepEqual(viewState.dispatchRealtime(
   [{ id: 1, view: { tables: ['qh_teste'] } }, { id: 2, view: { tables: ['qh_teste'] } }],
@@ -78,5 +113,5 @@ assert.deepEqual(viewState.filtrarSituacao(
   [{ cancelado: false, paralisado: false }, { cancelado: true }], 'ativas'),
   [{ cancelado: false, paralisado: false }]);
 
-const TOTAL = 13 + ESPERADOS.length + 3 + BUSCA_ESPERADOS.length + 5 + VS_ESPERADOS.length + 6;
+const TOTAL = 13 + ESPERADOS.length + 3 + BUSCA_ESPERADOS.length + 5 + VS_ESPERADOS.length + 6 + 17;
 console.log(`domain module: ${TOTAL}/${TOTAL}`);
