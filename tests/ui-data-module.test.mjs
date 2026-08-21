@@ -9,11 +9,18 @@
    único de injeção dos documentos, e o lugar onde o critério de parada do plano vira asserção).
    Os RENDERS da C1 não entram aqui — escrevem no DOM, e ficam com os gates de navegador.
 
+   A Fase C2 acrescentou `src/ui/empresas.mjs` (o chooser de empresa — busca + tabela + bind de
+   clique, usado por mais de uma família, endereço próprio porque o bind toca DOM — ver o
+   cabeçalho do módulo) e engordou `blocos.mjs` com `quadroHorariosBodyHTML`/`secoesTarifasHTML`/
+   `tarifaRowHTML`/`TARIFA_COLS`, que fecharam a última aresta do grafo entre C2 e C3. Os RENDERS
+   da C2 (`src/documentos/estrutura-tarifas-portaria.mjs`) também não entram aqui, pelo mesmo
+   motivo dos da C1. `bindEmpresaRows`, que TOCA DOM, entra só pelo contrato (ver abaixo).
+
    O que NÃO cabe neste arquivo: tudo que escreve no DOM (paginate, paginateTable,
-   paginateEvents, paginateLines, lineResults, bindLineRows). Node não tem `document`, e o repo é
-   zero-dependência (não há jsdom). Esses ficam com os gates de navegador — `check_views.mjs`,
-   `check_selecao_linha.mjs` e `check_abas.mjs`. Aqui eles entram só pelo contrato: carregam como
-   ESM e exportam o que prometem.
+   paginateEvents, paginateLines, lineResults, bindLineRows, bindEmpresaRows). Node não tem
+   `document`, e o repo é zero-dependência (não há jsdom). Esses ficam com os gates de
+   navegador — `check_views.mjs`, `check_selecao_linha.mjs` e `check_abas.mjs`. Aqui eles entram
+   só pelo contrato: carregam como ESM e exportam o que prometem.
 
    Rode: node ui-data-module.test.mjs   (ou, melhor, node check.js para rodar tudo). */
 import assert from 'node:assert/strict';
@@ -24,6 +31,7 @@ import * as listas from '../src/ui/listas.mjs';
 import * as blocos from '../src/ui/blocos.mjs';
 import * as campos from '../src/data/campos.mjs';
 import * as shell from '../src/documentos/shell.mjs';
+import * as empresas from '../src/ui/empresas.mjs';
 
 let pass = 0, fail = 0;
 const fails = [];
@@ -294,6 +302,42 @@ t('frotaBlockHTML traz as 12 KPIs que o check_views.mjs exige, com — no ausent
   assert.match(h, /<b>—<\/b><span>Reserva<\/span>/);
 });
 
+/* ---- Quadro de Horários / Seções e Tarifas (Fase C2) ----
+   Os dois blocos que fecharam a última aresta do grafo entre C2 (Estrutura/Tarifas) e C3
+   (Quadro) — ver o cabeçalho do módulo. */
+t('quadroHorariosBodyHTML: vazio vira caixa vazia de LINHA', () => {
+  assert.match(blocos.quadroHorariosBodyHTML([], [], {}), /quadro de horários/);
+});
+t('quadroHorariosBodyHTML agrupa por sentido (origem AUTORITATIVA) e depois por dia', () => {
+  const interv = [
+    { cod_origem:'1', nome_origem:'X', dia_semana:'Útil', hora_inicio:'05:00', hora_fim:'23:00', intervalo:30 },
+    { cod_origem:'2', nome_origem:'Y', dia_semana:'Útil', hora_inicio:'06:00', hora_fim:'22:00', intervalo:40 },
+  ];
+  const h = blocos.quadroHorariosBodyHTML(interv, [], { '1':'Central', '2':'Y' });
+  assert.match(h, /Sentido · partidas de Central/);   // origem autoritativa venceu o nome_origem
+  assert.match(h, /Sentido · partidas de Y/);
+  assert.match(h, /Por intervalo \/ frequência/);
+  assert.doesNotMatch(h, /Horários predeterminados/);
+});
+t('quadroHorariosBodyHTML: predeterminado agrupa partidas por dia', () => {
+  const predet = [{ cod_origem:'1', nome_origem:null, dia_semana:'Dom', saida:'08:00' }];
+  const h = blocos.quadroHorariosBodyHTML([], predet, {});
+  assert.match(h, /Horários predeterminados/);
+  assert.match(h, /Dom · 1 partida\(s\)/);
+  assert.match(h, /08:00/);
+});
+t('secoesTarifasHTML/tarifaRowHTML: vazio vira caixa vazia; status OK sem chip quando nada marcado', () => {
+  assert.match(blocos.secoesTarifasHTML([]), /seção ou tarifa/);
+  const h = blocos.secoesTarifasHTML([{ secao:1, tarifa:5.5, piso_i:10 }]);
+  assert.match(h, /R\$ 5,50/);
+  assert.match(h, /10,00 km/);
+  assert.match(h, /chip-off">OK/);
+});
+t('tarifaRowHTML: chip de status ligado traz a data do evento junto', () => {
+  const h = blocos.tarifaRowHTML({ cancelado:true, data_cancelamento:'2026-01-15' });
+  assert.match(h, /chip-on">Canc\. 15\/01\/2026/);
+});
+
 /* ================================================================
    src/data/campos.mjs  (Fase C1)
    ================================================================ */
@@ -323,26 +367,62 @@ t('campos: as colunas que a Estrutura consolida estão nas listas gêmeas', () =
    ================================================================ */
 // O seam ÚNICO de src/documentos/. Como os três `configurar*` da B2, ele falha FECHADO: um
 // documento sem rede pintaria tela vazia sem erro — invisível para todo gate deste repo.
-t('sbFetch e selecionarLinha lançam antes de configurarDocumentos', () => {
+t('sbFetch, selecionarLinha e novoCtx lançam antes de configurarDocumentos', () => {
   assert.throws(() => shell.sbFetch('evento_teste', ''), /configurarDocumentos/);
   assert.throws(() => shell.selecionarLinha({}), /configurarDocumentos/);
+  assert.throws(() => shell.novoCtx('V','P','H'), /configurarDocumentos/);
 });
-t('configurarDocumentos liga os dois slots, e ambos repassam os argumentos', () => {
+t('configurarDocumentos liga os três slots, e todos repassam os argumentos', () => {
   const chamadas = [];
   shell.configurarDocumentos({
     sbFetch: (tabela, qs) => { chamadas.push(['fetch', tabela, qs]); return 'ROWS'; },
     selecionarLinha: row => { chamadas.push(['linha', row]); },
+    novoCtx: (view, pane, host) => { chamadas.push(['ctx', view, pane, host]); return 'CTX'; },
   });
   assert.equal(shell.sbFetch('qh_teste', 'codlinha=eq.1'), 'ROWS');
   shell.selecionarLinha({ codlinha:'1' });
-  assert.deepEqual(chamadas, [['fetch', 'qh_teste', 'codlinha=eq.1'], ['linha', { codlinha:'1' }]]);
+  assert.equal(shell.novoCtx('V', 'P', 'H'), 'CTX');
+  assert.deepEqual(chamadas, [['fetch', 'qh_teste', 'codlinha=eq.1'], ['linha', { codlinha:'1' }], ['ctx', 'V', 'P', 'H']]);
 });
 t('src/documentos/shell.mjs tem no máximo 6 slots injetados (critério de parada do plano)', () => {
   // O plano vivo manda PARAR quando um módulo passa de ~6 dependências injetadas. Como todas as
   // famílias da Fase C passam por este seam, a conta é o número de slots dele — e esta asserção
-  // é o lugar em que o critério deixa de ser prosa. Hoje são 2.
+  // é o lugar em que o critério deixa de ser prosa. A C2 acrescentou o 3º (`novoCtx`, para o
+  // painel de Portarias, que monta ctx novo por conta própria); ainda longe do sétimo.
   const slots = Object.keys(shell).filter(k => k !== 'configurarDocumentos');
   assert.ok(slots.length <= 6, `slots injetados: ${slots.join(', ')} — o plano manda parar acima de ~6`);
+});
+
+/* ================================================================
+   src/ui/empresas.mjs  (Fase C2)
+   ================================================================ */
+await tAsync('searchEmpresas filtra por nome (sem acento) ou código, ordena e limita', async () => {
+  lookups.configurarLookups({ sbFetch: async () => [
+    { codempresa:'10', nome_empresa:'Viação São José' },
+    { codempresa:'20', nome_empresa:'Auto Ônibus Zebu' },
+  ] });
+  lookups.INVALIDADORES_LOOKUP.codempresa_teste(); // zera o cache (populado por um teste anterior)
+  await lookups.getEmpresas();
+  const r = empresas.searchEmpresas('sao jose');
+  assert.equal(r.length, 1);
+  assert.equal(r[0].codempresa, '10');
+  const porCodigo = empresas.searchEmpresas('20');
+  assert.equal(porCodigo.length, 1);
+  assert.equal(porCodigo[0].codempresa, '20');
+});
+t('empresaChooserHTML lista as empresas e escapa o nome (vem do banco)', () => {
+  const h = empresas.empresaChooserHTML([{ codempresa:'1', nome_empresa:'<b>X</b>', situacao:'Regular' }], { prompt:'clique' });
+  assert.match(h, /1 empresa\(s\) encontradas — clique/);
+  assert.doesNotMatch(h, /<b>X<\/b>/);
+  assert.match(h, /&lt;b&gt;X/);
+});
+t('bindEmpresaRows liga o clique de cada linha, passando codempresa e nome', () => {
+  const escolhidas = [];
+  const el = { dataset:{ emp:'7', nome:'Zebu' }, _ouvintes:{},
+    addEventListener(ev, fn){ this._ouvintes[ev] = fn; } };
+  empresas.bindEmpresaRows({ querySelectorAll: () => [el] }, (cod, nome) => escolhidas.push([cod, nome]));
+  el._ouvintes.click();
+  assert.deepEqual(escolhidas, [['7', 'Zebu']]);
 });
 
 console.log('\n==== PLACAR:', pass + '/' + (pass + fail), '====');

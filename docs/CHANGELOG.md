@@ -4,6 +4,52 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 21/08/2026 — Fase C2: Estrutura Operacional · Tarifas · Portaria saem do `app.js`
+
+**Fase C2 do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`): a segunda
+família de documentos a sair inteira, no mesmo dia da C1. Zero SQL, nenhuma mudança de
+comportamento pretendida.
+
+**Medido:** `app.js` 2.974 → **2.763** (−211); o bloco `MODAL / SISTEMA DE VIEWS` 1.746 → **1.527**
+(−219), e o percentual caiu de novo (58,7% → 55,2%). Total de JS do projeto 4.060 → 4.211
+(+151, líquido — o `src/` sozinho cresceu 362, de 1.086 para 1.448). Fator "sai do `app.js` →
+aparece em módulo" ≈1,7x, no mesmo patamar de B2/C1 (~1,8x).
+
+- **Dois módulos novos:** `src/documentos/estrutura-tarifas-portaria.mjs` (251 linhas — os
+  renders das três famílias) e `src/ui/empresas.mjs` (39 linhas — o chooser de empresa). Ambos
+  reabertos no `.vercelignore` (1 linha cada, `src/ui/` e `src/documentos/` já estavam abertos).
+- **Fechou a última aresta do grafo de `blocos.mjs` que a C1 tinha deixado pendente:**
+  `secoesTarifasHTML`/`tarifaRowHTML`/`TARIFA_COLS` (Tarifas, C2, mas o Quadro, C3, também usa) e
+  `quadroHorariosBodyHTML` (a Estrutura, C2, usa; o Quadro, C3, é o dono) foram para
+  `src/ui/blocos.mjs`. Sem isso a Estrutura não saía — ela consome markup de C1 e C3, e o `app.js`
+  não exporta nada (`grep -c '^export ' app.js` = 0).
+- **Um achado no meio da sessão, fora do escopo original:** o modo "por empresa" de Tarifas
+  precisa de `searchEmpresas`/`empresaChooserHTML`/`bindEmpresaRows`, e os três já eram usados por
+  mais de uma família (Quadro de Horários, Histórico da Empresa) antes desta fase. Mesmo critério
+  do `blocos.mjs`; foram para `src/ui/empresas.mjs` em vez de para lá porque `bindEmpresaRows` toca
+  DOM, e o contrato do `blocos.mjs` é "nada de DOM, só string de HTML" — o precedente é
+  `src/ui/listas.mjs`, que já mistura markup e bind pelo mesmo motivo.
+- **O 3º slot do `src/documentos/shell.mjs`:** o painel de Portarias monta o próprio `ctx` a cada
+  busca (não passa pelo `searchPanel`), e a função que fazia isso (`novoCtx`) lê o `activeLine`
+  global do `app.js` — não podia sair. Virou o 3º slot injetado (`sbFetch`, `selecionarLinha`,
+  `novoCtx`), ainda longe do critério de parada (~6).
+- **O que NÃO saiu, por medição, não por omissão:** `LOADERS.estrutura` é one-liner (`lineDocView`,
+  igual C1). `LOADERS.tarifas` tem corpo — a composição do `searchPanel` com dois modos — e essa
+  composição é trabalho da Fase D. `LOADERS.portarias`, sem composição de Fase D a proteger, virou
+  o one-liner `renderPortarias`. A armadilha de Portaria (único documento de lista+detalhe da Fase
+  C, `pushDetail`/`popDetail`) e o guard `isCurrentGen` da casca do painel foram preservados.
+- **O achado dos 4 loaders órfãos da C1, parcialmente resolvido:** `secoesPorLigacao` decidido
+  para C4 (é de Município, não de Tarifas, apesar do nome parecido — medido, não suposto pelo
+  nome). `ligacoesPorLogradouro`, `ligacoesPorTerminal` e `frotaPorEmpresa` seguem sem decisão,
+  registrados no plano como restrição para quem executar C3/C4.
+- **Prova por mutação: duas tentativas, as duas morderam.** `secoesTarifasHTML` esvaziado em
+  `blocos.mjs` → `check_views` vermelho em **tarifas, estrutura E quadroHorarios** (a prova de que
+  o bloco de fato serve mais de uma família); `renderEstrutura` trocado por uma caixa vazia →
+  `check_views estrutura` vermelho (`0 tbody tr`, `0 .kpi`).
+- Gates: `check.js`, `check_views` 18/18, `check_abas`, `check_selecao_linha`, `check_corrida_abas`
+  e `semgrep` (121 regras, 0 achados) verdes. `tests/ui-data-module.test.mjs` 34 → 42 casos.
+  `version.json` 8 → 9, carimbo `build 21/08-C`.
+
 ## 21/08/2026 — Fase C1: a primeira família de documentos sai do `app.js`
 
 **Fase C1 do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`): Frota ·
