@@ -18,8 +18,12 @@ import {
 // Estado do que está na tela — o seam do ciclo de vida da view, o modelo de abas, o despacho do
 // Realtime por aba e o que cada lista mostra. A camada de UI (renderTabs/activateTab/markStale/
 // scheduleReload) fica no app.js: o módulo decide, o app.js aplica.
+// `beginGen` NÃO entra: desde a Fase A ninguém no app.js cunha geração à mão — quem chama o
+// beginGen é o `makeCtx`/`nextGen` do próprio módulo, e importá-lo aqui seria binding morto (e
+// um convite a recriar o `const view = currentView, gen = beginGen(view)` que a fase eliminou).
 import {
-  beginGen, isCurrentGen, commitViewResult, pushDetail, popDetail,
+  isCurrentGen, commitViewResult, pushDetail, popDetail,
+  makeCtx, withLine, withHost, nextGen,
   MAX_TABS, makeTab, openTabState, closeTabState,
   dispatchRealtime, pageBounds, filtrarSituacao,
 } from './src/domain/view-state.mjs';
@@ -490,10 +494,11 @@ let activeLine = null;   // { codlinha, numero_ligacao, nome_ligacao, codempresa
    O FORMATO da aba e as transições puras (makeTab/openTabState/closeTabState/MAX_TABS) moram em
    `src/domain/view-state.mjs`; aqui fica só o estado vivo — qual aba existe agora, qual é a
    ativa — e o `paneEl`/`scrollTop` que a camada de UI (seção MODAL) cola por cima.
-   `activeLine`/`currentView` (declarado mais abaixo, seção MODAL) continuam sendo os pontos de
-   LEITURA usados pelos loaders — não se espalha acesso "por aba" pelos call sites existentes.
-   Eles só são reatribuídos nos pontos de abrir/selecionar/fechar aba (setActiveLine aqui;
-   setCurrentView e activateTab na seção MODAL), sempre em sincronia com `activeTab()`. */
+   `activeLine`/`currentView` (declarado mais abaixo, seção MODAL) são estado de SHELL: quem os
+   lê é o banner, a rota, a faixa de abas e o `novoCtx` que monta o contexto de um documento —
+   documento nenhum os lê (ver o CONTRATO no cabeçalho da seção MODAL). Eles continuam com mais
+   de um escritor legítimo, e isso não muda aqui: setActiveLine e activateTab escrevem os dois,
+   sempre nos pontos de abrir/selecionar/fechar aba e sempre em sincronia com `activeTab()`. */
 let tabIdSeq = 1;
 let tabs = [makeTab(tabIdSeq)];
 let activeTabId = tabs[0].id;
@@ -720,12 +725,18 @@ async function refreshActiveLine(){
    MODAL / SISTEMA DE VIEWS
    currentView = { title, tables:[], lineFilter, loader, _panelRun, _gen, _detail, pdfHTML }
    ----------------------------------------------------------------
-   Contrato de escrita em pdfHTML/_detail — NÃO atribua currentView.pdfHTML direto.
-   Todo loader/run/render que faz `await` e depois escreve um resultado:
-     1. no INÍCIO, antes do seu próprio await: `const view = currentView, gen = beginGen(view);`
-     2. ao terminar: `commitViewResult(view, gen, { pdfHTML: fn ou null })` no lugar da atribuição
-        — usando o `view` CAPTURADO, nunca `currentView` de novo (senão uma escrita atrasada
-        acerta a view aberta AGORA, não a dona da busca).
+   CONTRATO — todo `render…`/`loader` RECEBE `ctx`; nenhum lê `currentView`/`activeLine`/`modalBody`.
+     ctx = { view, gen, pane, host, line }   (definido em src/domain/view-state.mjs)
+   Quem MONTA um ctx é o shell, em três pontos e só neles: `runView` (abrir/trocar documento),
+   `reloadTab` (recarregamento ao vivo do Realtime) e o `run` de cada painel de busca. Todos
+   passam por `novoCtx(view, pane, host)`, o único lugar que ainda lê a linha ativa global.
+   Quem o RECEBE é o documento — e por receber, não tem como ler o global ERRADO depois de um
+   await: `ctx.pane` é o pane da aba que pediu (nó fixo), `ctx.line` é a linha daquela tentativa.
+   Derivações, nunca `beginGen` à mão: `withLine(ctx, l)` (a linha que a busca resolveu, MESMA
+   geração — geração nova aqui devolveria a corrida), `withHost(ctx, el)` (outro container da
+   mesma tentativa) e `nextGen(ctx)` (o usuário disparou de novo dentro do documento aberto).
+   Escrita em pdfHTML/_detail — NÃO atribua `currentView.pdfHTML` direto. Ao terminar:
+   `commitViewResult(view, gen, { pdfHTML: fn ou null })`, com o `view`/`gen` que vieram no ctx.
    `gen` descarta em silêncio uma escrita de uma busca/troca de linha anterior que resolveu
    depois de uma mais nova (ex.: digitar "101" e trocar pra "202" antes da 1ª resposta voltar).
    Helpers que escrevem pdfHTML DEPOIS do await de quem os chama (paginateTable, paginateLines,
@@ -733,12 +744,13 @@ async function refreshActiveLine(){
    seria tarde demais pro guard fazer sentido. A pintura em TELA usa o MESMO guard: paginate()
    (núcleo de paginateTable/paginateLines) e paginateEvents() só escrevem container.innerHTML
    se isCurrentGen(view, gen) — por isso todo call site passa view+gen, mesmo quem usa pdf:false
-   (o guard da tela independe de escrever PDF). `_panelRun` fica FORA do seam de propósito: é
-   atribuído uma vez, antes de qualquer await, direto no loader — não é resultado de operação
-   assíncrona, não há corrida a proteger. Painéis com lista+detalhe (hoje só Portarias) usam
-   pushDetail(view, patch)/popDetail(view) em vez de commitViewResult, pra não perder o pdfHTML/
-   busca da lista quando um item é aberto. Detalhes do design: beginGen/commitViewResult/
-   pushDetail/popDetail logo abaixo de `let currentView`.
+   (o guard da tela independe de escrever PDF). `_panelRun` fica FORA do seam de propósito: é a
+   referência ao `run` do painel, atribuída uma vez — não é resultado de operação assíncrona, não
+   há corrida a proteger; o que ele PRECISA é do ctx do painel, e por isso o `run` monta um novo
+   a cada chamada. Painéis com lista+detalhe (hoje só Portarias) usam pushDetail(view, patch)/
+   popDetail(view) em vez de commitViewResult, pra não perder o pdfHTML/busca da lista quando um
+   item é aberto. Detalhes do design: beginGen/commitViewResult/pushDetail/popDetail/makeCtx e
+   as derivações, em src/domain/view-state.mjs.
    ----------------------------------------------------------------
    SUB-ÍNDICE (grep `--- ` para pular). Na ordem atual do arquivo:
      Chrome do modal · Faixa de abas · Dispatcher — runView ·
@@ -1009,25 +1021,25 @@ function tabChooserHTML(){
       <div class="grid">${topicGridHTML(sec)}</div>
     </section>`).join('') + `</div>`;
 }
-// `line` chega do lineDocRun (1 resultado ou escolha na tabela); null = nenhuma linha ainda.
-function renderTabChooser(host, line){
+// `ctx.line` chega do lineDocRun (1 resultado ou escolha na tabela); null = nenhuma linha ainda.
+function renderTabChooser({ host, line }){
   const aviso = line
     ? `Linha ${esc(line.numero_ligacao || fmtCode(line.codlinha))} selecionada — escolha o documento desta aba:`
     : 'Escolha o documento desta aba (os que exigem linha pedem a busca acima):';
   host.innerHTML = `<p class="doc-note">${aviso}</p>` + tabChooserHTML();
   updateNeedChips();
 }
-function renderBlankTab(){
-  searchPanel({ title:'Buscar linha', placeholder:'Nome, número ou código da linha',
-    onRun:(term, host)=>lineDocRun(term, host, renderTabChooser) });
-  const host = modalBody.querySelector('#spHost');
-  if (activeLine){
-    const i = modalBody.querySelector('#spInput');
-    if (i) i.value = activeLine.numero_ligacao || activeLine.codlinha || '';
+function renderBlankTab(ctx){
+  searchPanel(ctx, { title:'Buscar linha', placeholder:'Nome, número ou código da linha',
+    onRun:(term, rctx)=>lineDocRun(rctx, term, renderTabChooser) });
+  const host = ctx.pane.querySelector('#spHost');
+  if (ctx.line){
+    const i = ctx.pane.querySelector('#spInput');
+    if (i) i.value = ctx.line.numero_ligacao || ctx.line.codlinha || '';
   }
   // o seletor aparece SEMPRE (com ou sem linha): sem ele, uma aba nova sem linha ficava presa
   // no "busque a linha…" e os cards que não precisam de linha seguiam inalcançáveis.
-  renderTabChooser(host, activeLine);
+  renderTabChooser(withHost(ctx, host));
 }
 
 // Gera o PDF do documento aberto via impressão nativa do navegador
@@ -1143,7 +1155,18 @@ btnBack.addEventListener('click', () => {
 });
 function setBody(html){ modalBody.innerHTML = html; }
 // `loading`/`emptyBox`/`emptyLinha`/`errorBox` (os estados de tela) são markup puro e moram em
-// `src/ui/doc.mjs`, importados no topo. `setBody` fica aqui porque escreve no DOM.
+// `src/ui/doc.mjs`, importados no topo. `setBody` fica aqui porque escreve no DOM — e escreve no
+// `modalBody` AO VIVO de propósito: seu único chamador é o `runView`, que acabou de ativar a aba.
+// Quem escreve depois de um await usa `ctx.pane`, o nó capturado (ver o contrato acima).
+
+// Ponto ÚNICO onde o shell monta um contexto novo para um documento — e o único que ainda lê o
+// `activeLine` global para isso. Lê-lo AQUI, a cada tentativa, é o que mantém o comportamento de
+// sempre: o painel de busca re-executado pelo Realtime (`_panelRun`) tem de enxergar a linha que
+// o usuário escolheu DENTRO do documento, não a que estava ativa quando o painel foi montado.
+// Documento nenhum chama esta função: ele recebe o ctx pronto e deriva com withLine/withHost/
+// nextGen. Três call sites, e são as três bordas do sistema: runView, reloadTab e o `run` de
+// painel (searchPanel, Portarias e Localidades, que têm o seu próprio).
+const novoCtx = (view, pane, host = null) => makeCtx(view, { pane, host, line: activeLine });
 
 /* --- Dispatcher — runView ---------------------------------------- */
 async function runView(view, { silent=false } = {}){
@@ -1154,12 +1177,13 @@ async function runView(view, { silent=false } = {}){
   const wasOpen = overlay.classList.contains('open');
   if (!wasOpen) lastFocused = document.activeElement;
   setCurrentView(view);
-  // fixa o pane DESTA view no momento em que ela começa a rodar — não o `modalBody` ao vivo.
-  // Loaders que fazem `await` e só DEPOIS chamam setBody/modalBody.querySelector (grep
-  // `view._pane` neles) usam esse pane capturado, não o `modalBody` compartilhado: sem isso,
-  // se o usuário trocar de aba enquanto o loader está no ar, a resposta atrasada pintaria a
-  // aba ERRADA — a que está em foco agora, não a que pediu (mesma razão do seam beginGen/
-  // commitViewResult, só que pro HTML da tela em vez do pdfHTML).
+  // fixa o pane DESTA view no momento em que ela começa a rodar — não o `modalBody` ao vivo. É
+  // ele que vai para o `ctx.pane` do loader logo abaixo: quem escreve depois de um await escreve
+  // no pane capturado, não no compartilhado. Sem isso, trocar de aba com o loader no ar faria a
+  // resposta atrasada pintar a aba ERRADA — a que está em foco agora, não a que pediu (mesma
+  // razão do seam beginGen/commitViewResult, só que pro HTML da tela em vez do pdfHTML).
+  // `view._pane` continua existindo porque o `catch` do runView e o próprio ctx o usam; a
+  // bancada que reproduz essa corrida é scripts/check_corrida_abas.mjs.
   view._pane = modalBody;
   mtTitle.textContent = view.title;
   renderTabs();   // título da aba ativa pode ter mudado (troca de documento dentro da mesma aba)
@@ -1169,8 +1193,12 @@ async function runView(view, { silent=false } = {}){
   // trocas de view com o modal já aberto só atualizam o hash (replace, sem nova entrada).
   syncHash({ push: !wasOpen && !!view.key });
   if (!silent) setBody(loading());
-  try { await view.loader(); }
-  catch(e){ view._pane.innerHTML = errorBox(e.message); }
+  // O ctx nasce AQUI, e é o que o loader recebe: view+geração desta abertura, o pane capturado
+  // acima e a linha ativa deste instante. Nada entre o `novoCtx` e o `await` — a geração tem de
+  // ser a mais nova no momento em que o loader começa.
+  const ctx = novoCtx(view, view._pane);
+  try { await view.loader(ctx); }
+  catch(e){ ctx.pane.innerHTML = errorBox(e.message); }
 }
 
 /* --- Busca de linha — wrappers de documento ---------------------- */
@@ -1178,23 +1206,25 @@ async function runView(view, { silent=false } = {}){
 // o SVG do logo chega lá pelo `configurarDoc` do bootstrap, no topo do arquivo.
 
 /* ----------------------------------------------------------------
-   LOADERS POR CARD — cada um desenha em modalBody e é re-executável
+   LOADERS POR CARD — cada um RECEBE o ctx, desenha em `ctx.pane` e é re-executável
    ---------------------------------------------------------------- */
 const LOADERS = {};
 
 /* ---- Linhas — busca embutida no card (nome, número ou código) ----
    Cada documento abre com um campo de busca de linha dentro do próprio card. Havendo
    linha já selecionada no topo, mostra o documento dela de imediato; pode-se trocar de
-   linha pesquisando ali mesmo. `render(host, line)` desenha o documento de UMA linha
-   em `host`; o wrapper cuida da busca, da escolha entre várias linhas e do PDF. */
-function lineDocView({ subtitle, render }){
-  searchPanel({ title:subtitle, placeholder:'Nome, número ou código da linha',
-    onRun:(term, host)=>lineDocRun(term, host, render) });
-  const host = modalBody.querySelector('#spHost');
-  if (activeLine){
-    const i = modalBody.querySelector('#spInput');
-    if (i) i.value = activeLine.numero_ligacao || activeLine.codlinha || '';
-    render(host, activeLine);
+   linha pesquisando ali mesmo. `render(ctx)` desenha o documento de UMA linha (`ctx.line`)
+   em `ctx.host`; o wrapper cuida da busca, da escolha entre várias linhas e do PDF. */
+function lineDocView(ctx, { subtitle, render }){
+  searchPanel(ctx, { title:subtitle, placeholder:'Nome, número ou código da linha',
+    onRun:(term, rctx)=>lineDocRun(rctx, term, render) });
+  const host = ctx.pane.querySelector('#spHost');
+  if (ctx.line){
+    const i = ctx.pane.querySelector('#spInput');
+    if (i) i.value = ctx.line.numero_ligacao || ctx.line.codlinha || '';
+    // MESMA geração do loader (`withHost` só troca o container): este render É a tentativa de
+    // abertura do documento, não uma busca nova.
+    render(withHost(ctx, host));
   } else {
     host.innerHTML = emptyBox('Busque a linha pelo nome, número ou código.');
   }
@@ -1207,26 +1237,29 @@ async function searchLines(term){
   return sbFetch('tabela_vista_teste', `or=(nome_ligacao.ilike.*${e1}*,numero_ligacao.ilike.*${e1}*,codlinha.ilike.*${code}*)&select=${LINE_FIELDS}&order=nome_ligacao&limit=40`);
 }
 // Resolve o termo → renderiza a linha ativa, 1 resultado, ou lista p/ escolher (N).
-// `render(host, line)` desenha o documento; `useActive` liga o atalho da linha já selecionada.
-async function lineSearchRun(term, host, { render, emptyMsg, prompt, useActive = true }){
-  const view = currentView, gen = beginGen(view);
+// `render(ctx)` desenha o documento; `useActive` liga o atalho da linha já selecionada.
+// A linha certa só existe DEPOIS do await, e é por isso que o contrato tem `withLine`: ela entra
+// no ctx preservando `view` e `gen`. Com geração nova, uma busca velha que resolvesse tarde
+// voltaria a vencer a mais recente — o bug que este seam existe para impedir.
+async function lineSearchRun(ctx, term, { render, emptyMsg, prompt, useActive = true }){
+  const { view, gen, host, line } = ctx;
   term = (term||'').trim();
   if (!term){
-    if (useActive && activeLine) return render(host, activeLine);
+    if (useActive && line) return render(ctx);
     host.innerHTML = emptyBox(emptyMsg); commitViewResult(view, gen, { pdfHTML:null }); return;
   }
-  if (useActive && activeLine && lineMatchesTerm(activeLine, term)) return render(host, activeLine);
+  if (useActive && line && lineMatchesTerm(line, term)) return render(ctx);
   const lines = await searchLines(term);
   if (!lines.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para “'+esc(term)+'”.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  if (lines.length === 1){ selectLine(lines[0]); return render(host, lines[0]); }
+  if (lines.length === 1){ selectLine(lines[0]); return render(withLine(ctx, lines[0])); }
   await getEmpresas();
   host.innerHTML = `<p class="doc-note">${lines.length} linha(s) encontradas — ${prompt}:</p>` + linhasTable(lines);
-  host.querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{ const l=JSON.parse(tr.dataset.row); selectLine(l); render(host, l); }));
+  host.querySelectorAll('tr[data-row]').forEach(tr=>tr.addEventListener('click',()=>{ const l=JSON.parse(tr.dataset.row); selectLine(l); render(withLine(ctx, l)); }));
   commitViewResult(view, gen, { pdfHTML:null });
 }
 // resolve o termo → 1 linha (renderiza o documento) ou várias (lista p/ escolher)
-function lineDocRun(term, host, render){
-  return lineSearchRun(term, host, { render, emptyMsg:'Busque a linha pelo nome, número ou código.', prompt:'clique para abrir o documento' });
+function lineDocRun(ctx, term, render){
+  return lineSearchRun(ctx, term, { render, emptyMsg:'Busque a linha pelo nome, número ou código.', prompt:'clique para abrir o documento' });
 }
 
 /* Histórico (linha e empresa): um evento por página, descrição/observação por extenso.
@@ -1248,8 +1281,8 @@ function evBandHTML(r, tipoLabel, tipoVal, showLine){
 // página") mora em `src/ui/paginacao.mjs`; aqui ficam só os helpers de MARKUP do evento.
 // Renderiza o histórico (paginado) de UMA linha dentro de um container
 /* --- DOC · Histórico (linha) -------------------------------------- */
-async function renderLineHistory(host, line){
-  const view = currentView, gen = beginGen(view);
+async function renderLineHistory(ctx){
+  const { view, gen, host, line } = ctx;
   selectLine(line);   // sincroniza a linha ativa e o banner do topo
   const [rows, lk] = await Promise.all([
     sbFetch('evento_teste', `codlinha=eq.${enc(line.codlinha)}&select=${EVENTO_FIELDS}&order=data_registro.asc&limit=2000`),
@@ -1264,10 +1297,10 @@ async function renderLineHistory(host, line){
   paginateEvents(host, rows, build, meta, { view, gen, onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
   commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(rows) });
 }
-LOADERS.historicoLinha = async () => {
-  const pre = activeLine ? (activeLine.numero_ligacao || activeLine.codlinha || '') : '';
-  searchPanel({ title:'Histórico da Linha', placeholder:'Nome, número ou código da linha', value:pre,
-    onRun: (term, host) => lineSearchRun(term, host, { render:renderLineHistory,
+LOADERS.historicoLinha = async (ctx) => {
+  const pre = ctx.line ? (ctx.line.numero_ligacao || ctx.line.codlinha || '') : '';
+  searchPanel(ctx, { title:'Histórico da Linha', placeholder:'Nome, número ou código da linha', value:pre,
+    onRun: (term, rctx) => lineSearchRun(rctx, term, { render:renderLineHistory,
       emptyMsg:'Busque pelo nome, número ou código da linha.', prompt:'clique para ver o histórico' }) });
 };
 
@@ -1289,8 +1322,8 @@ function itinerarioTableHTML(rows, ibge){
   return tableHTML([{t:'Sentido',w:'62px'},{t:'Tipo',w:'84px'},{t:'Nome do Logradouro'},{t:'Município',w:'110px'}], body, `${rows.length} logradouro(s) · cadastro DETRO-RJ`);
 }
 
-async function renderItinerarios(host, line){
-  const view = currentView, gen = beginGen(view);
+async function renderItinerarios(ctx){
+  const { view, gen, host, line } = ctx;
   host.innerHTML = loading();
   const [rows, ibge] = await Promise.all([
     sbFetch('itinerario_teste', `codlinha=eq.${enc(line.codlinha)}&select=${ITINERARIO_FIELDS}&order=id`),
@@ -1320,7 +1353,7 @@ async function renderItinerarios(host, line){
   paint();
 }
 
-LOADERS.itinerarios = () => lineDocView({ subtitle:'Cadastro de Linhas: Itinerários', render:renderItinerarios });
+LOADERS.itinerarios = (ctx) => lineDocView(ctx, { subtitle:'Cadastro de Linhas: Itinerários', render:renderItinerarios });
 
 /* --- DOC · Quadro de Horários --------------------------------- */
 function quadroHorariosBodyHTML(interv, predet, orig){
@@ -1380,14 +1413,14 @@ async function fetchQHByLines(codlinhas){
 }
 
 // Modo linha: resolve o termo (número, nome ou código) → 1 linha (mostra o quadro) ou várias (lista)
-function quadroLinhaRun(term, host){
-  return lineSearchRun(term, host, { render:renderLinhaQuadro, emptyMsg:'Busque a linha pelo número, nome ou código.', prompt:'clique para ver o quadro' });
+function quadroLinhaRun(ctx, term){
+  return lineSearchRun(ctx, term, { render:renderLinhaQuadro, emptyMsg:'Busque a linha pelo número, nome ou código.', prompt:'clique para ver o quadro' });
 }
 
 // Quadro de UMA linha (comportamento clássico do card)
-async function renderLinhaQuadro(host, line){
+async function renderLinhaQuadro(ctx){
+  const { view, gen, host, line } = ctx;
   if(!host || !line) return;
-  const view = currentView, gen = beginGen(view);
   host.innerHTML = loading();
   try {
     const [interv, predet, qh, secoes, orig] = await Promise.all([
@@ -1424,15 +1457,16 @@ async function renderLinhaQuadro(host, line){
   } catch(e){ host.innerHTML = errorBox(e.message); }
 }
 
-// compat: alguns caminhos chamam o quadro da linha ativa
-const renderActiveLineQuadro = host => renderLinhaQuadro(host, activeLine);
+// O adaptador `renderActiveLineQuadro = host => renderLinhaQuadro(host, activeLine)` existia só
+// porque o contrato antigo separava o container da linha e obrigava a ir buscar a segunda no
+// global. Com o ctx a linha vem dentro dele: a chamada é `renderLinhaQuadro(ctx)`, direta.
 
 // Modo empresa: resolve a empresa e lista as linhas com quadro
-async function quadroEmpresaRun(term, host){
-  const view = currentView, gen = beginGen(view);
+async function quadroEmpresaRun(ctx, term){
+  const { view, gen, host, line } = ctx;
   term = (term||'').trim();
   if(!term){
-    if(activeLine) return renderActiveLineQuadro(host);
+    if(line) return renderLinhaQuadro(ctx);
     host.innerHTML = emptyBox('Busque por uma empresa (nome ou código), ou selecione uma linha.');
     commitViewResult(view, gen, { pdfHTML:null }); return;
   }
@@ -1440,17 +1474,17 @@ async function quadroEmpresaRun(term, host){
   const emps = searchEmpresas(term);
   if(emps.length > 1){
     host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para abrir os quadros' });
-    bindEmpresaRows(host, (cod,nome)=>renderEmpresaQuadros(host, cod, nome));
+    bindEmpresaRows(host, (cod,nome)=>renderEmpresaQuadros(ctx, cod, nome));
     commitViewResult(view, gen, { pdfHTML:null }); return;
   }
   const cod = emps.length===1 ? emps[0].codempresa : term;
   const nome = emps.length===1 ? emps[0].nome_empresa : null;
-  await renderEmpresaQuadros(host, cod, nome);
+  await renderEmpresaQuadros(ctx, cod, nome);
 }
 
 // Lista as linhas (com quadro) de uma empresa e prepara o PDF de todos os quadros
-async function renderEmpresaQuadros(host, cod, nome){
-  const view = currentView, gen = beginGen(view);
+async function renderEmpresaQuadros(ctx, cod, nome){
+  const { view, gen, host } = ctx;
   host.innerHTML = loading();
   const [linhas, orig] = await Promise.all([
     sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=codlinha&limit=500`),
@@ -1478,7 +1512,7 @@ async function renderEmpresaQuadros(host, cod, nome){
     host.innerHTML = `<button type="button" class="qh-back">‹ Voltar à lista da empresa</button>`
       + quadroDocInner(l, iv, pd, orig);
     commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroDocInner(l, iv, pd, orig)}</div>` });
-    host.querySelector('.qh-back').addEventListener('click', ()=>renderEmpresaQuadros(host, cod, nome));
+    host.querySelector('.qh-back').addEventListener('click', ()=>renderEmpresaQuadros(ctx, cod, nome));
   };
   paginateTable(host.querySelector('#eqResult'), comQuadro, {
     cols:[{t:'Número',w:'110px'},{t:'Ligação'},{t:'Código',w:'130px'}],
@@ -1492,18 +1526,18 @@ async function renderEmpresaQuadros(host, cod, nome){
   });
 }
 
-LOADERS.quadroHorarios = async () => {
-  searchPanel({
+LOADERS.quadroHorarios = async (ctx) => {
+  searchPanel(ctx, {
     title:'Quadro de Horários',
     placeholder:'Número, nome ou código da linha (ou empresa)',
     selectOpts:[['linha','Por linha'],['empresa','Por empresa (PDF de todos)']],
     note: 'Por linha: número, nome ou código → mostra o quadro dela. Por empresa: nome ou código → baixa o PDF de todos os quadros da operadora.',
-    onRun: (term, host, modo) => modo==='empresa' ? quadroEmpresaRun(term, host) : quadroLinhaRun(term, host)
+    onRun: (term, rctx, modo) => modo==='empresa' ? quadroEmpresaRun(rctx, term) : quadroLinhaRun(rctx, term)
   });
   // havendo linha ativa, prefill com a linha e mostra o quadro dela (modo "Por linha", padrão)
-  if (activeLine){
-    const i = modalBody.querySelector('#spInput'); if(i) i.value = activeLine.numero_ligacao || activeLine.codlinha || '';
-    await renderLinhaQuadro(modalBody.querySelector('#spHost'), activeLine);
+  if (ctx.line){
+    const i = ctx.pane.querySelector('#spInput'); if(i) i.value = ctx.line.numero_ligacao || ctx.line.codlinha || '';
+    await renderLinhaQuadro(withHost(ctx, ctx.pane.querySelector('#spHost')));
   }
 };
 
@@ -1525,8 +1559,8 @@ function secoesTarifasHTML(rows){
   return tableHTML(TARIFA_COLS, rows.map(tarifaRowHTML).join(''), rows.length+' seção(ões)');
 }
 
-async function renderTarifas(host, line){
-  const view = currentView, gen = beginGen(view);
+async function renderTarifas(ctx){
+  const { view, gen, host, line } = ctx;
   host.innerHTML = loading();
   const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=${TARIFA_LINHA_FIELDS}&order=secao`);
   if (!rows.length) { host.innerHTML = emptyLinha('tarifa'); commitViewResult(view, gen, { pdfHTML:null }); return; }
@@ -1548,11 +1582,11 @@ async function renderTarifas(host, line){
 }
 
 // Modo empresa: resolve a empresa e lista as tarifas de TODAS as linhas dela
-async function tarifaEmpresaRun(term, host){
-  const view = currentView, gen = beginGen(view);
+async function tarifaEmpresaRun(ctx, term){
+  const { view, gen, host, line } = ctx;
   term = (term||'').trim();
   if(!term){
-    if(activeLine) return renderTarifasEmpresa(host, activeLine.codempresa, empNome(activeLine.codempresa));
+    if(line) return renderTarifasEmpresa(ctx, line.codempresa, empNome(line.codempresa));
     host.innerHTML = emptyBox('Busque por uma empresa (nome ou código RJ), ou troque para "Por linha".');
     commitViewResult(view, gen, { pdfHTML:null }); return;
   }
@@ -1560,12 +1594,12 @@ async function tarifaEmpresaRun(term, host){
   const emps = searchEmpresas(term);
   if(emps.length > 1){
     host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para ver as tarifas' });
-    bindEmpresaRows(host, (cod,nome)=>renderTarifasEmpresa(host, cod, nome));
+    bindEmpresaRows(host, (cod,nome)=>renderTarifasEmpresa(ctx, cod, nome));
     commitViewResult(view, gen, { pdfHTML:null }); return;
   }
   const cod = emps.length===1 ? emps[0].codempresa : term;
   const nome = emps.length===1 ? emps[0].nome_empresa : null;
-  await renderTarifasEmpresa(host, cod, nome);
+  await renderTarifasEmpresa(ctx, cod, nome);
 }
 // Lista (paginada) as tarifas de todas as linhas de UMA empresa
 const LINHA_TARIFA_COLS = [{t:'Número',w:'100px'},{t:'Ligação'},{t:'Código',w:'120px'},{t:'Seções',w:'80px'},{t:'Tarifa',w:'150px'}];
@@ -1573,8 +1607,8 @@ const LINHA_TARIFA_COLS = [{t:'Número',w:'100px'},{t:'Ligação'},{t:'Código',
 function linhaTarifaRowHTML(l){
   return `<tr><td class="td-num">${esc(orDash(l.numero_linha||fmtCode(l.codlinha)))}</td><td class="td-logr">${esc(orDash(l.nome_ligacao))}</td><td class="td-num">${esc(fmtCode(l.codlinha))}</td><td class="td-num">${l.nsec}</td><td class="td-sentido">${esc(l.tarifaTxt)}</td></tr>`;
 }
-async function renderTarifasEmpresa(host, cod, nome){
-  const view = currentView, gen = beginGen(view);
+async function renderTarifasEmpresa(ctx, cod, nome){
+  const { view, gen, host } = ctx;
   host.innerHTML = loading();
   const rows = await sbFetch('tarifa_atual_teste', `codempresa=eq.${enc(cod)}&select=codlinha,secao,numero_linha,nome_ligacao,via,caracteristica,tipo_ligacao,rm,tarifa,piso_i,situacao,cancelado,paralisado,sub_judice,transferido,data_criacao,data_cancelamento,data_paralisacao,data_sub_judice,data_transferencia&order=codlinha,secao&limit=3000`);
   const nomeEmp = nome || empNome(cod);
@@ -1598,19 +1632,19 @@ async function renderTarifasEmpresa(host, cod, nome){
   paint();
 }
 
-LOADERS.tarifas = () => {
-  searchPanel({
+LOADERS.tarifas = (ctx) => {
+  searchPanel(ctx, {
     title:'Tarifas Vigentes',
     placeholder:'Nome, número ou código da linha (ou empresa)',
     selectOpts:[['linha','Por linha'],['empresa','Por empresa']],
     note:'Por linha: nome, número ou código → mostra as tarifas dela. Por empresa: nome ou código RJ → lista as tarifas de todas as linhas da operadora.',
-    onRun:(term, host, modo) => modo==='empresa' ? tarifaEmpresaRun(term, host) : lineDocRun(term, host, renderTarifas)
+    onRun:(term, rctx, modo) => modo==='empresa' ? tarifaEmpresaRun(rctx, term) : lineDocRun(rctx, term, renderTarifas)
   });
-  const host = modalBody.querySelector('#spHost');
-  if (activeLine){
-    const i = modalBody.querySelector('#spInput');
-    if (i) i.value = activeLine.numero_ligacao || activeLine.codlinha || '';
-    renderTarifas(host, activeLine);
+  const host = ctx.pane.querySelector('#spHost');
+  if (ctx.line){
+    const i = ctx.pane.querySelector('#spInput');
+    if (i) i.value = ctx.line.numero_ligacao || ctx.line.codlinha || '';
+    renderTarifas(withHost(ctx, host));
   } else {
     host.innerHTML = emptyBox('Busque a linha pelo nome, número ou código — ou troque para "Por empresa".');
   }
@@ -1634,8 +1668,8 @@ function frotaBlockHTML(f){
     </div>`;
 }
 
-async function renderFrota(host, line){
-  const view = currentView, gen = beginGen(view);
+async function renderFrota(ctx){
+  const { view, gen, host, line } = ctx;
   host.innerHTML = loading();
   const [rows] = await Promise.all([
     sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=${FROTA_FIELDS}&limit=1`),
@@ -1651,11 +1685,11 @@ async function renderFrota(host, line){
   commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Frota da Linha')}${inner}</div>` });
 }
 
-LOADERS.frota = () => lineDocView({ subtitle:'Frota da Linha', render:renderFrota });
+LOADERS.frota = (ctx) => lineDocView(ctx, { subtitle:'Frota da Linha', render:renderFrota });
 
 /* --- DOC · Estrutura Operacional ------------------------------ */
-async function renderEstrutura(host, line){
-  const view = currentView, gen = beginGen(view);
+async function renderEstrutura(ctx){
+  const { view, gen, host, line } = ctx;
   host.innerHTML = loading();
   const cod = enc(line.codlinha);
   const [lineRows, secoes, itin, interv, predet, qh, orig, ibge] = await Promise.all([
@@ -1689,11 +1723,10 @@ async function renderEstrutura(host, line){
 
 // Documento consolidado (igual ao Relatório oficial): cadastro + Seções/Tarifas +
 // Itinerário + Quadro de Horários e Frota, num único .doc (também usado no PDF).
-LOADERS.estrutura = () => lineDocView({ subtitle:'Cadastro de Linhas: Estrutura Operacional', render:renderEstrutura });
+LOADERS.estrutura = (ctx) => lineDocView(ctx, { subtitle:'Cadastro de Linhas: Estrutura Operacional', render:renderEstrutura });
 
 /* ---- Empresas ---- */
-LOADERS.empresasRegulares = async () => {
-  const view = currentView, gen = beginGen(view), pane = view._pane;
+LOADERS.empresasRegulares = async ({ view, gen, pane }) => {
   // lista TODAS as empresas do cadastro (codempresa_teste), inclusive sem linhas
   const [lineRows] = await Promise.all([
     sbFetch('tabela_vista_teste', `select=codempresa,cancelado,paralisado&limit=5000`),
@@ -1743,8 +1776,7 @@ LOADERS.empresasRegulares = async () => {
 
 /* --- DOC · Empresas ----------------------------------------------- */
 function openEmpresaLigacoes(cod){
-  runView({ title:'Ligações por Empresa', tables:['tabela_vista_teste','codempresa_teste'], loader: async()=>{
-    const view = currentView, gen = beginGen(view), pane = view._pane;
+  runView({ title:'Ligações por Empresa', tables:['tabela_vista_teste','codempresa_teste'], loader: async({ view, gen, pane })=>{
     const [rows] = await Promise.all([
       sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`),
       getEmpresas()
@@ -1755,10 +1787,9 @@ function openEmpresaLigacoes(cod){
     lineResults(pane.querySelector('#empLigResult'), rows, { view, gen });
   }});
 }
-LOADERS.ligacoesPorEmpresa = async () => {
-  const pre = activeLine?.codempresa || '';
-  searchPanel({ title:'Ligações por Empresa', placeholder:'Código (ex. 101) ou nome da empresa', value:pre, onRun: async(term, host)=>{
-    const view = currentView, gen = beginGen(view);
+LOADERS.ligacoesPorEmpresa = async (ctx) => {
+  const pre = ctx.line?.codempresa || '';
+  searchPanel(ctx, { title:'Ligações por Empresa', placeholder:'Código (ex. 101) ou nome da empresa', value:pre, onRun: async(term, { view, gen, host })=>{
     if(!term){ host.innerHTML=emptyBox('Informe o código ou nome da empresa.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     await getEmpresas();
     let cods = [];
@@ -1774,10 +1805,9 @@ LOADERS.ligacoesPorEmpresa = async () => {
     lineResults(host, rows, { view, gen });
   }});
 };
-LOADERS.secoesPorEmpresa = async () => {
-  const pre = activeLine?.codempresa || '';
-  searchPanel({ title:'Seções por Empresa', placeholder:'Código da empresa (ex. 101)', value:pre, onRun: async(term, host)=>{
-    const view = currentView, gen = beginGen(view);
+LOADERS.secoesPorEmpresa = async (ctx) => {
+  const pre = ctx.line?.codempresa || '';
+  searchPanel(ctx, { title:'Seções por Empresa', placeholder:'Código da empresa (ex. 101)', value:pre, onRun: async(term, { view, gen, host })=>{
     if(!term){ host.innerHTML=emptyBox('Informe o código da empresa.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     const rows = await sbFetch('tarifa_atual_teste', `codempresa=eq.${enc(term)}&select=codlinha,secao,nome_ligacao&order=codlinha&limit=1000`);
     if(!rows.length){ host.innerHTML=emptyBox('Nenhuma seção cadastrada para a empresa '+esc(term)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
@@ -1796,8 +1826,8 @@ LOADERS.secoesPorEmpresa = async () => {
   }});
 };
 // Renderiza o histórico (paginado) de UMA empresa dentro de um container
-async function renderEmpresaHistory(host, cod, nome){
-  const view = currentView, gen = beginGen(view);
+async function renderEmpresaHistory(ctx, cod, nome){
+  const { view, gen, host } = ctx;
   const [rows, lk, empRows] = await Promise.all([
     sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=${EVENTO_FIELDS}&order=data_registro.asc&limit=500`),
     getEvLookups(),
@@ -1813,34 +1843,33 @@ async function renderEmpresaHistory(host, cod, nome){
   paginateEvents(host, rows, build, meta, { view, gen, onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
   commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(rows) });
 }
-LOADERS.historicoEmpresa = async () => {
-  const pre = activeLine?.codempresa || '';
-  searchPanel({ title:'Histórico da Empresa', placeholder:'Nome ou código da empresa (ex. 1001 ou AUTO VIAÇÃO)', value:pre,
-    onRun: async(term, host)=>{
-      const view = currentView, gen = beginGen(view);
+LOADERS.historicoEmpresa = async (ctx) => {
+  const pre = ctx.line?.codempresa || '';
+  searchPanel(ctx, { title:'Histórico da Empresa', placeholder:'Nome ou código da empresa (ex. 1001 ou AUTO VIAÇÃO)', value:pre,
+    onRun: async(term, rctx)=>{
+      const { view, gen, host } = rctx;
       term = (term||'').trim();
       if(!term){ host.innerHTML=emptyBox('Busque pelo nome ou código da empresa.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
       // busca client-side sobre o cadastro completo → insensível a maiúsc./minúsc. E acento
       await getEmpresas();
       const emps = searchEmpresas(term);
-      if(emps.length === 1){ await renderEmpresaHistory(host, emps[0].codempresa, emps[0].nome_empresa); return; }
+      if(emps.length === 1){ await renderEmpresaHistory(rctx, emps[0].codempresa, emps[0].nome_empresa); return; }
       if(emps.length > 1){
         host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para ver o histórico', sitWidth:'170px',
           extraChips:e=>boolChip(e.cassada,'cassada')+boolChip(e.sob_intervencao,'interv.') });
-        bindEmpresaRows(host, (cod,nome)=>renderEmpresaHistory(host, cod, nome));
+        bindEmpresaRows(host, (cod,nome)=>renderEmpresaHistory(rctx, cod, nome));
         commitViewResult(view, gen, { pdfHTML:null }); return;
       }
       // não achou no cadastro de nomes → tenta o termo como código direto nos eventos
-      await renderEmpresaHistory(host, term, null);
+      await renderEmpresaHistory(rctx, term, null);
     } });
 };
 
 /* ---- Consultas (por logradouro, terminal, localidade, município) ---- */
-LOADERS.ligacoesPorLogradouro = async () => {
+LOADERS.ligacoesPorLogradouro = async (ctx) => {
   const ibge = await getIbge();
   const munOpts = Object.entries(ibge).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>[cod, v.nome]);
-  searchPanel({ title:'Ligações por Logradouro', placeholder:'Nome da via / logradouro', selectOpts:[['','Todos os municípios'],...munOpts], onRun: async(term, host, ibgeCod)=>{
-    const view = currentView, gen = beginGen(view);
+  searchPanel(ctx, { title:'Ligações por Logradouro', placeholder:'Nome da via / logradouro', selectOpts:[['','Todos os municípios'],...munOpts], onRun: async(term, { view, gen, host }, ibgeCod)=>{
     if(!term){ host.innerHTML=emptyBox('Digite o nome do logradouro.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     // RPC divat_busca_logradouro: busca sem acento/caixa, casando TIPO + NOME do logradouro
     // (ex. "Rua Acre" ou só "Acre" — nome_logradouro sozinho não tem o tipo) e filtra
@@ -1855,7 +1884,7 @@ LOADERS.ligacoesPorLogradouro = async () => {
     lineResults(host, rows, { prefixHTML: prefix, view, gen });
   }});
 };
-LOADERS.municipioRegiao = async () => {
+LOADERS.municipioRegiao = async (ctx) => {
   const ibge = await getIbge();
   // Região Programa clássica (regiao_municipio) — é a classificação do print DETRO.
   const regioes = [...new Set(Object.values(ibge).map(x=>x.regiaoPrograma).filter(Boolean))].sort();
@@ -1866,7 +1895,8 @@ LOADERS.municipioRegiao = async () => {
     host.innerHTML = body? tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}], body, entries.length+' município(s) · clique para ver as linhas'):emptyBox('Nenhum município.');
     host.querySelectorAll('tr[data-ibge]').forEach(tr=>tr.addEventListener('click',()=>openLinhasPorIbge(tr.dataset.ibge, ibge[tr.dataset.ibge]?.nome)));
   };
-  searchPanel({ title:'Município e Região', placeholder:'Nome do município (ou escolha uma região)', selectOpts:[['','Todas as regiões'],...regioes.map(r=>[r,r])], onRun: async(term, host, region)=>{
+  searchPanel(ctx, { title:'Município e Região', placeholder:'Nome do município (ou escolha uma região)', selectOpts:[['','Todas as regiões'],...regioes.map(r=>[r,r])], onRun: async(term, rctx, region)=>{
+    const host = rctx.host;
     await getEmpresas();
     // 1) município digitado → vai pras linhas do município (lista se houver vários)
     if(term){
@@ -1891,7 +1921,10 @@ LOADERS.municipioRegiao = async () => {
       const scope  = host.querySelector('#regScope');
       host.querySelectorAll('.mun-chip').forEach(b=>b.addEventListener('click',()=>openLinhasPorIbge(b.dataset.ibge, ibge[b.dataset.ibge]?.nome)));
       async function paint(){
-        const view = currentView, gen = beginGen(view);
+        // geração NOVA da MESMA tentativa (nextGen preserva view/pane/host): o usuário pode
+        // trocar o escopo de novo antes de a RPC responder — é a corrida que motivou o seam.
+        // Um ctx montado do zero aqui acertaria a aba errada se ele tivesse trocado de aba.
+        const { view, gen } = nextGen(rctx);
         result.innerHTML = loading();
         const modo = scope.value;
         const it = await sbFetch('rpc/divat_linhas_regiao', `p_regiao=${enc(region)}&p_modo=${enc(modo)}&select=codlinha&limit=2000`);
@@ -1915,8 +1948,8 @@ LOADERS.municipioRegiao = async () => {
 };
 /* --- DOC · Municípios / entre-municípios -------------------------- */
 function openLinhasPorIbge(codibge, nome){
-  runView({ title:'Linhas no Município', tables:['itinerario_teste','tabela_vista_teste','codempresa_teste'], loader: async()=>{
-    const view = currentView, gen = beginGen(view), pane = view._pane;
+  runView({ title:'Linhas no Município', tables:['itinerario_teste','tabela_vista_teste','codempresa_teste'], loader: async(ctx)=>{
+    const { view, gen, pane } = ctx;
     const it = await sbFetch('itinerario_teste', `cod_municipio_origem=eq.${enc(codibge)}&select=codlinha&limit=4000`);
     const allCods=distinctCods(it);          // total real (sem corte) para o "Total"
     const cods=allCods.slice(0,500);         // teto de listagem (alinha com as views irmãs)
@@ -1948,17 +1981,17 @@ function openLinhasPorIbge(codibge, nome){
       return cls;
     }
     async function paint(){
-      // gen PRÓPRIO (nova geração da MESMA view capturada, não currentView): o usuário pode
-      // alternar o filtro de novo antes de ensureCls() (seu próprio await) resolver — mesma
-      // corrida que motivou o seam. Reler `currentView` aqui acertaria a aba ERRADA se o
-      // usuário tivesse trocado de aba nesse meio-tempo (mesma razão do `view._pane` acima).
-      const pGen = beginGen(view);
+      // geração PRÓPRIA, derivada do ctx (nextGen preserva view/pane): o usuário pode alternar o
+      // filtro de novo antes de ensureCls() (seu próprio await) resolver — mesma corrida que
+      // motivou o seam. Montar um ctx do zero aqui acertaria a aba ERRADA se ele tivesse trocado
+      // de aba nesse meio-tempo (mesma razão de o `pane` vir capturado).
+      const pctx = nextGen(ctx);
       // pdf:false → o PDF do Município é o determinístico definido acima (lista completa + meta)
-      if(scope.value==='todas'){ lineResults(result, rows, { pdf:false, view, gen:pGen }); return; }
+      if(scope.value==='todas'){ lineResults(result, rows, { pdf:false, view, gen:pctx.gen }); return; }
       result.innerHTML = loading();
       const c = await ensureCls();
       const set = scope.value==='dentro' ? c.dentro : c.inter;
-      lineResults(result, rows.filter(r=>set.has(String(r.codlinha))), { pdf:false, view, gen:pGen });
+      lineResults(result, rows.filter(r=>set.has(String(r.codlinha))), { pdf:false, view, gen:pctx.gen });
     }
     scope.addEventListener('change', ()=>{ paint().catch(e=>{ result.innerHTML = errorBox(e.message); }); });
     paint();
@@ -1989,8 +2022,8 @@ async function linhasNoMunicipio(codibge, memo){
   if (memo){ memo.set(chave, p); p.catch(() => memo.delete(chave)); }
   return p;
 }
-async function mostrarLinhasResultado(host, cods, titulo){
-  const view = currentView, gen = beginGen(view);
+async function mostrarLinhasResultado(ctx, cods, titulo){
+  const { view, gen, host } = ctx;
   if(!cods.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para este critério.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
   const slice = cods.slice(0,250);
   const rows = await fetchLinesByCods(slice,{limit:250});
@@ -2014,11 +2047,11 @@ async function mostrarLinhasResultado(host, cods, titulo){
 // Município A × Município B — filtro direcional (A→B, respeita a ordem do itinerário) e
 // filtro "trafega pelos dois" (qualquer ordem). `inter` é o próprio resultado não-direcional;
 // o direcional refina `inter` consultando a sequência de trechos do itinerário.
-async function mostrarLinhasEntreMunicipios(host, aTerm, bTerm, directional){
-  // Mesmo contrato da irmã `mostrarLinhasPorLocalidade`, que já capturava: as duas são
-  // chamadas do MESMO run(), e uma capturar e a outra não era assimetria dentro do mesmo
-  // fluxo — a busca pode ser trocada enquanto esta está no ar.
-  const view = currentView, gen = beginGen(view);
+async function mostrarLinhasEntreMunicipios(ctx, aTerm, bTerm, directional){
+  // Mesmo contrato da irmã `mostrarLinhasPorLocalidade`: as duas são chamadas do MESMO run() e
+  // recebem o MESMO ctx — a busca pode ser trocada enquanto esta está no ar, e é o `gen` que
+  // veio no ctx (não um recém-cunhado) que sabe se esta tentativa ainda é a mais nova.
+  const { view, gen, host } = ctx;
   const ibge = await getIbge();
   if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
   const nameOf = c => ibge[c]?.nome || c;
@@ -2067,18 +2100,18 @@ async function mostrarLinhasEntreMunicipios(host, aTerm, bTerm, directional){
     const titA = codsA.length===1 ? nameOf(codsA[0]) : a;
     const titB = codsB.length===1 ? nameOf(codsB[0]) : b;
     const titulo = directional ? `de ${titA} → ${titB}` : `${titA} e ${titB} (qualquer sentido)`;
-    await mostrarLinhasResultado(host, [...(directional?all:inter)], titulo);
+    await mostrarLinhasResultado(ctx, [...(directional?all:inter)], titulo);
   }catch(e){ host.innerHTML = errorBox(e.message); }
 }
-LOADERS.ligacoesPorTerminal = async () => {
+LOADERS.ligacoesPorTerminal = async (ctx) => {
   const [orig, ibge, terminais] = await Promise.all([getOrigem(), getIbge(), getTerminais()]);
   const munOpts = Object.entries(ibge).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>[cod, v.nome]);
   const nomesOrigem = [...new Set(Object.values(orig).filter(Boolean))];
   const nomesTerminal = [...new Set(terminais.map(r=>r.nome_logradouro).filter(Boolean))];
   const nomesTodos = [...new Set([...nomesOrigem, ...nomesTerminal])].sort((a,b)=>a.localeCompare(b));
   const suggest = q => { const nq=norm(q); return nomesTodos.filter(n=>norm(n).includes(nq)); };
-  searchPanel({ title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', selectOpts:[['','Todos os municípios'],...munOpts], suggest, onRun: async(term, host, ibgeCod)=>{
-    const view = currentView, gen = beginGen(view);
+  searchPanel(ctx, { title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', selectOpts:[['','Todos os municípios'],...munOpts], suggest, onRun: async(term, rctx, ibgeCod)=>{
+    const { view, gen, pane, host } = rctx;
     if(!term && !ibgeCod){ host.innerHTML=emptyBox('Digite o nome do terminal/origem, ou escolha um município para ver seus terminais.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
     if(!term){
       const itRows = await getTerminais();
@@ -2099,9 +2132,9 @@ LOADERS.ligacoesPorTerminal = async () => {
         + `<p class="doc-count">${terminaisMun.length} terminal(is) em ${esc(nomeMun)}</p>` + aviso;
       lineResults(host, rows, { prefixHTML:prefix, view, gen });
       host.querySelectorAll('.mun-chip').forEach(b => b.addEventListener('click', () => {
-        const i = modalBody.querySelector('#spInput');
+        const i = pane.querySelector('#spInput');
         if(i) i.value = b.dataset.term;
-        if(currentView && currentView._panelRun) currentView._panelRun();
+        if(view && view._panelRun) view._panelRun();
       }));
       return;
     }
@@ -2144,15 +2177,13 @@ LOADERS.ligacoesPorTerminal = async () => {
     lineResults(host, rows, { prefixHTML: prefix, view, gen });
   }});
 };
-LOADERS.secoesPorLigacao = async () => {
-  // Capturados ANTES do await. O `pane` já garantia escrever na ABA certa; faltava o `gen`,
-  // que garante escrever a tentativa mais NOVA: sem ele, trocar de linha enquanto a busca
-  // está no ar deixa a resposta atrasada sobrescrever o resultado da linha nova, no mesmo
-  // pane (contrato do seam em MODAL / SISTEMA DE VIEWS).
-  const view = currentView, pane = view._pane, gen = beginGen(view);
-  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(activeLine.codlinha)}&select=secao,nome_ligacao,tarifa&order=secao`);
+LOADERS.secoesPorLigacao = async ({ view, gen, pane, line }) => {
+  // Tudo vem do ctx, incluindo a LINHA. Antes este documento lia `activeLine` DEPOIS do await:
+  // trocar de linha com a busca no ar fazia o cabeçalho sair com a linha nova e a tabela com as
+  // seções da velha — a mesma tela mostrando duas linhas diferentes, sem erro nenhum.
+  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,nome_ligacao,tarifa&order=secao`);
   if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
-  const meta = metaRows([['Ligação',esc(activeLine.nome_ligacao||'—'),true],['Código',esc(fmtCode(activeLine.codlinha))]]);
+  const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]]);
   if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyLinha('seção')}</div>`; return; }
   const cols = [{t:'Seção',w:'70px'},{t:'Descrição'},{t:'Tarifa',w:'90px'}];
   const rowHTML = r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td></tr>`;
@@ -2173,8 +2204,7 @@ LOADERS.secoesPorLigacao = async () => {
 // A agregação (resumoFrota) e o filtro da tabela (filtrarFrotaEmpresas) vivem em
 // src/domain/agrupamento.mjs.
 // Frota consolidada por empresa (total geral + quebra por hierarquia) — item 16
-LOADERS.frotaPorEmpresa = async () => {
-  const view = currentView, gen = beginGen(view), pane = view._pane;
+LOADERS.frotaPorEmpresa = async ({ view, gen, pane }) => {
   const [rows] = await Promise.all([
     sbFetch('qh_teste', `select=codempresa,hierarquia,frota_operacional,reserva&limit=10000`),
     getEmpresas()
@@ -2248,10 +2278,11 @@ async function getPortariaAnos(){
   _portariaAnos = []; for(let a=maxAno; a>=minAno; a--) _portariaAnos.push(a);
   return _portariaAnos;
 }
-LOADERS.portarias = async () => {
-  // O `run` interno já capturava view/gen; a CASCA (esta parte) não capturava, e escrevia
-  // depois do await de getPortariaAnos(). Trocar de aba nesse intervalo repintava o pane.
-  const view = currentView, pane = view._pane, gen = beginGen(view);
+LOADERS.portarias = async (ctx) => {
+  // A CASCA deste painel escreve DEPOIS do await de getPortariaAnos() — trocar de aba nesse
+  // intervalo repintava o pane errado. O guard abaixo é o que impede isso, e ele PRECISA
+  // continuar existindo: `_panelRun` fica fora do seam, então aqui não há nada mais protegendo.
+  const { view, gen, pane } = ctx;
   const anos = await getPortariaAnos();
   if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
   pane.innerHTML = `<div class="doc">${docHead('Portarias / Legislação')}
@@ -2265,8 +2296,11 @@ LOADERS.portarias = async () => {
     <div id="pHost"></div></div>`;
   const num=pane.querySelector('#pNum'), ano=pane.querySelector('#pAno'),
         vig=pane.querySelector('#pVig'), txt=pane.querySelector('#pTxt'), host=pane.querySelector('#pHost');
+  // Este painel tem o `run` dele (não passa pelo searchPanel), então monta o próprio ctx: cada
+  // busca é uma tentativa nova, com o pane e o host DESTE painel.
   const run = async()=>{
-    const view = currentView, gen = beginGen(view);
+    const rctx = novoCtx(view, pane, host);
+    const { gen } = rctx;
     host.innerHTML = loading();
     try{
       let qs='';
@@ -2282,7 +2316,7 @@ LOADERS.portarias = async () => {
         rowHTML:(r,i)=>`<tr class="clickable" tabindex="0" role="button" data-idx="${i}"><td class="td-num">${esc(orDash(r.numero_portaria))}</td><td class="td-num">${esc(fmtDate(r.data_portaria))}</td><td class="td-tipo">${esc(orDash(r.tipo_portaria||r.tipo_legislacao))}</td><td class="td-logr">${esc(orDash(r.assunto))}</td><td>${r.vigor?'<span class="chip chip-off">Em vigor</span>':'<span class="chip chip-on">Revogada</span>'}</td></tr>`,
         foot:t=>t+' portaria(s)'+(t>=300?' (mostrando 300)':'')+' · clique para ler',
         bind:c=>c.querySelectorAll('tr[data-idx]').forEach(tr=>{
-          const open=()=>showPortaria(rows[+tr.dataset.idx], host, view);
+          const open=()=>showPortaria(rctx, rows[+tr.dataset.idx]);
           tr.addEventListener('click', open);
           tr.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } });
         }),
@@ -2294,12 +2328,13 @@ LOADERS.portarias = async () => {
   [num,txt].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
   [ano,vig].forEach(el=>el.addEventListener('change', run));
   pane.querySelector('#pClear').addEventListener('click', ()=>{ num.value=''; ano.value=''; vig.value=''; txt.value=''; run(); });
-  if(currentView) currentView._panelRun = run;
+  if(view) view._panelRun = run;
   run();
 };
-// `view` = a view da LISTA (capturada por quem abriu o item) — pushDetail/popDetail trocam só
-// o pdfHTML dela, preservando a busca/paginação por baixo (ver `Seam do ciclo de vida da view`).
-function showPortaria(r, host, view){
+// `ctx` = o da LISTA (o `rctx` da busca que abriu o item) — pushDetail/popDetail trocam só o
+// pdfHTML da view, preservando a busca/paginação por baixo (ver o contrato do seam acima).
+function showPortaria(ctx, r){
+  const { view, host } = ctx;
   const inner = `${metaRows([['Portaria',esc(orDash(r.numero_portaria))],['Tipo',esc(orDash(r.tipo_portaria||r.tipo_legislacao))],
       ['Data',esc(fmtDate(r.data_portaria))],['Publicação',esc(fmtDate(r.data_publicacao))],
       ['Situação', r.vigor?'Em vigor':'Revogada'], r.portaria_anterior?['Portaria anterior',esc(r.portaria_anterior)]:['','']])}
@@ -2357,11 +2392,11 @@ async function codsPorLocalidade(term){
   }
   return out;
 }
-async function mostrarLinhasPorLocalidade(host, a, b, bTipo='localidade'){
-  // capturados ANTES do primeiro await: a busca pode ser trocada enquanto esta está no ar, e
-  // quem escreve o resultado no fim precisa saber se ainda é a tentativa mais nova (ver o
-  // contrato do seam em MODAL / SISTEMA DE VIEWS).
-  const view = currentView, gen = beginGen(view);
+async function mostrarLinhasPorLocalidade(ctx, a, b, bTipo='localidade'){
+  // `view`/`gen`/`host` vêm do ctx da busca, montado ANTES do primeiro await: a busca pode ser
+  // trocada enquanto esta está no ar, e quem escreve o resultado no fim precisa saber se ainda
+  // é a tentativa mais nova (ver o contrato do seam em MODAL / SISTEMA DE VIEWS).
+  const { view, gen, host } = ctx;
   host.innerHTML = loading();
   try{
     const termos = await termosLocalidade(a);
@@ -2452,8 +2487,8 @@ const LOC_FILTERS = [
   { label:'Trafegam nos municípios A e B', kind:'municipio', aType:'municipio', bMode:'municipio', directional:false,
     hint:'Mostra as linhas que passam pelos dois municípios, em qualquer ordem.' },
 ];
-LOADERS.localidades = async () => {
-  const pane = currentView._pane;   // capturado agora — usado também pelo .then() assíncrono abaixo
+LOADERS.localidades = async (ctx) => {
+  const { view, pane } = ctx;   // `pane` capturado — usado também pelo `.then()` assíncrono abaixo
   pane.innerHTML = `<div class="doc">${docHead('Linhas por Localidade e Município')}
     <div class="doc-obs tight" id="locHint"><b>Dica:</b> ${esc(LOC_FILTERS[0].hint)}</div>
     <div class="loc-filters" id="locFilters" role="tablist">${LOC_FILTERS.map((f,i)=>
@@ -2501,23 +2536,26 @@ LOADERS.localidades = async () => {
   });
   applyMode();
 
+  // Como o painel de Portarias, este tem o `run` dele e monta o próprio ctx: uma tentativa nova
+  // por busca, com o pane e o host DESTA tela — as duas funções de busca recebem o MESMO.
   const run = async () => {
     const f = LOC_FILTERS[modeIdx];
     const a=(A.value||'').trim(), b=(B.value||'').trim();
     if(!a){ host.innerHTML = emptyBox(`Informe ${f.aType==='municipio'?'o município':'a localidade'}.`); return; }
+    const rctx = novoCtx(view, pane, host);
     if(f.kind==='localidade'){
       const bTipo = f.bMode==='municipio' ? 'municipio' : 'localidade';
       const bb = f.bMode==='none' ? '' : b;
       if(bb && bTipo==='localidade' && a.toLowerCase()===bb.toLowerCase()){ host.innerHTML=emptyBox('Use localidades diferentes nos dois campos.'); return; }
-      await mostrarLinhasPorLocalidade(host, a, bb, bTipo);
+      await mostrarLinhasPorLocalidade(rctx, a, bb, bTipo);
     }else{
       if(b && a.toLowerCase()===b.toLowerCase()){ host.innerHTML=emptyBox('Use municípios diferentes nos dois campos.'); return; }
-      await mostrarLinhasEntreMunicipios(host, a, b, f.directional);
+      await mostrarLinhasEntreMunicipios(rctx, a, b, f.directional);
     }
   };
   pane.querySelector('#locGo').addEventListener('click', run);
   [A,B].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
-  if(currentView) currentView._panelRun = run;   // realtime relê modeIdx a cada chamada, não fixa o modo
+  if(view) view._panelRun = run;   // realtime relê modeIdx a cada chamada, não fixa o modo
 
   Promise.all([getLocalidades(), getIbge()]).then(([locs, ibge])=>{
     const muns = [...new Set(Object.values(ibge).map(v=>v.nome).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
@@ -2635,21 +2673,30 @@ function empresaChooserHTML(emps, { prompt, sitWidth = '150px', extraChips } = {
 function bindEmpresaRows(host, fn){
   host.querySelectorAll('tr[data-emp]').forEach(tr=>tr.addEventListener('click',()=>fn(tr.dataset.emp, tr.dataset.nome)));
 }
-// painel com input de busca dentro do modal; o run() é re-executável (realtime)
-function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=false, note, suggest }){
+// Painel com input de busca dentro do modal; o run() é re-executável (realtime).
+// Recebe o `ctx` do documento e escreve no `ctx.pane` — não no `modalBody` ao vivo. A diferença
+// aparece quando o loader faz `await` ANTES de montar o painel (ligacoesPorLogradouro espera o
+// getIbge, ligacoesPorTerminal espera três lookups): se o usuário trocar de aba nesse intervalo,
+// o `modalBody` já aponta para outra aba e o painel inteiro era pintado na aba errada.
+// Cada `run()` monta o SEU ctx (geração nova + a linha ativa do momento) e o entrega ao `onRun`,
+// que por isso não recebe mais `host` solto: ele vem em `ctx.host`.
+function searchPanel(ctx, { title, placeholder, value='', selectOpts, onRun, auto=false, note, suggest }){
   const selHTML = selectOpts? `<select id="spSel" aria-label="Filtro">${selectOpts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`:'';
   // `suggest(termo)` (opcional) devolve nomes candidatos p/ autocomplete; dropdown próprio
   // (classe sp-*, não results-drop/.selector — evita a armadilha do CSS ".selector > button").
   const dropHTML = suggest? `<div class="sp-drop" id="spDrop" role="listbox"></div>` : '';
-  setBody(`<div class="doc">${docHead(title)}
+  const pane = ctx.pane;
+  pane.innerHTML = `<div class="doc">${docHead(title)}
     ${note?`<div class="doc-obs tight"><b>Nota:</b> ${esc(note)}</div>`:''}
     <div class="doc-search"><div class="sp-field"><input id="spInput" type="text" placeholder="${esc(placeholder)}" value="${esc(value)}" aria-label="${esc(placeholder)}" autocomplete="off"${suggest?' role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="spDrop"':''}>${dropHTML}</div>${selHTML}<button id="spBtn">Buscar</button></div>
-    <div id="spHost"></div></div>`);
-  const input=modalBody.querySelector('#spInput'), btn=modalBody.querySelector('#spBtn'), host=modalBody.querySelector('#spHost'), sel=modalBody.querySelector('#spSel');
-  const run = async()=>{ closeSug(); host.innerHTML=loading(); try{ await onRun(input.value.trim(), host, sel?sel.value:undefined); }catch(e){ host.innerHTML=errorBox(e.message);} };
+    <div id="spHost"></div></div>`;
+  const input=pane.querySelector('#spInput'), btn=pane.querySelector('#spBtn'), host=pane.querySelector('#spHost'), sel=pane.querySelector('#spSel');
+  const run = async()=>{ closeSug(); host.innerHTML=loading();
+    const rctx = novoCtx(ctx.view, pane, host);
+    try{ await onRun(input.value.trim(), rctx, sel?sel.value:undefined); }catch(e){ host.innerHTML=errorBox(e.message);} };
   let closeSug = ()=>{};
   if(suggest){
-    const drop = modalBody.querySelector('#spDrop');
+    const drop = pane.querySelector('#spDrop');
     closeSug = ()=>{ drop.classList.remove('open'); drop.innerHTML=''; input.setAttribute('aria-expanded','false'); };
     // fixed (não absolute) escapa do overflow:hidden do .modal — precisa recalcular a
     // posição (viewport) a cada abertura, não só uma vez.
@@ -2678,7 +2725,7 @@ function searchPanel({ title, placeholder, value='', selectOpts, onRun, auto=fal
   input.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
   if(sel) sel.addEventListener('change', run);
   // guarda o "run" para o realtime re-executar mantendo o termo digitado
-  if(currentView) currentView._panelRun = run;
+  if(ctx.view) ctx.view._panelRun = run;
   if(auto || value) run();
 }
 
@@ -2835,14 +2882,19 @@ async function reloadTab(tab){
   if(eraStale){ tab.stale = false; renderTabs(); if(tab.paneEl) tab.paneEl.innerHTML = loading('Atualizando…'); }
   try {
     await refreshActiveLine();                        // banner ao vivo (activeLine é snapshot)
-    // reconfere DEPOIS do await: os loaders capturam `currentView` no começo (seam beginGen/
-    // commitViewResult), então rodar o loader agora mexeria na aba que estiver ativa AGORA —
-    // não na dona do evento. Trocou de documento na mesma aba → o runView novo já trouxe dado
-    // fresco, nada a fazer; trocou de aba → ela volta a ser só "desatualizada".
+    // reconfere DEPOIS do await: o ctx do loader é montado logo abaixo, a partir de `tab`, então
+    // rodar o loader agora despacharia trabalho para uma aba que já não é a dona do evento.
+    // Trocou de documento na mesma aba → o runView novo já trouxe dado fresco, nada a fazer;
+    // trocou de aba → ela volta a ser só "desatualizada".
     if(tab.view !== view) return;
     if(tab !== activeTab()){ markStale([tab.id]); return; }
+    // A SEGUNDA invocação de loader do arquivo (a outra é o runView). Mudar só uma delas faria
+    // o card abrir certo e o recarregamento ao vivo passar `undefined` — falha que só aparece
+    // com o portal aberto e o banco mudando, que nenhum gate offline enxerga.
+    // O `_panelRun` não recebe ctx: ele é o `run` do painel, que monta o seu (geração nova + a
+    // linha do momento) a cada chamada — é exatamente o que um recarregamento precisa.
     if(view._panelRun) await view._panelRun();        // painéis de busca
-    else await view.loader();                         // views diretas
+    else await view.loader(novoCtx(view, tab.paneEl));  // views diretas
     mtLive.classList.remove('on'); void mtLive.offsetWidth; mtLive.classList.add('on');
     toast('Atualizado ao vivo', 'live');
   } catch(e){

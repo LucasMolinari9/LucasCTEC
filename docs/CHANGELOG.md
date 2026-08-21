@@ -4,6 +4,76 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 21/08/2026 — Fase A: contexto explícito (`ctx`) e a bancada de corrida
+
+**Fase A do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`). **Nenhum arquivo
+mudou de lugar** — mudou o **contrato**: cada `render*`/loader do modal passou a **receber**
+`ctx = { view, gen, pane, host, line }` em vez de abrir com `const view = currentView, gen =
+beginGen(view);`. Zero SQL, nenhuma mudança de comportamento pretendida.
+
+**Não meça esta fase em linhas: `app.js` 3.001 → 3.053 (+52).** Ela é a precondição da Fase C, que
+é onde o bloco `MODAL / SISTEMA DE VIEWS` (1.844 linhas, 60,4% do arquivo) sai. As **22** aberturas
+`const view = currentView, …` acabaram; hoje o `grep` dá **0**.
+
+- **O contrato mora em `src/domain/view-state.mjs`**, ao lado do seam que ele embrulha: `makeCtx`,
+  `withLine`, `withHost`, `nextGen`. `beginGen` deixou de ser importado pelo `app.js` — quem o
+  chama é o módulo, e o import viraria binding morto.
+- **Quem MONTA um ctx é o shell, em três pontos e só neles:** `runView`, `reloadTab` e o `run()`
+  de cada painel de busca, todos via `novoCtx(view, pane, host)` — o único ponto que ainda lê
+  `activeLine` para isso. **São DUAS invocações de loader, não uma:** mudar só a do `runView`
+  faria o card abrir certo e o recarregamento por Realtime receber `undefined`, falha que só
+  aparece com o portal aberto e o banco mudando.
+- **`withLine` preserva `view` e `gen`** — a linha certa só existe depois do `await`, e derivar com
+  geração nova devolveria a corrida que o seam existe para impedir. **Isso fechou um buraco real:**
+  no caminho de 1 resultado, o `lineSearchRun` chamava `render(host, lines[0])` e o render cunhava
+  uma geração NOVA; uma busca velha que resolvesse tarde voltava a vencer a mais recente.
+- **`activeLine`/`currentView` continuam com mais de um escritor, e eles ficaram** (o wiring de
+  abas, as limpezas). O que acabou foi um **documento** os LER.
+- **`searchPanel` passou a escrever em `ctx.pane`, não no `modalBody` ao vivo.** Dois loaders
+  montam o painel DEPOIS de um `await` (`ligacoesPorLogradouro` espera o `getIbge`,
+  `ligacoesPorTerminal` espera três lookups): trocar de aba nesse intervalo pintava o painel
+  inteiro na aba errada. Era o único ponto em que o código anterior de fato sangrava.
+- **`LOADERS.secoesPorLigacao` lia `activeLine` DEPOIS do `await`** — trocar de linha com a busca no
+  ar dava cabeçalho de uma linha e tabela de outra, na mesma tela, sem erro. Hoje lê `ctx.line`.
+- **O guard explícito de Portarias foi preservado** (`await getPortariaAnos()` → `isCurrentGen`):
+  `_panelRun` fica fora do seam, então é a única coisa que protege a casca daquele painel.
+- **Um adaptador morreu:** `renderActiveLineQuadro = host => renderLinhaQuadro(host, activeLine)`
+  existia só porque o contrato antigo separava o container da linha e mandava buscar a segunda no
+  global.
+
+**A bancada de corrida — `scripts/check_corrida_abas.mjs` (entregável obrigatório da fase).**
+Nenhum gate do repo cobria isto, e o motivo é estrutural: nenhum deles **cria** a ordenação que
+define o bug. O `check_views.mjs` abre cada view numa página limpa; o `check_abas.mjs` espera cada
+ação assentar; o `check_selecao_linha.mjs` espera o pane parar de girar; e o stub do PostgREST
+respondia na hora. Os três podiam ficar verdes com um render atrasado pintando o pane ativo em vez
+do que capturou. O `scripts/lib/rig.mjs` ganhou um `segurar(tabela, qs)` opcional que prende a
+resposta até o teste liberar (sem ele, o comportamento é o de sempre). Dois atos — um render de
+documento (Itinerários) e a casca de um loader (Ligações por Logradouro) — e três asserções:
+**(a)** o pane da aba 2 não foi pintado pelo trabalho atrasado da aba 1; **(b)** o `pdfHTML` da aba
+2 não foi sobrescrito (lido pelo caminho real, com um stub de `window.print` sobre o `.pdf-export`
+que o `baixarPdf` monta); **(c)** o pane **da aba 1** e o `pdfHTML` **dela** receberam a resposta
+atrasada. Sem a (c), a bancada aprovaria uma implementação que descartasse toda resposta
+pós-troca-de-aba. Roda no CI, no mesmo `views.yml` dos outros três gates de navegador.
+
+- **Armadilha da própria bancada, achada ao escrevê-la:** a 1ª versão afirmava que o PDF da aba 2
+  não continha `/Itiner/i` — e falhou, porque o texto de uma portaria da fixture fala em
+  "alteracao do itinerario da linha 549M". O marcador virou o TÍTULO do documento. Falso vermelho
+  é tão inútil quanto falso verde.
+
+**Prova por mutação (o plano exige uma; foram três).** (1) `searchPanel` de volta ao `modalBody` ao
+vivo → ATO 2 vermelho em (a) e (c) — é a reprodução do bug real, não uma mutação artificial;
+(2) `renderItinerarios` relendo `currentView` na hora de escrever → ATO 1 (b) vermelho, o `pdfHTML`
+da aba 2 é sobrescrito; (3) corpo de `renderFrota` trocado por uma caixa vazia →
+`check_views.mjs frota` vermelho ("0 `.kpi`, esperado >= 12").
+
+**Verificação:** `node tests/check.js` verde · `check_views.mjs` 18/18 · `check_abas.mjs`,
+`check_selecao_linha.mjs` e `check_corrida_abas.mjs` verdes · `./scripts/semgrep.sh` 0 achados em
+121 regras. `version.json` 6 → 7 e `#verTag` para `build 21/08-A` (o `app.js`, os módulos e o
+`index.html` são servidos).
+
+**Revisão:** a cota do Codex segue esgotada desde 15/08. A revisão foi própria, e ausência de
+revisão não é aprovação — os achados estão registrados no PR.
+
 ## 20/08/2026 — Fase B2: helpers compartilhados e o seam de seleção
 
 **Fase B2 do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`), executada **fora

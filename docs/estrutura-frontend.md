@@ -108,7 +108,7 @@ achar por `grep` do texto da marca, nunca por linha.
   `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`. Eram 15: `UTILITÁRIOS` guardava só o `debounce`, que foi
   para `src/domain/core.mjs` na Fase B2 — seção que fica vazia sai, não vira comentário órfão.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~60,3% do JS (~1,8k linhas; 69 declarações
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~60,4% do JS (~1,8k linhas; 69 declarações
   `function` + 17 `LOADERS.x`). Ele **subiu** de participação tendo ENCOLHIDO em linhas: a Fase B2
   tirou 263 linhas do arquivo e 98 dele, então o denominador caiu mais que o numerador —
   percentual de seção não mede progresso de modularização; o total mede.
@@ -223,7 +223,67 @@ abaixo) e o **bloco secundário do Localidade** (o PDF de lá cobre os DOIS bloc
 use estes helpers (o `pdf` cuida da completude) — não monte `tableHTML` cru sem paginar, nem
 dependa do fallback do `.doc` visível.
 
-## 5. Histórico da organização
+## 5. Contexto explícito (`ctx`) — o que todo `render*`/loader recebe
+
+Desde 21/08/2026 (Fase A do plano de modularização) **nenhum documento lê `currentView`,
+`activeLine` ou `modalBody`.** Cada `render*`/loader **recebe**:
+
+```js
+ctx = { view, gen, pane, host, line }
+```
+
+| campo | o que é | por que não pode ser lido do global |
+|---|---|---|
+| `view` | a view dona da tentativa | depois de um `await`, `currentView` já pode ser a de OUTRA aba |
+| `gen` | a geração desta tentativa (`beginGen`) | é o que descarta a resposta atrasada |
+| `pane` | o `.modal-body` da aba que pediu | `modalBody` aponta para a aba que está na tela AGORA |
+| `host` | o container dentro do pane (`#spHost`, `#pHost`, `#locHost`…) | — |
+| `line` | a linha DESTA tentativa | `activeLine` muda com troca de aba e com a própria busca |
+
+**Quem monta um ctx é o shell, em três pontos e só neles** — todos via `novoCtx(view, pane, host)`
+(`app.js`, seção `MODAL / SISTEMA DE VIEWS`), que é o único lugar que ainda lê `activeLine` para
+esse fim:
+
+1. `runView` — abrir ou trocar de documento;
+2. `reloadTab` — recarregamento ao vivo do Realtime. **São DUAS invocações de loader, não uma.**
+   Mudar só a primeira faz o card abrir certo e o recarregamento passar `undefined` — falha que só
+   aparece com o portal aberto e o banco mudando;
+3. o `run()` de cada painel de busca (`searchPanel`, e os `run` próprios de Portarias e
+   Localidades). Cada busca é uma tentativa nova: geração nova + a linha ativa daquele instante.
+
+**Derivar, nunca cunhar geração à mão.** Três derivações, em `src/domain/view-state.mjs`:
+
+- `withLine(ctx, linha)` — a linha que a busca ACABOU de resolver, **preservando `view` e `gen`**.
+  A linha certa só existe depois do `await` (1 resultado, ou o clique na lista de N). Derivar com
+  geração nova aqui devolveria a corrida que o seam existe para impedir: a busca velha voltaria a
+  poder escrever por cima da nova.
+- `withHost(ctx, el)` — mesma tentativa, outro container.
+- `nextGen(ctx)` — o usuário disparou algo DE NOVO dentro do documento já aberto (trocar o escopo
+  do Município, refiltrar as Portarias) e o novo `await` pode ser ultrapassado pelo clique seguinte.
+
+**O que continua sendo global, e de propósito:** `activeLine` e `currentView` têm mais de um
+escritor legítimo e eles ficam — o wiring de abas (`activateTab`) e as limpezas (`closeModal`,
+`applyRoute`) seguem escrevendo os dois. O que acabou foi um **documento** os LER.
+
+**Duas exceções documentadas:**
+
+- `_panelRun` fica fora do seam: é a referência ao `run` do painel, não resultado de operação
+  assíncrona. Mas a **casca** de um painel pode escrever depois de um `await` — é o caso de
+  Portarias, que faz `await getPortariaAnos()` antes de pintar. Ali o que protege é um
+  `if (!isCurrentGen(view, gen)) return;` explícito, e **ele tem de ser preservado**: sem ele uma
+  tentativa velha religa o runner depois de uma troca de aba.
+- `setBody` continua escrevendo no `modalBody` ao vivo. Seu único chamador é o `runView`, que
+  acabou de ativar a aba — não há `await` no meio. Quem escreve depois de um `await` usa `ctx.pane`.
+
+**Como isso é guardado:** `scripts/check_corrida_abas.mjs`. É o único gate do repo que **cria** a
+ordenação do bug — o stub do PostgREST segura a resposta (`segurar`, em `scripts/lib/rig.mjs`) até
+a troca de aba ter acontecido. Ele afirma, em dois atos (um render de documento e a casca de um
+loader): (a) o pane da aba 2 não foi pintado pelo trabalho atrasado da aba 1; (b) o `pdfHTML` da
+aba 2 não foi sobrescrito; (c) o pane **da aba 1** e o `pdfHTML` **dela** receberam a resposta
+atrasada. A (c) não é decoração: sem ela, uma implementação que descartasse toda resposta
+pós-troca-de-aba passaria em (a) e (b).
+
+## 6. Histórico da organização
 
 - **Parte A (2026-07-16):** adicionado o índice no topo, o sub-índice do MODAL e as sub-marcas —
   **sem mover código** (mudança puramente aditiva de comentários). Deu navegação por `grep`.
