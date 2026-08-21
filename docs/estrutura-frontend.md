@@ -108,10 +108,12 @@ achar por `grep` do texto da marca, nunca por linha.
   `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`. Eram 15: `UTILITÁRIOS` guardava só o `debounce`, que foi
   para `src/domain/core.mjs` na Fase B2 — seção que fica vazia sai, não vira comentário órfão.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~60,4% do JS (~1,8k linhas; 69 declarações
-  `function` + 17 `LOADERS.x`). Ele **subiu** de participação tendo ENCOLHIDO em linhas: a Fase B2
-  tirou 263 linhas do arquivo e 98 dele, então o denominador caiu mais que o numerador —
-  percentual de seção não mede progresso de modularização; o total mede.
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~58,7% do JS (~1,7k linhas). Ele **subiu**
+  de participação na Fase B2 tendo ENCOLHIDO em linhas — ela tirou 263 do arquivo e 98 dele, e o
+  denominador caiu mais que o numerador. Na Fase C1 aconteceu o inverso: o bloco perdeu 98 linhas
+  (1.844 → 1.746) e o percentual CAIU (60,4% → 58,7%), porque desta vez a saída foi quase toda
+  dele. Nos dois casos a lição é a mesma — percentual de seção não mede progresso de
+  modularização; o total mede.
 
 ### Sub-marcas do bloco `MODAL / SISTEMA DE VIEWS`
 
@@ -119,13 +121,27 @@ O próprio marcador do bloco traz um **sub-índice**. A ordem das sub-marcas:
 
 `Chrome do modal` · `Faixa de abas` · `Dispatcher — runView` ·
 `Busca de linha — wrappers de documento` ·
-`Eventos — helpers compartilhados` · `DOC · Histórico (linha)` ·
-`DOC · Itinerários` · `DOC · Quadro de Horários` · `DOC · Tarifas` · `DOC · Frota` ·
-`DOC · Estrutura Operacional` · `DOC · Empresas` · `DOC · Municípios / entre-municípios` ·
-`DOC · Portaria` · `DOC · Localidades`.
+`DOC · Histórico (linha)` · `DOC · Itinerários` · `DOC · Quadro de Horários` · `DOC · Tarifas` ·
+`DOC · Frota` · `DOC · Estrutura Operacional` · `DOC · Empresas` ·
+`DOC · Municípios / entre-municípios` · `DOC · Portaria` · `DOC · Localidades`.
 
-Cada bloco `DOC · X` reúne, **juntos**, tudo daquele documento: helper(s) HTML (`xxxHTML`), o
-render (`renderX`), eventuais runners e o registro `LOADERS.x = …`.
+Cada bloco `DOC · X` reúne, **juntos**, tudo daquele documento **que ainda mora no `app.js`**:
+helper(s) HTML (`xxxHTML`), o render (`renderX`), eventuais runners e o registro `LOADERS.x = …`.
+
+**Desde a Fase C1, "juntos" quer dizer menos do que dizia.** Três dessas marcas — `DOC · Histórico
+(linha)`, `DOC · Itinerários` e `DOC · Frota` — guardam **só** o registro `LOADERS.x`: o render
+mora em `src/documentos/frota-historico-itinerarios.mjs` e o markup compartilhado, em
+`src/ui/blocos.mjs`. A marca fica porque é por ela que se acha o registro, e cada uma diz, em
+comentário, para onde o resto foi. A sub-marca `Eventos — helpers compartilhados` **sumiu**, junto
+com o markup que a batizava. C2, C3 e C4 vão esvaziar as outras do mesmo jeito.
+
+**NÃO dimensione uma fase pela marca — meça por SÍMBOLO.** As faixas entre marcas derivaram do
+código, e três registros moram sob a marca de outra família (medido em 21/08/2026): além do
+`LOADERS.empresasRegulares` documentado no §6, `LOADERS.municipioRegiao` mora sob `DOC · Empresas`,
+e `ligacoesPorTerminal`/`secoesPorLigacao`/`frotaPorEmpresa` moram sob `DOC · Municípios`. O
+arquivo também usa **dois** estilos de sub-marca (`/* --- X --- */` e `/* ---- X ---- */`), então
+um extrator que só case o primeiro reparte errado. Quem mover essas famílias conserta as suas
+marcas — a C1 consertou as três dela.
 
 ## 3. Regras de segurança ao reorganizar o JS (leia antes de mover código)
 
@@ -193,7 +209,8 @@ cortados.
   `configurarListas({aoSelecionarLinha})`.
 - **`paginateEvents`** (`src/ui/paginacao.mjs`) — o paginador **antigo e diferente**: **um evento
   por página** (não N itens), com filtros próprios. Só o Histórico usa; o markup do evento
-  (`evBandHTML`/`evBlocksHTML`) continua no bloco `Eventos — helpers compartilhados` do MODAL.
+  (`evBandHTML`/`evBlocksHTML`) morou para `src/ui/blocos.mjs` na Fase C1 — o bloco
+  `Eventos — helpers compartilhados` do MODAL deixou de existir.
 
 ### O que é paginado e o que NÃO é
 
@@ -282,6 +299,23 @@ loader): (a) o pane da aba 2 não foi pintado pelo trabalho atrasado da aba 1; (
 aba 2 não foi sobrescrito; (c) o pane **da aba 1** e o `pdfHTML` **dela** receberam a resposta
 atrasada. A (c) não é decoração: sem ela, uma implementação que descartasse toda resposta
 pós-troca-de-aba passaria em (a) e (b).
+
+**A Fase C1 endureceu a (c) do ATO 1, e a razão vale como aviso geral sobre asserção de PDF.** Ela
+afirmava só que o PDF da aba 1 continha o TÍTULO do documento e uma linha da tabela — e nenhuma das
+duas coisas distingue o `pdfHTML` committado do **fallback** do `baixarPdf` (`app.js`, seção
+`MODAL`), que clona o `.doc` vivo quando `pdfHTML` é `null`. O `searchPanel` também chama
+`docHead(title)`, então o título aparece nos dois caminhos; e um documento sem paginação de tela
+tem a tabela inteira no DOM, então as linhas também. Medido mutando o `commitViewResult` do
+`renderItinerarios` para fora: a asserção continuava **verde**. O que só o `pdfHTML` tem é a
+AUSÊNCIA do campo de busca (`id="spInput"`) — o PDF é o documento, não o painel em volta dele —, e
+é isso que a asserção passou a exigir. Ao escrever asserção sobre PDF, pergunte sempre o que dela
+**não** sobreviveria ao fallback.
+
+**O que a Fase C1 provou sobre o contrato, de brinde:** um documento que virou módulo em
+`src/documentos/` não tem mais como cometer o erro clássico — `currentView`, `activeLine` e
+`modalBody` **não estão no escopo dele**. O compilador passou a garantir o que antes era
+disciplina. O que a bancada ainda precisa provar, e prova, é que o ctx **chega** correto através
+da fronteira do módulo: o ATO 1 usa justamente o documento de Itinerários, que a C1 moveu.
 
 ## 6. Histórico da organização
 

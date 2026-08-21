@@ -48,6 +48,12 @@
 !/src/ui/doc.mjs
 !/src/ui/paginacao.mjs
 !/src/ui/listas.mjs
+!/src/ui/blocos.mjs
 !/src/data
 /src/data/*
 !/src/data/lookups.mjs
+!/src/data/campos.mjs
+!/src/documentos
+/src/documentos/*
+!/src/documentos/shell.mjs
+!/src/documentos/frota-historico-itinerarios.mjs

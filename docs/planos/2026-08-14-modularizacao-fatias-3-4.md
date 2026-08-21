@@ -42,16 +42,19 @@ do plano de 6 ([`../historico/contexto-proxima-sessao-2026-08-14.md`](../histori
 responderam à crítica **irmã** — a de que o processo virou projeto paralelo. O monólito mal foi
 arranhado.
 
-Medido no `app.js` de **3.053 linhas** (remedido em 21/08/2026, sobre a `main` com a Fase B2 mais
-a Fase A). Cada faixa vai da **marca da seção** até a linha anterior à marca seguinte — a
+Medido no `app.js` de **2.974 linhas** (`wc -l`; remedido em 21/08/2026, sobre a branch da Fase
+C1). Cada faixa vai da **marca da seção** até a linha anterior à marca seguinte — a
 convenção que o extrator do `tests/check.js` §[2b] usa, e que as faixas anteriores desta tabela
 erravam por duas linhas:
 
 | bloco | linhas | % |
 |---|---|---|
-| `MODAL / SISTEMA DE VIEWS` (`app.js:724`–`:2567`) | 1.844 | 60,4% |
-| `COMPONENTES AUXILIARES` (`:2568`–`:2731`) | 164 | 5,4% |
-| `SUPABASE CONFIG` (`:88`–`:255`) | 168 | 5,5% |
+| `MODAL / SISTEMA DE VIEWS` (`app.js:743`–`:2488`) | 1.746 | 58,7% |
+| `COMPONENTES AUXILIARES` (`:2489`–`:2652`) | 164 | 5,5% |
+| `SUPABASE CONFIG` (`:119`–`:286`) | 168 | 5,6% |
+
+Antes da C1, sobre um `app.js` de 3.053: `MODAL` = 1.844 (60,4%), `COMPONENTES AUXILIARES` = 164
+(5,4%), `SUPABASE CONFIG` = 168 (5,5%).
 
 O `MODAL` subiu de 58,3% para 60,3% na Fase B2 tendo PERDIDO 98 linhas — a B2 tirou 263 do arquivo
 inteiro, e o denominador encolheu mais que o numerador. A Fase A fez o contrário: **acrescentou**
@@ -59,7 +62,13 @@ inteiro, e o denominador encolheu mais que o numerador. A Fase A fez o contrári
 dizem a mesma coisa: percentual de seção não é medida de progresso da modularização, e a Fase A não
 é medida em linhas — ela é a precondição da Fase C, que é onde o bloco sai.
 
-Dois terços do arquivo, e é onde nenhuma das sessões já planejadas toca. O estudo de 10/08
+A **Fase C1** é o primeiro caso em que o percentual do `MODAL` CAI (60,4% → 58,7%), porque foi a
+primeira vez que a saída foi quase toda dele: o bloco perdeu 98 linhas e o arquivo, 79. A conta
+não fecha por acaso — fora do `MODAL` entraram 19 linhas líquidas (os `import` novos e o
+bootstrap, menos o bloco de constantes de campo que saiu daqui).
+
+Quase dois terços do arquivo (era "dois terços" quando o `MODAL` estava em 60,4%; a C1 o levou a
+58,7%), e é onde nenhuma das sessões já planejadas toca. O estudo de 10/08
 ([`../historico/estudo-modularizacao-frontend-2026-08-10.md`](../historico/estudo-modularizacao-frontend-2026-08-10.md))
 chama isso de fatias 3 e 4, e as **condiciona** no item 3 de "Próximas fatias recomendadas"
 (`docs/historico/estudo-modularizacao-frontend-2026-08-10.md:29`): separar documentos "somente após
@@ -71,7 +80,7 @@ O diagnóstico que justificava a ordem abaixo, e que a **Fase A resolveu**: um d
 dava 23, uma delas dentro do comentário de contrato). Enquanto fosse verdade, mover o arquivo
 trocaria um monólito por módulos rasos acoplados por variável global — piorar com aparência de
 melhorar. Hoje `grep -c 'const view = currentView' app.js` = **0**: cada documento recebe o
-contexto por parâmetro, e o `lineSearchRun` (`app.js:1244`) é o exemplo que mostra por quê — a
+contexto por parâmetro, e o `lineSearchRun` (`app.js:1273`) é o exemplo que mostra por quê — a
 linha certa só existe depois do await dele.
 
 **O padrão de injeção já existe e está em produção.** O seam do `pdfHTML` fez cinco helpers
@@ -121,7 +130,8 @@ pelas famílias da C, e é ali que a redundância acaba — daí a precondição
 | 3 | **B2** | helpers compartilhados + o seam de seleção | ✅ feita — ver a seção da fase |
 | 4 | **A** | contexto explícito + bancada de corrida | ✅ feita — ver a seção da fase |
 | 5 | **B** | `src/data/rest.mjs` — encerra o mecanismo `@canon` | a fazer |
-| 6–9 | **C1…C4** | documentos por família | a fazer |
+| 6 | **C1** | Frota · Histórico da linha · Itinerários | ✅ feita — ver a seção da fase |
+| 7–9 | **C2…C4** | documentos por família | a fazer |
 | 10 | **D** | `LOADERS` como composição explícita | a fazer |
 | 11 | **E** | infra do modal (opcional) | a fazer |
 
@@ -131,7 +141,7 @@ em um ponto: *bastar* não é *preceder*. Os helpers que a B2 moveu não leem `c
 `activeLine`; o que faltava a eles era um endereço importável, não um contexto explícito. As duas
 dependências reais foram resolvidas sem invadir as outras fases:
 `src/data/lookups.mjs` precisa de `sbFetch` e o recebe **injetado**
-(`configurarLookups({ sbFetch })`, `app.js:77`) em vez de importar o `src/data/rest.mjs` que a
+(`configurarLookups({ sbFetch })`, `app.js:102`) em vez de importar o `src/data/rest.mjs` que a
 Fase B ainda vai criar — quando ela criar, troca-se a injeção por um `import` sem tocar em nenhum
 call site; e `bannerTrunc`, que a Fase B listava, saiu aqui porque é markup, não infraestrutura
 (ver a nota na Fase B). O custo de ter invertido: nenhum. O ganho: A e C passam a ter os helpers
@@ -153,7 +163,7 @@ Nenhum arquivo mudou de lugar. Mudou o **contrato**: cada `render*`/loader passo
 `ctx = { view, gen, pane, host, line }` em vez de abrir com `const view = currentView, …`. As **22**
 aberturas desse tipo acabaram — hoje `grep -c 'const view = currentView' app.js` = 0, e a única
 menção que restava, a do comentário de contrato, foi reescrita. `beginGen` deixou de ser importado
-pelo `app.js` (a razão em `app.js:21`–`:23`, o `import` que sobrou em `:24`–`:29`): quem o chama
+pelo `app.js` (a razão em `app.js:23`–`:25`, o `import` que sobrou em `:26`–`:31`): quem o chama
 agora é o `makeCtx`/`nextGen` do próprio módulo, e importá-lo aqui seria binding morto — e um
 convite a recriar a abertura que a fase eliminou.
 
@@ -163,45 +173,45 @@ Runbook para quem for mexer: `docs/estrutura-frontend.md` §5.
 
 ### As três coisas que a fase precisava acertar, e o que foi feito
 
-**1. As DUAS invocações de loader.** `await view.loader(ctx)` em `app.js:1200` (`runView`) e
-`await view.loader(novoCtx(view, tab.paneEl))` em `app.js:2897` (`reloadTab`, "views diretas"). As
+**1. As DUAS invocações de loader.** `await view.loader(ctx)` em `app.js:1229` (`runView`) e
+`await view.loader(novoCtx(view, tab.paneEl))` em `app.js:2818` (`reloadTab`, "views diretas"). As
 duas passam `ctx`. Mudar só a primeira faria o card abrir certo e o recarregamento por Realtime
 receber `undefined` — falha que só aparece com o portal aberto e o banco mudando.
 
 **2. `line` derivável depois do `await`.** `withLine` preserva `view` e `gen`, e é usado nos dois
-pontos em que a linha certa só existe depois da busca: o resultado único (`app.js:1254`) e o clique
-na lista de N (`app.js:1257`). Derivar com geração nova ali destruiria a proteção que a fase existe
+pontos em que a linha certa só existe depois da busca: o resultado único (`app.js:1283`) e o clique
+na lista de N (`app.js:1286`). Derivar com geração nova ali destruiria a proteção que a fase existe
 para dar. **De brinde, fechou um buraco real:** antes, o caminho de 1 resultado chamava
 `render(host, lines[0])` e o render cunhava uma geração NOVA — uma busca velha que resolvesse tarde
 voltava a vencer a mais recente. Hoje ela herda a geração da própria tentativa e é descartada.
 
 **3. `activeLine`/`currentView` continuam com mais de um escritor, e eles ficaram.** `setActiveLine`
-(`app.js:506`), `activateTab` (`app.js:935` e `:936`) e as limpezas do `closeModal`/`applyRoute`
+(`app.js:537`), `activateTab` (`app.js:964` e `:965`) e as limpezas do `closeModal`/`applyRoute`
 seguem escrevendo. O que acabou foi um **documento** os LER. A leitura que sobrou é toda de shell,
-e passa por um ponto só: `novoCtx(view, pane, host)` (`app.js:1169`), com três call sites —
-`runView` (`:1199`), `reloadTab` (`:2897`) e o `run` de painel (`searchPanel` em `app.js:2695`,
-Portarias em `:2302`, Localidades em `:2545`). Ler `activeLine` ali, a cada tentativa, é o que **preserva** o comportamento de hoje: um
+e passa por um ponto só: `novoCtx(view, pane, host)` (`app.js:1198`), com três call sites —
+`runView` (`:1228`), `reloadTab` (`:2818`) e o `run` de painel (`searchPanel` em `app.js:2616`,
+Portarias em `:2223`, Localidades em `:2466`). Ler `activeLine` ali, a cada tentativa, é o que **preserva** o comportamento de hoje: um
 painel re-executado pelo Realtime tem de enxergar a linha que o usuário escolheu DENTRO do
 documento, não a que estava ativa quando o painel foi montado.
 
 ### As exceções, e uma mudança que não estava no roteiro
 
 - **O guard de Portarias foi preservado**, como o plano exigia: `await getPortariaAnos()` em
-  `app.js:2286`, `if (!isCurrentGen(view, gen)) return;` em `app.js:2287`, `_panelRun = run` em
-  `app.js:2331`. `_panelRun` segue fora do seam — mas a CASCA do painel escreve depois de um await,
+  `app.js:2207`, `if (!isCurrentGen(view, gen)) return;` em `app.js:2208`, `_panelRun = run` em
+  `app.js:2252`. `_panelRun` segue fora do seam — mas a CASCA do painel escreve depois de um await,
   e sem esse guard uma tentativa velha religa o runner depois de uma troca de aba.
-- **Os 5 call sites com `pdf:false` seguem passando `view`/`gen`**: `app.js:1525`, `:1990`, `:1994`,
-  `:2259` e `:2659`.
-- **`searchPanel` passou a escrever em `ctx.pane`, não no `modalBody` ao vivo** (`app.js:2688`). Não
+- **Os 5 call sites com `pdf:false` seguem passando `view`/`gen`**: `app.js:1478`, `:1911`, `:1915`,
+  `:2180` e `:2580`.
+- **`searchPanel` passou a escrever em `ctx.pane`, não no `modalBody` ao vivo** (`app.js:2609`). Não
   é zelo: dois loaders montam o painel DEPOIS de um await — `ligacoesPorLogradouro` espera o
-  `getIbge` (`app.js:1870`) e `ligacoesPorTerminal` espera três lookups (`app.js:2107`). Trocar de
+  `getIbge` (`app.js:1791`) e `ligacoesPorTerminal` espera três lookups (`app.js:2028`). Trocar de
   aba nesse intervalo fazia o painel inteiro ser pintado na aba errada. É o ATO 2 da bancada, e é o
   único ponto em que o código anterior de fato sangrava (medido: com o `modalBody` de volta, o ato
   2 fica vermelho em duas checagens).
 - **Um adaptador morreu:** `renderActiveLineQuadro = host => renderLinhaQuadro(host, activeLine)`
   existia só porque o contrato antigo separava o container da linha e obrigava a buscar a segunda no
   global. Com o ctx a chamada é `renderLinhaQuadro(ctx)`, direta — o comentário que registra a
-  remoção está em `app.js:1460`.
+  remoção está em `app.js:1413`.
 
 ### A bancada de corrida — `scripts/check_corrida_abas.mjs`
 
@@ -253,21 +263,21 @@ helpers já importáveis. Um loader exportado por módulo pode entrar no registr
 
 ## Fase B — módulo profundo de acesso REST
 
-`src/data/rest.mjs`, com o que cada símbolo é hoje: `esperar` (`app.js:145`), `SB_TIMEOUT_MS`
-(`:147`), `SB_RETRIES` (`:148`), `CANCELADO` (`:152`), `ehCancelamento` (`:153`), `fetchComTimeout`
-(`:160`), `sbFetch` (`:178`), `SB_MAX_ROWS` (`:222`), `marcarTrunc` (`:230`) e
-`selecionarSupabase` (`:124`).
+`src/data/rest.mjs`, com o que cada símbolo é hoje: `esperar` (`app.js:176`), `SB_TIMEOUT_MS`
+(`:178`), `SB_RETRIES` (`:179`), `CANCELADO` (`:183`), `ehCancelamento` (`:184`), `fetchComTimeout`
+(`:191`), `sbFetch` (`:209`), `SB_MAX_ROWS` (`:253`), `marcarTrunc` (`:261`) e
+`selecionarSupabase` (`:155`).
 Só entra se a interface **esconder** timeout, retry e truncagem — condição literal do estudo.
 Config (URL, chave, `fetch`) injetada, não lida de global.
 **O consumidor já está pronto:** `src/data/lookups.mjs` recebe `sbFetch` por injeção
-(`configurarLookups`, `app.js:77`), então esta fase troca a injeção por um `import` lá dentro sem
+(`configurarLookups`, `app.js:102`), então esta fase troca a injeção por um `import` lá dentro sem
 tocar em nenhum call site.
 
 **Dois símbolos saíram desta lista na Fase B2, e não por conveniência.** `bannerTrunc` era listado
 aqui porque ficava no mesmo bloco do `app.js`; ele não é infraestrutura — não conhece rede, timeout
 nem `limit`, só lê os campos `_trunc`/`_limite` que o `marcarTrunc` marca e devolve HTML. Foi para
 `src/ui/doc.mjs:71`, e o contrato entre marcar e pintar está escrito nos dois lados
-(`app.js:242`–`:244` e `src/ui/doc.mjs:65`–`:70`). `preencherLookup` também não era REST — o
+(`app.js:273`–`:275` e `src/ui/doc.mjs:65`–`:70`). `preencherLookup` também não era REST — o
 próprio plano dizia isso — e foi para o `src/data/lookups.mjs:106` a que pertencia; a razão de
 adiá-lo (fechar o marco abaixo junto) deixou de existir quando a B2 veio antes.
 
@@ -295,7 +305,7 @@ ou seja, o marco agora depende só desta fase. Quando a última sair,
 ## ✅ Fase B2 — helpers compartilhados e o seam de seleção (FEITA)
 
 **O problema que ela tinha de resolver.** Ao virar módulo nativo, um documento perde acesso aos
-helpers privados do IIFE — que abre em `app.js:67` e fecha em `app.js:3053`, sem uma única
+helpers privados do IIFE — que abre em `app.js:92` e fecha em `app.js:2974`, sem uma única
 instrução `export` no arquivo (`grep -c '^export ' app.js` = 0). Quatro módulos novos, todos
 reabertos linha a linha no `.vercelignore`:
 
@@ -328,7 +338,7 @@ os call sites; esquecer um deixa as linhas daquela tela **renderizadas e não cl
 no console" — **não é intrínseco à opção, é intrínseco a encadear por parâmetro**. "Selecionar
 linha e fechar o modal" é UMA ação do portal inteiro, não uma variação por tela: existe uma só
 implementação, e ela é composição de shell (`selectLine` + `closeModal` + `toast`). Injetada UMA
-vez no bootstrap — `configurarListas({ aoSelecionarLinha })`, `app.js:83` — o encadeamento some, e
+vez no bootstrap — `configurarListas({ aoSelecionarLinha })`, `app.js:108` — o encadeamento some, e
 com ele o modo de falha. Nenhum dos call sites de `lineResults` mudou.
 
 E o esquecimento deixou de ser silencioso: sem configuração, `bindLineRows`
@@ -341,8 +351,8 @@ linha clicável"). O mesmo padrão vale para os outros dois injetados — sem `c
 
 **A contagem de call sites de `lineResults` estava errada aqui: eram 9, hoje são 8.** O PR #132
 (seções de tarifa nos modos por Município) trocou a chamada de `mostrarLinhasResultado` por
-`renderLocalidadeSecoes`. Os 8 de hoje: `app.js:1787`, `:1805`, `:1884`, `:1939`, `:1990`,
-`:1994`, `:2133` e `:2177`. **Nenhum deles precisou mudar**, que é o ponto da decisão acima —
+`renderLocalidadeSecoes`. Os 8 de hoje: `app.js:1708`, `:1726`, `:1805`, `:1860`, `:1911`,
+`:1915`, `:2054` e `:2098`. **Nenhum deles precisou mudar**, que é o ponto da decisão acima —
 mas eles seguem pertencendo a documentos que C3 e C4 vão mover, e agora podem ir.
 
 ### O que ficou provado, e como
@@ -365,18 +375,18 @@ mas eles seguem pertencendo a documentos que C3 e C4 vão mover, e agora podem i
 Famílias, do mais isolado para o mais acoplado. **Os tamanhos vêm do estudo de 10/08 e não foram
 reconferidos** — meça antes de dimensionar a sessão:
 
-| # | famílias |
-|---|---|
-| C1 | Frota · Histórico da linha · Itinerários |
-| C2 | Estrutura · Tarifas · Portaria |
-| C3 | Quadro de Horários · Empresas |
-| C4 | Municípios · Localidades |
+| # | famílias | estado |
+|---|---|---|
+| C1 | Frota · Histórico da linha · Itinerários | ✅ feita — ver abaixo |
+| C2 | Estrutura · Tarifas · Portaria | a fazer |
+| C3 | Quadro de Horários · Empresas | a fazer |
+| C4 | Municípios · Localidades | a fazer |
 
 C4 por último, e cada metade traz uma complicação própria. Municípios é a única família com filtro
-de escopo — `#regScope` (`app.js:1914`) e `#munScope` (`app.js:1963`), os dois únicos do arquivo —
-e com dois ramos de PDF na mesma tela (`app.js:1990` e `:1994`, ambos `pdf:false`). Localidades tem
+de escopo — `#regScope` (`app.js:1835`) e `#munScope` (`app.js:1884`), os dois únicos do arquivo —
+e com dois ramos de PDF na mesma tela (`app.js:1911` e `:1915`, ambos `pdf:false`). Localidades tem
 o bloco secundário cujo `pdfHTML` cobre os DOIS blocos: por isso o `paginateLines` dele vai com
-`pdf:false` (`app.js:2659`) e o `commitViewResult` único vem depois, em `:2661`.
+`pdf:false` (`app.js:2580`) e o `commitViewResult` único vem depois, em `:2582`.
 
 **A B2 removeu a restrição que ameaçava encolher C3 e C4.** `lineResults`, `paginateLines`,
 `linhasTable` e `bindLineRows` são importáveis (`src/ui/listas.mjs`), e o clique numa linha chega
@@ -392,18 +402,141 @@ citar a primeira no lugar da segunda não prova a delegação:
 
 | loader | declarado em | delega em |
 |---|---|---|
-| `LOADERS.historicoLinha` | `app.js:1300` | `app.js:1303` — passa `renderLineHistory` como `render:` do `lineSearchRun` |
-| `LOADERS.quadroHorarios` | `app.js:1529` | `app.js:1535` (despacha `quadroLinhaRun`/`quadroEmpresaRun`) e `:1540` (chama `renderLinhaQuadro` direto) |
-| `LOADERS.tarifas` | `app.js:1635` | `app.js:1641` (despacha `tarifaEmpresaRun`/`lineDocRun`) e `:1647` (chama `renderTarifas` direto) |
+| `LOADERS.historicoLinha` | `app.js:1299` | `app.js:1302` — passa `renderLineHistory` como `render:` do `lineSearchRun` |
+| `LOADERS.quadroHorarios` | `app.js:1482` | `app.js:1488` (despacha `quadroLinhaRun`/`quadroEmpresaRun`) e `:1493` (chama `renderLinhaQuadro` direto) |
+| `LOADERS.tarifas` | `app.js:1588` | `app.js:1594` (despacha `tarifaEmpresaRun`/`lineDocRun`) e `:1600` (chama `renderTarifas` direto) |
 
-Nos one-liners `itinerarios` (`app.js:1356`), `frota` (`:1688`) e `estrutura` (`:1726`) as duas
+Nos one-liners `itinerarios` (`app.js:1309`), `frota` (`:1609`) e `estrutura` (`:1647`) as duas
 coincidem: a delegação via `lineDocView` é a própria linha da declaração. Outros têm a
 implementação dentro do próprio loader. **Não há partição limpa** — uma versão anterior deste plano
 afirmou "3 assim, 14 assado" e estava errada. Abra o loader da família antes de planejar a sessão.
 
 O registro `LOADERS` guarda **loaders**, nunca renders: o valor é invocado como função de carga em
-`app.js:1200` e `:2897`, e desde a Fase A as duas invocações passam `ctx`. Um loader exportado por
+`app.js:1229` e `:2818`, e desde a Fase A as duas invocações passam `ctx`. Um loader exportado por
 módulo pode entrar no registro sem adaptador — é o que torna a Fase D possível.
+
+---
+
+### ✅ C1 — Frota · Histórico da linha · Itinerários (FEITA)
+
+A primeira família a sair inteira. Três renders viraram `src/documentos/frota-historico-itinerarios.mjs`
+(`renderLineHistory` `:31`, `renderItinerarios` `:51`, `renderFrota` `:85`), e com eles nasceram
+três módulos de apoio, cada um por um motivo diferente:
+
+| módulo | linhas | o que leva, e por que ali |
+|---|---|---|
+| `src/documentos/frota-historico-itinerarios.mjs` | 100 | os três renders da família |
+| `src/ui/blocos.mjs` | 85 | o markup que **duas** famílias usam: `evBlocksHTML` (`:32`), `evBandHTML` (`:36`), `SENTIDO_ORDER`/`normSentido` (`:50`/`:51`), `itinerarioTableHTML` (`:53`), `frotaBlockHTML` (`:70`) |
+| `src/data/campos.mjs` | 26 | as 7 listas de coluna do `select=` — `LINE_FIELDS` (`:10`) e as seis gêmeas (`:21`–`:26`) |
+| `src/documentos/shell.mjs` | 49 | o seam de injeção: `configurarDocumentos` (`:34`), `sbFetch` (`:40`), `selecionarLinha` (`:46`) |
+
+**Custo em linhas, medido:** `app.js` 3.053 → **2.974** (−79); `MODAL` 1.844 → **1.746** (−98);
+total de JS do projeto 3.879 → **4.060** (+181). O diff do `app.js` é −146/+67: saíram 146 linhas,
+voltaram 67 de `import`, bootstrap e comentário dizendo para onde o código foi. O fator "sai do
+`app.js` → aparece em módulo" ficou em **260 / 146 ≈ 1,8x**, o mesmo da B2 (477 / 263) — dois
+pontos não fazem tendência, mas o número parou de ser suposição.
+
+### A DECISÃO: markup compartilhado vai para `src/ui/`, nunca para o módulo de uma família
+
+Era a bifurcação que esta sessão tinha de fechar, e ela fixa o formato de C2, C3 e C4 do mesmo
+jeito que a opção 1 da B2 fixou D e E.
+
+**O que decidiu foi um ciclo, não estética.** Se cada família exportasse o seu markup para as
+irmãs, o módulo de C3 (Quadro) importaria `secoesTarifasHTML` do de C2 (Tarifas, hoje
+`app.js:1510`, consumido pelo Quadro em `app.js:1390`) enquanto o de C2 (Estrutura) importaria
+`quadroHorariosBodyHTML` do de C3 (hoje `app.js:1312`, consumido pela Estrutura em `app.js:1639`).
+Dois módulos de família em ciclo, com TDZ à espreita no primeiro `const` que alguém escrevesse
+neles. E um módulo que a irmã importa deixa de ser "a família": vira helper com nome de família, e
+a partição "uma família por PR" passa a mentir.
+
+**A regra, então:** um bloco desce para `src/ui/blocos.mjs` quando **DUAS** famílias o usam; bloco
+de uma família só fica na família. O critério é estreito de propósito — trazer tudo para lá por
+simetria transformaria o `blocos.mjs` no depósito que o `src/ui/doc.mjs` (markup genérico, sem
+assunto) não é. As duas justificativas estão no cabeçalho do próprio `src/ui/blocos.mjs`, com o
+grafo medido.
+
+**Consequência para C2 e C3, e ela é boa:** a aresta PARA TRÁS do grafo (C2 dependendo de C3)
+**deixa de existir como aresta entre fases**. `secoesTarifasHTML` e `quadroHorariosBodyHTML` são
+os dois casos, e quem mover o primeiro deles põe o seu no `blocos.mjs`; o segundo passa a importar
+de lá. C2 e C3 podem entrar em qualquer ordem.
+
+### A injeção: um seam para toda a Fase C, não um por família
+
+`src/documentos/shell.mjs`, com **dois** slots: `sbFetch` (andaime — some quando a Fase B criar
+`src/data/rest.mjs`) e `selecionarLinha` (ação de shell de verdade, até a Fase E; quem a usa é o
+`renderLineHistory`, para sincronizar o banner do topo com a linha na tela).
+
+Um módulo em vez de um `configurar*` por família porque as quatro famílias precisam exatamente das
+mesmas duas coisas: quatro `configurar*` seriam quatro nomes a não colidir no `import` do `app.js`,
+quatro chamadas no bootstrap e quatro cópias do guard de falha-fechado. E porque os re-exports
+deixam os call sites DENTRO dos documentos idênticos ao que eram no `app.js` — `sbFetch('evento_teste', …)`
+continua se escrevendo assim —, que é o que um PR de refatoração deve conseguir: o corpo movido
+não muda.
+
+**É também onde o critério de parada passa a ser mensurável.** Como todas as famílias da C passam
+por este seam, a conta de "mais de ~6 dependências injetadas" é o número de slots dele. Hoje: 2.
+E deixou de ser prosa — `tests/ui-data-module.test.mjs` afirma `slots.length <= 6`.
+
+### As marcas consertadas, e as que ficaram
+
+Consertadas (são as da família): o sub-índice do `MODAL` foi reescrito; a sub-marca
+`Eventos — helpers compartilhados` **sumiu** junto com o markup que a batizava; e as três marcas
+`DOC ·` da família passaram a dizer, em comentário, que guardam só o registro `LOADERS.*`.
+
+**NÃO consertadas, e registradas no sub-índice do `app.js` e em `docs/estrutura-frontend.md` §2**
+(são de outras famílias): `LOADERS.municipioRegiao` mora sob `DOC · Empresas`;
+`ligacoesPorTerminal`, `secoesPorLigacao` e `frotaPorEmpresa` moram sob `DOC · Municípios`; e o
+`LOADERS.empresasRegulares` sob `DOC · Estrutura Operacional`, que já era documentado. O arquivo
+segue com **dois** estilos de sub-marca (`/* --- X --- */` e `/* ---- X ---- */`).
+
+### O que ficou provado, e como
+
+- `node tests/check.js` verde; `check_views.mjs` 18/18; `check_abas.mjs`,
+  `check_selecao_linha.mjs` e `check_corrida_abas.mjs` verdes; `./scripts/semgrep.sh` 0 achados em
+  121 regras. `tests/ui-data-module.test.mjs` foi de 21 para **34** casos.
+- **Prova por mutação — cinco tentativas, e duas delas NÃO morderam.** As que morderam:
+  1. corpo de `renderFrota` esvaziado → `check_views.mjs frota` vermelho (`0 ".kpi", esperado >= 12`);
+  2. `evBlocksHTML` esvaziado em `src/ui/blocos.mjs` → `check_views.mjs historico` vermelho em
+     **historicoLinha E historicoEmpresa**, mais `ui-data-module.test.mjs` — é a prova de que o
+     módulo compartilhado de fato serve duas famílias, que é a justificativa dele;
+  3. bootstrap `configurarDocumentos` removido → 3 das 18 views vermelhas, uma delas exibindo a
+     mensagem do próprio módulo. O seam falha fechado, como os três da B2.
+
+### Os dois verdes que não morderam — achados desta sessão
+
+**1. A asserção (c) do ATO 1 da bancada de corrida não distinguia o `pdfHTML` do fallback.**
+Mutando o `commitViewResult` do `renderItinerarios` para fora, a bancada seguiu **verde**: ela
+procurava o título do documento e uma linha da tabela no PDF, e as duas coisas aparecem também no
+caminho de fallback do `baixarPdf`, que clona o `.doc` vivo — o `searchPanel` chama `docHead(title)`
+com o mesmo texto, e Itinerários não pagina, então a tabela inteira está no DOM. **Consertado nesta
+sessão:** a asserção passou a exigir a AUSÊNCIA do campo de busca (`id="spInput"`) no PDF, que é o
+que só o `pdfHTML` committado tem. Com o conserto, a mesma mutação fica vermelha. Registrado
+também em `docs/estrutura-frontend.md` §5, como aviso geral sobre asserção de PDF.
+
+**2. A bancada não cobre a corrida de gerações DENTRO da mesma view.** Trocar
+`commitViewResult(view, gen, …)` por `commitViewResult(view, view._gen, …)` no `renderItinerarios`
+— ou seja, escrever sem conferir se a tentativa ainda é a mais nova — deixa os dois atos **verdes**.
+A razão é que cada aba tem o seu objeto `view`: o ato 1 troca de aba, então a escrita atrasada
+acerta o `view` certo, e o guard nunca é exercido. A corrida que ele deixaria passar é a original
+do seam (digitar "101", trocar para "202" na MESMA aba antes da 1ª resposta voltar), e nenhum gate
+do repo a cria. **NÃO consertado**, de propósito: seria um terceiro ato, é buraco pré-existente e
+não tem relação com mover a família. Fica registrado como candidato a trabalho próprio.
+
+### O que a C1 provou sobre o contrato da Fase A, de brinde
+
+Um documento que virou módulo **não tem mais como** cometer o erro clássico: `currentView`,
+`activeLine` e `modalBody` não estão no escopo dele. A disciplina que a Fase A escreveu em
+comentário virou propriedade do arquivo. O que a bancada ainda precisa provar — e prova — é que o
+ctx **chega** correto através da fronteira do módulo; o ATO 1 usa justamente Itinerários.
+
+### Uma limpeza fora da família, declarada
+
+`matchEvent`, `pageBounds` e `preencherLookup` estavam na lista de `import` do `app.js` sem
+nenhum uso no corpo — binding morto desde a B2, que moveu os dois primeiros para dentro do
+`src/ui/paginacao.mjs` e deixou o terceiro usado só pelo próprio `src/data/lookups.mjs`. É o mesmo defeito
+que os comentários de `app.js:23`–`:25` e `:13`–`:16` existem para evitar, e escaparam. Removidos
+aqui porque esta fase edita justamente esse bloco de `import`; qualquer outra coisa fora da C1
+ficou de fora.
 
 ---
 
@@ -431,7 +564,7 @@ são shell, e saem na E.
 ## Fase E — infra do modal (opcional)
 
 Chrome do modal e faixa de abas para `src/ui/`, mais o shell de busca de linha (`lineDocView`,
-`app.js:1218`; `lineDocRun`, `:1261`; `lineSearchRun`, `:1244`; `searchPanel`, `:2683`). A
+`app.js:1247`; `lineDocRun`, `:1290`; `lineSearchRun`, `:1273`; `searchPanel`, `:2604`). A
 família de listas **não** está mais nesta lista: saiu na B2.
 
 É a área que o `check_abas.mjs` exercita diretamente — ele clica `#modalTabAdd` em
@@ -487,15 +620,30 @@ listeners, rotas, composição — e wiring não é o defeito que a crítica apo
 
 1. **Produção sai apenas da `main`.** Push em branch gera *preview deploy*, em domínio próprio. Os
    únicos caminhos para produção são o merge (auto-deploy) e a promoção manual pelo painel.
-2. **Preview não alcança o banco de produção.** `HOSTS_PROD` (`app.js:118`) é allowlist, e o
-   `selecionarSupabase` (`app.js:124`) decide por pertencimento: `hostsProd.includes(host)` em
-   `app.js:127` e o ternário de `:128`–`:130` mandam todo host fora da lista para o banco de teste.
+2. **Preview não alcança o banco de produção.** `HOSTS_PROD` (`app.js:149`) é allowlist, e o
+   `selecionarSupabase` (`app.js:155`) decide por pertencimento: `hostsProd.includes(host)` em
+   `app.js:158` e o ternário de `:159`–`:161` mandam todo host fora da lista para o banco de teste.
    Branch nova nasce apontando para teste, por desenho fail-closed.
 3. **Zero SQL neste plano.** Nenhuma migração, query, chave ou policy.
 
 A ressalva que mantém isso honesto: não mergear protege o **site**, não o **repositório**. O único
-risco real mora no **merge** — a falha do `.vercelignore` é invisível no CI e só aparece na tela.
-Daí a conferência do preview ser condição de merge, não formalidade.
+risco real mora no **merge**.
+
+**Correção medida na Fase C1: a falha do `.vercelignore` NÃO é invisível no CI.** Esta frase dizia
+que era, e que só apareceria na tela — o que tornava a conferência do preview a única rede contra
+o acidente de 10/08/2026. É falso desde a Sessão 2, e a própria seção "Riscos" logo acima já dizia
+o contrário (o smoke deriva os módulos dos `import`); as duas afirmações conviveram sem ninguém
+notar. O job `smoke` do PR #137 rodou contra o **preview desta branch**
+(`DEPLOY_ENVIRONMENT: Preview`, com o bypass da Vercel) e buscou cada módulo novo por HTTP:
+`/src/ui/blocos.mjs`, `/src/data/campos.mjs`, `/src/documentos/shell.mjs` e
+`/src/documentos/frota-historico-itinerarios.mjs` → **200**, mais `/CLAUDE.md`, `/tests/check.js` e
+`/docs/backup_schema.sql` → **404** (o default-deny intacto) e a matriz de ambiente confirmando que
+o preview aponta para o banco de TESTE.
+
+O que a conferência do preview **ainda** compra, e por isso segue sendo condição de merge: o smoke
+prova que o arquivo é SERVIDO, não que o documento RENDERIZA. Um módulo publicado que quebre em
+runtime, um render que pinte vazio, ou a atualização ao vivo que não chega — nada disso o smoke vê.
+É por comportamento que o preview vale, não mais pelo 404.
 
 ## Protocolo
 

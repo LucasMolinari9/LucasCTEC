@@ -37,6 +37,8 @@ import { startServer, getChromium, launchPage, makeReporter } from './lib/rig.mj
 const PORT = 8101;
 // O título do documento de Itinerários — o que distingue o PDF dele de qualquer outro.
 const MARCA_ITINERARIO = /Cadastro de Linhas: Itiner/i;
+// O campo de busca do `searchPanel`, que a CASCA do documento tem e o pdfHTML committado não.
+const SPINPUT = /id="spInput"/;
 const server = await startServer(PORT);
 const { falhas, check } = makeReporter();
 
@@ -133,8 +135,16 @@ async function abrirPortariasEmAbaNova(page) {
   check(linhasAba1 > 0, 'ATO 1 · (c) o pane da aba 1 recebeu a resposta atrasada',
     `linhas de itinerário=${linhasAba1}`);
   const pdfAba1 = await pdfDaAbaAtiva(page);
-  check(MARCA_ITINERARIO.test(pdfAba1) && /TERMINAL MENEZES CORTES/i.test(pdfAba1),
-    'ATO 1 · (c) o pdfHTML da aba 1 recebeu a resposta atrasada', `${pdfAba1.length}c`);
+  // O `!SPINPUT` não é zelo: sem ele esta asserção NÃO distingue o pdfHTML committado da resposta
+  // atrasada do FALLBACK do baixarPdf (`app.js:1088`–`:1089`, que clona o `.doc` vivo). O
+  // `searchPanel` também chama `docHead(title)`, então a marca do título e as linhas da tabela
+  // aparecem nos dois caminhos — medido na Fase C1, mutando o `commitViewResult` do
+  // `renderItinerarios` para fora: a asserção continuava VERDE. O que só o pdfHTML tem é a
+  // AUSÊNCIA do campo de busca: o PDF é o documento, não o painel em volta dele.
+  check(MARCA_ITINERARIO.test(pdfAba1) && /TERMINAL MENEZES CORTES/i.test(pdfAba1)
+        && !SPINPUT.test(pdfAba1),
+    'ATO 1 · (c) o pdfHTML da aba 1 veio do commitViewResult, não do fallback do baixarPdf',
+    `${pdfAba1.length}c`);
 
   await browser.close();
 }
