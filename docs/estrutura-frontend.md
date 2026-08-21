@@ -108,9 +108,9 @@ achar por `grep` do texto da marca, nunca por linha.
   `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`. Eram 15: `UTILITÁRIOS` guardava só o `debounce`, que foi
   para `src/domain/core.mjs` na Fase B2 — seção que fica vazia sai, não vira comentário órfão.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~60,4% do JS (~1,8k linhas; 69 declarações
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~60,3% do JS (~1,8k linhas; 69 declarações
   `function` + 17 `LOADERS.x`). Ele **subiu** de participação tendo ENCOLHIDO em linhas: a Fase B2
-  tirou 266 linhas do arquivo e 99 dele, então o denominador caiu mais que o numerador —
+  tirou 263 linhas do arquivo e 98 dele, então o denominador caiu mais que o numerador —
   percentual de seção não mede progresso de modularização; o total mede.
 
 ### Sub-marcas do bloco `MODAL / SISTEMA DE VIEWS`
