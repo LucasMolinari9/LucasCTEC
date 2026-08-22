@@ -6,18 +6,55 @@ de auditoria em `docs/`).
 
 ## 22/08/2026 — encerramento deliberado da modularização
 
-- Inventariadas as responsabilidades de shell restantes no `app.js` (chrome do modal, abas,
-  rotas, listeners, despacho, busca e painel) e medidas as fronteiras mutáveis que uma extração
-  teria de expor.
-- A etapa E foi deliberadamente não executada: ela atravessaria 9 estados de abas e ao menos 7
-  ações do shell, exportaria estado do IIFE ou criaria dependências bidirecionais, sem retirar uma
-  responsabilidade de negócio completa.
+- Após B, C1–C4 e D, foram inventariadas as responsabilidades de shell restantes no `app.js`:
+  chrome do modal, abas, rotas, listeners, despacho, busca e painel.
+- A etapa E foi deliberadamente não executada: a extração atravessaria 9 estados de abas e ao
+  menos 7 ações do shell, exportaria estado do IIFE ou criaria dependências bidirecionais, sem
+  retirar uma responsabilidade de negócio completa.
 - As conclusões duráveis foram transferidas para `docs/estrutura-frontend.md` e o plano vivo foi
   removido conforme a política de saída documental.
-- Verificação final completada também nos gates que antes estavam pendentes por falta de
-  ferramentas no ambiente: `check_abas.mjs`, `check_selecao_linha.mjs` e
-  `check_corrida_abas.mjs` passaram no Chromium; `scripts/semgrep.sh` executou 121 regras sobre
-  103 arquivos, sem achados.
+
+## 22/08/2026 — Fase D: `LOADERS` vira composição explícita
+
+O inventário pós-C4 encontrou 17 entradas. Dezesseis loaders documentais agora são exports das
+famílias associados diretamente no `app.js`; `empresasRegulares` é a única infraestrutura do
+modal mantida inline, porque abre outra view por `runView`. Wrappers que apenas repassavam `ctx`
+foram removidos, enquanto `lineDocView`, `lineDocRun`, `lineSearchRun` e `searchPanel` continuam no
+shell para a Fase E opcional.
+
+A auditoria também encontrou dois corpos extensos indevidamente remanescentes: `secoesPorLigacao`
+voltou à família C4 e `frotaPorEmpresa` à C3 antes de D prosseguir. As composições finas de C1–C3
+recebem apenas seus helpers de shell em configuradores próprios fail-closed; o seam compartilhado
+de C4 segue em seis slots e não nasceu container global ou service locator. O gate estrutural
+novo exige associações diretas e preserva os quatro helpers de E.
+
+O critério global manda parar: o restante é bootstrap, DOM, navegação, abas e abertura de views;
+a Fase E não foi aberta porque não há redução mensurável de acoplamento. `app.js` caiu de 1.870
+para 1.730 linhas e o bloco modal, de 821 para 685 linhas (~39,6%). `version.json` avançou para 12.
+
+## 22/08/2026 — Fase C4: Municípios · Localidades saem do `app.js`
+
+**Fase C4 em PR próprio**, sem a composição global da Fase D. A medição foi refeita sobre o
+arquivo vigente: `app.js` 2.464 → **1.870** linhas (−594) e o bloco `MODAL / SISTEMA DE VIEWS`
+1.341 → **821** (−520; 43,7% do arquivo novo).
+
+- **Módulo novo:** `src/documentos/municipios-localidades.mjs` reúne os quatro loaders
+  (`ligacoesPorLogradouro`, `municipioRegiao`, `ligacoesPorTerminal`, `localidades`), 13 funções
+  privadas de busca/render e o cache de localidades com invalidator explícito. O arquivo foi
+  reaberto individualmente na `.vercelignore`.
+- **Contrato preservado:** toda entrada usa `ctx = { view, gen, pane, host, line }`; o módulo não
+  exporta nem alcança `currentView`, `activeLine` ou `modalBody`. A fronteira chegou exatamente a
+  seis slots mutáveis (`selecionarLinha`, `novoCtx`, `montarPainelBusca`, `abrirView`,
+  `distinctCods`, `fetchLinesByCods`), limite guardado por teste. A próxima dependência larga deve
+  ficar no `app.js`.
+- **UI sem duplicação:** tabelas, paginação e clique de linha continuam em `src/ui/listas.mjs`.
+  Nenhum markup exclusivo foi promovido a `src/ui/blocos.mjs`.
+- **Estado/PDF:** `#regScope` e `#munScope` persistem durante recargas/repinturas; os dois ramos de
+  tela municipal mantêm `pdf:false`; Localidades mantém `paginateLines(..., { pdf:false })` no
+  bloco secundário e um único commit depois de montar os dois blocos.
+- **Cobertura:** o gate de views ganhou casos para os dois seletores. A mutação que esvaziou
+  `pintarLocalidadeSecoes` derrubou os dois cenários de Localidades por conteúdo abaixo do
+  contrato, e foi revertida antes da validação final.
 
 ## 22/08/2026 — Fase C3: Quadro de Horários · Empresas saem do `app.js`
 
@@ -541,8 +578,10 @@ nenhum sobre o portal.** É o que se espera quando a mudança é toda de ferrame
 de a revisão externa valer a pena mesmo com todos os gates verdes: gate confere o que alguém já
 pensou em conferir.
 
-**Pendente (só o dono, pela aba Actions):** rodar o workflow uma vez para preencher
-`.semgrep/vendor/`. Até lá o gap continua aberto — o que muda é que agora ele **avisa**.
+**Concluído em 14/08/2026:** o dono executou o workflow pela aba Actions; o run
+[`31845142284`](https://github.com/LucasMolinari9/LucasCTEC/actions/runs/31845142284) validou os
+173 rulesets vendorizados contra o registry, abriu a PR #127 e ela foi mesclada sem alterações fora
+de `.semgrep/vendor/`.
 
 ## 08–09/08/2026 — A auditoria completa vira 22 correções, e o gate passa a ver o que não via
 
@@ -997,10 +1036,8 @@ direto no Postgres, prova mais forte que um teste de caixa-preta.
   injeção no agrupador `or=(...)` do PostgREST; headers de segurança (CSP, HSTS,
   `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`) completos no
   `vercel.json`.
-- **Pendente, fora do escopo desta revisão**: ativar *Leaked Password Protection* no Dashboard
-  do Supabase (Authentication → Policies) — já listado como pendente no `CLAUDE.md`; não foi
-  possível confirmar ao vivo se o signup do Auth está fechado (mesmo bloqueio de rede); hash do
-  `vendor/supabase-js-2.110.7.min.js` não foi reconferido contra o pacote oficial do npm.
+- O hash do `vendor/supabase-js-2.110.7.min.js` não foi reconferido contra o pacote oficial do
+  npm nesta revisão.
 
 ## 23/07/2026 — Home vira painel lateral (sidebar de tópicos)
 

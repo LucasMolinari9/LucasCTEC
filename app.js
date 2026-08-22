@@ -4,19 +4,12 @@ import {
 } from './src/domain/core.mjs';
 // `scoreEmpresa` não entra aqui de propósito: só o dedupEmpresasPorRJ a usa, e ele mora no módulo.
 import {
-  groupBy, countBy, fmtMoney, byCodlinha, rjOrder,
-  dedupEmpresasPorRJ, classifyMunLines, terminaisDoMunicipio,
-  resumoFrota, filtrarFrotaEmpresas,
+  fmtMoney, byCodlinha, dedupEmpresasPorRJ, resumoFrota, filtrarFrotaEmpresas,
 } from './src/domain/agrupamento.mjs';
-// `termosLocalidade` NÃO vem daqui: é async (`await getLocalidades()`), então é I/O e ficou no
-// app.js — ela consome o `localidadesQueCasam` importado abaixo.
 // `yearOf` e `matchEvent` NÃO entram: quem os usa é o `paginateEvents` de src/ui/paginacao.mjs,
 // que os importa por conta própria desde a Fase B2 — aqui seriam binding morto, o mesmo motivo
 // pelo qual `beginGen` ficou de fora acima. (O `matchEvent` FICOU nesta lista por engano na B2 e
 // só foi removido na Fase C1; os dois seguem exportados porque os testes os exercitam.)
-import {
-  localidadesQueCasam, orIlike, municipiosExatos,
-} from './src/domain/busca.mjs';
 // Estado do que está na tela — o seam do ciclo de vida da view, o modelo de abas, o despacho do
 // Realtime por aba e o que cada lista mostra. A camada de UI (renderTabs/activateTab/markStale/
 // scheduleReload) fica no app.js: o módulo decide, o app.js aplica.
@@ -25,9 +18,9 @@ import {
 // um convite a recriar o `const view = currentView, gen = beginGen(view)` que a fase eliminou).
 import {
   isCurrentGen, commitViewResult, pushDetail, popDetail,
-  makeCtx, withLine, withHost, nextGen,
+  makeCtx, withLine, withHost,
   MAX_TABS, makeTab, openTabState, closeTabState,
-  dispatchRealtime, filtrarSituacao,
+  dispatchRealtime,
 } from './src/domain/view-state.mjs';
 // `pageBounds` também não entra, pelo mesmo motivo: quem o usa é o `paginate` de
 // src/ui/paginacao.mjs. Ficou nesta lista por engano na B2 e saiu na C1.
@@ -38,12 +31,11 @@ import {
   loading, emptyBox, emptyLinha, errorBox, bannerTrunc,
 } from './src/ui/doc.mjs';
 // Caches de referência (municípios, origens, terminais, cadastro de empresas, tipos de evento).
-// A função de rede chega neles por `configurarLookups` no bootstrap logo abaixo.
+// Os lookups importam diretamente a fronteira REST única.
 // `preencherLookup` NÃO entra: quem o usa é o próprio módulo (e o tests/harness.js, que o
 // importa direto). Terceiro binding morto herdado da B2, removido na C1 junto com os outros dois.
 // `getEvLookups` NÃO entra mais: quem o usava (`renderEmpresaHistory`) saiu na Fase C3.
 import {
-  configurarLookups, getIbge, getOrigem, getTerminais,
   getEmpresas, empNome, empresasMap, empresasList, empresaPorCod,
   INVALIDADORES_LOOKUP,
 } from './src/data/lookups.mjs';
@@ -54,7 +46,7 @@ import { paginate, paginateTable } from './src/ui/paginacao.mjs';
 // A família de listas de LINHA. A ação de clicar numa linha (selecionar + fechar o modal + toast)
 // é de shell e chega por `configurarListas` no bootstrap logo abaixo.
 import {
-  configurarListas, situacaoSelectHTML, linhasTable, bindLineRows, paginateLines, lineResults,
+  configurarListas, linhasTable, lineResults,
 } from './src/ui/listas.mjs';
 // As listas de colunas do `select=`. São dado, não estado; saíram na Fase C1 junto com o
 // primeiro documento, para não existirem em duas cópias (a do módulo e a daqui). Só `LINE_FIELDS`
@@ -63,29 +55,30 @@ import {
 // que a Fase C3 moveu o Quadro de Horários e o Histórico da Empresa — binding morto removido
 // junto (as duas primeiras já estavam mortas desde a C1/C2, e escaparam por engano).
 import { LINE_FIELDS } from './src/data/campos.mjs';
-// FASE C1 — a primeira família de documentos a sair inteira do arquivo. O que fica aqui embaixo
-// são os registros `LOADERS.*`, que permanecem no shell (wrappers de busca de linha).
-// `configurarDocumentos` é o seam ÚNICO de `src/documentos/`: injeta a rede e a ação de shell
-// para TODAS as famílias da Fase C, e é onde o critério de parada do plano se mede.
+import { configurarRest, selecionarSupabase, sbFetch, ehCancelamento } from './src/data/rest.mjs';
+// FASE D — as famílias exportam loaders finais e o registro os associa diretamente. Os
+// configuradores próprios recebem só os quatro helpers que continuam no shell para a Fase E.
 import { configurarDocumentos } from './src/documentos/shell.mjs';
 import {
-  renderLineHistory, renderItinerarios, renderFrota,
+  configurarLoadersFrotaHistoricoItinerarios,
+  loadHistoricoLinha, loadItinerarios, loadFrota,
 } from './src/documentos/frota-historico-itinerarios.mjs';
-// FASE C2 — Estrutura Operacional · Tarifas · Portaria. `LOADERS.estrutura` (one-liner) e
-// `LOADERS.tarifas` (tem corpo — a composição do `searchPanel`, responsabilidade do shell) ainda
-// ficam aqui embaixo; `LOADERS.portarias` virou o one-liner `renderPortarias`.
+// FASE C2 + D — Estrutura, Tarifas e Portaria exportam seus loaders finais.
 import {
-  renderTarifas, tarifaEmpresaRun, renderEstrutura, renderPortarias, invalidarPortariaAnos,
+  configurarLoadersEstruturaTarifas,
+  loadTarifas, loadEstrutura, renderPortarias, invalidarPortariaAnos,
 } from './src/documentos/estrutura-tarifas-portaria.mjs';
-// FASE C3 — Quadro de Horários · Empresas, a terceira família a sair inteira. `renderLinhaQuadro`
-// (modo "por linha") e `quadroEmpresaRun` (modo "por empresa") alimentam `LOADERS.quadroHorarios`,
-// que FICA (tem corpo — mesma razão de `LOADERS.tarifas`). `ligacoesPorEmpresaRun`/
-// `secoesPorEmpresaRun`/`historicoEmpresaRun` alimentam os três `LOADERS.*` de Empresas, que
-// viraram wrappers finos — mesmo padrão que a C2 usou para `tarifaEmpresaRun`.
+// FASE C3 + D — loaders finais do Quadro/Empresas, inclusive o acabamento de frotaPorEmpresa.
 import {
-  renderLinhaQuadro, quadroEmpresaRun,
-  ligacoesPorEmpresaRun, secoesPorEmpresaRun, historicoEmpresaRun,
+  configurarLoadersQuadroEmpresas,
+  loadQuadroHorarios, loadLigacoesPorEmpresa, loadSecoesPorEmpresa, loadHistoricoEmpresa,
+  frotaPorEmpresa,
 } from './src/documentos/quadro-empresas.mjs';
+// FASE C4 + D — loaders finais de Municípios/Localidades, inclusive secoesPorLigacao.
+import {
+  ligacoesPorLogradouro, municipioRegiao, ligacoesPorTerminal, secoesPorLigacao, localidades,
+  invalidarLocalidades,
+} from './src/documentos/municipios-localidades.mjs';
 
 /* ================================================================
    ÍNDICE DO ARQUIVO  —  navegue por `grep` da marca da seção.
@@ -113,7 +106,6 @@ import {
    ligado. As funções passadas abaixo são todas `function` (hoisted), então referenciá-las aqui
    é seguro mesmo estando declaradas mais adiante — ver docs/estrutura-frontend.md §3. */
 configurarDoc({ logoSVG: document.getElementById('brandLogo').innerHTML });
-configurarLookups({ sbFetch });
 /* O seam de seleção: clicar numa linha de qualquer lista SELECIONA a linha, fecha o modal e
    avisa. É composição de shell (rota + modal + toast), não markup, e por isso não desce para o
    módulo — desce a AÇÃO, uma vez. `selectLine`/`closeModal`/`toast` são `function` (hoisted).
@@ -132,7 +124,17 @@ configurarListas({ aoSelecionarLinha: row => {
 // arquivo, e passá-la aqui por valor bateria em TDZ — o bootstrap roda no TOPO do IIFE, antes da
 // declaração existir. O fecho só a lê quando de fato CHAMADO, muito depois de o arquivo inteiro
 // já ter sido avaliado (nenhum documento abre no load).
-configurarDocumentos({ sbFetch, selecionarLinha: selectLine, novoCtx: (view, pane, host) => novoCtx(view, pane, host) });
+configurarDocumentos({
+  selecionarLinha: selectLine,
+  novoCtx: (view, pane, host) => novoCtx(view, pane, host),
+  montarPainelBusca: (ctx, options) => searchPanel(ctx, options),
+  abrirView: options => runView(options),
+  distinctCods: (rows, limit) => distinctCods(rows, limit),
+  fetchLinesByCods: (cods, options) => fetchLinesByCods(cods, options),
+});
+configurarLoadersFrotaHistoricoItinerarios({ lineDocView, lineSearchRun, searchPanel });
+configurarLoadersEstruturaTarifas({ lineDocView, lineDocRun, searchPanel });
+configurarLoadersQuadroEmpresas({ lineSearchRun, searchPanel });
 
 /* ================================================================
    SUPABASE CONFIG
@@ -170,19 +172,6 @@ const HOSTS_PROD   = ['divatdetro.vercel.app',
 const SB_TESTE_URL = 'https://gontnlfmothfglssbyyk.supabase.co';
 const SB_TESTE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdvbnRubGZtb3RoZmdsc3NieXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNTU0OTAsImV4cCI6MjEwMDgzMTQ5MH0.NMEaXXeWxI6A50KuA1euHpSH3Mi53CXU71N16zrjhH4';
 
-function selecionarSupabase(hostname, config){
-  const host = String(hostname || '').trim().toLowerCase().replace(/\.$/, '');
-  const hostsProd = (config.hostsProd || []).map(h => String(h).trim().toLowerCase().replace(/\.$/, ''));
-  const producao = hostsProd.includes(host);
-  const alvo = producao
-    ? { url: config.prodUrl,  key: config.prodKey,  ambiente: 'producao' }
-    : { url: config.testeUrl, key: config.testeKey, ambiente: 'teste' };
-  if (!alvo.url || !alvo.key) {
-    throw new Error(`Configuração Supabase ausente para o ambiente de ${alvo.ambiente}.`);
-  }
-  return Object.freeze({ ...alvo, hostname: host });
-}
-
 const SB = selecionarSupabase(location.hostname, {
   hostsProd: HOSTS_PROD,
   prodUrl: SB_URL,
@@ -190,107 +179,11 @@ const SB = selecionarSupabase(location.hostname, {
   testeUrl: SB_TESTE_URL,
   testeKey: SB_TESTE_KEY
 });
+configurarRest({ url: SB.url, key: SB.key, fetch: window.fetch.bind(window) });
 
-const esperar = ms => new Promise(r => setTimeout(r, ms));
-
-const SB_TIMEOUT_MS = 20000;   // teto por requisição: evita a tela presa em "Carregando…" pra sempre
-const SB_RETRIES    = 2;       // tentativas extras só p/ erros transitórios (rede / 5xx / 429)
-
-// Erro de requisição CANCELADA de propósito (busca ficou obsoleta), distinto de timeout e de
-// falha de rede. Quem chama trata isto como "ignore em silêncio", não como erro para exibir.
-const CANCELADO = 'RequisicaoCancelada';
-const ehCancelamento = e => e && e.name === CANCELADO;
-
-// fetch com timeout via AbortController — cancela a requisição se passar do teto.
-// `sinal` (opcional) é um AbortSignal EXTERNO, de quem quer cancelar antes disso (busca obsoleta).
-// Os dois são compostos, e a distinção entre eles é preservada: timeout vira mensagem para o
-// usuário, cancelamento externo é engolido. Sem essa distinção, trocar de termo de busca pintaria
-// "Tempo de resposta esgotado" na tela.
-async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal){
-  if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  const repassar = () => ctrl.abort();
-  if (sinal) sinal.addEventListener('abort', repassar, { once: true });
-  try {
-    return await fetch(url, { ...opts, signal: ctrl.signal });
-  } catch (e) {
-    // o abort veio de fora, não do relógio
-    if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-    throw e;
-  } finally {
-    clearTimeout(t);
-    if (sinal) sinal.removeEventListener('abort', repassar);
-  }
-}
-
-async function sbFetch(table, qs = '', sinal) {
-  const url = `${SB.url}/rest/v1/${table}?${qs}`;
-  let ultimoErro;
-  for (let tentativa = 0; tentativa <= SB_RETRIES; tentativa++) {
-    try {
-      const res = await fetchComTimeout(url, {
-        headers: { apikey: SB.key, Authorization: `Bearer ${SB.key}` }
-      }, SB_TIMEOUT_MS, sinal);
-      if (!res.ok) {
-        // 5xx/429 são transitórios → vale repetir; demais 4xx são definitivos
-        if ((res.status >= 500 || res.status === 429) && tentativa < SB_RETRIES) {
-          ultimoErro = new Error(`HTTP ${res.status}`);
-          await esperar(400 * 2 ** tentativa);          // backoff: 400ms, 800ms
-          // o cancelamento pode chegar DURANTE o backoff: sem esta conferência, a tentativa
-          // seguinte sairia para a rede depois de a busca já ter sido abandonada.
-          if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-          continue;
-        }
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || `HTTP ${res.status}`);
-      }
-      return marcarTrunc(await res.json(), qs);
-    } catch (e) {
-      // cancelamento nunca repete: foi pedido, não é falha.
-      if (ehCancelamento(e)) throw e;
-      ultimoErro = e;
-      const transitorio = (e.name === 'AbortError') || (e instanceof TypeError); // timeout ou falha de rede
-      if (transitorio && tentativa < SB_RETRIES) {
-        await esperar(400 * 2 ** tentativa);
-        if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-        continue;
-      }
-      if (e.name === 'AbortError') throw new Error('Tempo de resposta esgotado — verifique a conexão e tente novamente.');
-      throw ultimoErro;
-    }
-  }
-  throw ultimoErro;
-}
-
-// Teto do PostgREST: `pgrst.db_max_rows` do role `authenticator`. Confirmado contra o banco vivo
-// em 09/08/2026 e versionado em docs/backup_schema.sql (bloco LIMITES DE ROLE), além de descrito
-// no CLAUDE.md (seção Supabase). Subir o teto exige mudar os TRÊS na mesma tarefa: o banco, esta
-// constante e a baseline — a baseline porque um restore sem ela devolve o banco sem teto nenhum,
-// e sem sintoma; esta constante porque o marcarTrunc a usa como segundo critério de truncagem.
-const SB_MAX_ROWS = 30000;
-// Marca (sem alterar o conteúdo) um array de resultados que provavelmente foi CORTADO:
-// só sinaliza quando a consulta tinha um limit "de lista" (>=50) e veio cheio até o teto.
-// A flag é não-enumerável → JSON.stringify/map/spread ignoram; só quem checa rows._trunc vê.
-// O teto efetivo é o MENOR entre o limit pedido e o do servidor: um `limit` maior que
-// SB_MAX_ROWS sairia cortado em silêncio pelo critério antigo, porque data.length (30000)
-// nunca alcança lim (50000) — sem banner e sem toast. Hoje não dispara (os 5 maiores limits
-// do app.js são exatamente 30000); é armadilha armada para a próxima consulta grande.
-function marcarTrunc(data, qs){
-  if (!Array.isArray(data)) return data;
-  const m = /(?:^|&)limit=(\d+)/.exec(qs || '');
-  if (m){
-    const teto = Math.min(+m[1], SB_MAX_ROWS);
-    if (teto >= 50 && data.length >= teto){
-      Object.defineProperty(data, '_trunc',  { value:true, enumerable:false });
-      Object.defineProperty(data, '_limite', { value:teto, enumerable:false });
-    }
-  }
-  return data;
-}
 // O BANNER que avisa o usuário sobre essa truncagem é markup, não infraestrutura: mora em
 // `src/ui/doc.mjs` (`bannerTrunc`). O contrato entre os dois são os campos não-enumeráveis
-// `_trunc`/`_limite` marcados logo acima — mexeu num lado, leia o outro.
+// `_trunc`/`_limite` marcados em `src/data/rest.mjs` — mexeu num lado, leia o outro.
 
 /* --- Regras de domínio e formatação (funções puras) ---
    Daqui pra baixo, nenhuma função toca rede/DOM — só recebem dado e devolvem
@@ -796,9 +689,9 @@ async function refreshActiveLine(){
    `src/ui/blocos.mjs`, junto com o da tabela de itinerário e o da grade de frota.
    AVISO, medido em 21/08/2026 e NÃO consertado (não é desta família): três marcas abaixo
    abrigam registro de outra. `LOADERS.empresasRegulares` mora sob `DOC · Estrutura
-   Operacional`, `LOADERS.municipioRegiao` mora sob `DOC · Empresas`, e `ligacoesPorTerminal`,
-   `secoesPorLigacao` e `frotaPorEmpresa` moram sob `DOC · Municípios`. Não dimensione uma fase
-   pela marca: meça por SÍMBOLO. Quem mover essas famílias (C2, C3, C4) conserta as suas.
+   Operacional`; desde a C4 os quatro registros de Municípios/Localidades ficam juntos na marca
+   de composição C4. `secoesPorLigacao` e `frotaPorEmpresa` ainda moram sob a marca seguinte.
+   Não dimensione uma fase pela marca: meça por SÍMBOLO.
    ================================================================ */
 /* --- Chrome do modal --------------------------------------------- */
 const overlay       = document.getElementById('modalOverlay');
@@ -1306,80 +1199,38 @@ function lineDocRun(ctx, term, render){
    registro, que é shell: o painel de busca de linha e o `lineSearchRun` que resolve o termo.
    O MARKUP do evento (`evBandHTML`/`evBlocksHTML`) mora em `src/ui/blocos.mjs`, porque o
    Histórico da EMPRESA (mais abaixo, família C3) usa os mesmos dois blocos. */
-LOADERS.historicoLinha = async (ctx) => {
-  const pre = ctx.line ? (ctx.line.numero_ligacao || ctx.line.codlinha || '') : '';
-  searchPanel(ctx, { title:'Histórico da Linha', placeholder:'Nome, número ou código da linha', value:pre,
-    onRun: (term, rctx) => lineSearchRun(rctx, term, { render:renderLineHistory,
-      emptyMsg:'Busque pelo nome, número ou código da linha.', prompt:'clique para ver o histórico' }) });
-};
+LOADERS.historicoLinha = loadHistoricoLinha;
 
 /* --- DOC · Itinerários --------------------------------------------
    Render em `src/documentos/frota-historico-itinerarios.mjs`; a tabela e a normalização de
    sentido, em `src/ui/blocos.mjs` (a Estrutura Operacional, família C2, também as usa). */
-LOADERS.itinerarios = (ctx) => lineDocView(ctx, { subtitle:'Cadastro de Linhas: Itinerários', render:renderItinerarios });
+LOADERS.itinerarios = loadItinerarios;
 
 /* --- DOC · Quadro de Horários ---------------------------------
    `quadroMetaHTML`/`quadroDocInner`/`fetchQHByLines`, os renders (`renderLinhaQuadro`,
    `renderEmpresaQuadros`) e o modo empresa (`quadroEmpresaRun`) moraram para
-   `src/documentos/quadro-empresas.mjs` na Fase C3. `quadroLinhaRun` FICOU: é wrapper que chama
-   `lineSearchRun` (abaixo), que só existe aqui porque usa `selectLine` — shell puro, sem seam de
-   injeção (a razão está no cabeçalho do módulo novo). */
+   `src/documentos/quadro-empresas.mjs`; D fechou a composição fina dentro da família. */
 
-// Modo linha: resolve o termo (número, nome ou código) → 1 linha (mostra o quadro) ou várias (lista)
-function quadroLinhaRun(ctx, term){
-  return lineSearchRun(ctx, term, { render:renderLinhaQuadro, emptyMsg:'Busque a linha pelo número, nome ou código.', prompt:'clique para ver o quadro' });
-}
-
-LOADERS.quadroHorarios = async (ctx) => {
-  searchPanel(ctx, {
-    title:'Quadro de Horários',
-    placeholder:'Número, nome ou código da linha (ou empresa)',
-    selectOpts:[['linha','Por linha'],['empresa','Por empresa (PDF de todos)']],
-    note: 'Por linha: número, nome ou código → mostra o quadro dela. Por empresa: nome ou código → baixa o PDF de todos os quadros da operadora.',
-    onRun: (term, rctx, modo) => modo==='empresa' ? quadroEmpresaRun(rctx, term) : quadroLinhaRun(rctx, term)
-  });
-  // havendo linha ativa, prefill com a linha e mostra o quadro dela (modo "Por linha", padrão)
-  if (ctx.line){
-    const i = ctx.pane.querySelector('#spInput'); if(i) i.value = ctx.line.numero_ligacao || ctx.line.codlinha || '';
-    await renderLinhaQuadro(withHost(ctx, ctx.pane.querySelector('#spHost')));
-  }
-};
+LOADERS.quadroHorarios = loadQuadroHorarios;
 
 /* --- DOC · Tarifas --------------------------------------------
    Os renders (`renderTarifas`, `tarifaEmpresaRun`, `renderTarifasEmpresa`) e o markup só de
    Tarifas (`linhaTarifaRowHTML`/`LINHA_TARIFA_COLS`) moraram para
    `src/documentos/estrutura-tarifas-portaria.mjs` na Fase C2. `secoesTarifasHTML`/`tarifaRowHTML`/
    `TARIFA_COLS`, que o Quadro de Horários (logo acima) TAMBÉM usa, foram para `src/ui/blocos.mjs`.
-   Aqui fica só o registro — que É trabalho de shell (composição do `searchPanel` com dois
-   modos), não um one-liner; essa composição permanece no shell. */
-LOADERS.tarifas = (ctx) => {
-  searchPanel(ctx, {
-    title:'Tarifas Vigentes',
-    placeholder:'Nome, número ou código da linha (ou empresa)',
-    selectOpts:[['linha','Por linha'],['empresa','Por empresa']],
-    note:'Por linha: nome, número ou código → mostra as tarifas dela. Por empresa: nome ou código RJ → lista as tarifas de todas as linhas da operadora.',
-    onRun:(term, rctx, modo) => modo==='empresa' ? tarifaEmpresaRun(rctx, term) : lineDocRun(rctx, term, renderTarifas)
-  });
-  const host = ctx.pane.querySelector('#spHost');
-  if (ctx.line){
-    const i = ctx.pane.querySelector('#spInput');
-    if (i) i.value = ctx.line.numero_ligacao || ctx.line.codlinha || '';
-    renderTarifas(withHost(ctx, host));
-  } else {
-    host.innerHTML = emptyBox('Busque a linha pelo nome, número ou código — ou troque para "Por empresa".');
-  }
-};
+   D fechou a composição de busca na família; aqui fica só a associação direta. */
+LOADERS.tarifas = loadTarifas;
 
 /* --- DOC · Frota --------------------------------------------------
    Render em `src/documentos/frota-historico-itinerarios.mjs`; a grade de KPIs
    (`frotaBlockHTML`), em `src/ui/blocos.mjs` — a Estrutura Operacional, logo abaixo, a repete. */
-LOADERS.frota = (ctx) => lineDocView(ctx, { subtitle:'Frota da Linha', render:renderFrota });
+LOADERS.frota = loadFrota;
 
 /* --- DOC · Estrutura Operacional ------------------------------
    Render em `src/documentos/estrutura-tarifas-portaria.mjs` (Fase C2) — o documento consolidado
    (igual ao Relatório oficial): cadastro + Seções/Tarifas + Itinerário + Quadro de Horários e
    Frota, num único `.doc` (também usado no PDF). Aqui fica só o registro, one-liner de shell. */
-LOADERS.estrutura = (ctx) => lineDocView(ctx, { subtitle:'Cadastro de Linhas: Estrutura Operacional', render:renderEstrutura });
+LOADERS.estrutura = loadEstrutura;
 
 /* ---- Empresas ---- */
 LOADERS.empresasRegulares = async ({ view, gen, pane }) => {
@@ -1434,8 +1285,8 @@ LOADERS.empresasRegulares = async ({ view, gen, pane }) => {
    `ligacoesPorEmpresaRun`/`secoesPorEmpresaRun`/`historicoEmpresaRun` (a lógica que era o corpo
    do `onRun` de cada `LOADERS.*`) e `renderEmpresaHistory` moraram para
    `src/documentos/quadro-empresas.mjs` na Fase C3 — mesmo padrão que a C2 usou para
-   `tarifaEmpresaRun`. Os três registros ficaram como wrappers finos (`searchPanel` + a função
-   importada). `openEmpresaLigacoes` FICOU: abre uma view NOVA via `runView`, que é shell puro
+   `tarifaEmpresaRun`. D moveu os wrappers finos para o export final. `openEmpresaLigacoes`
+   FICOU: abre uma view NOVA via `runView`, que é shell puro
    sem seam de injeção — ver a nota no cabeçalho do módulo novo. */
 function openEmpresaLigacoes(cod){
   runView({ title:'Ligações por Empresa', tables:['tabela_vista_teste','codempresa_teste'], loader: async({ view, gen, pane })=>{
@@ -1449,422 +1300,23 @@ function openEmpresaLigacoes(cod){
     lineResults(pane.querySelector('#empLigResult'), rows, { view, gen });
   }});
 }
-LOADERS.ligacoesPorEmpresa = async (ctx) => {
-  const pre = ctx.line?.codempresa || '';
-  searchPanel(ctx, { title:'Ligações por Empresa', placeholder:'Código (ex. 101) ou nome da empresa', value:pre,
-    onRun: (term, rctx) => ligacoesPorEmpresaRun(rctx, term) });
-};
-LOADERS.secoesPorEmpresa = async (ctx) => {
-  const pre = ctx.line?.codempresa || '';
-  searchPanel(ctx, { title:'Seções por Empresa', placeholder:'Código da empresa (ex. 101)', value:pre,
-    onRun: (term, rctx) => secoesPorEmpresaRun(rctx, term) });
-};
-LOADERS.historicoEmpresa = async (ctx) => {
-  const pre = ctx.line?.codempresa || '';
-  searchPanel(ctx, { title:'Histórico da Empresa', placeholder:'Nome ou código da empresa (ex. 1001 ou AUTO VIAÇÃO)', value:pre,
-    onRun: (term, rctx) => historicoEmpresaRun(rctx, term) });
-};
+LOADERS.ligacoesPorEmpresa = loadLigacoesPorEmpresa;
+LOADERS.secoesPorEmpresa = loadSecoesPorEmpresa;
+LOADERS.historicoEmpresa = loadHistoricoEmpresa;
 
-/* ---- Consultas (por logradouro, terminal, localidade, município) ---- */
-LOADERS.ligacoesPorLogradouro = async (ctx) => {
-  const ibge = await getIbge();
-  const munOpts = Object.entries(ibge).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>[cod, v.nome]);
-  searchPanel(ctx, { title:'Ligações por Logradouro', placeholder:'Nome da via / logradouro', selectOpts:[['','Todos os municípios'],...munOpts], onRun: async(term, { view, gen, host }, ibgeCod)=>{
-    if(!term){ host.innerHTML=emptyBox('Digite o nome do logradouro.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    // RPC divat_busca_logradouro: busca sem acento/caixa, casando TIPO + NOME do logradouro
-    // (ex. "Rua Acre" ou só "Acre" — nome_logradouro sozinho não tem o tipo) e filtra
-    // opcionalmente por município (cod_municipio_origem, via p_ibge).
-    const qsMun = ibgeCod? `&p_ibge=${enc(ibgeCod)}` : '';
-    const it = await sbFetch('rpc/divat_busca_logradouro', `termo=${ilikeTerm(term)}${qsMun}&select=codlinha&limit=2000`);
-    const cods=distinctCods(it,500);
-    const munTxt = ibgeCod? ` em ${esc(ibge[ibgeCod]?.nome||'')}` : '';
-    if(!cods.length){ host.innerHTML=emptyBox(`Nenhuma linha passa por esse logradouro${munTxt}.`); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    const rows = await fetchLinesByCods(cods,{limit:500});
-    const prefix = bannerTrunc(it) + `<p class="doc-note">${cods.length} linha(s) passam por "${esc(term)}"${munTxt}</p>`;
-    lineResults(host, rows, { prefixHTML: prefix, view, gen });
-  }});
-};
-LOADERS.municipioRegiao = async (ctx) => {
-  const ibge = await getIbge();
-  // Região Programa clássica (regiao_municipio) — é a classificação do print DETRO.
-  const regioes = [...new Set(Object.values(ibge).map(x=>x.regiaoPrograma).filter(Boolean))].sort();
-  // tabela de municípios clicáveis (drill-down → openLinhasPorIbge)
-  const munTable = (entries, host)=>{
-    const body = entries.sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>
-      `<tr class="clickable" tabindex="0" role="button" data-ibge="${esc(cod)}"><td class="td-logr">${esc(v.nome)}</td><td class="td-tipo">${esc(orDash(v.regiaoPrograma))}</td><td class="td-num">cód. ${esc(cod)}</td></tr>`).join('');
-    host.innerHTML = body? tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}], body, entries.length+' município(s) · clique para ver as linhas'):emptyBox('Nenhum município.');
-    host.querySelectorAll('tr[data-ibge]').forEach(tr=>tr.addEventListener('click',()=>openLinhasPorIbge(tr.dataset.ibge, ibge[tr.dataset.ibge]?.nome)));
-  };
-  searchPanel(ctx, { title:'Município e Região', placeholder:'Nome do município (ou escolha uma região)', selectOpts:[['','Todas as regiões'],...regioes.map(r=>[r,r])], onRun: async(term, rctx, region)=>{
-    const host = rctx.host;
-    await getEmpresas();
-    // 1) município digitado → vai pras linhas do município (lista se houver vários)
-    if(term){
-      const municipios = Object.entries(ibge).filter(([,v])=> (!region||v.regiaoPrograma===region) && norm(v.nome).includes(norm(term)) );
-      if(!municipios.length){ host.innerHTML = emptyBox('Nenhum município.'); return; }
-      if(municipios.length===1){ openLinhasPorIbge(municipios[0][0], municipios[0][1].nome); return; }
-      munTable(municipios, host); return;
-    }
-    // 2) Região Programa escolhida → duas métricas do print (RPC divat_linhas_regiao):
-    //    "origem na região" (1º trecho da linha na região) × "trafega dentro da região"
-    //    (todos os trechos na região). O usuário alterna pelo seletor de escopo.
-    if(region){
-      const muns = Object.entries(ibge).filter(([,v])=>v.regiaoPrograma===region).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||''));
-      const chips = muns.map(([cod,v])=>`<button type="button" class="mun-chip" data-ibge="${esc(cod)}">${esc(v.nome)}</button>`).join('');
-      host.innerHTML = `<div class="loc-tools"><label>Mostrar <select id="regScope">
-          <option value="origem">Linhas com origem na Região Programa</option>
-          <option value="dentro">Linhas que trafegam dentro da Região Programa</option>
-        </select></label></div>
-        <div class="mun-chips"><span class="mun-chips-lbl">Filtrar por município:</span>${chips}</div>
-        <div id="regResult"></div>`;
-      const result = host.querySelector('#regResult');
-      const scope  = host.querySelector('#regScope');
-      host.querySelectorAll('.mun-chip').forEach(b=>b.addEventListener('click',()=>openLinhasPorIbge(b.dataset.ibge, ibge[b.dataset.ibge]?.nome)));
-      async function paint(){
-        // geração NOVA da MESMA tentativa (nextGen preserva view/pane/host): o usuário pode
-        // trocar o escopo de novo antes de a RPC responder — é a corrida que motivou o seam.
-        // Um ctx montado do zero aqui acertaria a aba errada se ele tivesse trocado de aba.
-        const { view, gen } = nextGen(rctx);
-        result.innerHTML = loading();
-        const modo = scope.value;
-        const it = await sbFetch('rpc/divat_linhas_regiao', `p_regiao=${enc(region)}&p_modo=${enc(modo)}&select=codlinha&limit=2000`);
-        const lc = distinctCods(it,500);
-        // sem esc() aqui de propósito: emptyBox já escapa. Escapar duas vezes fazia uma região
-        // com apóstrofo sair como &amp;#39; na tela.
-        if(!lc.length){ result.innerHTML = emptyBox('Nenhuma linha para esse critério na região '+region+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-        const rows = await fetchLinesByCods(lc,{limit:500});
-        const label = modo==='origem' ? 'com origem na' : 'que trafegam dentro da';
-        const prefix = bannerTrunc(it)
-          + `<p class="doc-count">${lc.length} linha(s) ${label} região ${esc(region)}</p>`;
-        lineResults(result, rows, { prefixHTML: prefix, view, gen });
-      }
-      scope.addEventListener('change', ()=>{ paint().catch(e=>{ result.innerHTML = errorBox(e.message); }); });
-      paint().catch(e=>{ result.innerHTML = errorBox(e.message); });
-      return;
-    }
-    // 3) nada informado → orienta
-    host.innerHTML = emptyBox('Escolha uma região para ver as linhas, ou digite o nome de um município.');
-  }, auto:true});
-};
-/* --- DOC · Municípios / entre-municípios -------------------------- */
-function openLinhasPorIbge(codibge, nome){
-  runView({ title:'Linhas no Município', tables:['itinerario_teste','tabela_vista_teste','codempresa_teste'], loader: async(ctx)=>{
-    const { view, gen, pane } = ctx;
-    const it = await sbFetch('itinerario_teste', `cod_municipio_origem=eq.${enc(codibge)}&select=codlinha&limit=4000`);
-    const allCods=distinctCods(it);          // total real (sem corte) para o "Total"
-    const cods=allCods.slice(0,500);         // teto de listagem (alinha com as views irmãs)
-    if(!cods.length){ pane.innerHTML = `<div class="doc">${docHead('Linhas no Município')}${emptyBox('Nenhuma linha registrada em '+(nome||codibge)+'.')}</div>`; return; }
-    const rows = await fetchLinesByCods(cods,{limit:500});
-    const avisoTrunc = allCods.length>cods.length
-      ? `<div class="trunc-aviso"><b>Lista parcial:</b> ${allCods.length} linhas no total; mostrando as primeiras ${cods.length}.</div>` : '';
-    pane.innerHTML = `<div class="doc">${docHead('Linhas no Município')}
-      ${metaRows([['Município',esc(nome||codibge),true],['Total',allCods.length+' linha(s)']])}
-      ${avisoTrunc}
-      <div class="loc-tools"><label>Mostrar <select id="munScope">
-        <option value="todas">Todas as linhas</option>
-        <option value="dentro">Só dentro do município</option>
-        <option value="inter">Que vão para outros municípios</option>
-      </select></label></div>
-      <div id="munResult"></div></div>`;
-    const result = pane.querySelector('#munResult');
-    const scope  = pane.querySelector('#munScope');
-    const metaPdf = metaRows([['Município',esc(nome||codibge),true],['Total',allCods.length+' linha(s)']]);
-    // PDF determinístico: lista completa, sem a barra de filtro (evita espaço em branco / subconjunto filtrado)
-    commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Linhas no Município')}${metaPdf}${avisoTrunc}${linhasTable(rows)}</div>` });
-    // classificação dentro×intermunicipal PREGUIÇOSA: só busca o itinerário completo das
-    // linhas quando o usuário escolhe um filtro (o padrão "todas" mantém o custo atual).
-    let cls = null;
-    async function ensureCls(){
-      if(cls) return cls;
-      const it2 = await sbFetch('itinerario_teste', `codlinha=in.(${cods.map(enc).join(',')})&select=codlinha,cod_municipio_origem&limit=30000`);
-      cls = classifyMunLines(it2, codibge);
-      return cls;
-    }
-    async function paint(){
-      // geração PRÓPRIA, derivada do ctx (nextGen preserva view/pane): o usuário pode alternar o
-      // filtro de novo antes de ensureCls() (seu próprio await) resolver — mesma corrida que
-      // motivou o seam. Montar um ctx do zero aqui acertaria a aba ERRADA se ele tivesse trocado
-      // de aba nesse meio-tempo (mesma razão de o `pane` vir capturado).
-      const pctx = nextGen(ctx);
-      // pdf:false → o PDF do Município é o determinístico definido acima (lista completa + meta)
-      if(scope.value==='todas'){ lineResults(result, rows, { pdf:false, view, gen:pctx.gen }); return; }
-      result.innerHTML = loading();
-      const c = await ensureCls();
-      const set = scope.value==='dentro' ? c.dentro : c.inter;
-      lineResults(result, rows.filter(r=>set.has(String(r.codlinha))), { pdf:false, view, gen:pctx.gen });
-    }
-    scope.addEventListener('change', ()=>{ paint().catch(e=>{ result.innerHTML = errorBox(e.message); }); });
-    paint();
-  }});
-}
-// A classificação dentro × intermunicipal (classifyMunLines) e o agrupamento de terminais por
-// grafia (terminaisDoMunicipio) vivem em src/domain/agrupamento.mjs.
-// linhas (codlinha distintos) cujo itinerário passa por um município (codibge)
-//
-// `memo` (opcional): Map de UMA execução, para não repetir a mesma consulta dentro da mesma
-// busca. NÃO é cache global de propósito — cache global aqui envelheceria em silêncio se o
-// Realtime caísse, e precisaria entrar no invalidateCaches; o ganho não paga o acoplamento,
-// porque a repetição que importa acontece toda dentro de uma única busca (ver
-// mostrarLinhasEntreMunicipios).
-async function linhasNoMunicipio(codibge, memo){
-  const chave = String(codibge);
-  // guarda a PROMESSA, não o resultado: duas chamadas para o mesmo município no mesmo tick
-  // pegam o mesmo voo em vez de disparar dois.
-  if (memo && memo.has(chave)) return memo.get(chave);
-  const p = (async () => {
-    // limite alto de propósito: Rio de Janeiro tem ~13,5 mil trechos de itinerário — com
-    // limite menor o conjunto chega incompleto e as interseções entre municípios encolhem
-    const rows = await sbFetch('itinerario_teste', `cod_municipio_origem=eq.${enc(codibge)}&select=codlinha&limit=30000`);
-    return distinctCods(rows);
-  })();
-  // promessa REJEITADA sai do memo: senão um erro transitório de rede ficaria memorizado
-  // pelo resto da busca e toda combinação seguinte falharia pelo mesmo motivo já superado.
-  if (memo){ memo.set(chave, p); p.catch(() => memo.delete(chave)); }
-  return p;
-}
-async function mostrarLinhasResultado(ctx, cods, titulo){
-  const { view, gen, host } = ctx;
-  if(!cods.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para este critério.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  const slice = cods.slice(0,250);
-  const rows = await fetchLinesByCods(slice,{limit:250});
-  // Diferente do modo Localidade (que filtra a seção pelo NOME buscado), aqui não há um nome
-  // pra casar — a busca é geográfica (itinerário). Mostra a tabela de tarifa INTEIRA de cada
-  // linha encontrada.
-  const baseCods = distinctCods(rows, 250);
-  let secByLine = new Map();
-  if(baseCods.length){
-    const secRows = await sbFetch('tarifa_atual_teste',
-      `codlinha=in.(${baseCods.map(enc).join(',')})&select=codlinha,secao,nome_ligacao,nome_ligacao_cresc,tipo_ligacao,tarifa,situacao&order=codlinha,secao&limit=5000`);
-    secByLine = groupBy(secRows, r=>r.codlinha);
-  }
-  const comSecaoN = rows.reduce((n,r)=>n+(secByLine.has(r.codlinha)?1:0),0);
-  const secNote = comSecaoN ? ` · ${comSecaoN} com tarifa cadastrada` : '';
-  const extra = cods.length>slice.length ? ` (mostrando ${slice.length})` : '';
-  const prefix = `<p class="doc-count">${cods.length} linha(s) — ${esc(titulo)}${secNote}${extra}</p>`;
-  renderLocalidadeSecoes(host, rows, secByLine, { prefixHTML: prefix, view, gen,
-    semSecaoSub: '', semSecaoObs: 'Ligam os municípios buscados, mas não têm seção de tarifa cadastrada.' });
-}
-// Município A × Município B — filtro direcional (A→B, respeita a ordem do itinerário) e
-// filtro "trafega pelos dois" (qualquer ordem). `inter` é o próprio resultado não-direcional;
-// o direcional refina `inter` consultando a sequência de trechos do itinerário.
-async function mostrarLinhasEntreMunicipios(ctx, aTerm, bTerm, directional){
-  // Mesmo contrato da irmã `mostrarLinhasPorLocalidade`: as duas são chamadas do MESMO run() e
-  // recebem o MESMO ctx — a busca pode ser trocada enquanto esta está no ar, e é o `gen` que
-  // veio no ctx (não um recém-cunhado) que sabe se esta tentativa ainda é a mais nova.
-  const { view, gen, host } = ctx;
-  const ibge = await getIbge();
-  if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
-  const nameOf = c => ibge[c]?.nome || c;
-  const findCods = t => Object.entries(ibge).filter(([,v])=>norm(v.nome).includes(norm(t))).map(([c])=>c);
-  const a = (aTerm||'').trim(), b = (bTerm||'').trim();
-  if(!a){ host.innerHTML = emptyBox('Informe ao menos o primeiro município.'); return; }
-  const codsA = findCods(a);
-  if(!codsA.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(a)}".`); return; }
-  if(!b){
-    if(codsA.length===1){ openLinhasPorIbge(codsA[0], nameOf(codsA[0])); return; }
-    host.innerHTML = tableHTML([{t:'Município'},{t:'Região',w:'160px'},{t:'IBGE',w:'100px'}],
-      codsA.map(c=>`<tr class="clickable" tabindex="0" role="button" data-ibge="${esc(c)}"><td class="td-logr">${esc(nameOf(c))}</td><td class="td-tipo">${esc(orDash(ibge[c].regiao))}</td><td class="td-num">cód. ${esc(c)}</td></tr>`).join(''),
-      codsA.length+' município(s) · clique para ver as linhas');
-    host.querySelectorAll('tr[data-ibge]').forEach(tr=>tr.addEventListener('click',()=>openLinhasPorIbge(tr.dataset.ibge, nameOf(tr.dataset.ibge))));
-    return;
-  }
-  if(a.toLowerCase()===b.toLowerCase()){ host.innerHTML = emptyBox('Use municípios diferentes nos dois campos.'); return; }
-  const codsB = findCods(b);
-  if(!codsB.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(b)}".`); return; }
-  host.innerHTML = loading();
-  try{
-    const all = new Set();    // direcional: A→B, nessa ordem
-    const inter = new Set();  // trafega pelos dois, qualquer ordem
-    // Memo de UMA execução. O laço é 5×5, e sem ele o mesmo `ca` era rebuscado nas 5 iterações
-    // internas e cada `cb` reaparecia a cada volta externa: 50 consultas de município para no
-    // máximo 10 municípios distintos. Com o memo, no pior caso 75 requisições viram ~35.
-    // Isso reduz a carga que o PORTAL gera — NÃO é rate limiting: quem quiser abusar chama o
-    // PostgREST direto com a chave anon, que é pública por design (ver docs/seguranca.md §9.2).
-    const memoMun = new Map();
-    for(const ca of codsA.slice(0,5)){
-      for(const cb of codsB.slice(0,5)){
-        if(ca===cb) continue;
-        const lA = await linhasNoMunicipio(ca, memoMun);
-        const sB = new Set(await linhasNoMunicipio(cb, memoMun));
-        const interPar = lA.filter(c=>sB.has(c));
-        interPar.forEach(c=>inter.add(c));
-        if(!directional || !interPar.length) continue;
-        const it = await sbFetch('itinerario_teste', `codlinha=in.(${interPar.slice(0,200).map(enc).join(',')})&select=codlinha,cod_municipio_origem,sentido&order=id&limit=30000`);
-        for(const [k,seq] of groupBy(it, r=>r.codlinha+'¦'+(r.sentido||''))){
-          const iA=seq.findIndex(r=>String(r.cod_municipio_origem)===String(ca));
-          const iB=seq.findIndex(r=>String(r.cod_municipio_origem)===String(cb));
-          if(iA>=0&&iB>=0&&iA<iB) all.add(k.split('¦')[0]);
-        }
-      }
-    }
-    const titA = codsA.length===1 ? nameOf(codsA[0]) : a;
-    const titB = codsB.length===1 ? nameOf(codsB[0]) : b;
-    const titulo = directional ? `de ${titA} → ${titB}` : `${titA} e ${titB} (qualquer sentido)`;
-    await mostrarLinhasResultado(ctx, [...(directional?all:inter)], titulo);
-  }catch(e){ host.innerHTML = errorBox(e.message); }
-}
-LOADERS.ligacoesPorTerminal = async (ctx) => {
-  const [orig, ibge, terminais] = await Promise.all([getOrigem(), getIbge(), getTerminais()]);
-  const munOpts = Object.entries(ibge).sort((a,b)=>(a[1].nome||'').localeCompare(b[1].nome||'')).map(([cod,v])=>[cod, v.nome]);
-  const nomesOrigem = [...new Set(Object.values(orig).filter(Boolean))];
-  const nomesTerminal = [...new Set(terminais.map(r=>r.nome_logradouro).filter(Boolean))];
-  const nomesTodos = [...new Set([...nomesOrigem, ...nomesTerminal])].sort((a,b)=>a.localeCompare(b));
-  const suggest = q => { const nq=norm(q); return nomesTodos.filter(n=>norm(n).includes(nq)); };
-  searchPanel(ctx, { title:'Ligações por Terminais', placeholder:'Nome do terminal / origem', selectOpts:[['','Todos os municípios'],...munOpts], suggest, onRun: async(term, rctx, ibgeCod)=>{
-    const { view, gen, pane, host } = rctx;
-    if(!term && !ibgeCod){ host.innerHTML=emptyBox('Digite o nome do terminal/origem, ou escolha um município para ver seus terminais.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    if(!term){
-      const itRows = await getTerminais();
-      const terminaisMun = terminaisDoMunicipio(itRows, ibgeCod);
-      const nomeMun = ibge[ibgeCod]?.nome || ibgeCod;
-      const chips = terminaisMun.length
-        ? `<div class="mun-chips"><span class="mun-chips-lbl">Filtrar por terminal:</span>${terminaisMun.map(t=>{
-            const titulo = `${t.nLinhas} linha(s)`;
-            return `<button type="button" class="mun-chip" data-term="${esc(t.nome)}" title="${esc(titulo)}">${esc(t.nome)}</button>`;
-          }).join('')}</div>`
-        : emptyBox('Nenhum terminal cadastrado em '+nomeMun+'.');
-      const todosCods = await linhasNoMunicipio(ibgeCod);
-      const lineCods = todosCods.slice(0,500);
-      const rows = await fetchLinesByCods(lineCods,{limit:500});
-      const aviso = todosCods.length>lineCods.length
-        ? `<div class="trunc-aviso"><b>Lista parcial:</b> ${todosCods.length} linhas no total; mostrando as primeiras ${lineCods.length}.</div>` : '';
-      const prefix = bannerTrunc(itRows) + chips
-        + `<p class="doc-count">${terminaisMun.length} terminal(is) em ${esc(nomeMun)}</p>` + aviso;
-      lineResults(host, rows, { prefixHTML:prefix, view, gen });
-      host.querySelectorAll('.mun-chip').forEach(b => b.addEventListener('click', () => {
-        const i = pane.querySelector('#spInput');
-        if(i) i.value = b.dataset.term;
-        if(view && view._panelRun) view._panelRun();
-      }));
-      return;
-    }
-    const nTerm = norm(term);
-    // duas fontes distintas de "terminal": origem_teste (ponto de origem do quadro de horários,
-    // quase sempre nome de município) e itinerario_teste tipo "Terminal" (terminal físico, ex.
-    // "Rodoviário Menezes Côrtes") — busca casa qualquer uma das duas.
-    const cods = Object.entries(orig).filter(([,n])=>norm(n).includes(nTerm)).map(([c])=>c);
-    const rawTermRows = await getTerminais();
-    const termRows = rawTermRows.filter(r=>norm(r.nome_logradouro).includes(nTerm));
-    if(!cods.length && !termRows.length){ host.innerHTML=bannerTrunc(rawTermRows)+emptyBox('Nenhum terminal/origem com esse nome.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    let qi=[], qp=[];
-    if(cods.length){
-      const inList = cods.slice(0,50).map(enc).join(',');
-      [qi, qp] = await Promise.all([
-        sbFetch('qh_intervalo_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`),
-        sbFetch('qh_predeterminado_teste', `cod_origem=in.(${inList})&select=codlinha&limit=3000`)
-      ]);
-    }
-    const todosCods = distinctCods([...qi, ...qp, ...termRows]);
-    let filtrados = todosCods;
-    const munTxt = ibgeCod? ` em ${esc(ibge[ibgeCod]?.nome||'')}` : '';
-    if(ibgeCod){
-      const munSet = new Set((await linhasNoMunicipio(ibgeCod)).map(String));
-      filtrados = filtrados.filter(c=>munSet.has(String(c)));
-    }
-    const lineCods = filtrados.slice(0,120);
-    if(!lineCods.length){
-      const msg = ibgeCod && todosCods.length
-        ? `Esse terminal/origem existe, mas não serve o município ${ibge[ibgeCod]?.nome||ibgeCod}.`
-        : 'Nenhuma linha vinculada a esse terminal/origem.';
-      host.innerHTML=bannerTrunc(qi)+bannerTrunc(qp)+bannerTrunc(rawTermRows)+emptyBox(msg);
-      commitViewResult(view, gen, { pdfHTML:null }); return;
-    }
-    const rows = await fetchLinesByCods(lineCods,{limit:200});
-    const aviso = filtrados.length>lineCods.length
-      ? `<div class="trunc-aviso"><b>Lista parcial:</b> ${filtrados.length} linhas no total; mostrando as primeiras ${lineCods.length}.</div>` : '';
-    const prefix = bannerTrunc(qi)+bannerTrunc(qp)+bannerTrunc(rawTermRows)+aviso
-      + `<p class="doc-note">${lineCods.length} linha(s) a partir de "${esc(term)}"${munTxt}</p>`;
-    lineResults(host, rows, { prefixHTML: prefix, view, gen });
-  }});
-};
-LOADERS.secoesPorLigacao = async ({ view, gen, pane, line }) => {
-  // Tudo vem do ctx, incluindo a LINHA. Antes este documento lia `activeLine` DEPOIS do await:
-  // trocar de linha com a busca no ar fazia o cabeçalho sair com a linha nova e a tabela com as
-  // seções da velha — a mesma tela mostrando duas linhas diferentes, sem erro nenhum.
-  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,nome_ligacao,tarifa&order=secao`);
-  if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
-  const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]]);
-  if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyLinha('seção')}</div>`; return; }
-  const cols = [{t:'Seção',w:'70px'},{t:'Descrição'},{t:'Tarifa',w:'90px'}];
-  const rowHTML = r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td></tr>`;
-  pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}
-    <div class="loc-tools"><label>Filtrar <input type="text" id="secF" placeholder="seção ou descrição" autocomplete="off"></label></div>
-    <div id="secResult"></div></div>`;
-  const result = pane.querySelector('#secResult'), inp = pane.querySelector('#secF');
-  const paint = ()=>{
-    const q = norm(inp.value.trim());
-    const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${r.nome_ligacao||''}`).includes(q)) : rows;
-    result.innerHTML = f.length ? tableHTML(cols, f.map(rowHTML).join(''), f.length+' seção(ões)') : emptyBox('Nenhuma seção com esse filtro.');
-  };
-  inp.addEventListener('input', debounce(paint));
-  paint();
-  commitViewResult(view, gen, { pdfHTML:null });
-};
+/* ---- Consultas (por logradouro, terminal, localidade, município) ----
+   Família C4 movida integralmente para `src/documentos/municipios-localidades.mjs`. Aqui ficam
+   somente os registros de composição do LOADERS; a composição global continua fora do escopo. */
+LOADERS.ligacoesPorLogradouro = ligacoesPorLogradouro;
+LOADERS.municipioRegiao = municipioRegiao;
+LOADERS.ligacoesPorTerminal = ligacoesPorTerminal;
+
+LOADERS.secoesPorLigacao = secoesPorLigacao;
 
 // A agregação (resumoFrota) e o filtro da tabela (filtrarFrotaEmpresas) vivem em
 // src/domain/agrupamento.mjs.
 // Frota consolidada por empresa (total geral + quebra por hierarquia) — item 16
-LOADERS.frotaPorEmpresa = async ({ view, gen, pane }) => {
-  const [rows] = await Promise.all([
-    sbFetch('qh_teste', `select=codempresa,hierarquia,frota_operacional,reserva&limit=10000`),
-    getEmpresas()
-  ]);
-  if(!isCurrentGen(view, gen)) return;
-  if(!rows.length){
-    pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}${emptyBox('Nenhuma frota cadastrada.')}</div>`;
-    commitViewResult(view, gen, { pdfHTML:null });
-    return;
-  }
-  const fmtN = n => n.toLocaleString('pt-BR');
-  const { totOp, totRes, porEmp, porHier } = resumoFrota(rows);
-  const frotaEmpresas = porEmp.map(e=>{
-    const cadastro = empresaPorCod(e.cod);
-    return { ...e, nome_empresa:cadastro?.nome_empresa || empNome(e.cod), situacao:cadastro?.situacao || '' };
-  });
-  const h3 = t => `<h3 class="doc-h3">${t}</h3>`;
-  const kpisHTML = `<div class="kpi-grid">
-      <div class="kpi"><b>${fmtN(totOp)}</b><span>Frota operacional</span></div>
-      <div class="kpi"><b>${fmtN(totRes)}</b><span>Reserva</span></div>
-      <div class="kpi"><b>${rows.length}</b><span>Linhas</span></div>
-      <div class="kpi"><b>${porEmp.length}</b><span>Empresas</span></div>
-      <div class="kpi"><b>${porHier.length}</b><span>Hierarquias</span></div>
-    </div>`;
-  const empCols = [{t:'RJ',w:'62px'},{t:'Empresa'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}];
-  const empRowHTML = e=>`<tr><td class="td-num">${esc(e.cod)}</td><td class="td-logr">${esc(e.nome_empresa)}</td><td class="td-num">${e.n}</td><td class="td-sentido">${fmtN(e.op)}</td><td class="td-num">${fmtN(e.res)}</td></tr>`;
-  const empTableHTML = items=>tableHTML(empCols, items.map(empRowHTML).join(''), `${items.length} empresa(s)`);
-  const hierHTML = tableHTML([{t:'Hierarquia'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}],
-    porHier.map(x=>`<tr><td class="td-logr">${esc(orDash(x.h))}</td><td class="td-num">${x.n}</td><td class="td-sentido">${fmtN(x.op)}</td><td class="td-num">${fmtN(x.res)}</td></tr>`).join(''));
-  const footHTML = `<div class="doc-foot">Consolidado sobre ${rows.length} linhas · cadastro DETRO-RJ · DIVAT</div>`;
-  const pdfHTML = items=>`<div class="doc">${docHead('Frota por Empresa')}${bannerTrunc(rows)}${kpisHTML}
-    ${h3('Frota por empresa')}${items.length ? empTableHTML(items) : emptyBox('Nenhuma empresa com esse filtro.')}
-    ${h3('Frota por hierarquia')}${hierHTML}${footHTML}</div>`;
-  pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}
-    ${bannerTrunc(rows)}${kpisHTML}
-    ${h3('Frota por empresa')}
-    <div class="loc-tools">
-      <label>Situação <select id="frotaEmpSit"><option value="todas">Todas</option><option value="ativas" selected>Ativas</option><option value="canceladas">Canceladas</option></select></label>
-      <label>Buscar <input type="text" id="frotaEmpBusca" placeholder="nome ou RJ" autocomplete="off"></label>
-    </div>
-    <div id="frotaEmpResult"></div>
-    ${h3('Frota por hierarquia')}${hierHTML}${footHTML}</div>`;
-  const result = pane.querySelector('#frotaEmpResult');
-  const sel = pane.querySelector('#frotaEmpSit'), inp = pane.querySelector('#frotaEmpBusca');
-  const paint = ()=>{
-    const filtradas = filtrarFrotaEmpresas(frotaEmpresas, sel.value, inp.value);
-    if(!filtradas.length){
-      result.innerHTML = emptyBox('Nenhuma empresa com esse filtro.');
-    } else {
-      paginateTable(result, filtradas, {
-        cols:empCols, rowHTML:empRowHTML, foot:t=>t+' empresa(s)', unit:'empresas',
-        pageSize:25, pdf:false, view, gen,
-      });
-    }
-    commitViewResult(view, gen, { pdfHTML:()=>pdfHTML(filtradas) });
-  };
-  sel.addEventListener('change', paint);
-  inp.addEventListener('input', debounce(paint));
-  paint();
-};
+LOADERS.frotaPorEmpresa = frotaPorEmpresa;
 /* --- DOC · Portaria -----------------------------------------------
    `getPortariaAnos`/`renderPortarias`/`showPortaria` moraram para
    `src/documentos/estrutura-tarifas-portaria.mjs` na Fase C2 — é o único documento de
@@ -1872,224 +1324,9 @@ LOADERS.frotaPorEmpresa = async ({ view, gen, pane }) => {
    `LOADERS.portarias` virou o one-liner `renderPortarias` (import no topo do arquivo). */
 LOADERS.portarias = renderPortarias;
 
-/* ---- Linhas por Localidade (cruza nome em tabela_vista_teste; enriquece com qh_teste) ---- */
-let _localidadesList = null;
-/* --- DOC · Localidades -------------------------------------------- */
-async function getLocalidades(){
-  if(_localidadesList) return _localidadesList;
-  const rows = await sbFetch('localidades_teste', 'select=localidade,ordem_importacao&order=ordem_importacao&limit=2000');
-  const seen = new Set(); const out = [];
-  rows.forEach(r=>{
-    const nome = String(r.localidade||'').replace(/^"+|"+$/g,'').trim();
-    const key = nome.toLowerCase();
-    if(!nome || nome.length<3 || key==='localidade' || seen.has(key)) return;
-    seen.add(key); out.push(nome);
-  });
-  out.sort((a,b)=>a.localeCompare(b));
-  _localidadesList = out;
-  return out;
-}
-// termos p/ o ilike de localidade: nomes canônicos (com acento) + o termo digitado (texto
-// livre, cobre grafias sem acento na base), sem duplicatas
-async function termosLocalidade(term){
-  const canon = localidadesQueCasam(await getLocalidades(), term);
-  const out = [], seen = new Set();
-  for(const t of [...canon, term.trim()]){
-    const k = t.toLowerCase(); if(!t || seen.has(k)) continue; seen.add(k); out.push(t);
-  }
-  return out;
-}
-// `localidadesQueCasam`/`orIlike`/`municipiosExatos` moraram para `src/domain/busca.mjs`.
-// codlinha que casam uma localidade pelo NOME/VIA da linha (tabela_vista), por uma SEÇÃO de
-// tarifa OU por um LOGRADOURO do itinerário — MESMA semântica usada na busca do campo A.
-// Usado p/ cruzar duas localidades de forma simétrica (independe da ordem dos campos).
-async function codsPorLocalidade(term){
-  const termos = await termosLocalidade(term);
-  const [ln, sec, itin] = await Promise.all([
-    sbFetch('tabela_vista_teste', `${orIlike(['nome_ligacao','nome_lig_cresc','via'], termos)}&select=codlinha&limit=3000`),
-    sbFetch('tarifa_atual_teste', `${orIlike(['nome_ligacao','via'], termos)}&select=codlinha&limit=3000`),
-    sbFetch('itinerario_teste', `${orIlike(['nome_logradouro'], termos)}&select=codlinha&limit=2000`)
-  ]);
-  const out = new Set([...ln, ...sec, ...itin].map(r=>r.codlinha).filter(Boolean));
-  // localidade que também é MUNICÍPIO (ex.: Niterói): une as linhas cujo itinerário passa
-  // pelo município — a busca textual não enxerga quem passa sem citar o nome
-  for(const c of municipiosExatos(await getIbge(), termos).slice(0,3)){
-    (await linhasNoMunicipio(c)).forEach(cl=>out.add(cl));
-  }
-  return out;
-}
-async function mostrarLinhasPorLocalidade(ctx, a, b, bTipo='localidade'){
-  // `view`/`gen`/`host` vêm do ctx da busca, montado ANTES do primeiro await: a busca pode ser
-  // trocada enquanto esta está no ar, e quem escreve o resultado no fim precisa saber se ainda
-  // é a tentativa mais nova (ver o contrato do seam em MODAL / SISTEMA DE VIEWS).
-  const { view, gen, host } = ctx;
-  host.innerHTML = loading();
-  try{
-    const termos = await termosLocalidade(a);
-    // 1) linhas cujo nome/nome_cresc/via casa a localidade  2) linhas cujas SEÇÕES de tarifa
-    //    casam a localidade (item 13: as seções da Estrutura também entram na busca)
-    // 3) linhas cujo ITINERÁRIO passa por um logradouro com o nome da localidade (a dica da
-    //    tela promete "nome/itinerário")
-    const [lineRows, secHits, itinHits, ibge] = await Promise.all([
-      sbFetch('tabela_vista_teste', `${orIlike(['nome_ligacao','nome_lig_cresc','via'], termos)}&select=${LINE_FIELDS}&order=nome_ligacao&limit=400`),
-      sbFetch('tarifa_atual_teste', `${orIlike(['nome_ligacao','via'], termos)}&select=codlinha&limit=3000`),
-      sbFetch('itinerario_teste', `${orIlike(['nome_logradouro'], termos)}&select=codlinha&limit=2000`),
-      getIbge()
-    ]);
-    // 4) localidade que também é MUNICÍPIO (ex.: Niterói): linhas cujo itinerário passa pelo
-    //    município também entram — a busca textual não enxerga quem passa sem citar o nome
-    const munACods = [];
-    for(const c of municipiosExatos(ibge, termos).slice(0,3)){
-      (await linhasNoMunicipio(c)).forEach(cl=>munACods.push(cl));
-    }
-    const haveCods = new Set(lineRows.map(r=>r.codlinha));
-    let extraCods = [...new Set([...secHits, ...itinHits].map(r=>r.codlinha).concat(munACods).filter(c=>c && !haveCods.has(c)))];
-    // cruzamento com o campo B: interseção por CODLINHA antes de baixar os dados das linhas
-    // extras (evita buscar linhas que a interseção descartaria e o corte de 200 que estrangulava)
-    let rows = lineRows;
-    if(b && bTipo==='municipio'){
-      // localidade A × MUNICÍPIO B: interseção com as linhas que passam pelo município
-      const cods = Object.entries(ibge).filter(([,v])=>norm(v.nome).includes(norm(b))).map(([c])=>c);
-      if(!cods.length){ host.innerHTML = emptyBox(`Nenhum município com o nome "${esc(b)}".`); commitViewResult(view, gen, { pdfHTML:null }); return; }
-      const munSet = new Set();
-      for(const c of cods.slice(0,5)){ (await linhasNoMunicipio(c)).forEach(cl=>munSet.add(cl)); }
-      rows = rows.filter(r=> munSet.has(r.codlinha));
-      extraCods = extraCods.filter(c=> munSet.has(c));
-    } else if(b){
-      // localidade A × localidade B: interseção SIMÉTRICA por codlinha (mesma busca de
-      // nome/via + seção/itinerário/município que a de A), para não depender da ordem dos campos.
-      const setB = await codsPorLocalidade(b);
-      rows = rows.filter(r=> setB.has(r.codlinha));
-      extraCods = extraCods.filter(c=> setB.has(c));
-    }
-    const fetchCods = extraCods.slice(0,250);
-    let base = rows;
-    if(fetchCods.length) base = rows.concat(await fetchLinesByCods(fetchCods, { limit: fetchCods.length }));
-    if(!base.length){ host.innerHTML = emptyBox(b?`Nenhuma linha entre "${esc(a)}" e "${esc(b)}".`:`Nenhuma linha encontrada para "${esc(a)}".`); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    await getEmpresas();
-    // seções de tarifa cujo NOME casa a(s) localidade(s) buscada(s), por linha — reproduz o
-    // relatório oficial. Município B é só filtro de trânsito, não entra nos termos de seção.
-    const secTerms = [...termos];
-    let termsB = null;
-    if(b && bTipo==='localidade'){ termsB = await termosLocalidade(b); termsB.forEach(t=>secTerms.push(t)); }
-    const baseCods = distinctCods(base, 600);
-    let secByLine = new Map();
-    if(baseCods.length){
-      let secRows = await sbFetch('tarifa_atual_teste',
-        `codlinha=in.(${baseCods.map(enc).join(',')})&${orIlike(['nome_ligacao','nome_ligacao_cresc'], secTerms)}`
-        + `&select=codlinha,secao,nome_ligacao,nome_ligacao_cresc,tipo_ligacao,tarifa,situacao&order=codlinha,secao&limit=5000`);
-      // localidade A × localidade B: mostrar só a seção que liga A↔B (casa AMBAS as
-      // localidades), não toda seção que toca A ou B — foco no trecho pesquisado.
-      if(termsB){
-        const hasAny = (hay, ts) => ts.some(t=>{ const n=norm(t); return n && hay.includes(n); });
-        secRows = secRows.filter(r=>{
-          const hay = norm(`${r.nome_ligacao||''} ${r.nome_ligacao_cresc||''}`);
-          return hasAny(hay, termos) && hasAny(hay, termsB);
-        });
-      }
-      secByLine = groupBy(secRows, r=>r.codlinha);
-    }
-    const comSecaoN = base.reduce((n,r)=>n+(secByLine.has(r.codlinha)?1:0),0);
-    const corte = extraCods.length - fetchCods.length;
-    const titulo = b? `${esc(a)} ↔ ${esc(b)}` : esc(a);
-    const secNote = comSecaoN ? ` · ${comSecaoN} com seção ${b && bTipo==='localidade' ? `${esc(a)} ↔ ${esc(b)}` : `em ${esc(a)}`}` : '';
-    const corteNote = corte>0 ? ` (${corte} linha(s) a mais não exibidas — refine a busca)` : '';
-    const prefix = bannerTrunc(lineRows)
-      + `<p class="doc-count">${base.length} linha(s) · ${titulo}${secNote}${corteNote}</p>`;
-    renderLocalidadeSecoes(host, base, secByLine, { prefixHTML: prefix, view, gen });
-  }catch(e){ host.innerHTML = errorBox(e.message); }
-}
-// 5 modos de busca da tela "Linhas por Localidade e Município" — cada botão de filtro decide
-// o tipo do campo A/B e qual função de busca roda (localidade× vs. município×).
-const LOC_FILTERS = [
-  { label:'Possui seção na Localidade A', kind:'localidade', aType:'localidade', bMode:'none',
-    hint:'Lista as linhas que têm uma seção de tarifa com esse nome na localidade A.' },
-  { label:'De localidade A para localidade B', kind:'localidade', aType:'localidade', bMode:'localidade',
-    hint:'Cruza duas localidades: mostra as linhas que ligam A a B (independe da ordem digitada).' },
-  { label:'De localidade A para Município B', kind:'localidade', aType:'localidade', bMode:'municipio',
-    hint:'Mostra as linhas da localidade A que também passam pelo município B.' },
-  { label:'Do Município A para o Município B', kind:'municipio', aType:'municipio', bMode:'municipio', directional:true,
-    hint:'Mostra as linhas cujo itinerário vai de A para B, nessa ordem.' },
-  { label:'Trafegam nos municípios A e B', kind:'municipio', aType:'municipio', bMode:'municipio', directional:false,
-    hint:'Mostra as linhas que passam pelos dois municípios, em qualquer ordem.' },
-];
-LOADERS.localidades = async (ctx) => {
-  const { view, pane } = ctx;   // `pane` capturado — usado também pelo `.then()` assíncrono abaixo
-  pane.innerHTML = `<div class="doc">${docHead('Linhas por Localidade e Município')}
-    <div class="doc-obs tight" id="locHint"><b>Dica:</b> ${esc(LOC_FILTERS[0].hint)}</div>
-    <div class="loc-filters" id="locFilters" role="tablist">${LOC_FILTERS.map((f,i)=>
-      `<button type="button" class="loc-filter-btn${i===0?' active':''}" data-idx="${i}" aria-pressed="${i===0}">${esc(f.label)}</button>`).join('')}</div>
-    <div class="loc-form">
-      <label id="locALabel"><span class="loc-lbl-txt">Localidade</span><input id="locA" list="locList" placeholder="Digite a localidade…" autocomplete="off"></label>
-      <label id="locBLabel"><span class="loc-lbl-txt">Cruzar com</span><input id="locB" list="locList" placeholder="Segunda localidade…" autocomplete="off"></label>
-    </div>
-    <datalist id="locList"></datalist><datalist id="munLocList"></datalist>
-    <div class="loc-actions"><button class="loc-btn" id="locGo" type="button">Buscar linhas</button></div>
-    <div id="locHost">${emptyBox('Escolha um filtro, preencha os campos e clique em Buscar.')}</div></div>`;
-
-  const A=pane.querySelector('#locA'), B=pane.querySelector('#locB'),
-        ALbl=pane.querySelector('#locALabel .loc-lbl-txt'), BLbl=pane.querySelector('#locBLabel'),
-        BLblTxt=pane.querySelector('#locBLabel .loc-lbl-txt'),
-        hint=pane.querySelector('#locHint'), host=pane.querySelector('#locHost'),
-        filtersBar=pane.querySelector('#locFilters');
-
-  let modeIdx = 0;
-  function applyMode(){
-    const f = LOC_FILTERS[modeIdx];
-    filtersBar.querySelectorAll('.loc-filter-btn').forEach(b=>{
-      const active = +b.dataset.idx===modeIdx;
-      b.classList.toggle('active', active); b.setAttribute('aria-pressed', active);
-    });
-    hint.innerHTML = `<b>Dica:</b> ${esc(f.hint)}`;
-    ALbl.textContent = f.aType==='municipio' ? 'Município' : 'Localidade';
-    A.setAttribute('list', f.aType==='municipio' ? 'munLocList' : 'locList');
-    A.placeholder = f.aType==='municipio' ? 'Nome do município…' : 'Digite a localidade…';
-    A.value=''; B.value='';
-    if(f.bMode==='none'){
-      BLbl.style.display='none';
-    }else{
-      BLbl.style.display='';
-      const bIsMun = f.bMode==='municipio';
-      B.setAttribute('list', bIsMun ? 'munLocList' : 'locList');
-      B.placeholder = bIsMun ? 'Nome do município…' : (f.kind==='municipio' ? 'Segundo município…' : 'Segunda localidade…');
-      BLblTxt.textContent = bIsMun ? 'Município B' : (f.kind==='municipio' ? 'Município B' : 'Cruzar com');
-    }
-    host.innerHTML = emptyBox('Preencha os campos e clique em Buscar.');
-  }
-  filtersBar.addEventListener('click', e=>{
-    const btn = e.target.closest('.loc-filter-btn'); if(!btn) return;
-    modeIdx = +btn.dataset.idx; applyMode();
-  });
-  applyMode();
-
-  // Como o painel de Portarias, este tem o `run` dele e monta o próprio ctx: uma tentativa nova
-  // por busca, com o pane e o host DESTA tela — as duas funções de busca recebem o MESMO.
-  const run = async () => {
-    const f = LOC_FILTERS[modeIdx];
-    const a=(A.value||'').trim(), b=(B.value||'').trim();
-    if(!a){ host.innerHTML = emptyBox(`Informe ${f.aType==='municipio'?'o município':'a localidade'}.`); return; }
-    const rctx = novoCtx(view, pane, host);
-    if(f.kind==='localidade'){
-      const bTipo = f.bMode==='municipio' ? 'municipio' : 'localidade';
-      const bb = f.bMode==='none' ? '' : b;
-      if(bb && bTipo==='localidade' && a.toLowerCase()===bb.toLowerCase()){ host.innerHTML=emptyBox('Use localidades diferentes nos dois campos.'); return; }
-      await mostrarLinhasPorLocalidade(rctx, a, bb, bTipo);
-    }else{
-      if(b && a.toLowerCase()===b.toLowerCase()){ host.innerHTML=emptyBox('Use municípios diferentes nos dois campos.'); return; }
-      await mostrarLinhasEntreMunicipios(rctx, a, b, f.directional);
-    }
-  };
-  pane.querySelector('#locGo').addEventListener('click', run);
-  [A,B].forEach(el=>el.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
-  if(view) view._panelRun = run;   // realtime relê modeIdx a cada chamada, não fixa o modo
-
-  Promise.all([getLocalidades(), getIbge()]).then(([locs, ibge])=>{
-    const muns = [...new Set(Object.values(ibge).map(v=>v.nome).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-    const locDL = pane.querySelector('#locList'), munDL = pane.querySelector('#munLocList');
-    if(locDL) locDL.innerHTML = locs.map(n=>`<option value="${esc(n)}"></option>`).join('');
-    if(munDL) munDL.innerHTML = muns.map(n=>`<option value="${esc(n)}"></option>`).join('');
-  }).catch(e=>{ console.warn('datalists de localidade/município indisponíveis:', e); });
-};
+/* --- DOC · Localidades --------------------------------------------
+   Família C4 movida para `src/documentos/municipios-localidades.mjs`; fica só a composição. */
+LOADERS.localidades = localidades;
 
 /* ================================================================
    COMPONENTES AUXILIARES (tabela de linhas + painel de busca)
@@ -2109,86 +1346,6 @@ async function fetchLinesByCods(cods, { limit = 300 } = {}){
 // (`situacaoSelectHTML`, `linhasTable`, `bindLineRows`, `paginateLines`, `lineResults`) em
 // `src/ui/listas.mjs`, que recebe a ação de clicar numa linha pelo `configurarListas` do
 // bootstrap. Ver docs/estrutura-frontend.md §4.
-// tabela leve de seções de tarifa (Nome da Seção · Tipo · Tarifa) — formato do relatório
-// oficial "seções que possuem seção em <localidade>"
-function secoesLocalidadeTable(secoes){
-  const cols = [{t:'Nome da Seção'},{t:'Tipo',w:'160px'},{t:'Tarifa',w:'90px'}];
-  const body = [...secoes].sort((a,b)=>(a.secao||0)-(b.secao||0)).map(s=>
-    `<tr><td class="td-logr">${esc(orDash(s.nome_ligacao))}</td><td class="td-tipo">${esc(orDash(s.tipo_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(s.tarifa))}</td></tr>`).join('');
-  return tableHTML(cols, body, secoes.length+' seção(ões)');
-}
-// render do "Linhas por Localidade": bloco principal = linhas COM seção na localidade,
-// agrupadas por empresa e com as seções por linha (reproduz o relatório antigo); bloco
-// secundário = demais linhas da cobertura ampla (entram por itinerário/nome), como lista.
-// A barra de situação (Todas/Ativas/Canceladas) usa o MESMO seletor e a MESMA regra do
-// `lineResults` (via situacaoSelectHTML/filtrarSituacao): as duas telas listam linha e
-// precisam concordar no que é "ativa". O filtro repinta os DOIS blocos e refaz o
-// `bindLineRows` — quem entra na tela depois de filtrar tem que continuar clicável.
-function renderLocalidadeSecoes(host, base, secByLine, { prefixHTML='', view, gen, semSecaoSub, semSecaoObs } = {}){
-  host.innerHTML = prefixHTML
-    + `<div class="loc-tools">${situacaoSelectHTML()}</div><div id="locSecResult"></div>`;
-  const result = host.querySelector('#locSecResult');
-  const statusSel = host.querySelector('#lrStatus');
-  const paint = () => {
-    const rows = filtrarSituacao(base, statusSel.value);
-    // o contador do `prefixHTML` é o do resultado INTEIRO e fica acima da barra; ao filtrar,
-    // repetir só o total mentiria sobre o que está na tela — daí a contagem do recorte.
-    pintarLocalidadeSecoes(result, rows, secByLine, { total: base.length, view, gen, semSecaoSub, semSecaoObs });
-  };
-  statusSel.addEventListener('change', paint);
-  paint();
-}
-// uma linha do bloco "com seção": cabeçalho clicável (data-row → bindLineRows) + as seções dela
-function locLinhaSecHTML(r, secByLine){
-  const chips = [boolChip(r.cancelado,'canc.'), boolChip(r.paralisado,'paral.')].filter(Boolean).join(' ');
-  return `<div class="loc-linha-sec">
-    <div class="loc-linha-head clickable" tabindex="0" role="button" data-row='${esc(JSON.stringify(r))}'><span class="mono">${esc(fmtCode(r.codlinha))}</span> <span>${fmtLineName(r.nome_ligacao)}</span> ${chips}</div>
-    ${secoesLocalidadeTable(secByLine.get(r.codlinha)||[])}</div>`;
-}
-// bloco "com seção" de uma FATIA de linhas já ordenada por empresa: os cabeçalhos de empresa
-// entram DENTRO da fatia, e a contagem do cabeçalho é a do grupo INTEIRO (`totais`), não a da
-// página — mesma convenção do `paginateLines` no modo agrupado.
-function locComSecaoHTML(fatia, secByLine, totais){
-  return [...groupBy(fatia, r=>r.codempresa||'—')].map(([cod,rs])=>
-    `<h3 class="loc-emp-head">${esc(empNome(cod))} <span class="loc-emp-rj">RJ-${esc(cod||'—')} · ${totais.get(cod)} linha(s)</span></h3>`
-    + rs.map(r=>locLinhaSecHTML(r, secByLine)).join('')).join('');
-}
-const LOC_SEM_SECAO_OBS = 'Ligam os pontos buscados, mas não têm uma seção de tarifa com esse nome.';
-// Os DOIS blocos são paginados em 25/página (`paginate`/`paginateLines`), como as demais listas
-// de linha do portal — uma localidade grande chega a 400 linhas, cada uma com sua tabela de
-// seções, e despejar tudo no DOM de uma vez travava a tela.
-// Como só a fatia atual entra no DOM, o fallback do `baixarPdf` exportaria só a página aberta:
-// por isso o `pdfHTML` é escrito aqui pelo seam (`commitViewResult`), com os dois blocos
-// INTEIROS. Ver CLAUDE.md § "Paginação é SÓ de tela; o PDF sai INTEIRO".
-function pintarLocalidadeSecoes(host, base, secByLine, { total = base.length, view, gen, semSecaoSub = 'por itinerário ou nome', semSecaoObs = LOC_SEM_SECAO_OBS } = {}){
-  // filtro que não sobra nada: zera o pdfHTML junto, senão o botão PDF baixaria o recorte anterior
-  if(!base.length){ host.innerHTML = emptyBox('Nenhuma linha com esse filtro.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  const comSecao = [...groupBy(base.filter(r=>secByLine.has(r.codlinha)), r=>r.codempresa||'—')]
-    .sort((x,y)=>rjOrder(x[0],y[0])).flatMap(([,rs])=>[...rs].sort(byCodlinha));
-  const semSecao = base.filter(r=>!secByLine.has(r.codlinha));
-  const totais = countBy(comSecao, r=>r.codempresa||'—');
-
-  const cabSemSecao = `<h3 class="loc-emp-head mt22">Outras linhas <span class="loc-emp-rj">${semSecaoSub ? esc(semSecaoSub)+' · ' : ''}${semSecao.length} linha(s)</span></h3>`
-    + `<div class="doc-obs tight">${semSecaoObs}</div>`;
-  host.innerHTML = (base.length < total ? `<p class="doc-count">${base.length} de ${total} linha(s) com o filtro escolhido</p>` : '')
-    + (comSecao.length ? '<div id="locComSecao"></div>' : '')
-    + (semSecao.length ? cabSemSecao + '<div id="locSemSecao"></div>' : '');
-
-  const fatiaComSecao = (s,e) => locComSecaoHTML(comSecao.slice(s,e), secByLine, totais);
-  if(comSecao.length){
-    paginate(host.querySelector('#locComSecao'), comSecao.length, fatiaComSecao,
-      { afterPaint: bindLineRows, unit:'linhas', view, gen });
-  }
-  // `pdf:false`: o PDF deste documento é escrito abaixo, com os DOIS blocos — deixar o
-  // paginateLines escrever o dele sobrescreveria isso com só a lista secundária.
-  if(semSecao.length){
-    paginateLines(host.querySelector('#locSemSecao'), semSecao, { grouped:false, pdf:false, view, gen });
-  }
-  if(view) commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead(view.title)}`
-    + (comSecao.length ? fatiaComSecao(0, comSecao.length) : '')
-    + (semSecao.length ? cabSemSecao + linhasTable([...semSecao].sort(byCodlinha)) : '')
-    + '</div>' });
-}
 // `empresaChooserHTML`/`bindEmpresaRows` moraram para `src/ui/empresas.mjs` na Fase C2 —
 // importados no topo do arquivo. Usados por mais de uma família (Tarifas, Quadro de Horários,
 // Histórico da Empresa), mesmo critério do `src/ui/blocos.mjs`; endereço diferente porque
@@ -2378,7 +1535,7 @@ let reloadTimer = null;
 const CACHE_INVALIDATORS = {
   ...INVALIDADORES_LOOKUP,
   portaria_teste:       invalidarPortariaAnos,
-  localidades_teste:    () => { _localidadesList = null; },
+  localidades_teste:    invalidarLocalidades,
 };
 function invalidateCaches(table){
   const fn = CACHE_INVALIDATORS[table];

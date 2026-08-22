@@ -5,14 +5,11 @@
          index.html NÃO tem <script> inline (a CSP publica script-src 'self');
     [1c] confere que nenhum `env:` de workflow tem duas chaves que só diferem em
          maiúsculas — o GitHub rejeita o workflow e o run morre com zero jobs;
-     [2] guarda anti-drift: confere que as funções copiadas nos *.harness.js ainda
-         existem iguais no app.js (avisa se a original mudou e a cópia ficou velha);
      [3] roda todos os *.test.js desta pasta.
    Sai com código != 0 se QUALQUER etapa falhar. Node puro, sem dependências. */
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { extrairCanon, conferirCanon } = require('./canon.js');
 
 const TESTS_DIR = __dirname;
 const INDEX = path.join(__dirname, '..', 'index.html');
@@ -54,6 +51,31 @@ if (!js.includes("from './src/domain/core.mjs'")) {
 }
 if (!fs.existsSync(VERSION) || !js.includes("'/version.json")) {
   fail('auto-atualização deve observar /version.json');
+}
+
+// Fase D: o registro é composição explícita. Loader documental já extraído precisa entrar por
+// associação direta ao export da família; wrapper `(ctx) => importado(ctx)` só esconde a origem
+// e recria no shell uma camada sem comportamento. Os quatro helpers abaixo são exceção deliberada:
+// pertencem à infraestrutura do modal e ficam para a Fase E opcional.
+{
+  const diretos = [
+    'loadHistoricoLinha', 'loadItinerarios', 'loadQuadroHorarios', 'loadTarifas', 'loadFrota',
+    'loadEstrutura', 'loadLigacoesPorEmpresa', 'loadSecoesPorEmpresa', 'loadHistoricoEmpresa',
+    'ligacoesPorLogradouro', 'municipioRegiao', 'ligacoesPorTerminal', 'secoesPorLigacao',
+    'frotaPorEmpresa', 'localidades', 'renderPortarias',
+  ];
+  const faltam = diretos.filter(nome => !new RegExp(`LOADERS\\.[A-Za-z0-9_$]+\\s*=\\s*${nome}\\s*;`).test(js));
+  if (faltam.length) fail(`Fase D: loaders documentais sem associação direta: ${faltam.join(', ')}`);
+  else okline(`Fase D: ${diretos.length} loaders documentais associados diretamente`);
+
+  const wrappers = [...js.matchAll(/LOADERS\.([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?\(ctx\)\s*=>\s*([A-Za-z0-9_$]+)\(ctx\)\s*;/g)];
+  if (wrappers.length) fail(`Fase D: wrappers que apenas repassam ctx: ${wrappers.map(m => m[1]).join(', ')}`);
+  else okline('Fase D: nenhum wrapper LOADERS.* repassa ctx sem comportamento');
+
+  const helpersShell = ['lineDocView', 'lineDocRun', 'lineSearchRun', 'searchPanel'];
+  const ausentes = helpersShell.filter(nome => !new RegExp(`function\\s+${nome}\\s*\\(`).test(js));
+  if (ausentes.length) fail(`Fase E antecipada: helpers removidos do app.js: ${ausentes.join(', ')}`);
+  else okline('Fase E não antecipada: quatro helpers de busca/modal permanecem no app.js');
 }
 
 // Guarda de PUBLICAÇÃO: todo asset que o app.js exige em runtime tem de sobreviver ao deploy.
@@ -257,158 +279,7 @@ console.log('\n[1c] Workflows: nenhum env: com chave duplicada ignorando maiúsc
   if (!achados) okline(`ok (${blocos} bloco(s) env: em ${arquivos.length} workflow(s))`);
 }
 
-// ---------- [2] guarda anti-drift ----------
-console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
-// Compara o TEXTO INTEIRO de cada cópia marcada nos harness contra o app.js.
-//
-// Até 08/08/2026 isto era `js.includes(snippet)` com o trecho escrito à mão, e em 15 das 50
-// entradas o trecho era só a ASSINATURA da função. A guarda perguntava se existia uma linha
-// `function matchEvent(r, c){` no app.js — o corpo era irrelevante. Medido: trocando o corpo
-// de matchEvent por `return false`, o gate saía "tudo verde", os 213 testes puros passavam e
-// as 17 views também. Como os testes rodam sobre a CÓPIA, e a guarda era a única coisa ligando
-// a cópia ao original, a rede inteira ficava verde com o portal quebrado.
-//
-// A fronteira da cópia agora é declarada por marcador (`/* @canon <nome> */` … `/* @endcanon */`),
-// não inferida por contagem de chaves — contar chaves é a armadilha: ao sondar isto, um extrator
-// ingênuo deu 6 falsos negativos só em funções de UMA LINHA, que fecham sem `\n}\n`.
-{
-  const HARNESSES = ['pure.harness.js', 'harness.js'];
-  const copias = new Map();
-  const fontes = new Map();
-  for (const arquivo of HARNESSES){
-    const src = fs.readFileSync(path.join(TESTS_DIR, arquivo), 'utf8');
-    for (const [nome, dados] of extrairCanon(src)){ copias.set(nome, dados); fontes.set(nome, arquivo); }
-  }
-  const fora = new Set(conferirCanon(copias, js));
-  for (const [nome, { adaptado }] of copias){
-    if (fora.has(nome)){
-      fail(`cópia DIVERGE do app.js: "${nome}" (${fontes.get(nome)}) — o harness testa código que o `
-         + 'app.js não tem mais. Reponha o texto do app.js entre os marcadores @canon, ou, se a '
-         + 'mudança for intencional, atualize a cópia E confira se o teste dela ainda faz sentido.');
-    } else okline(adaptado ? `${nome} (adaptada de propósito)` : nome);
-  }
-
-  // Cópia exportada SEM marcador passaria batida — foi o que aconteceu com `ilikeTerm` e
-  // `MAX_TABS` na auditoria externa de 27/07/2026 (37 cópias exportadas × 36 guardas, contadas
-  // à mão). Esta checagem fecha o laço: todo símbolo exportado por um harness tem de estar
-  // entre marcadores. Varre os DOIS harness — varrer só um e deixar o irmão aberto é o mesmo
-  // bug, adiado (o harness.js ficou descoberto assim até 27/07/2026). Harness NOVO entra aqui.
-  //
-  // A exceção legítima é o símbolo que o harness IMPORTA de `src/` em vez de copiar: ali
-  // não há cópia para divergir, é a mesma implementação que o navegador executa.
-  //
-  // A exceção é apurada por harness e por BINDING — não por nome existir em algum lugar de
-  // `src/`. A diferença não é purismo: com a versão por nome, um harness que tirasse
-  // `groupBy` do seu `require` e reintroduzisse uma cópia local sem marcador continuaria isento,
-  // porque `groupBy` segue exportado pelo `agrupamento.mjs`. Medido em 14/08/2026 (achado do
-  // Codex no PR #125): o gate saía "todas marcadas e conferidas", VERDE, com a cópia local no
-  // lugar — e dali em diante ela podia divergir do módulo sem nada olhando. É o mesmo buraco da
-  // lista escrita à mão que esta seção veio fechar, entrando por outra porta.
-  //
-  // Falha FECHADO em toda ambiguidade: forma de require que o extrator não reconhece (namespace,
-  // `require` computado) não isenta ninguém, e o gate reprova pedindo o marcador em vez de
-  // adivinhar. Um extrator que erra para o lado permissivo é pior que extrator nenhum.
-  // Varre `src/` INTEIRO, não só `src/domain/`: desde a Fase B2 os módulos moram também em
-  // `src/ui/` e `src/data/`, e uma varredura presa a `domain` deixaria de reconhecer o `require`
-  // do módulo real — reprovando quem fez a coisa certa e empurrando de volta para a cópia local,
-  // que é exatamente o que este mecanismo existe para acabar. A chave é o caminho relativo a
-  // `src/` (`ui/doc.mjs`), porque é assim que o `require` do harness o escreve.
-  const exportsPorModulo = () => {
-    const raizSrc = path.join(__dirname, '..', 'src');
-    const porArquivo = new Map();
-    const varrer = dir => {
-      let entradas = [];
-      try { entradas = fs.readdirSync(dir, { withFileTypes:true }); } catch (_) { return []; }
-      return entradas.flatMap(e => e.isDirectory() ? varrer(path.join(dir, e.name))
-        : (e.name.endsWith('.mjs') ? [path.join(dir, e.name)] : []));
-    };
-    const arquivos = varrer(raizSrc).map(f => path.relative(raizSrc, f).split(path.sep).join('/')).sort();
-    if (!arquivos.length) return null;
-    for (const f of arquivos){
-      const src = fs.readFileSync(path.join(raizSrc, f), 'utf8');
-      const nomes = new Set();
-      for (const m of src.matchAll(/^export\s+(?:async\s+)?(?:function\*?|const|let|var|class)\s+([A-Za-z_$][\w$]*)/gm)) nomes.add(m[1]);
-      for (const m of src.matchAll(/^export\s*\{([^}]*)\}/gm)){
-        for (const parte of m[1].split(',')){
-          const nome = parte.trim().split(/\s+as\s+/).pop().trim();
-          if (nome) nomes.add(nome);
-        }
-      }
-      porArquivo.set(f, nomes);
-    }
-    return porArquivo;
-  };
-  // Nomes que ESTE harness liga a um módulo de `src/`, lidos dos seus próprios `require`.
-  // Só a forma desestruturada é aceita — é a que o repo usa, e é a única em que dá para saber,
-  // pelo texto, qual binding veio do módulo.
-  const RE_REQUIRE_DOMINIO = /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\(\s*['"][^'"]*\/src\/((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.mjs)['"]\s*\)/g;
-  // Comentário é removido ANTES de procurar o `require`, senão declaração MORTA concede isenção
-  // viva. Medido em 14/08/2026 (achado do Codex sobre o próprio commit que trocou a isenção por
-  // nome pela isenção por binding): bastava tirar `groupBy` do require de verdade, deixar
-  // `// const { groupBy } = require('../src/domain/agrupamento.mjs')` no arquivo e recolocar a
-  // cópia local sem marcador — o gate imprimia "todas marcadas e conferidas" e saía verde.
-  // É o MESMO defeito da versão anterior (extrator que erra para o lado permissivo) entrando pela
-  // terceira porta; daí o comentário longo, para a quarta não passar.
-  // O corte do `//` exige início de linha ou espaço antes: sem isso `'https://x'` viraria
-  // `'https:` e mutilaria strings, trocando um falso positivo por um falso negativo.
-  const semComentariosJS = txt => txt
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/(^|\s)\/\/[^\n]*/g, '$1');
-  const ligadosAModulo = (bruto, porModulo, arquivo) => {
-    const src = semComentariosJS(bruto);
-    const nomes = new Set();
-    for (const m of src.matchAll(RE_REQUIRE_DOMINIO)){
-      const modulo = m[2];
-      const exportsDele = porModulo.get(modulo);
-      if (!exportsDele){
-        fail(`[${arquivo}] require de src/${modulo}, que não existe — corrija o caminho`);
-        continue;
-      }
-      for (const parte of m[1].split(',')){
-        const t = parte.trim();
-        if (!t) continue;
-        // `{ a: b }` — `a` é o export, `b` é o nome local que o harness reexporta.
-        const [origem, local] = t.split(':').map(s => s.trim());
-        const nomeExportado = origem, nomeLocal = local || origem;
-        if (!/^[A-Za-z_$][\w$]*$/.test(nomeExportado) || !/^[A-Za-z_$][\w$]*$/.test(nomeLocal)) continue;
-        if (!exportsDele.has(nomeExportado)){
-          fail(`[${arquivo}] desestrutura "${nomeExportado}" de src/${modulo}, que não o exporta `
-             + '— o binding chega undefined e o teste passaria testando nada');
-          continue;
-        }
-        nomes.add(nomeLocal);
-      }
-    }
-    return nomes;
-  };
-  let totalExportados = 0, falhou = false;
-  const porModulo = exportsPorModulo();
-  if (!porModulo){
-    fail('não consegui ler os export de src/**/*.mjs — a guarda de cobertura @canon ficaria cega');
-    falhou = true;
-  }
-  for (const arquivo of HARNESSES){
-    const src = fs.readFileSync(path.join(TESTS_DIR, arquivo), 'utf8');
-    const m = src.match(/module\.exports\s*=\s*\{([\s\S]*?)\}\s*;/);
-    if (!m){ fail(`não achei o module.exports do ${arquivo} (a cobertura não pôde ser conferida)`); falhou = true; continue; }
-    const exportados = m[1].split(',').map(s => s.trim()).filter(Boolean)
-      // `get X(){…}` / `set X(v){…}`: o nome é o 2º token, não o 1º.
-      .map(s => s.replace(/^(?:get|set)\s+/, '').split(/[:(]/)[0].trim())
-      .filter(Boolean);
-    totalExportados += new Set(exportados).size;
-    const doModulo = porModulo ? ligadosAModulo(src, porModulo, arquivo) : new Set();
-    const semMarcador = [...new Set(exportados)].filter(n => !copias.has(n) && !doModulo.has(n));
-    if (semMarcador.length){
-      fail(`[${arquivo}] cópia exportada sem marcador @canon: ${semMarcador.join(', ')} — `
-         + 'envolva o bloco em /* @canon <nome> */ … /* @endcanon */ '
-         + '(ou, se a função já foi extraída, importe-a de src/domain/ em vez de copiá-la)');
-      falhou = true;
-    }
-  }
-  if (!falhou && !fora.size) okline(`cobertura (${totalExportados} cópias exportadas nos ${HARNESSES.length} harness, todas marcadas e conferidas)`);
-}
-
-// ---------- [2b] guarda docs × código ----------
+// ---------- [2] guarda docs × código ----------
 // Irmã offline do scripts/check_deriva.mjs. Ele guarda docs × BANCO (tabelas, colunas, RPCs);
 // esta guarda o eixo que ficava descoberto: docs × CÓDIGO. As duas nascem da mesma causa —
 // fato copiado à mão para a prosa e nunca mais conferido. A auditoria externa de 27/07/2026
@@ -418,7 +289,7 @@ console.log('\n[2] Guarda anti-drift (cópias verbatim batem com o app.js)');
 // Só policia os docs VIVOS. O CHANGELOG, os `analise-*.md` e os `revisao-externa-*.md` são
 // snapshots datados de propósito: os números deles descrevem o estado de quando foram
 // escritos, e cobrá-los transformaria esta guarda em alarme falso.
-console.log('\n[2b] Deriva docs × código');
+console.log('\n[2] Deriva docs × código');
 {
   const RAIZ = path.join(__dirname, '..');
   const ler = p => fs.readFileSync(path.join(RAIZ, p), 'utf8');

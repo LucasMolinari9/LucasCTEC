@@ -54,9 +54,11 @@
 /src/data/*
 !/src/data/lookups.mjs
 !/src/data/campos.mjs
+!/src/data/rest.mjs
 !/src/documentos
 /src/documentos/*
 !/src/documentos/shell.mjs
 !/src/documentos/frota-historico-itinerarios.mjs
 !/src/documentos/estrutura-tarifas-portaria.mjs
 !/src/documentos/quadro-empresas.mjs
+!/src/documentos/municipios-localidades.mjs

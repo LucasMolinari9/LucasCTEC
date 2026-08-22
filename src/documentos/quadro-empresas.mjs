@@ -36,16 +36,58 @@
 import {
   esc, enc, fmtCode, fmtDate, fmtLineName, orDash, boolChip, situacaoHTML, norm, debounce,
 } from '../domain/core.mjs';
-import { groupBy } from '../domain/agrupamento.mjs';
-import { commitViewResult } from '../domain/view-state.mjs';
-import { docHead, metaRows, loading, emptyBox, emptyLinha, errorBox } from '../ui/doc.mjs';
+import { groupBy, resumoFrota, filtrarFrotaEmpresas } from '../domain/agrupamento.mjs';
+import { commitViewResult, isCurrentGen, withHost } from '../domain/view-state.mjs';
+import { docHead, metaRows, tableHTML, loading, emptyBox, emptyLinha, errorBox, bannerTrunc } from '../ui/doc.mjs';
 import { paginateTable, paginateEvents } from '../ui/paginacao.mjs';
 import { lineResults } from '../ui/listas.mjs';
 import { evBandHTML, evBlocksHTML, secoesTarifasHTML, quadroHorariosBodyHTML } from '../ui/blocos.mjs';
 import { searchEmpresas, empresaChooserHTML, bindEmpresaRows } from '../ui/empresas.mjs';
-import { getOrigem, getEmpresas, empNome, empresasList, empresasMap, getEvLookups } from '../data/lookups.mjs';
+import { getOrigem, getEmpresas, empNome, empresaPorCod, empresasList, empresasMap, getEvLookups } from '../data/lookups.mjs';
 import { LINE_FIELDS, QH_INTERVALO_FIELDS, QH_PREDET_FIELDS, TARIFA_LINHA_FIELDS, EVENTO_FIELDS } from '../data/campos.mjs';
-import { sbFetch } from './shell.mjs';
+import { sbFetch } from '../data/rest.mjs';
+
+let _loaderShell = null;
+export function configurarLoadersQuadroEmpresas(shell){ _loaderShell = shell; }
+function loaderShell(){
+  if(!_loaderShell) throw new Error('configurarLoadersQuadroEmpresas precisa ser chamado antes dos loaders');
+  return _loaderShell;
+}
+
+function quadroLinhaRun(ctx, term){
+  return loaderShell().lineSearchRun(ctx, term, { render:renderLinhaQuadro,
+    emptyMsg:'Busque a linha pelo número, nome ou código.', prompt:'clique para ver o quadro' });
+}
+export function loadQuadroHorarios(ctx){
+  const { searchPanel } = loaderShell();
+  searchPanel(ctx, {
+    title:'Quadro de Horários',
+    placeholder:'Número, nome ou código da linha (ou empresa)',
+    selectOpts:[['linha','Por linha'],['empresa','Por empresa (PDF de todos)']],
+    note: 'Por linha: número, nome ou código → mostra o quadro dela. Por empresa: nome ou código → baixa o PDF de todos os quadros da operadora.',
+    onRun: (term, rctx, modo) => modo==='empresa' ? quadroEmpresaRun(rctx, term) : quadroLinhaRun(rctx, term)
+  });
+  if(ctx.line){
+    const i = ctx.pane.querySelector('#spInput');
+    if(i) i.value = ctx.line.numero_ligacao || ctx.line.codlinha || '';
+    return renderLinhaQuadro(withHost(ctx, ctx.pane.querySelector('#spHost')));
+  }
+}
+export function loadLigacoesPorEmpresa(ctx){
+  const pre = ctx.line?.codempresa || '';
+  return loaderShell().searchPanel(ctx, { title:'Ligações por Empresa', placeholder:'Código (ex. 101) ou nome da empresa', value:pre,
+    onRun: (term, rctx) => ligacoesPorEmpresaRun(rctx, term) });
+}
+export function loadSecoesPorEmpresa(ctx){
+  const pre = ctx.line?.codempresa || '';
+  return loaderShell().searchPanel(ctx, { title:'Seções por Empresa', placeholder:'Código da empresa (ex. 101)', value:pre,
+    onRun: (term, rctx) => secoesPorEmpresaRun(rctx, term) });
+}
+export function loadHistoricoEmpresa(ctx){
+  const pre = ctx.line?.codempresa || '';
+  return loaderShell().searchPanel(ctx, { title:'Histórico da Empresa', placeholder:'Nome ou código da empresa (ex. 1001 ou AUTO VIAÇÃO)', value:pre,
+    onRun: (term, rctx) => historicoEmpresaRun(rctx, term) });
+}
 
 /* ================================================================
    DOC · Quadro de Horários
@@ -267,4 +309,63 @@ export async function historicoEmpresaRun(ctx, term){
   }
   // não achou no cadastro de nomes → tenta o termo como código direto nos eventos
   await renderEmpresaHistory(ctx, term, null);
+}
+
+export async function frotaPorEmpresa({ view, gen, pane }){
+  const [rows] = await Promise.all([
+    sbFetch('qh_teste', 'select=codempresa,hierarquia,frota_operacional,reserva&limit=10000'),
+    getEmpresas()
+  ]);
+  if(!isCurrentGen(view, gen)) return;
+  if(!rows.length){
+    pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}${emptyBox('Nenhuma frota cadastrada.')}</div>`;
+    commitViewResult(view, gen, { pdfHTML:null });
+    return;
+  }
+  const fmtN = n => n.toLocaleString('pt-BR');
+  const { totOp, totRes, porEmp, porHier } = resumoFrota(rows);
+  const frotaEmpresas = porEmp.map(e=>{
+    const cadastro = empresaPorCod(e.cod);
+    return { ...e, nome_empresa:cadastro?.nome_empresa || empNome(e.cod), situacao:cadastro?.situacao || '' };
+  });
+  const h3 = t => `<h3 class="doc-h3">${t}</h3>`;
+  const kpisHTML = `<div class="kpi-grid">
+      <div class="kpi"><b>${fmtN(totOp)}</b><span>Frota operacional</span></div>
+      <div class="kpi"><b>${fmtN(totRes)}</b><span>Reserva</span></div>
+      <div class="kpi"><b>${rows.length}</b><span>Linhas</span></div>
+      <div class="kpi"><b>${porEmp.length}</b><span>Empresas</span></div>
+      <div class="kpi"><b>${porHier.length}</b><span>Hierarquias</span></div>
+    </div>`;
+  const empCols = [{t:'RJ',w:'62px'},{t:'Empresa'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}];
+  const empRowHTML = e=>`<tr><td class="td-num">${esc(e.cod)}</td><td class="td-logr">${esc(e.nome_empresa)}</td><td class="td-num">${e.n}</td><td class="td-sentido">${fmtN(e.op)}</td><td class="td-num">${fmtN(e.res)}</td></tr>`;
+  const empTableHTML = items=>tableHTML(empCols, items.map(empRowHTML).join(''), `${items.length} empresa(s)`);
+  const hierHTML = tableHTML([{t:'Hierarquia'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}],
+    porHier.map(x=>`<tr><td class="td-logr">${esc(orDash(x.h))}</td><td class="td-num">${x.n}</td><td class="td-sentido">${fmtN(x.op)}</td><td class="td-num">${fmtN(x.res)}</td></tr>`).join(''));
+  const footHTML = `<div class="doc-foot">Consolidado sobre ${rows.length} linhas · cadastro DETRO-RJ · DIVAT</div>`;
+  const pdfHTML = items=>`<div class="doc">${docHead('Frota por Empresa')}${bannerTrunc(rows)}${kpisHTML}
+    ${h3('Frota por empresa')}${items.length ? empTableHTML(items) : emptyBox('Nenhuma empresa com esse filtro.')}
+    ${h3('Frota por hierarquia')}${hierHTML}${footHTML}</div>`;
+  pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}
+    ${bannerTrunc(rows)}${kpisHTML}
+    ${h3('Frota por empresa')}
+    <div class="loc-tools">
+      <label>Situação <select id="frotaEmpSit"><option value="todas">Todas</option><option value="ativas" selected>Ativas</option><option value="canceladas">Canceladas</option></select></label>
+      <label>Buscar <input type="text" id="frotaEmpBusca" placeholder="nome ou RJ" autocomplete="off"></label>
+    </div>
+    <div id="frotaEmpResult"></div>
+    ${h3('Frota por hierarquia')}${hierHTML}${footHTML}</div>`;
+  const result = pane.querySelector('#frotaEmpResult');
+  const sel = pane.querySelector('#frotaEmpSit'), inp = pane.querySelector('#frotaEmpBusca');
+  const paint = ()=>{
+    const filtradas = filtrarFrotaEmpresas(frotaEmpresas, sel.value, inp.value);
+    if(!filtradas.length) result.innerHTML = emptyBox('Nenhuma empresa com esse filtro.');
+    else paginateTable(result, filtradas, {
+      cols:empCols, rowHTML:empRowHTML, foot:t=>t+' empresa(s)', unit:'empresas',
+      pageSize:25, pdf:false, view, gen,
+    });
+    commitViewResult(view, gen, { pdfHTML:()=>pdfHTML(filtradas) });
+  };
+  sel.addEventListener('change', paint);
+  inp.addEventListener('input', debounce(paint));
+  paint();
 }

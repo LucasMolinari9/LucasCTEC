@@ -62,10 +62,13 @@ lugar a olhar é se essas duas funções voltaram para `public`.
 
 ## Credencial auditora e secret
 
-**Estado em 22/08/2026: login criado, secret configurado pelo dono.** A criação/rotação do login
-é deliberadamente separada da migração, para impedir senha em SQL versionado — por isso ela não
-mora em `supabase/migrations/`, só o resultado (grants, schema) mora. Runbook para uma próxima
-rotação, com `psql`:
+**Estado verificado em 22/08/2026: login ativo e secret configurado.** O secret de Actions
+`SUPABASE_TEST_AUDIT_DATABASE_URL` existe, e os runs manuais abaixo provaram seu conteúdo sem
+expô-lo: os validadores aceitaram exclusivamente o projeto de teste `gontnlfmothfglssbyyk` e o
+login `divat_auditor_ci`, conectaram ao banco e concluíram as consultas. Como a credencial estava
+válida, não foi necessário rotacioná-la. A criação/rotação do login é deliberadamente separada da
+migração, para impedir senha em SQL versionado — por isso ela não mora em `supabase/migrations/`,
+só o resultado (grants, schema) mora. Runbook para uma próxima rotação, com `psql`:
 
 ```bash
 psql "$ADMIN_DATABASE_URL" \
@@ -80,8 +83,21 @@ sem variável de sessão nenhuma.)
 
 Grave a URL de conexão no secret de Actions `SUPABASE_TEST_AUDIT_DATABASE_URL`. A URL deve usar o
 projeto `gontnlfmothfglssbyyk` e o login `divat_auditor_ci`; o runner recusa qualquer outro
-project ref, inclusive produção. Dispare manualmente o workflow `Phase 3 database security` e só
-promova o job `test-auditor` a check obrigatório após ele passar.
+project ref, inclusive produção. Em 22/08/2026, três execuções `workflow_dispatch` na `main`
+(commit `652394995801f80c65c456bfdf0589c819bd42da`) forneceram a evidência operacional:
+
+- [`Phase 3 database security` #32585853817](https://github.com/LucasMolinari9/LucasCTEC/actions/runs/32585853817):
+  `test-auditor` executado, não pulado, e verde; `check_phase3_audit.mjs` concluiu os diagnósticos
+  pelo auditor mínimo;
+- [`DB checks` #32585854923](https://github.com/LucasMolinari9/LucasCTEC/actions/runs/32585854923):
+  jobs `seguranca`, `qualidade` e `realtime` executados, não pulados, e verdes, comprovando
+  respectivamente `check_grants.mjs`, `check_data_quality.mjs` e `check_realtime.mjs`;
+- [`Deriva` #32585856069](https://github.com/LucasMolinari9/LucasCTEC/actions/runs/32585856069):
+  job `deriva` executado, não pulado, e verde, comprovando `check_deriva.mjs`.
+
+Os logs mantiveram a URL mascarada e mostraram somente os comandos e seus veredictos. A passagem
+dos cinco validadores também é a prova de que a URL satisfez as travas de projeto/login antes das
+consultas; presença do secret ou job verde sem essas travas não seria evidência suficiente.
 
 ## Objetos novos
 
@@ -135,11 +151,12 @@ janela entre as duas.
 
 **Ordem cumprida:** os quatro gates foram migrados para a credencial de auditor (o mesmo caminho
 do job `test-auditor`, via `divat_auditor_ci`) antes de qualquer DDL em produção — isto valia
-como bloqueio para aplicar a migração de Fase 3 em produção, e agora está feito no código. O que
-falta é só o operacional: criar/rotacionar `divat_auditor_ci` (se ainda não existir) e configurar
-o secret `SUPABASE_TEST_AUDIT_DATABASE_URL` também para `db-checks.yml` e `deriva.yml` (o
-`test-auditor` já dependia dele) — ver "Credencial auditora e secret" acima. Sem o secret, os
-quatro gates falham fechado (saem 1) em vez de rodar cegos.
+como bloqueio para aplicar a migração de Fase 3 em produção, e agora está feito no código e
+comprovado operacionalmente pelos runs de 22/08/2026 registrados em "Credencial auditora e
+secret". O mesmo secret configurado alimentou `test-auditor`, `db-checks.yml` e `deriva.yml`; os
+cinco validadores executaram e passaram. Se o secret for removido ou deixar de satisfazer as
+travas de projeto/login, os quatro gates vivos continuam falhando fechado (saem 1) em vez de
+rodar cegos.
 
 Consequência para os scripts, já aplicada: os quatro deixaram de derivar `SB_URL`/`SB_KEY` do
 `app.js` por regex (`check_deriva.mjs` e `check_realtime.mjs` continuam lendo o `app.js`, mas só
@@ -150,15 +167,17 @@ usar o secret). Essa perda de alcance é parte da decisão, não um detalhe de i
 
 ## Critérios antes de qualquer promoção
 
-1. Criar/rotacionar `divat_auditor_ci` e configurar o secret sem expô-lo.
-2. Executar o workflow manual e anexar o resultado à PR.
+1. Criar/rotacionar `divat_auditor_ci` e configurar o secret sem expô-lo. **Cumprido e verificado
+   em 22/08/2026.**
+2. Executar os workflows manuais e anexar os resultados à PR. **Cumprido em 22/08/2026; ver os
+   três runs na seção "Credencial auditora e secret".**
 3. Rodar todos os testes, 17 views e gates existentes da PR.
 4. Fazer smoke do preview protegido; configurar `VERCEL_AUTOMATION_BYPASS_SECRET` se ainda faltar.
 5. Confirmar no GitHub que os checks obrigatórios bloqueiam alteração da `main`.
 6. Manter a PR em rascunho e solicitar autorização separada para qualquer ação em produção.
 7. **Antes de tocar produção:** migrar os quatro gates vivos para a credencial de auditor — ver a
-   seção acima. **Feito no código; falta o secret.** Sem `SUPABASE_TEST_AUDIT_DATABASE_URL`
-   configurado e um run verde de `db-checks.yml`/`deriva.yml` contra o projeto de teste, não há
-   evidência de que a migração dos gates funciona de verdade — e aplicar a migração da Fase 3 em
-   produção sem essa evidência arrisca cegar o gate diário de grants nos dois projetos ao mesmo
-   tempo.
+   seção acima. **Feito no código e comprovado em 22/08/2026:** o secret estava configurado, e os
+   runs verdes de `db-checks.yml` e `deriva.yml` executaram contra o projeto de teste. Essa
+   evidência deve ser renovada depois de qualquer rotação da credencial ou mudança nesses gates;
+   promover sem evidência vigente arrisca cegar o gate diário de grants nos dois projetos ao
+   mesmo tempo.

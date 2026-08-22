@@ -32,7 +32,7 @@ import {
   esc, enc, fmtCode, fmtDate, orDash, ilikeTerm, situacaoHTML, isVigente,
 } from '../domain/core.mjs';
 import { groupBy, fmtMoney } from '../domain/agrupamento.mjs';
-import { commitViewResult, isCurrentGen, pushDetail, popDetail } from '../domain/view-state.mjs';
+import { commitViewResult, isCurrentGen, pushDetail, popDetail, withHost } from '../domain/view-state.mjs';
 import { docHead, metaRows, loading, emptyBox, emptyLinha, errorBox } from '../ui/doc.mjs';
 import { paginateTable } from '../ui/paginacao.mjs';
 import {
@@ -45,7 +45,36 @@ import {
   LINE_FIELDS, ITINERARIO_FIELDS, QH_INTERVALO_FIELDS, QH_PREDET_FIELDS,
   TARIFA_LINHA_FIELDS, FROTA_FIELDS,
 } from '../data/campos.mjs';
-import { sbFetch, novoCtx } from './shell.mjs';
+import { sbFetch } from '../data/rest.mjs';
+import { novoCtx } from './shell.mjs';
+
+let _loaderShell = null;
+export function configurarLoadersEstruturaTarifas(shell){ _loaderShell = shell; }
+function loaderShell(){
+  if(!_loaderShell) throw new Error('configurarLoadersEstruturaTarifas precisa ser chamado antes dos loaders');
+  return _loaderShell;
+}
+
+export function loadEstrutura(ctx){
+  return loaderShell().lineDocView(ctx, { subtitle:'Cadastro de Linhas: Estrutura Operacional', render:renderEstrutura });
+}
+export function loadTarifas(ctx){
+  const { searchPanel, lineDocRun } = loaderShell();
+  searchPanel(ctx, {
+    title:'Tarifas Vigentes',
+    placeholder:'Nome, número ou código da linha (ou empresa)',
+    selectOpts:[['linha','Por linha'],['empresa','Por empresa']],
+    note:'Por linha: nome, número ou código → mostra as tarifas dela. Por empresa: nome ou código RJ → lista as tarifas de todas as linhas da operadora.',
+    onRun:(term, rctx, modo) => modo==='empresa' ? tarifaEmpresaRun(rctx, term) : lineDocRun(rctx, term, renderTarifas)
+  });
+  const host = ctx.pane.querySelector('#spHost');
+  if (ctx.line){
+    const i = ctx.pane.querySelector('#spInput');
+    if (i) i.value = ctx.line.numero_ligacao || ctx.line.codlinha || '';
+    return renderTarifas(withHost(ctx, host));
+  }
+  host.innerHTML = emptyBox('Busque a linha pelo nome, número ou código — ou troque para "Por empresa".');
+}
 
 /* ================================================================
    DOC · Tarifas

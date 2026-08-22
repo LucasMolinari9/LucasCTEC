@@ -1,7 +1,7 @@
 # Estrutura e navegação do frontend (`index.html` + `styles.css` + `app.js`) — Portal DIVAT
 
 > **Por que este arquivo existe:** o frontend tem `index.html` (HTML), `styles.css` (CSS),
-> `app.js` (~2,6k linhas — extraído do HTML e ainda envolto num IIFE) e módulos em `src/`. Continua
+> `app.js` (~1,7k linhas — extraído do HTML e ainda envolto num IIFE) e módulos em `src/`. Continua
 > **zero-build**: nada de bundler, framework ou `package.json`. Este doc registra (1) *por que*
 > essa forma, (2) *como navegar* no `app.js` sem se perder, e (3) as **regras de segurança** para
 > reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do `CLAUDE.md` (que lista as
@@ -34,7 +34,7 @@ mudou junto, e o que continua valendo:
   linha, com o seam de seleção) e **`src/data/lookups.mjs`** (os caches de referência).
   O que eles precisam do `app.js` **não é lido de global: é injetado**, num bootstrap único no
   topo do IIFE (`grep 'Bootstrap dos módulos'`) — `configurarDoc({logoSVG})`,
-  `configurarLookups({sbFetch})` e `configurarListas({aoSelecionarLinha})`. Três consequências
+  `configurarListas({aoSelecionarLinha})`; `lookups.mjs` importa `src/data/rest.mjs` diretamente. Três consequências
   práticas: (a) o módulo é exercitável em Node puro, sem navegador, porque a dependência entra
   por parâmetro (`tests/ui-data-module.test.mjs`); (b) a dependência aparece na assinatura, em
   vez de num acesso escondido no meio do corpo; (c) **os três falham fechado** — sem configurar,
@@ -44,16 +44,9 @@ mudou junto, e o que continua valendo:
   ação de clicar numa linha).
 - **Regra para extrair:** prefira módulos profundos com interface pequena. Não mova loaders/estado
   apenas para reduzir linhas; extraia quando a dependência puder ser expressa por imports claros.
-- **Extração paga o processo que ela torna desnecessário.** Enquanto a função mora no `app.js`, o
-  teste unitário roda sobre uma **cópia** em `tests/*.harness.js`, e essa cópia precisa da guarda
-  `@canon` para não divergir do original. Extraída, o harness importa o módulo real: cópia e guarda
-  são **apagadas** no mesmo commit — o teste passa a exercitar exatamente o código que o navegador
-  executa. Quando o último `@canon` sair, `tests/canon.js` e `tests/drift.test.js` se aposentam.
-  O `pure.harness.js` chegou lá na Sessão 4 (zero cópias); as 10 que faltam estão no `harness.js`
-  e dependem da Fase B (`src/data/rest.mjs`) — eram 12 até a Fase B2 levar `bannerTrunc` para
-  `src/ui/doc.mjs` e `preencherLookup` para `src/data/lookups.mjs`.
+- **Extração paga o processo que ela torna desnecessário.** Os harness importam os módulos reais, de modo que os testes exercitam exatamente o código que o navegador executa. A Fase B encerrou as últimas cópias e aposentou o mecanismo `@canon`.
 - **Toda extração tem três passos obrigatórios, não um:** mover a função + importar no `app.js`;
-  apagar o `@canon` e trocar por `require` no harness; e **reabrir o arquivo no `.vercelignore`**.
+  trocar o harness para o módulo real; e **reabrir o arquivo no `.vercelignore`**.
   Pular o terceiro derruba o portal inteiro (import ES é atômico — ver §`.vercelignore` no
   `CLAUDE.md`); o `check.js` §[1] reprova nomeando o arquivo que ficou de fora.
 - **CSS em `styles.css`** (extraído do `<style>` em 22/07/2026): cacheável separado do HTML e
@@ -105,7 +98,7 @@ achar por `grep` do texto da marca, nunca por linha.
   `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`. Eram 15: `UTILITÁRIOS` guardava só o `debounce`, que foi
   para `src/domain/core.mjs` na Fase B2 — seção que fica vazia sai, não vira comentário órfão.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~52,1% do JS (~1,3k linhas). Ele **subiu**
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~39,5% do JS (~0,7k linhas). Ele **subiu**
   de participação na Fase B2 tendo ENCOLHIDO em linhas — ela tirou 263 do arquivo e 98 dele, e o
   denominador caiu mais que o numerador. Nas Fases C1, C2 e C3 aconteceu o inverso: C1 tirou 98
   linhas do bloco (1.844 → 1.746) e o percentual CAIU (60,4% → 58,7%); C2 tirou mais 219
@@ -131,15 +124,23 @@ helper(s) HTML (`xxxHTML`), o render (`renderX`), eventuais runners e o registro
 mora em `src/documentos/frota-historico-itinerarios.mjs` e o markup compartilhado, em
 `src/ui/blocos.mjs`. A marca fica porque é por ela que se acha o registro, e cada uma diz, em
 comentário, para onde o resto foi. A sub-marca `Eventos — helpers compartilhados` **sumiu**, junto
-com o markup que a batizava. C2, C3 e C4 vão esvaziar as outras do mesmo jeito.
+com o markup que a batizava. C2, C3 e C4 esvaziaram as famílias seguintes do mesmo jeito.
 
-**NÃO dimensione uma fase pela marca — meça por SÍMBOLO.** As faixas entre marcas derivaram do
-código, e três registros moram sob a marca de outra família (medido em 21/08/2026): além do
-`LOADERS.empresasRegulares` documentado no §6, `LOADERS.municipioRegiao` mora sob `DOC · Empresas`,
-e `ligacoesPorTerminal`/`secoesPorLigacao`/`frotaPorEmpresa` moram sob `DOC · Municípios`. O
-arquivo também usa **dois** estilos de sub-marca (`/* --- X --- */` e `/* ---- X ---- */`), então
-um extrator que só case o primeiro reparte errado. Quem mover essas famílias conserta as suas
-marcas — a C1 consertou as três dela.
+**NÃO dimensione uma fase pela marca — meça por SÍMBOLO.** Na medição refeita sobre o `app.js`
+imediatamente anterior à C4 (22/08/2026), os corpos dos quatro loaders tinham 18 linhas
+(`ligacoesPorLogradouro`), 62 (`municipioRegiao`), 74 (`ligacoesPorTerminal`) e 77 (`localidades`).
+Eles puxavam 13 funções privadas da mesma família (`openLinhasPorIbge`, `linhasNoMunicipio`,
+`mostrarLinhasResultado`, `mostrarLinhasEntreMunicipios`, `getLocalidades`, `termosLocalidade`,
+`codsPorLocalidade`, `mostrarLinhasPorLocalidade`, `secoesLocalidadeTable`,
+`renderLocalidadeSecoes`, `locLinhaSecHTML`, `locComSecaoHTML` e `pintarLocalidadeSecoes`) e duas
+constantes privadas. A fronteira real exigiu exatamente seis slots
+mutáveis: `selecionarLinha`, `novoCtx`, `montarPainelBusca`, `abrirView`, `distinctCods` e
+`fetchLinesByCods`; as demais dependências são imports estáveis de domínio, UI, dados e REST.
+O limite de parada foi atingido, não ultrapassado, então a família pôde sair sem interface larga.
+
+Desde a C4, `LOADERS.municipioRegiao`, `LOADERS.ligacoesPorTerminal`,
+`LOADERS.ligacoesPorLogradouro` e `LOADERS.localidades` são registros finos junto da marca C4;
+`secoesPorLigacao` e `frotaPorEmpresa` continuam no `app.js` por pertencerem a outras entregas.
 
 ## 3. Regras de segurança ao reorganizar o JS (leia antes de mover código)
 
