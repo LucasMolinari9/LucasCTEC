@@ -1,7 +1,7 @@
 # Estrutura e navegação do frontend (`index.html` + `styles.css` + `app.js`) — Portal DIVAT
 
 > **Por que este arquivo existe:** o frontend tem `index.html` (HTML), `styles.css` (CSS),
-> `app.js` (~2,8k linhas — extraído do HTML e ainda envolto num IIFE) e módulos em `src/`. Continua
+> `app.js` (~2,6k linhas — extraído do HTML e ainda envolto num IIFE) e módulos em `src/`. Continua
 > **zero-build**: nada de bundler, framework ou `package.json`. Este doc registra (1) *por que*
 > essa forma, (2) *como navegar* no `app.js` sem se perder, e (3) as **regras de segurança** para
 > reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do `CLAUDE.md` (que lista as
@@ -108,13 +108,13 @@ achar por `grep` do texto da marca, nunca por linha.
   `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`. Eram 15: `UTILITÁRIOS` guardava só o `debounce`, que foi
   para `src/domain/core.mjs` na Fase B2 — seção que fica vazia sai, não vira comentário órfão.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~55,2% do JS (~1,5k linhas). Ele **subiu**
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~52,1% do JS (~1,3k linhas). Ele **subiu**
   de participação na Fase B2 tendo ENCOLHIDO em linhas — ela tirou 263 do arquivo e 98 dele, e o
-  denominador caiu mais que o numerador. Na Fase C1 e na C2 aconteceu o inverso: C1 tirou 98
+  denominador caiu mais que o numerador. Nas Fases C1, C2 e C3 aconteceu o inverso: C1 tirou 98
   linhas do bloco (1.844 → 1.746) e o percentual CAIU (60,4% → 58,7%); C2 tirou mais 219
-  (1.746 → 1.527) e caiu de novo (58,7% → 55,2%), porque nas duas a saída foi quase toda dele.
-  Nos três casos a lição é a mesma — percentual de seção não mede progresso de modularização; o
-  total mede.
+  (1.746 → 1.527) e caiu de novo (58,7% → 55,2%); C3 tirou mais 186 (1.527 → 1.341) e caiu de
+  novo (55,2% → 52,1%) — nas três a saída foi quase toda dele. Nos quatro casos a lição é a
+  mesma — percentual de seção não mede progresso de modularização; o total mede.
 
 ### Sub-marcas do bloco `MODAL / SISTEMA DE VIEWS`
 

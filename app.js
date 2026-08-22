@@ -41,36 +41,28 @@ import {
 // A função de rede chega neles por `configurarLookups` no bootstrap logo abaixo.
 // `preencherLookup` NÃO entra: quem o usa é o próprio módulo (e o tests/harness.js, que o
 // importa direto). Terceiro binding morto herdado da B2, removido na C1 junto com os outros dois.
+// `getEvLookups` NÃO entra mais: quem o usava (`renderEmpresaHistory`) saiu na Fase C3.
 import {
   configurarLookups, getIbge, getOrigem, getTerminais,
   getEmpresas, empNome, empresasMap, empresasList, empresaPorCod,
-  getEvLookups, INVALIDADORES_LOOKUP,
+  INVALIDADORES_LOOKUP,
 } from './src/data/lookups.mjs';
 // Paginação de tela — o núcleo agnóstico de conteúdo. Só de TELA: dados e PDF saem inteiros.
-import { paginate, paginateTable, paginateEvents } from './src/ui/paginacao.mjs';
+// `paginateEvents` NÃO entra mais: quem o usava (`renderEmpresaHistory`) saiu na Fase C3 — quem
+// precisa dele agora é o próprio `src/documentos/quadro-empresas.mjs`.
+import { paginate, paginateTable } from './src/ui/paginacao.mjs';
 // A família de listas de LINHA. A ação de clicar numa linha (selecionar + fechar o modal + toast)
 // é de shell e chega por `configurarListas` no bootstrap logo abaixo.
 import {
   configurarListas, situacaoSelectHTML, linhasTable, bindLineRows, paginateLines, lineResults,
 } from './src/ui/listas.mjs';
-// Blocos de documento compartilhados por MAIS DE UMA família da Fase C (evento, itinerário,
-// frota, quadro de horários, seções/tarifas). Ficam fora de qualquer módulo de família de
-// propósito — a razão (um ciclo entre famílias, via o documento consolidado Estrutura) está
-// escrita no cabeçalho do módulo. O `app.js` importa só o que os documentos que AINDA não saíram
-// (Quadro de Horários, C3) usam — `secoesTarifasHTML` entra aqui porque o bloco "Seções e
-// Tarifas" do Quadro a chama; `tarifaRowHTML`/`TARIFA_COLS` NÃO entram, porque só o Quadro
-// consolida a tabela via `secoesTarifasHTML` — quem lê as duas peças soltas é a família de
-// Tarifas, em `src/documentos/estrutura-tarifas-portaria.mjs`.
-import {
-  evBandHTML, evBlocksHTML, itinerarioTableHTML, frotaBlockHTML,
-  quadroHorariosBodyHTML, secoesTarifasHTML,
-} from './src/ui/blocos.mjs';
 // As listas de colunas do `select=`. São dado, não estado; saíram na Fase C1 junto com o
-// primeiro documento, para não existirem em duas cópias (a do módulo e a daqui).
-import {
-  LINE_FIELDS, ITINERARIO_FIELDS, QH_INTERVALO_FIELDS, QH_PREDET_FIELDS,
-  TARIFA_LINHA_FIELDS, FROTA_FIELDS, EVENTO_FIELDS,
-} from './src/data/campos.mjs';
+// primeiro documento, para não existirem em duas cópias (a do módulo e a daqui). Só `LINE_FIELDS`
+// segue lida diretamente pelo `app.js` — as outras seis (`ITINERARIO_FIELDS`, `QH_*`,
+// `TARIFA_LINHA_FIELDS`, `FROTA_FIELDS`, `EVENTO_FIELDS`) ficaram sem nenhum call site aqui desde
+// que a Fase C3 moveu o Quadro de Horários e o Histórico da Empresa — binding morto removido
+// junto (as duas primeiras já estavam mortas desde a C1/C2, e escaparam por engano).
+import { LINE_FIELDS } from './src/data/campos.mjs';
 // FASE C1 — a primeira família de documentos a sair inteira do arquivo. O que fica aqui embaixo
 // são os registros `LOADERS.*`, que são shell (wrappers de busca de linha) e saem nas Fases D/E.
 // `configurarDocumentos` é o seam ÚNICO de `src/documentos/`: injeta a rede e a ação de shell
@@ -85,11 +77,15 @@ import {
 import {
   renderTarifas, tarifaEmpresaRun, renderEstrutura, renderPortarias, invalidarPortariaAnos,
 } from './src/documentos/estrutura-tarifas-portaria.mjs';
-// O chooser de empresa (busca + tabela de escolha + bind de clique), usado por MAIS DE UMA
-// família: Tarifas (acima), o modo "por empresa" do Quadro de Horários e o Histórico da Empresa
-// (as duas últimas, C3, ainda abaixo). Critério igual ao de `blocos.mjs`; endereço diferente
-// porque `bindEmpresaRows` toca DOM — ver o cabeçalho de `src/ui/empresas.mjs`.
-import { searchEmpresas, empresaChooserHTML, bindEmpresaRows } from './src/ui/empresas.mjs';
+// FASE C3 — Quadro de Horários · Empresas, a terceira família a sair inteira. `renderLinhaQuadro`
+// (modo "por linha") e `quadroEmpresaRun` (modo "por empresa") alimentam `LOADERS.quadroHorarios`,
+// que FICA (tem corpo — mesma razão de `LOADERS.tarifas`). `ligacoesPorEmpresaRun`/
+// `secoesPorEmpresaRun`/`historicoEmpresaRun` alimentam os três `LOADERS.*` de Empresas, que
+// viraram wrappers finos — mesmo padrão que a C2 usou para `tarifaEmpresaRun`.
+import {
+  renderLinhaQuadro, quadroEmpresaRun,
+  ligacoesPorEmpresaRun, secoesPorEmpresaRun, historicoEmpresaRun,
+} from './src/documentos/quadro-empresas.mjs';
 
 /* ================================================================
    ÍNDICE DO ARQUIVO  —  navegue por `grep` da marca da seção.
@@ -1323,145 +1319,15 @@ LOADERS.historicoLinha = async (ctx) => {
 LOADERS.itinerarios = (ctx) => lineDocView(ctx, { subtitle:'Cadastro de Linhas: Itinerários', render:renderItinerarios });
 
 /* --- DOC · Quadro de Horários ---------------------------------
-   `quadroHorariosBodyHTML` mora em `src/ui/blocos.mjs` desde a Fase C2 — a Estrutura Operacional
-   (`src/documentos/estrutura-tarifas-portaria.mjs`) o usa também; ver o cabeçalho do módulo. */
-
-// Corpo de UM quadro (meta + tabelas) para uma linha qualquer — reusado na linha ativa,
-// no clique da lista por empresa e na montagem do PDF de todos os quadros.
-function quadroMetaHTML(line, ultimaAlteracao){
-  const pares = [['Empresa',esc(empNome(line.codempresa)),true],['Registro','RJ-'+esc(line.codempresa||'—')],['Código',esc(fmtCode(line.codlinha))],['Número da Ligação',esc(orDash(line.numero_ligacao))],['Ligação',esc(line.nome_ligacao||'—'),true],['Via',esc(orDash(line.via))],['Característica',esc(orDash(line.caracteristica))],['Tipo',esc(orDash(line.tipo))],['Situação',situacaoHTML(line),true]];
-  if(ultimaAlteracao!==undefined) pares.push(['Última alteração',fmtDate(ultimaAlteracao)]);
-  return metaRows(pares);
-}
-
-function quadroDocInner(line, interv, predet, orig){
-  return `${quadroMetaHTML(line)}
-    ${quadroHorariosBodyHTML(interv, predet, orig)}`;
-}
-
-// Busca os quadros (intervalo + predeterminado) de várias linhas de uma vez e agrupa por codlinha.
-async function fetchQHByLines(codlinhas){
-  const inList = codlinhas.map(enc).join(',');
-  const [interv, predet] = await Promise.all([
-    sbFetch('qh_intervalo_teste', `codlinha=in.(${inList})&select=codlinha,cod_origem,nome_origem,dia_semana,hora_inicio,hora_fim,intervalo&order=id&limit=20000`),
-    sbFetch('qh_predeterminado_teste', `codlinha=in.(${inList})&select=codlinha,cod_origem,nome_origem,dia_semana,saida&order=id&limit=30000`)
-  ]);
-  return { intervBy: groupBy(interv, r=>r.codlinha), predetBy: groupBy(predet, r=>r.codlinha),
-           trunc: !!(interv._trunc || predet._trunc) };
-}
+   `quadroMetaHTML`/`quadroDocInner`/`fetchQHByLines`, os renders (`renderLinhaQuadro`,
+   `renderEmpresaQuadros`) e o modo empresa (`quadroEmpresaRun`) moraram para
+   `src/documentos/quadro-empresas.mjs` na Fase C3. `quadroLinhaRun` FICOU: é wrapper que chama
+   `lineSearchRun` (abaixo), que só existe aqui porque usa `selectLine` — shell puro, sem seam de
+   injeção (a razão está no cabeçalho do módulo novo). */
 
 // Modo linha: resolve o termo (número, nome ou código) → 1 linha (mostra o quadro) ou várias (lista)
 function quadroLinhaRun(ctx, term){
   return lineSearchRun(ctx, term, { render:renderLinhaQuadro, emptyMsg:'Busque a linha pelo número, nome ou código.', prompt:'clique para ver o quadro' });
-}
-
-// Quadro de UMA linha (comportamento clássico do card)
-async function renderLinhaQuadro(ctx){
-  const { view, gen, host, line } = ctx;
-  if(!host || !line) return;
-  host.innerHTML = loading();
-  try {
-    const [interv, predet, qh, secoes, orig] = await Promise.all([
-      sbFetch('qh_intervalo_teste', `codlinha=eq.${enc(line.codlinha)}&select=${QH_INTERVALO_FIELDS}&order=id`),
-      sbFetch('qh_predeterminado_teste', `codlinha=eq.${enc(line.codlinha)}&select=${QH_PREDET_FIELDS}&order=id`),
-      sbFetch('qh_teste', `codlinha=eq.${enc(line.codlinha)}&select=ultima_alteracao&limit=1`),
-      sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=${TARIFA_LINHA_FIELDS}&order=secao`),
-      getOrigem(), getEmpresas()
-    ]);
-    if (!interv.length && !predet.length){ host.innerHTML = emptyLinha('quadro de horários'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    const ultima = qh[0]?.ultima_alteracao;
-    // bloco de Seções e Tarifas da linha (mesma tabela/builder da Estrutura), fora do #qhResult
-    const h3sec = `<h3 class="doc-h3">Seções e Tarifas</h3>`;
-    const secBlock = secoes.length ? `${h3sec}${secoesTarifasHTML(secoes)}` : '';
-    commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroMetaHTML(line, ultima)}${secBlock}${quadroHorariosBodyHTML(interv, predet, orig)}</div>` });
-    // filtros por sentido (origem das partidas) e por dia — o PDF segue completo
-    const sentidoKey = (cod,nome)=> orig[cod] || nome || ('Origem '+orDash(cod));
-    const sentidos = [...new Set([...interv.map(r=>sentidoKey(r.cod_origem,r.nome_origem)), ...predet.map(r=>sentidoKey(r.cod_origem,r.nome_origem))])].filter(Boolean).sort((a,b)=>a.localeCompare(b));
-    const dias = [...new Set([...interv,...predet].map(r=>r.dia_semana||'—'))].filter(v=>v&&v!=='—').sort((a,b)=>a.localeCompare(b));
-    const sentSel = sentidos.length>1 ? `<label>Sentido <select id="qhSent"><option value="">Todos</option>${sentidos.map(s=>`<option value="${esc(s)}">de ${esc(s)}</option>`).join('')}</select></label>` : '';
-    const diaSel  = dias.length>1 ? `<label>Dia <select id="qhDia"><option value="">Todos</option>${dias.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join('')}</select></label>` : '';
-    const tools = (sentSel||diaSel) ? `<div class="loc-tools">${sentSel}${diaSel}</div>` : '';
-    host.innerHTML = `${quadroMetaHTML(line, ultima)}${secBlock}${tools}<div id="qhResult"></div>`;
-    const result = host.querySelector('#qhResult'), ss = host.querySelector('#qhSent'), ds = host.querySelector('#qhDia');
-    const paint = ()=>{
-      const s = ss?ss.value:'', d = ds?ds.value:'';
-      const fi = interv.filter(r=>(!s||sentidoKey(r.cod_origem,r.nome_origem)===s)&&(!d||(r.dia_semana||'—')===d));
-      const fp = predet.filter(r=>(!s||sentidoKey(r.cod_origem,r.nome_origem)===s)&&(!d||(r.dia_semana||'—')===d));
-      result.innerHTML = quadroHorariosBodyHTML(fi, fp, orig);
-    };
-    if(ss) ss.addEventListener('change', paint);
-    if(ds) ds.addEventListener('change', paint);
-    paint();
-  } catch(e){ host.innerHTML = errorBox(e.message); }
-}
-
-// O adaptador `renderActiveLineQuadro = host => renderLinhaQuadro(host, activeLine)` existia só
-// porque o contrato antigo separava o container da linha e obrigava a ir buscar a segunda no
-// global. Com o ctx a linha vem dentro dele: a chamada é `renderLinhaQuadro(ctx)`, direta.
-
-// Modo empresa: resolve a empresa e lista as linhas com quadro
-async function quadroEmpresaRun(ctx, term){
-  const { view, gen, host, line } = ctx;
-  term = (term||'').trim();
-  if(!term){
-    if(line) return renderLinhaQuadro(ctx);
-    host.innerHTML = emptyBox('Busque por uma empresa (nome ou código), ou selecione uma linha.');
-    commitViewResult(view, gen, { pdfHTML:null }); return;
-  }
-  await getEmpresas();
-  const emps = searchEmpresas(term);
-  if(emps.length > 1){
-    host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para abrir os quadros' });
-    bindEmpresaRows(host, (cod,nome)=>renderEmpresaQuadros(ctx, cod, nome));
-    commitViewResult(view, gen, { pdfHTML:null }); return;
-  }
-  const cod = emps.length===1 ? emps[0].codempresa : term;
-  const nome = emps.length===1 ? emps[0].nome_empresa : null;
-  await renderEmpresaQuadros(ctx, cod, nome);
-}
-
-// Lista as linhas (com quadro) de uma empresa e prepara o PDF de todos os quadros
-async function renderEmpresaQuadros(ctx, cod, nome){
-  const { view, gen, host } = ctx;
-  host.innerHTML = loading();
-  const [linhas, orig] = await Promise.all([
-    sbFetch('tabela_vista_teste', `codempresa=eq.${enc(cod)}&select=${LINE_FIELDS}&order=codlinha&limit=500`),
-    getOrigem(), getEmpresas()
-  ]);
-  const nomeEmp = nome || empNome(cod);
-  if(!linhas.length){ host.innerHTML = emptyBox('Nenhuma linha encontrada para a empresa '+esc(nomeEmp)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  const { intervBy, predetBy, trunc } = await fetchQHByLines(linhas.map(l=>l.codlinha));
-  const comQuadro = linhas.filter(l => intervBy.has(l.codlinha) || predetBy.has(l.codlinha));
-  if(!comQuadro.length){ host.innerHTML = emptyBox('Nenhum quadro de horários cadastrado para as linhas da empresa '+esc(nomeEmp)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  // PDF: todos os quadros, um por página
-  commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${comQuadro.map(l=>
-    `<div class="ev-page">${docHead('Quadro de Horários')}${quadroDocInner(l, intervBy.get(l.codlinha)||[], predetBy.get(l.codlinha)||[], orig)}</div>`).join('')}</div>` });
-  host.innerHTML = `<div class="doc-obs tight"><b>${esc(nomeEmp)}</b> · ${linhas.length} linha(s), ${comQuadro.length} com quadro de horários.
-      Use o botão <b>PDF</b> da barra acima para baixar todos os quadros (um por página).</div>`
-    + (trunc? `<div class="trunc-aviso"><b>Resultado parcial:</b> a empresa tem muitos horários e alguns podem não ter sido carregados.</div>`:'')
-    + `<div id="eqResult"></div>`;
-  // clique numa linha → quadro individual (com voltar). data-cod=codlinha → fatia-safe.
-  // Reusa o mesmo view/gen da lista: é ação síncrona (sem fetch próprio), o clique mais
-  // recente sempre vence naturalmente (JS de thread única), sem precisar de nova geração.
-  const abrirQuadro = tr=>{
-    const l = comQuadro.find(x=>String(x.codlinha)===String(tr.dataset.cod));
-    if(!l) return;
-    const iv = intervBy.get(l.codlinha)||[], pd = predetBy.get(l.codlinha)||[];
-    host.innerHTML = `<button type="button" class="qh-back">‹ Voltar à lista da empresa</button>`
-      + quadroDocInner(l, iv, pd, orig);
-    commitViewResult(view, gen, { pdfHTML: ()=>`<div class="doc">${docHead('Quadro de Horários')}${quadroDocInner(l, iv, pd, orig)}</div>` });
-    host.querySelector('.qh-back').addEventListener('click', ()=>renderEmpresaQuadros(ctx, cod, nome));
-  };
-  paginateTable(host.querySelector('#eqResult'), comQuadro, {
-    cols:[{t:'Número',w:'110px'},{t:'Ligação'},{t:'Código',w:'130px'}],
-    rowHTML:l=>`<tr class="clickable" tabindex="0" role="button" data-cod="${esc(l.codlinha)}">
-      <td class="td-num" data-label="Número">${esc(l.numero_ligacao||fmtCode(l.codlinha))}</td>
-      <td class="td-logr" data-label="Ligação">${fmtLineName(l.nome_ligacao)}</td>
-      <td class="td-num" data-label="Código">${esc(fmtCode(l.codlinha))}</td></tr>`,
-    foot:t=>t+' linha(s) com quadro · clique para ver o quadro',
-    bind:c=>c.querySelectorAll('tr[data-cod]').forEach(tr=>tr.addEventListener('click',()=>abrirQuadro(tr))),
-    unit:'linhas', pdf:false, view, gen,   // o PDF desta tela é "todos os quadros" (definido acima), não a lista
-  });
 }
 
 LOADERS.quadroHorarios = async (ctx) => {
@@ -1564,7 +1430,13 @@ LOADERS.empresasRegulares = async ({ view, gen, pane }) => {
   paint();
 };
 
-/* --- DOC · Empresas ----------------------------------------------- */
+/* --- DOC · Empresas -----------------------------------------------
+   `ligacoesPorEmpresaRun`/`secoesPorEmpresaRun`/`historicoEmpresaRun` (a lógica que era o corpo
+   do `onRun` de cada `LOADERS.*`) e `renderEmpresaHistory` moraram para
+   `src/documentos/quadro-empresas.mjs` na Fase C3 — mesmo padrão que a C2 usou para
+   `tarifaEmpresaRun`. Os três registros ficaram como wrappers finos (`searchPanel` + a função
+   importada). `openEmpresaLigacoes` FICOU: abre uma view NOVA via `runView`, que é shell puro
+   sem seam de injeção — ver a nota no cabeçalho do módulo novo. */
 function openEmpresaLigacoes(cod){
   runView({ title:'Ligações por Empresa', tables:['tabela_vista_teste','codempresa_teste'], loader: async({ view, gen, pane })=>{
     const [rows] = await Promise.all([
@@ -1579,80 +1451,18 @@ function openEmpresaLigacoes(cod){
 }
 LOADERS.ligacoesPorEmpresa = async (ctx) => {
   const pre = ctx.line?.codempresa || '';
-  searchPanel(ctx, { title:'Ligações por Empresa', placeholder:'Código (ex. 101) ou nome da empresa', value:pre, onRun: async(term, { view, gen, host })=>{
-    if(!term){ host.innerHTML=emptyBox('Informe o código ou nome da empresa.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    await getEmpresas();
-    let cods = [];
-    if(/^\d+$/.test(term.trim())){
-      cods = [term.trim()];
-    } else {
-      const t = norm(term);
-      cods = Object.entries(empresasMap()).filter(([,n])=>norm(n||'').includes(t)).map(([c])=>c);
-      if(!cods.length){ host.innerHTML=emptyBox('Nenhuma empresa encontrada para "'+esc(term)+'".'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    }
-    const filter = cods.length===1 ? `codempresa=eq.${enc(cods[0])}` : `codempresa=in.(${cods.map(enc).join(',')})`;
-    const rows = await sbFetch('tabela_vista_teste', `${filter}&select=${LINE_FIELDS}&order=nome_ligacao&limit=500`);
-    lineResults(host, rows, { view, gen });
-  }});
+  searchPanel(ctx, { title:'Ligações por Empresa', placeholder:'Código (ex. 101) ou nome da empresa', value:pre,
+    onRun: (term, rctx) => ligacoesPorEmpresaRun(rctx, term) });
 };
 LOADERS.secoesPorEmpresa = async (ctx) => {
   const pre = ctx.line?.codempresa || '';
-  searchPanel(ctx, { title:'Seções por Empresa', placeholder:'Código da empresa (ex. 101)', value:pre, onRun: async(term, { view, gen, host })=>{
-    if(!term){ host.innerHTML=emptyBox('Informe o código da empresa.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    const rows = await sbFetch('tarifa_atual_teste', `codempresa=eq.${enc(term)}&select=codlinha,secao,nome_ligacao&order=codlinha&limit=1000`);
-    if(!rows.length){ host.innerHTML=emptyBox('Nenhuma seção cadastrada para a empresa '+esc(term)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-    const cols = [{t:'Linha',w:'110px'},{t:'Seção',w:'70px'},{t:'Descrição'}];
-    const rowHTML = r=>`<tr><td class="td-num">${esc(fmtCode(r.codlinha))}</td><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td></tr>`;
-    host.innerHTML = `<div class="loc-tools"><label>Filtrar <input type="text" id="secF" placeholder="seção, linha ou descrição" autocomplete="off"></label></div><div id="secResult"></div>`;
-    const result = host.querySelector('#secResult'), inp = host.querySelector('#secF');
-    const paint = ()=>{
-      const q = norm(inp.value.trim());
-      const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${fmtCode(r.codlinha)} ${r.codlinha} ${r.nome_ligacao||''}`).includes(q)) : rows;
-      if(!f.length){ result.innerHTML = emptyBox('Nenhuma seção com esse filtro.'); return; }
-      paginateTable(result, f, { cols, rowHTML:r=>rowHTML(r), foot:t=>t+' seção(ões)', unit:'seções', view, gen });
-    };
-    inp.addEventListener('input', debounce(paint));
-    paint();
-  }});
+  searchPanel(ctx, { title:'Seções por Empresa', placeholder:'Código da empresa (ex. 101)', value:pre,
+    onRun: (term, rctx) => secoesPorEmpresaRun(rctx, term) });
 };
-// Renderiza o histórico (paginado) de UMA empresa dentro de um container
-async function renderEmpresaHistory(ctx, cod, nome){
-  const { view, gen, host } = ctx;
-  const [rows, lk, empRows] = await Promise.all([
-    sbFetch('evento_teste', `codempresa=eq.${enc(cod)}&select=${EVENTO_FIELDS}&order=data_registro.asc&limit=500`),
-    getEvLookups(),
-    sbFetch('codempresa_teste', `codempresa=eq.${enc(cod)}&select=nome_empresa,situacao,processo,data_publicacao,cassada,sob_intervencao&limit=1`)
-  ]);
-  const E = empRows[0] || {};
-  const head = docHead('Histórico da Empresa');
-  const empSit = [ boolChip(E.cassada,'Cassada'), boolChip(E.sob_intervencao,'Sob intervenção') ].filter(Boolean).join(' ') || '<span class="chip chip-off">Regular</span>';
-  const meta = metaRows([['Empresa',esc(nome||E.nome_empresa||'—'),true],['Código da Empresa',esc(cod)],['Situação',esc(orDash(E.situacao))],['Processo',esc(orDash(E.processo))],['Publicação',fmtDate(E.data_publicacao)],['Situação cadastral',empSit,true],['Total',rows.length+' evento(s)']]);
-  if(!rows.length){ host.innerHTML = meta + emptyBox('Nenhum evento para a empresa '+esc(cod)+'.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-  const build = r => evBandHTML(r, 'Tipo Evento Empresa', lk.emp?.[r.evento_empresa]||lk.lin?.[r.evento_linha]||'—', !!(r.codlinha)) + evBlocksHTML(r);
-  const pdfFrom = list => `<div class="doc">${list.map(r=>`<div class="ev-page">${head}${meta}${build(r)}</div>`).join('')}</div>`;
-  paginateEvents(host, rows, build, meta, { view, gen, onFilter:(vis)=>{ commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(vis) }); } });
-  commitViewResult(view, gen, { pdfHTML: ()=>pdfFrom(rows) });
-}
 LOADERS.historicoEmpresa = async (ctx) => {
   const pre = ctx.line?.codempresa || '';
   searchPanel(ctx, { title:'Histórico da Empresa', placeholder:'Nome ou código da empresa (ex. 1001 ou AUTO VIAÇÃO)', value:pre,
-    onRun: async(term, rctx)=>{
-      const { view, gen, host } = rctx;
-      term = (term||'').trim();
-      if(!term){ host.innerHTML=emptyBox('Busque pelo nome ou código da empresa.'); commitViewResult(view, gen, { pdfHTML:null }); return; }
-      // busca client-side sobre o cadastro completo → insensível a maiúsc./minúsc. E acento
-      await getEmpresas();
-      const emps = searchEmpresas(term);
-      if(emps.length === 1){ await renderEmpresaHistory(rctx, emps[0].codempresa, emps[0].nome_empresa); return; }
-      if(emps.length > 1){
-        host.innerHTML = empresaChooserHTML(emps, { prompt:'clique para ver o histórico', sitWidth:'170px',
-          extraChips:e=>boolChip(e.cassada,'cassada')+boolChip(e.sob_intervencao,'interv.') });
-        bindEmpresaRows(host, (cod,nome)=>renderEmpresaHistory(rctx, cod, nome));
-        commitViewResult(view, gen, { pdfHTML:null }); return;
-      }
-      // não achou no cadastro de nomes → tenta o termo como código direto nos eventos
-      await renderEmpresaHistory(rctx, term, null);
-    } });
+    onRun: (term, rctx) => historicoEmpresaRun(rctx, term) });
 };
 
 /* ---- Consultas (por logradouro, terminal, localidade, município) ---- */

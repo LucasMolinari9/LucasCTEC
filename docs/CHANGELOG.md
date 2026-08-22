@@ -4,6 +4,53 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 22/08/2026 — Fase C3: Quadro de Horários · Empresas saem do `app.js`
+
+**Fase C3 do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`): a terceira
+família de documentos a sair inteira. Zero SQL, nenhuma mudança de comportamento pretendida.
+
+**Medido:** `app.js` 2.763 → **2.573** (`wc -l`; −190); o bloco `MODAL / SISTEMA DE VIEWS`
+1.527 → **1.341** (−186), e o percentual caiu de novo (55,2% → 52,1%). Total de JS do projeto
+4.211 → 4.291 (+80, líquido — o menor de todas as fases C, porque o `app.js` perdeu MAIS linhas
+que o `MODAL` sozinho: a sessão também limpou seis imports mortos). Fator "sai do `app.js` →
+aparece em módulo" ≈1,4x — mais baixo que o ~1,7–1,8x anterior, pela mesma razão.
+
+- **Um módulo novo:** `src/documentos/quadro-empresas.mjs` (270 linhas) — os renders do Quadro de
+  Horários (`renderLinhaQuadro`, `quadroEmpresaRun`, `renderEmpresaQuadros`, mais os helpers
+  `quadroMetaHTML`/`quadroDocInner`/`fetchQHByLines`) e de Empresas (`ligacoesPorEmpresaRun`,
+  `secoesPorEmpresaRun`, `renderEmpresaHistory`, `historicoEmpresaRun`). Reaberto no
+  `.vercelignore` com 1 linha (`src/documentos/` já estava aberto).
+- **Sem aresta de grafo para fechar desta vez** — o markup compartilhado entre famílias
+  (`evBandHTML`/`evBlocksHTML`, `secoesTarifasHTML`, `quadroHorariosBodyHTML`) já morava em
+  `src/ui/blocos.mjs` desde a C1/C2, e o módulo novo só importa de lá.
+- **Dois motivos medidos, não "faltou tempo", para o que ficou no `app.js`:**
+  1. `quadroLinhaRun` é wrapper de `lineSearchRun`, que só existe no `app.js` porque chama
+     `selectLine` (shell puro, sem seam de injeção) — o plano deixa esses quatro wrappers
+     (`lineDocView`/`lineDocRun`/`lineSearchRun`/`searchPanel`) para a Fase E de propósito.
+  2. `LOADERS.empresasRegulares`/`openEmpresaLigacoes` dependem de `runView` (abre uma view NOVA
+     ao clicar numa empresa) — também shell puro, sem seam. Forçar a saída exigiria um quarto
+     tipo de slot em `shell.mjs` só para isto — registrado como restrição, não decisão, para a
+     Fase E.
+- **`LOADERS.quadroHorarios` fica** (tem corpo — a composição do `searchPanel` com dois modos, é
+  trabalho de Fase D, mesmo padrão de `LOADERS.tarifas` na C2). `LOADERS.ligacoesPorEmpresa`/
+  `secoesPorEmpresa`/`historicoEmpresa` viraram wrappers finos — a lógica que era o corpo do
+  `onRun` (sem nome antes) virou a função exportada com o mesmo nome + `Run`, o mesmo padrão que
+  a C2 usou para `tarifaEmpresaRun`.
+- **Achado, fora da família, declarado:** ao podar o import de `src/data/campos.mjs`,
+  `ITINERARIO_FIELDS` e `FROTA_FIELDS` já estavam mortos desde a C1/C2 (escaparam por engano nas
+  duas sessões). Removidos junto com os quatro que esta sessão tornou órfãos
+  (`QH_INTERVALO_FIELDS`, `QH_PREDET_FIELDS`, `TARIFA_LINHA_FIELDS`, `EVENTO_FIELDS`) e três
+  bindings de outros módulos (`getEvLookups`, `paginateEvents`, o trio `searchEmpresas`/
+  `empresaChooserHTML`/`bindEmpresaRows`) — mesmo defeito que a C1 já tinha achado uma vez
+  (`matchEvent`/`pageBounds`/`preencherLookup`).
+- **Prova por mutação: duas tentativas, as duas morderam.** `renderLinhaQuadro` esvaziado (retorno
+  antes do fetch) → `check_views quadroHorarios` vermelho (`documento em branco`, `0 tbody tr`);
+  `ligacoesPorEmpresaRun` esvaziado → `check_views ligacoesPorEmpresa` vermelho (mesmo padrão).
+- Sem testes novos em `ui-data-module.test.mjs`: nada nesta família é markup puro sem DOM/rede —
+  fica coberto pelos gates de navegador (mesma nota da C1).
+- Gates: `check.js`, `check_views` 18/18, `check_abas`, `check_selecao_linha`, `check_corrida_abas`
+  e `semgrep` (121 regras, 0 achados) verdes. `version.json` 9 → 10, carimbo `build 22/08-A`.
+
 ## 21/08/2026 — Fase C2: Estrutura Operacional · Tarifas · Portaria saem do `app.js`
 
 **Fase C2 do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`): a segunda
