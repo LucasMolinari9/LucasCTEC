@@ -76,8 +76,9 @@ bloco `SET ROLE anon` + tentativas de INSERT/UPDATE/DELETE/SELECT em transação
 ## 5. O que SÓ O DONO pode fazer (maior ganho de segurança)
 1. **MFA / verificação em 2 etapas nas TRÊS contas:** Supabase, GitHub e Vercel. Senhas fortes e
    únicas em cada uma. *(É a ação de maior impacto de todo o plano.)*
-2. **Ligar Leaked Password Protection:** Supabase Dashboard → Authentication → Passwords → ativar.
-   (Fecha o único WARN dos advisors.)
+2. **Leaked Password Protection:** manter como controle desejável se o projeto migrar para Pro ou
+   superior. O recurso não está disponível no plano Free; não fazer upgrade nem introduzir Auth
+   apenas para fechar esse WARN dos advisors.
 3. **Manter signup fechado:** Dashboard → Authentication → "Allow new users to sign up" = OFF.
 4. **Rotacionar a `service_role`** se ela já foi colada fora do painel (chat, e-mail, arquivo):
    Dashboard → Settings → API.
@@ -90,6 +91,15 @@ bloco `SET ROLE anon` + tentativas de INSERT/UPDATE/DELETE/SELECT em transação
 > decisão em vigor, e este documento é lido por agentes que executam o que leem. A segurança do
 > portal nunca dependeu do sigilo do código: o `app.js` e a chave `anon` são servidos a todo
 > visitante desde sempre.
+
+### Confirmação operacional — 22/08/2026
+
+No Dashboard do projeto de produção **Banco - Divat** (`lwzsxuaqqeoamukduhev`), plano **Free**,
+foi confirmado que **Allow new users to sign up** e **Allow anonymous sign-ins** permanecem
+desativados. A tela do provedor Email confirmou também que **Prevent use of leaked passwords** é
+exclusivo do plano Pro ou superior e, por isso, permanece indisponível neste projeto. Nenhuma
+configuração foi alterada: o portal continua público, sem Supabase Auth/sessões e sem acesso para
+`authenticated`, conforme `docs/planos/fase-3-hardening-moderado.md`.
 
 ## 6. Checklist trimestral (5 min numa sessão do Claude)
 
