@@ -984,10 +984,8 @@ direto no Postgres, prova mais forte que um teste de caixa-preta.
   injeção no agrupador `or=(...)` do PostgREST; headers de segurança (CSP, HSTS,
   `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`) completos no
   `vercel.json`.
-- **Pendente, fora do escopo desta revisão**: ativar *Leaked Password Protection* no Dashboard
-  do Supabase (Authentication → Policies) — já listado como pendente no `CLAUDE.md`; não foi
-  possível confirmar ao vivo se o signup do Auth está fechado (mesmo bloqueio de rede); hash do
-  `vendor/supabase-js-2.110.7.min.js` não foi reconferido contra o pacote oficial do npm.
+- O hash do `vendor/supabase-js-2.110.7.min.js` não foi reconferido contra o pacote oficial do
+  npm nesta revisão.
 
 ## 23/07/2026 — Home vira painel lateral (sidebar de tópicos)
 

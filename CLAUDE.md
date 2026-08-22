@@ -164,7 +164,7 @@ exibe e **atualiza ao vivo** (Realtime).
     Se um dia precisar de edição logada legítima, crie policy **restrita por tabela/coluna** —
     nunca `ALL USING(true)`.
   - **Signup do Auth: manter FECHADO** (Dashboard → Authentication → "Allow new users to sign
-    up" = OFF). Pendente (só dashboard): ligar **Leaked Password Protection**.
+    up" = OFF). O estado e as limitações vigentes ficam registrados em `docs/seguranca.md`.
   - **Manual de segurança do dono + auditoria/pentest** (linguagem direta, modelo de ameaça,
     checklist trimestral e resposta a incidente): **`docs/seguranca.md`**. Auditoria completa +
     teste de invasão ao vivo em 23/07/2026 (sem achados de segredo; sem caminho de escrita).
