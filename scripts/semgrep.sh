@@ -124,6 +124,8 @@ aviso_sem_vendor() {
 
 case "${1:-}" in
   --test)
+    # Offline de verdade: --metrics=off não desliga a consulta de versão a semgrep.dev.
+    export SEMGREP_ENABLE_VERSION_CHECK=0
     exec "$SEMGREP" --test --metrics=off --config="$ROOT/.semgrep/rules" "$ROOT/.semgrep/tests"
     ;;
   --full)
@@ -132,6 +134,8 @@ case "${1:-}" in
     exec "$SEMGREP" scan $COMMON $LOCAL_RULES $REGISTRY "$@" .
     ;;
   *)
+    # O padrão usa apenas arquivos locais; não espere pelo timeout de um version check de rede.
+    export SEMGREP_ENABLE_VERSION_CHECK=0
     aviso_sem_vendor
     if [ -n "$VENDOR_RULES" ]; then aviso_versao; fi
     # shellcheck disable=SC2086
