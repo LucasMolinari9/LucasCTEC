@@ -4,6 +4,30 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 22/08/2026 — Fase C4: Municípios · Localidades saem do `app.js`
+
+**Fase C4 em PR próprio**, sem a composição global da Fase D. A medição foi refeita sobre o
+arquivo vigente: `app.js` 2.464 → **1.870** linhas (−594) e o bloco `MODAL / SISTEMA DE VIEWS`
+1.341 → **821** (−520; 43,7% do arquivo novo).
+
+- **Módulo novo:** `src/documentos/municipios-localidades.mjs` reúne os quatro loaders
+  (`ligacoesPorLogradouro`, `municipioRegiao`, `ligacoesPorTerminal`, `localidades`), 13 funções
+  privadas de busca/render e o cache de localidades com invalidator explícito. O arquivo foi
+  reaberto individualmente na `.vercelignore`.
+- **Contrato preservado:** toda entrada usa `ctx = { view, gen, pane, host, line }`; o módulo não
+  exporta nem alcança `currentView`, `activeLine` ou `modalBody`. A fronteira chegou exatamente a
+  seis slots mutáveis (`selecionarLinha`, `novoCtx`, `montarPainelBusca`, `abrirView`,
+  `distinctCods`, `fetchLinesByCods`), limite guardado por teste. A próxima dependência larga deve
+  ficar no `app.js`.
+- **UI sem duplicação:** tabelas, paginação e clique de linha continuam em `src/ui/listas.mjs`.
+  Nenhum markup exclusivo foi promovido a `src/ui/blocos.mjs`.
+- **Estado/PDF:** `#regScope` e `#munScope` persistem durante recargas/repinturas; os dois ramos de
+  tela municipal mantêm `pdf:false`; Localidades mantém `paginateLines(..., { pdf:false })` no
+  bloco secundário e um único commit depois de montar os dois blocos.
+- **Cobertura:** o gate de views ganhou casos para os dois seletores. A mutação que esvaziou
+  `pintarLocalidadeSecoes` derrubou os dois cenários de Localidades por conteúdo abaixo do
+  contrato, e foi revertida antes da validação final.
+
 ## 22/08/2026 — Fase C3: Quadro de Horários · Empresas saem do `app.js`
 
 **Fase C3 do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`): a terceira

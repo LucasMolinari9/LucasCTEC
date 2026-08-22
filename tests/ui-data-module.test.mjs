@@ -33,6 +33,7 @@ import * as blocos from '../src/ui/blocos.mjs';
 import * as campos from '../src/data/campos.mjs';
 import * as shell from '../src/documentos/shell.mjs';
 import * as empresas from '../src/ui/empresas.mjs';
+import * as municipiosLocalidades from '../src/documentos/municipios-localidades.mjs';
 
 let pass = 0, fail = 0;
 const fails = [];
@@ -42,6 +43,13 @@ const t = (nome, fn) => {
 const tAsync = async (nome, fn) => {
   try { await fn(); pass++; } catch (e){ fail++; fails.push(`${nome}: ${e.message}`); }
 };
+
+t('módulo C4 exporta as quatro famílias completas e o invalidator de Localidades', () => {
+  for (const nome of ['ligacoesPorLogradouro', 'municipioRegiao', 'ligacoesPorTerminal',
+                      'localidades', 'invalidarLocalidades']) {
+    assert.equal(typeof municipiosLocalidades[nome], 'function', `municipios-localidades.${nome} ausente`);
+  }
+});
 
 /* ================================================================
    src/ui/doc.mjs
@@ -370,25 +378,40 @@ t('campos: as colunas que a Estrutura consolida estão nas listas gêmeas', () =
    ================================================================ */
 // O seam ÚNICO de src/documentos/. Como os três `configurar*` da B2, ele falha FECHADO: um
 // documento sem rede pintaria tela vazia sem erro — invisível para todo gate deste repo.
-t('selecionarLinha e novoCtx lançam antes de configurarDocumentos', () => {
+t('os seis slots de documentos lançam antes de configurarDocumentos', () => {
   assert.throws(() => shell.selecionarLinha({}), /configurarDocumentos/);
   assert.throws(() => shell.novoCtx('V','P','H'), /configurarDocumentos/);
+  assert.throws(() => shell.montarPainelBusca({}, {}), /não configurado/);
+  assert.throws(() => shell.abrirView({}), /não configurado/);
+  assert.throws(() => shell.distinctCods([]), /não configurado/);
+  assert.throws(() => shell.fetchLinesByCods([]), /não configurado/);
 });
-t('configurarDocumentos liga os dois slots e repassa os argumentos', () => {
+await tAsync('configurarDocumentos liga os seis slots e repassa os argumentos', async () => {
   const chamadas = [];
   shell.configurarDocumentos({
     selecionarLinha: row => { chamadas.push(['linha', row]); },
     novoCtx: (view, pane, host) => { chamadas.push(['ctx', view, pane, host]); return 'CTX'; },
+    montarPainelBusca: (ctx, options) => { chamadas.push(['painel', ctx, options]); return 'PAINEL'; },
+    abrirView: options => { chamadas.push(['view', options]); return 'VIEW'; },
+    distinctCods: (rows, limit) => { chamadas.push(['cods', rows, limit]); return ['1']; },
+    fetchLinesByCods: async (cods, options) => { chamadas.push(['linhas', cods, options]); return [{ codlinha:'1' }]; },
   });
   shell.selecionarLinha({ codlinha:'1' });
   assert.equal(shell.novoCtx('V', 'P', 'H'), 'CTX');
-  assert.deepEqual(chamadas, [['linha', { codlinha:'1' }], ['ctx', 'V', 'P', 'H']]);
+  assert.equal(shell.montarPainelBusca('C', 'O'), 'PAINEL');
+  assert.equal(shell.abrirView('O'), 'VIEW');
+  assert.deepEqual(shell.distinctCods(['R'], 2), ['1']);
+  assert.deepEqual(await shell.fetchLinesByCods(['1'], { limit:1 }), [{ codlinha:'1' }]);
+  assert.deepEqual(chamadas, [
+    ['linha', { codlinha:'1' }], ['ctx', 'V', 'P', 'H'], ['painel', 'C', 'O'], ['view', 'O'],
+    ['cods', ['R'], 2], ['linhas', ['1'], { limit:1 }],
+  ]);
 });
 t('src/documentos/shell.mjs tem no máximo 6 slots injetados (critério de parada do plano)', () => {
   // O plano vivo manda PARAR quando um módulo passa de ~6 dependências injetadas. Como todas as
   // famílias da Fase C passam por este seam, a conta é o número de slots dele — e esta asserção
-  // é o lugar em que o critério deixa de ser prosa. A C2 acrescentou o 3º (`novoCtx`, para o
-  // painel de Portarias, que monta ctx novo por conta própria); ainda longe do sétimo.
+  // é o lugar em que o critério deixa de ser prosa. A C4 chegou exatamente ao sexto; o próximo
+  // slot exige parar e manter a responsabilidade no app.js.
   const slots = Object.keys(shell).filter(k => k !== 'configurarDocumentos');
   assert.ok(slots.length <= 6, `slots injetados: ${slots.join(', ')} — o plano manda parar acima de ~6`);
 });
