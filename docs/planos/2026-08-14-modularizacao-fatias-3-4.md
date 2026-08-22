@@ -296,10 +296,10 @@ nem `limit`, só lê os campos `_trunc`/`_limite` que o `marcarTrunc` marca e de
 próprio plano dizia isso — e foi para o `src/data/lookups.mjs:106` a que pertencia; a razão de
 adiá-lo (fechar o marco abaixo junto) deixou de existir quando a B2 veio antes.
 
-**Também no mesmo PR:** os dois runbooks que mandam editar `SB_MAX_ROWS` no `app.js` — o
-`CLAUDE.md` ("suba, na mesma tarefa, a constante `SB_MAX_ROWS` do `app.js`" e "São TRÊS lugares a
+**Também no mesmo PR:** os dois runbooks que mandam editar `SB_MAX_ROWS` em `src/data/rest.mjs` — o
+`CLAUDE.md` ("suba, na mesma tarefa, a constante `SB_MAX_ROWS` de `src/data/rest.mjs`" e "São TRÊS lugares a
 mudar juntos", ambos na seção Supabase, `grep -n SB_MAX_ROWS CLAUDE.md`), mais
-`docs/backup_schema.sql:783`–`:784` ("na constante SB_MAX_ROWS do app.js"). Mover a constante sem
+`docs/backup_schema.sql:783`–`:784` ("na constante SB_MAX_ROWS de src/data/rest.mjs"). Mover a constante sem
 mover a instrução deixa os dois apontando para onde ela não está, e a guarda docs×código **não**
 cobre esse caminho: ela começa em `tests/check.js:411` e confere fatos NUMÉRICOS por regex (tabela
 `FATOS`, `tests/check.js:512`) — nenhum gate do repo sequer menciona `SB_MAX_ROWS` (grep vazio em
@@ -311,8 +311,7 @@ alguém subisse o teto do PostgREST e a truncagem ficasse no valor velho, em sil
 duas menções em PROSA, no cabeçalho do arquivo; conte os marcadores, não a palavra). Eram 12 até a
 B2 tirar as duas que não eram do bloco `SUPABASE CONFIG`, e as 10 que restam são **todas** dele —
 ou seja, o marco agora depende só desta fase. Quando a última sair,
-[`../../tests/canon.js`](../../tests/canon.js) (56 linhas) e
-[`../../tests/drift.test.js`](../../tests/drift.test.js) (72) se aposentam junto com a §[2] do
+`tests/canon.js` (56 linhas) e `tests/drift.test.js` (72) se aposentam junto com a §[2] do
 `check.js` — processo apagado por ter **perdido o objeto**, não por corte de rigor.
 
 ---

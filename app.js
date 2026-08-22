@@ -38,12 +38,12 @@ import {
   loading, emptyBox, emptyLinha, errorBox, bannerTrunc,
 } from './src/ui/doc.mjs';
 // Caches de referência (municípios, origens, terminais, cadastro de empresas, tipos de evento).
-// A função de rede chega neles por `configurarLookups` no bootstrap logo abaixo.
+// Os lookups importam diretamente a fronteira REST única.
 // `preencherLookup` NÃO entra: quem o usa é o próprio módulo (e o tests/harness.js, que o
 // importa direto). Terceiro binding morto herdado da B2, removido na C1 junto com os outros dois.
 // `getEvLookups` NÃO entra mais: quem o usava (`renderEmpresaHistory`) saiu na Fase C3.
 import {
-  configurarLookups, getIbge, getOrigem, getTerminais,
+  getIbge, getOrigem, getTerminais,
   getEmpresas, empNome, empresasMap, empresasList, empresaPorCod,
   INVALIDADORES_LOOKUP,
 } from './src/data/lookups.mjs';
@@ -63,10 +63,11 @@ import {
 // que a Fase C3 moveu o Quadro de Horários e o Histórico da Empresa — binding morto removido
 // junto (as duas primeiras já estavam mortas desde a C1/C2, e escaparam por engano).
 import { LINE_FIELDS } from './src/data/campos.mjs';
+import { configurarRest, selecionarSupabase, sbFetch, ehCancelamento } from './src/data/rest.mjs';
 // FASE C1 — a primeira família de documentos a sair inteira do arquivo. O que fica aqui embaixo
 // são os registros `LOADERS.*`, que são shell (wrappers de busca de linha) e saem nas Fases D/E.
-// `configurarDocumentos` é o seam ÚNICO de `src/documentos/`: injeta a rede e a ação de shell
-// para TODAS as famílias da Fase C, e é onde o critério de parada do plano se mede.
+// `configurarDocumentos` injeta apenas as duas ações de shell compartilhadas; a rede vem da
+// fronteira REST importada diretamente por cada família.
 import { configurarDocumentos } from './src/documentos/shell.mjs';
 import {
   renderLineHistory, renderItinerarios, renderFrota,
@@ -113,7 +114,6 @@ import {
    ligado. As funções passadas abaixo são todas `function` (hoisted), então referenciá-las aqui
    é seguro mesmo estando declaradas mais adiante — ver docs/estrutura-frontend.md §3. */
 configurarDoc({ logoSVG: document.getElementById('brandLogo').innerHTML });
-configurarLookups({ sbFetch });
 /* O seam de seleção: clicar numa linha de qualquer lista SELECIONA a linha, fecha o modal e
    avisa. É composição de shell (rota + modal + toast), não markup, e por isso não desce para o
    módulo — desce a AÇÃO, uma vez. `selectLine`/`closeModal`/`toast` são `function` (hoisted).
@@ -132,7 +132,7 @@ configurarListas({ aoSelecionarLinha: row => {
 // arquivo, e passá-la aqui por valor bateria em TDZ — o bootstrap roda no TOPO do IIFE, antes da
 // declaração existir. O fecho só a lê quando de fato CHAMADO, muito depois de o arquivo inteiro
 // já ter sido avaliado (nenhum documento abre no load).
-configurarDocumentos({ sbFetch, selecionarLinha: selectLine, novoCtx: (view, pane, host) => novoCtx(view, pane, host) });
+configurarDocumentos({ selecionarLinha: selectLine, novoCtx: (view, pane, host) => novoCtx(view, pane, host) });
 
 /* ================================================================
    SUPABASE CONFIG
@@ -170,19 +170,6 @@ const HOSTS_PROD   = ['divatdetro.vercel.app',
 const SB_TESTE_URL = 'https://gontnlfmothfglssbyyk.supabase.co';
 const SB_TESTE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdvbnRubGZtb3RoZmdsc3NieXlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNTU0OTAsImV4cCI6MjEwMDgzMTQ5MH0.NMEaXXeWxI6A50KuA1euHpSH3Mi53CXU71N16zrjhH4';
 
-function selecionarSupabase(hostname, config){
-  const host = String(hostname || '').trim().toLowerCase().replace(/\.$/, '');
-  const hostsProd = (config.hostsProd || []).map(h => String(h).trim().toLowerCase().replace(/\.$/, ''));
-  const producao = hostsProd.includes(host);
-  const alvo = producao
-    ? { url: config.prodUrl,  key: config.prodKey,  ambiente: 'producao' }
-    : { url: config.testeUrl, key: config.testeKey, ambiente: 'teste' };
-  if (!alvo.url || !alvo.key) {
-    throw new Error(`Configuração Supabase ausente para o ambiente de ${alvo.ambiente}.`);
-  }
-  return Object.freeze({ ...alvo, hostname: host });
-}
-
 const SB = selecionarSupabase(location.hostname, {
   hostsProd: HOSTS_PROD,
   prodUrl: SB_URL,
@@ -190,107 +177,11 @@ const SB = selecionarSupabase(location.hostname, {
   testeUrl: SB_TESTE_URL,
   testeKey: SB_TESTE_KEY
 });
+configurarRest({ url: SB.url, key: SB.key, fetch: window.fetch.bind(window) });
 
-const esperar = ms => new Promise(r => setTimeout(r, ms));
-
-const SB_TIMEOUT_MS = 20000;   // teto por requisição: evita a tela presa em "Carregando…" pra sempre
-const SB_RETRIES    = 2;       // tentativas extras só p/ erros transitórios (rede / 5xx / 429)
-
-// Erro de requisição CANCELADA de propósito (busca ficou obsoleta), distinto de timeout e de
-// falha de rede. Quem chama trata isto como "ignore em silêncio", não como erro para exibir.
-const CANCELADO = 'RequisicaoCancelada';
-const ehCancelamento = e => e && e.name === CANCELADO;
-
-// fetch com timeout via AbortController — cancela a requisição se passar do teto.
-// `sinal` (opcional) é um AbortSignal EXTERNO, de quem quer cancelar antes disso (busca obsoleta).
-// Os dois são compostos, e a distinção entre eles é preservada: timeout vira mensagem para o
-// usuário, cancelamento externo é engolido. Sem essa distinção, trocar de termo de busca pintaria
-// "Tempo de resposta esgotado" na tela.
-async function fetchComTimeout(url, opts = {}, timeoutMs = SB_TIMEOUT_MS, sinal){
-  if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
-  const repassar = () => ctrl.abort();
-  if (sinal) sinal.addEventListener('abort', repassar, { once: true });
-  try {
-    return await fetch(url, { ...opts, signal: ctrl.signal });
-  } catch (e) {
-    // o abort veio de fora, não do relógio
-    if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-    throw e;
-  } finally {
-    clearTimeout(t);
-    if (sinal) sinal.removeEventListener('abort', repassar);
-  }
-}
-
-async function sbFetch(table, qs = '', sinal) {
-  const url = `${SB.url}/rest/v1/${table}?${qs}`;
-  let ultimoErro;
-  for (let tentativa = 0; tentativa <= SB_RETRIES; tentativa++) {
-    try {
-      const res = await fetchComTimeout(url, {
-        headers: { apikey: SB.key, Authorization: `Bearer ${SB.key}` }
-      }, SB_TIMEOUT_MS, sinal);
-      if (!res.ok) {
-        // 5xx/429 são transitórios → vale repetir; demais 4xx são definitivos
-        if ((res.status >= 500 || res.status === 429) && tentativa < SB_RETRIES) {
-          ultimoErro = new Error(`HTTP ${res.status}`);
-          await esperar(400 * 2 ** tentativa);          // backoff: 400ms, 800ms
-          // o cancelamento pode chegar DURANTE o backoff: sem esta conferência, a tentativa
-          // seguinte sairia para a rede depois de a busca já ter sido abandonada.
-          if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-          continue;
-        }
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || `HTTP ${res.status}`);
-      }
-      return marcarTrunc(await res.json(), qs);
-    } catch (e) {
-      // cancelamento nunca repete: foi pedido, não é falha.
-      if (ehCancelamento(e)) throw e;
-      ultimoErro = e;
-      const transitorio = (e.name === 'AbortError') || (e instanceof TypeError); // timeout ou falha de rede
-      if (transitorio && tentativa < SB_RETRIES) {
-        await esperar(400 * 2 ** tentativa);
-        if (sinal && sinal.aborted) throw Object.assign(new Error('cancelado'), { name: CANCELADO });
-        continue;
-      }
-      if (e.name === 'AbortError') throw new Error('Tempo de resposta esgotado — verifique a conexão e tente novamente.');
-      throw ultimoErro;
-    }
-  }
-  throw ultimoErro;
-}
-
-// Teto do PostgREST: `pgrst.db_max_rows` do role `authenticator`. Confirmado contra o banco vivo
-// em 09/08/2026 e versionado em docs/backup_schema.sql (bloco LIMITES DE ROLE), além de descrito
-// no CLAUDE.md (seção Supabase). Subir o teto exige mudar os TRÊS na mesma tarefa: o banco, esta
-// constante e a baseline — a baseline porque um restore sem ela devolve o banco sem teto nenhum,
-// e sem sintoma; esta constante porque o marcarTrunc a usa como segundo critério de truncagem.
-const SB_MAX_ROWS = 30000;
-// Marca (sem alterar o conteúdo) um array de resultados que provavelmente foi CORTADO:
-// só sinaliza quando a consulta tinha um limit "de lista" (>=50) e veio cheio até o teto.
-// A flag é não-enumerável → JSON.stringify/map/spread ignoram; só quem checa rows._trunc vê.
-// O teto efetivo é o MENOR entre o limit pedido e o do servidor: um `limit` maior que
-// SB_MAX_ROWS sairia cortado em silêncio pelo critério antigo, porque data.length (30000)
-// nunca alcança lim (50000) — sem banner e sem toast. Hoje não dispara (os 5 maiores limits
-// do app.js são exatamente 30000); é armadilha armada para a próxima consulta grande.
-function marcarTrunc(data, qs){
-  if (!Array.isArray(data)) return data;
-  const m = /(?:^|&)limit=(\d+)/.exec(qs || '');
-  if (m){
-    const teto = Math.min(+m[1], SB_MAX_ROWS);
-    if (teto >= 50 && data.length >= teto){
-      Object.defineProperty(data, '_trunc',  { value:true, enumerable:false });
-      Object.defineProperty(data, '_limite', { value:teto, enumerable:false });
-    }
-  }
-  return data;
-}
 // O BANNER que avisa o usuário sobre essa truncagem é markup, não infraestrutura: mora em
 // `src/ui/doc.mjs` (`bannerTrunc`). O contrato entre os dois são os campos não-enumeráveis
-// `_trunc`/`_limite` marcados logo acima — mexeu num lado, leia o outro.
+// `_trunc`/`_limite` marcados em `src/data/rest.mjs` — mexeu num lado, leia o outro.
 
 /* --- Regras de domínio e formatação (funções puras) ---
    Daqui pra baixo, nenhuma função toca rede/DOM — só recebem dado e devolvem

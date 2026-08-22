@@ -21,7 +21,8 @@ import { paginateEvents } from '../ui/paginacao.mjs';
 import { evBandHTML, evBlocksHTML, itinerarioTableHTML, frotaBlockHTML, SENTIDO_ORDER, normSentido } from '../ui/blocos.mjs';
 import { getIbge, getEmpresas, empNome, getEvLookups } from '../data/lookups.mjs';
 import { EVENTO_FIELDS, ITINERARIO_FIELDS, FROTA_FIELDS } from '../data/campos.mjs';
-import { sbFetch, selecionarLinha } from './shell.mjs';
+import { sbFetch } from '../data/rest.mjs';
+import { selecionarLinha } from './shell.mjs';
 
 /* ================================================================
    DOC · Histórico (linha)

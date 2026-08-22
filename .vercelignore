@@ -54,6 +54,7 @@
 /src/data/*
 !/src/data/lookups.mjs
 !/src/data/campos.mjs
+!/src/data/rest.mjs
 !/src/documentos
 /src/documentos/*
 !/src/documentos/shell.mjs
