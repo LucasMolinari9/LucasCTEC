@@ -56,18 +56,11 @@ on:
       - docs/backup_schema.sql
       - docs/schema.md
       - .github/workflows/db-checks.yml
+  # Sem filtro de paths: `realtime`, `qualidade` e `seguranca` são checks obrigatórios da
+  # `main`. Se o workflow não nascer numa PR, o GitHub deixa o merge preso para sempre em
+  # "Waiting for status to be reported". O filtro de push acima pode continuar econômico;
+  # required check é contrato de PR.
   pull_request:
-    paths:
-      - app.js
-      - scripts/check_realtime.mjs
-      - scripts/check_data_quality.mjs
-      - scripts/data_quality_baseline.json
-      - scripts/check_grants.mjs
-      - scripts/security_baseline.json
-      - scripts/lib/audit-database.mjs
-      - docs/backup_schema.sql
-      - docs/schema.md
-      - .github/workflows/db-checks.yml
 
 # GITHUB_TOKEN no mínimo: nenhum destes workflows faz push, abre PR ou comenta.
 # Sem este bloco o token herda o default do repo/organização, que pode ser contents: write

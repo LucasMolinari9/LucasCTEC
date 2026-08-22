@@ -31,14 +31,10 @@ on:
       - scripts/bootstrap_phase3_auditor.sql
       - scripts/rollback_phase3_test.sql
       - .github/workflows/phase3-security.yml
+  # Sem filtro de paths: `migration-contract` é check obrigatório da `main`. Mesmo uma PR sem
+  # SQL precisa criar o job e reportar o status; caso contrário o ruleset espera um contexto que
+  # nunca nascerá. O job é offline e leva segundos.
   pull_request:
-    paths:
-      - 'supabase/migrations/**'
-      - scripts/check_migrations.mjs
-      - scripts/check_phase3_audit.mjs
-      - scripts/bootstrap_phase3_auditor.sql
-      - scripts/rollback_phase3_test.sql
-      - .github/workflows/phase3-security.yml
 
 permissions:
   contents: read
