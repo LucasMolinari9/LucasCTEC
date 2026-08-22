@@ -44,8 +44,16 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > da sessão: já era usado por mais de uma família). `app.js` 2.974 → 2.763; `MODAL` 1.746 → 1.527
 > linhas, 55,2%. A C2 também decidiu o destino de um dos quatro loaders órfãos que a C1 tinha
 > deixado sem família (`secoesPorLigacao` → C4); os outros três seguem sem decisão — ver o plano.
-> Faltam **C3/C4**, a **Fase B** (`src/data/rest.mjs`, que encerra o mecanismo `@canon`) e as
-> Fases D/E.
+> E entrou a **Fase C3** (Quadro de Horários · Empresas), a terceira família a sair inteira:
+> `src/documentos/quadro-empresas.mjs` (270 linhas). Sem aresta de grafo para fechar desta vez —
+> o markup compartilhado já morava em `blocos.mjs` desde C1/C2. `LOADERS.quadroHorarios` fica
+> (corpo — mesmo padrão de `LOADERS.tarifas`); `quadroLinhaRun` fica (wrapper de `lineSearchRun`,
+> shell puro sem seam); `LOADERS.empresasRegulares`/`openEmpresaLigacoes` ficam (dependem de
+> `runView`, shell puro, também sem seam) — restrição registrada, não decisão, para a Fase E.
+> `app.js` 2.763 → 2.573; `MODAL` 1.527 → 1.341 linhas, 52,1%. A C3 também limpou seis imports
+> mortos de `src/data/campos.mjs` e outros módulos — dois já estavam mortos desde a C1/C2 e
+> escaparam por engano. Faltam **C4**, a **Fase B** (`src/data/rest.mjs`, que encerra o mecanismo
+> `@canon`) e as Fases D/E.
 >
 > Continua valendo:
 > **[`docs/historico/contexto-proxima-sessao-2026-08-09.md`](docs/historico/contexto-proxima-sessao-2026-08-09.md)**
@@ -64,7 +72,7 @@ empresas, relatórios). Os dados são **alimentados pelo dono direto no Supabase
 exibe e **atualiza ao vivo** (Realtime).
 
 ## Arquitetura (importante)
-- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (quase todo o JS, ~2,8k
+- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (quase todo o JS, ~2,6k
   linhas, num IIFE)** — zero-build: sem framework, sem `package.json`, `<script src>` clássico no
   fim do `<body>`. Todo JS novo vai no `app.js` (o `tests/check.js` **falha** se aparecer
   `<script>` inline no `index.html` — a CSP publica `script-src 'self'` e bloquearia) e todo CSS
@@ -152,10 +160,11 @@ exibe e **atualiza ao vivo** (Realtime).
   reabertos um a um (hoje `domain/core.mjs`, `domain/agrupamento.mjs`, `domain/busca.mjs`,
   `domain/view-state.mjs`, `ui/doc.mjs`, `ui/paginacao.mjs`, `ui/listas.mjs`, `ui/blocos.mjs`,
   `ui/empresas.mjs`, `data/lookups.mjs`, `data/campos.mjs`, `documentos/shell.mjs`,
-  `documentos/frota-historico-itinerarios.mjs` e `documentos/estrutura-tarifas-portaria.mjs` —
-  cada subdiretório novo de `src/` também precisa das suas três linhas, e a Fase C1 abriu
-  `src/documentos/` pagando exatamente isso; arquivo novo num subdiretório já aberto custa só a
-  linha dele, como a C2 pagou para `ui/empresas.mjs` e `documentos/estrutura-tarifas-portaria.mjs`).
+  `documentos/frota-historico-itinerarios.mjs`, `documentos/estrutura-tarifas-portaria.mjs` e
+  `documentos/quadro-empresas.mjs` — cada subdiretório novo de `src/` também precisa das suas
+  três linhas, e a Fase C1 abriu `src/documentos/` pagando exatamente isso; arquivo novo num
+  subdiretório já aberto custa só a linha dele, como C2 e C3 pagaram para `ui/empresas.mjs`,
+  `documentos/estrutura-tarifas-portaria.mjs` e `documentos/quadro-empresas.mjs`).
   Arquivo público novo (ícone, fonte) precisa ser reaberto lá, senão vira 404. **`src/` é reaberto
   arquivo a arquivo**, não com um `!/src` de uma linha: é diretório cujo nome convida a guardar o
   que não se serve, e reabri-lo inteiro publicaria em silêncio o que alguém largar ali. Reabrir só
@@ -291,6 +300,7 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | *(fora do `app.js`)* `src/documentos/shell.mjs` | `configurarDocumentos`, `sbFetch`, `selecionarLinha`, `novoCtx` | O seam ÚNICO de injeção de `src/documentos/`: uma chamada no bootstrap serve todas as famílias da Fase C, e o número de slots (**3**, desde a C2) é onde o critério de parada do plano se mede. `sbFetch` é andaime — sai na Fase B; `novoCtx` entrou na C2 para o painel de Portarias, que monta o próprio ctx a cada busca. |
 | *(fora do `app.js`)* `src/documentos/frota-historico-itinerarios.mjs` | `renderLineHistory`, `renderItinerarios`, `renderFrota` | **Fase C1** — a primeira família de documentos a sair inteira. Cada render recebe o `ctx` e não tem como ler `currentView`/`activeLine`: eles nem estão no escopo. Os registros `LOADERS.*` ficaram no `app.js` (são shell; saem nas Fases D/E). |
 | *(fora do `app.js`)* `src/documentos/estrutura-tarifas-portaria.mjs` | `renderTarifas`/`tarifaEmpresaRun`/`renderTarifasEmpresa`, `renderEstrutura`, `renderPortarias`/`showPortaria`/`invalidarPortariaAnos` | **Fase C2** — a segunda família a sair inteira. Portaria é o único documento de lista+detalhe da Fase C (`pushDetail`/`popDetail`, não `commitViewResult`). `LOADERS.estrutura` (one-liner) e `LOADERS.tarifas` (tem corpo — composição de Fase D) ficaram no `app.js`; `LOADERS.portarias` virou o one-liner `renderPortarias`. |
+| *(fora do `app.js`)* `src/documentos/quadro-empresas.mjs` | `renderLinhaQuadro`/`quadroEmpresaRun`/`renderEmpresaQuadros`, `ligacoesPorEmpresaRun`/`secoesPorEmpresaRun`/`renderEmpresaHistory`/`historicoEmpresaRun` | **Fase C3** — a terceira família a sair inteira. `LOADERS.quadroHorarios` (corpo — composição de Fase D) e `quadroLinhaRun` (wrapper de `lineSearchRun`, shell puro sem seam) ficaram no `app.js`; os três `LOADERS.*` de Empresas viraram wrappers finos. `LOADERS.empresasRegulares`/`openEmpresaLigacoes` ficaram — dependem de `runView`, sem seam de injeção. |
 | `SUPABASE CONFIG` | `sbFetch`, `fetchComTimeout`, `selecionarSupabase`, `marcarTrunc` | Config SB + fetch com timeout/retry. Os helpers de formatação e escape moraram para `src/domain/core.mjs`; o `bannerTrunc` que pinta a truncagem, para `src/ui/doc.mjs` (marcar é dado, pintar é markup). |
 | `ÍCONES` | objeto `I` | SVGs dos ícones. |
 | `SEÇÕES / CARDS` | array `SECTIONS` | Define os cards `[ícone, título, descrição, view, precisaLinha]`. |
@@ -298,7 +308,7 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | `STATE + CACHES` | `activeLine`, `tabs`/`activeTab`/`setActiveLine`, `searchEmpresas` | Estado global desta tela. Os caches de lookup foram para `src/data/lookups.mjs` (linha acima); ficou a busca de empresa do modal, que só lê a lista que o módulo expõe. |
 | `BUSCA DE LINHAS (hero)` | `doSearch`, `closeDropdown` | Busca do topo e dropdown de resultados. |
 | `LINHA ATIVA — BANNER` | `selectLine`, `bannerEmpHTML` | Banner navy da linha selecionada. |
-| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody`, `baixarPdf`, `setCurrentView`/`activateTab` (wiring das abas, sobre o modelo puro do `view-state.mjs`), `renderBlankTab`/`renderTabChooser` (seletor de documentos da aba do "+") e os `render*` que **ainda** não saíram | **Maior bloco**: abre/preenche o modal e renderiza os documentos que a Fase C ainda não moveu. Desde a C1/C2, seis marcas `DOC ·` (Histórico da linha, Itinerários, Frota, Estrutura, Tarifas, Portaria) guardam só o registro `LOADERS.*` (Tarifas com corpo próprio — a composição do `searchPanel`) — o render mora em `src/documentos/`. |
+| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody`, `baixarPdf`, `setCurrentView`/`activateTab` (wiring das abas, sobre o modelo puro do `view-state.mjs`), `renderBlankTab`/`renderTabChooser` (seletor de documentos da aba do "+") e os `render*` que **ainda** não saíram | **Maior bloco**: abre/preenche o modal e renderiza os documentos que a Fase C ainda não moveu. Desde a C1/C2/C3, oito marcas `DOC ·` (Histórico da linha, Itinerários, Quadro de Horários, Tarifas, Frota, Estrutura, Empresas, Portaria) guardam só shell — registro `LOADERS.*` ou wrapper fino (Tarifas e Quadro de Horários com corpo próprio — a composição do `searchPanel`, trabalho de Fase D) — o render mora em `src/documentos/`. |
 | `COMPONENTES AUXILIARES` | `searchPanel`, `distinctCods`/`fetchLinesByCods`, `empresaChooserHTML`/`bindEmpresaRows`, `renderLocalidadeSecoes`/`pintarLocalidadeSecoes` | Painel de busca reutilizável e os helpers de listagem que ainda dependem de estado desta tela. A tabela de linhas e a paginação moraram para `src/ui/listas.mjs` e `src/ui/paginacao.mjs`. |
 | `CLIQUE NOS CARDS` | — | Liga o clique do card → abre a view. |
 | `TOAST` | `toast` | Avisos transitórios. |
@@ -389,7 +399,7 @@ PDF não têm teste em Node; o que os módulos de `src/ui/` têm de markup puro 
 
 2a. **Mexeu em render/loader? `node scripts/check_views.mjs`** — abre as **18 views** num
    navegador headless e falha se alguma explodir, ficar no spinner ou pintar menos que o
-   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~55,2% do `app.js`), que o
+   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~52,1% do `app.js`), que o
    `check.js` **não** cobre. Aceita filtro: `check_views.mjs frota`.
    **O que quebra se esquecer:** view nova sem entrada em `VIEWS` (a checagem anti-drift do final
    pega); `select=` alterado sem ajustar a fixture em `scripts/lib/rig.mjs` — nome de coluna

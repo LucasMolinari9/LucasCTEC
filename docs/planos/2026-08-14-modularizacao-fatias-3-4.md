@@ -42,20 +42,21 @@ do plano de 6 ([`../historico/contexto-proxima-sessao-2026-08-14.md`](../histori
 responderam à crítica **irmã** — a de que o processo virou projeto paralelo. O monólito mal foi
 arranhado.
 
-Medido no `app.js` de **2.764 linhas** (`split('\n').length`, a mesma conta do `tests/check.js`
-§[2b]; remedido em 21/08/2026, sobre a branch da Fase C2). Cada faixa vai da **marca da seção**
+Medido no `app.js` de **2.574 linhas** (`split('\n').length`, a mesma conta do `tests/check.js`
+§[2b]; remedido em 22/08/2026, sobre a branch da Fase C3). Cada faixa vai da **marca da seção**
 até a linha anterior à marca seguinte — a convenção que o extrator do `tests/check.js` §[2b] usa,
 e que as faixas anteriores desta tabela erravam por duas linhas:
 
 | bloco | linhas | % |
 |---|---|---|
-| `MODAL / SISTEMA DE VIEWS` (`app.js:758`–`:2283`) | 1.527 | 55,2% |
-| `COMPONENTES AUXILIARES` (`:2285`–`:2441`) | 158 | 5,7% |
-| `SUPABASE CONFIG` (`:142`–`:308`) | 168 | 6,1% |
+| `MODAL / SISTEMA DE VIEWS` (`app.js:754`–`:2093`) | 1.341 | 52,1% |
+| `COMPONENTES AUXILIARES` (`:2095`–`:2251`) | 158 | 6,1% |
+| `SUPABASE CONFIG` (`:138`–`:304`) | 168 | 6,5% |
 
 Antes da C1, sobre um `app.js` de 3.053: `MODAL` = 1.844 (60,4%), `COMPONENTES AUXILIARES` = 164
 (5,4%), `SUPABASE CONFIG` = 168 (5,5%). Depois da C1 e antes da C2, sobre um `app.js` de 2.974:
-`MODAL` = 1.746 (58,7%).
+`MODAL` = 1.746 (58,7%). Depois da C2 e antes da C3, sobre um `app.js` de 2.763: `MODAL` = 1.527
+(55,2%).
 
 O `MODAL` subiu de 58,3% para 60,3% na Fase B2 tendo PERDIDO 98 linhas — a B2 tirou 263 do arquivo
 inteiro, e o denominador encolheu mais que o numerador. A Fase A fez o contrário: **acrescentou**
@@ -70,10 +71,14 @@ bootstrap, menos o bloco de constantes de campo que saiu daqui). A **Fase C2** r
 (58,7% → 55,2%): o bloco perdeu 219 linhas e o arquivo, 210 — a diferença de 9 é o `import`/
 bootstrap novo (a 3ª chamada de `configurarDocumentos` some, é a mesma linha; entrou o slot
 `novoCtx` e as importações da nova família) menos o comentário-tombstone que substituiu cada
-função removida.
+função removida. A **Fase C3** repetiu de novo (55,2% → 52,1%): o bloco perdeu 186 linhas e o
+arquivo, 190 — desta vez o arquivo perdeu MAIS que o bloco, porque a sessão também limpou seis
+imports de `src/data/campos.mjs` que já estavam mortos (dois deles, `ITINERARIO_FIELDS` e
+`FROTA_FIELDS`, desde a C1/C2 — escaparam por engano) e três de outros módulos
+(`getEvLookups`, `paginateEvents`, o trio `searchEmpresas`/`empresaChooserHTML`/`bindEmpresaRows`).
 
 Pouco mais da metade do arquivo (era "dois terços" quando o `MODAL` estava em 60,4%; C1 o levou a
-58,7%; C2, a 55,2%), e é onde só C3/C4/D/E ainda tocam. O estudo de 10/08
+58,7%; C2, a 55,2%; C3, a 52,1%), e é onde só C4/D/E ainda tocam. O estudo de 10/08
 ([`../historico/estudo-modularizacao-frontend-2026-08-10.md`](../historico/estudo-modularizacao-frontend-2026-08-10.md))
 chama isso de fatias 3 e 4, e as **condiciona** no item 3 de "Próximas fatias recomendadas"
 (`docs/historico/estudo-modularizacao-frontend-2026-08-10.md:29`): separar documentos "somente após
@@ -137,7 +142,8 @@ pelas famílias da C, e é ali que a redundância acaba — daí a precondição
 | 5 | **B** | `src/data/rest.mjs` — encerra o mecanismo `@canon` | a fazer |
 | 6 | **C1** | Frota · Histórico da linha · Itinerários | ✅ feita — ver a seção da fase |
 | 7 | **C2** | Estrutura · Tarifas · Portaria | ✅ feita — ver a seção da fase |
-| 8–9 | **C3…C4** | documentos por família | a fazer |
+| 8 | **C3** | Quadro de Horários · Empresas | ✅ feita — ver a seção da fase |
+| 9 | **C4** | documentos por família | a fazer |
 | 10 | **D** | `LOADERS` como composição explícita | a fazer |
 | 11 | **E** | infra do modal (opcional) | a fazer |
 
@@ -385,7 +391,7 @@ reconferidos** — meça antes de dimensionar a sessão:
 |---|---|---|
 | C1 | Frota · Histórico da linha · Itinerários | ✅ feita — ver abaixo |
 | C2 | Estrutura · Tarifas · Portaria | ✅ feita — ver abaixo |
-| C3 | Quadro de Horários · Empresas | a fazer |
+| C3 | Quadro de Horários · Empresas | ✅ feita — ver abaixo |
 | C4 | Municípios · Localidades | a fazer |
 
 C4 por último, e cada metade traz uma complicação própria. Municípios é a única família com filtro
@@ -635,6 +641,77 @@ Nenhum achado além do que já está registrado acima (o 3º slot do `shell.mjs`
 `src/ui/empresas.mjs` fora do escopo original da sessão, e a decisão parcial dos 4 órfãos). Os
 dois primeiros são exigidos pelo próprio código — sem eles a família não saía inteira — e estão
 justificados nos respectivos cabeçalhos de módulo, não só aqui.
+
+---
+
+### ✅ C3 — Quadro de Horários · Empresas (FEITA)
+
+A terceira família a sair, num módulo novo — `src/documentos/quadro-empresas.mjs` (270 linhas):
+`quadroMetaHTML`/`quadroDocInner`/`fetchQHByLines`, `renderLinhaQuadro`, `quadroEmpresaRun`,
+`renderEmpresaQuadros` (Quadro de Horários); `ligacoesPorEmpresaRun`, `secoesPorEmpresaRun`,
+`renderEmpresaHistory`, `historicoEmpresaRun` (Empresas).
+
+**Nada de markup novo foi compartilhado com outra família nesta sessão** — o que já era
+compartilhado (`evBandHTML`/`evBlocksHTML`, `secoesTarifasHTML`, `quadroHorariosBodyHTML`) já
+morava em `src/ui/blocos.mjs` desde a C1/C2, e o módulo novo só importa de lá. Diferente de C1 e
+C2, esta sessão não teve aresta de grafo para fechar.
+
+**Dois motivos distintos, medidos, para o que FICOU no `app.js` — nenhum é "faltou tempo":**
+
+1. **`quadroLinhaRun` é wrapper que chama `lineSearchRun`**, e `lineSearchRun` só existe no
+   `app.js` porque chama `selectLine` (shell puro, sem seam de injeção — o plano deixa esses
+   quatro wrappers, `lineDocView`/`lineDocRun`/`lineSearchRun`/`searchPanel`, para a Fase E de
+   propósito). `quadroEmpresaRun`, ao contrário, não usa `lineSearchRun` — só chama helpers
+   importáveis — e por isso saiu.
+2. **`LOADERS.empresasRegulares`/`openEmpresaLigacoes` dependem de `runView`** (o dispatcher que
+   abre uma view NOVA ao clicar numa empresa da lista) — shell de verdade, sem seam. Diferente do
+   3º slot que a C2 abriu (`novoCtx`, porque um documento MOVIDO precisava dele), aqui é o
+   inverso: quem chama `runView` é o loader que **ficou**. Forçar a saída exigiria um quarto tipo
+   de slot (abrir view nova) só para isto — **registrado como restrição, não decisão**, para
+   quem mexer na Fase E depois.
+
+`LOADERS.quadroHorarios` também fica — tem corpo (composição do `searchPanel` com dois modos),
+mesmo padrão de `LOADERS.tarifas` na C2. `LOADERS.ligacoesPorEmpresa`/`secoesPorEmpresa`/
+`historicoEmpresa` viraram wrappers finos: a lógica que era o corpo do `onRun` (sem nome antes)
+agora é a função exportada com o mesmo nome + `Run` (`ligacoesPorEmpresaRun`, etc.) — o mesmo
+padrão que a C2 usou para `tarifaEmpresaRun`.
+
+**Achado, fora da família, declarado:** ao auditar o import de `src/data/campos.mjs` para saber
+o que ainda tinha call site no `app.js`, `ITINERARIO_FIELDS` e `FROTA_FIELDS` já estavam mortos
+desde a C1/C2 (o único uso de cada um morava dentro de código que já tinha saído, e o import não
+foi podado nas duas sessões). Removidos aqui, junto com os quatro que esta sessão tornou órfãos
+(`QH_INTERVALO_FIELDS`, `QH_PREDET_FIELDS`, `TARIFA_LINHA_FIELDS`, `EVENTO_FIELDS`) e três
+bindings de outros módulos (`getEvLookups`, `paginateEvents`, o trio `searchEmpresas`/
+`empresaChooserHTML`/`bindEmpresaRows`, todos sem call site no `app.js` depois da família sair).
+É o mesmo defeito que a C1 já tinha encontrado uma vez (`matchEvent`/`pageBounds`/
+`preencherLookup`) — o risco não é hipotético, já aconteceu duas vezes.
+
+**Custo em linhas, medido:** `app.js` 2.763 → **2.573** (`wc -l`; −190); `MODAL` 1.527 → **1.341**
+(−186, 55,2% → 52,1%); `src/` sozinho 1.448 → **1.718** (+270, todo em
+`quadro-empresas.mjs`, novo). Total do projeto 4.211 → **4.291** (+80 líquido — o menor de
+todas as fases C, porque o `app.js` perdeu MAIS que o `MODAL` sozinho, por causa da limpeza de
+imports mortos acima). Fator "sai do `app.js` → aparece em módulo" = 270/190 ≈ **1,4x** — mais
+baixo que o ~1,7–1,8x de B2/C1/C2; a razão é a mesma da conta do parágrafo anterior, não um sinal
+de regressão do método.
+
+### O que ficou provado, e como
+
+- `node tests/check.js` verde; `check_views.mjs` 18/18; `check_abas.mjs`, `check_selecao_linha.mjs`
+  e `check_corrida_abas.mjs` verdes; `./scripts/semgrep.sh` 0 achados em 121 regras.
+- **Prova por mutação — duas tentativas, as duas morderam.** (1) `renderLinhaQuadro` esvaziado
+  (retorno antes do fetch) → `check_views.mjs quadroHorarios` vermelho (`documento em branco`,
+  `0 "tbody tr"`, esperado ≥4). (2) `ligacoesPorEmpresaRun` esvaziado →
+  `check_views.mjs ligacoesPorEmpresa` vermelho (`documento em branco`, `0 "tbody tr"`, esperado
+  ≥1).
+- Sem testes novos em `tests/ui-data-module.test.mjs`: nada nesta família é markup puro sem
+  DOM/rede — tudo aqui depende de `sbFetch`/DOM, e fica coberto pelos gates de navegador acima
+  (mesma nota que valeu para os renders da C1).
+
+### Revisão própria — achados registrados (Codex esgotado desde 15/08)
+
+Os dois achados já estão descritos acima: a decisão de deixar `LOADERS.empresasRegulares`/
+`openEmpresaLigacoes` no `app.js` (restrição, não decisão — candidata a Fase E) e a limpeza dos
+seis imports mortos de `src/data/campos.mjs` (dois já mortos desde C1/C2). Nenhum outro achado.
 
 ---
 
