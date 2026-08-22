@@ -139,8 +139,8 @@ bloco `SET ROLE anon` + tentativas de INSERT/UPDATE/DELETE/SELECT em transação
 
 ## 9. Riscos residuais conhecidos e ACEITOS
 
-Três coisas não estão fechadas. Estão aqui para não serem redescobertas como "achado novo" a cada
-auditoria — e para que a decisão de conviver com elas seja explícita, não esquecimento.
+Quatro coisas não estão fechadas. Estão aqui para não serem redescobertas como "achado novo" a
+cada auditoria — e para que a decisão de conviver com elas seja explícita, não esquecimento.
 
 > **Por que esta seção é curta.** Ela registra **que** cada risco foi avaliado, **qual controle o
 > compensa** e **por que a convivência foi aceita** — é registro de decisão, não log de auditoria.
@@ -196,6 +196,22 @@ SEC-06 continua **mitigado**, não encerrado.
 É o maior item aberto do projeto, apontado em 16/07 e de novo em 27/07. Só o dono pode fechá-lo
 (exige a máquina dele e um projeto Supabase descartável); o checklist do que falta está no
 `docs/backup.md`, seção **O que a integridade do dump garante (e o que NÃO garante)**.
+
+**9.4 — `rls_auto_enable()` é `SECURITY DEFINER` (aceito em 22/08/2026).** Medido contra o
+projeto de TESTE ao configurar o auditor desta PR: existe um event trigger `ensure_rls`
+(`ddl_command_end`), instalado depois de 09/08/2026 — quando `docs/schema.md` chegou a afirmar,
+medido, que a função **não existia** e que não havia automatismo ligando RLS. A provisão não é
+mais verdadeira para o projeto de teste; a origem exata (quem/quando instalou) não foi
+determinada. A função está registrada como exceção aceita em `scripts/security_baseline.json`
+(achado `funcao_security_definer`), depois de ler o corpo dela.
+
+**Por que é aceito, não revogado:** o corpo só faz `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`
+em tabela nova de `public` — nunca concede privilégio a `anon`/`authenticated`, nunca lê dado.
+`SECURITY DEFINER` é necessário aqui por desenho: um event trigger roda com os direitos de quem
+emitiu o DDL, e a ideia é ligar RLS **mesmo que** quem criou a tabela não tivesse esse privilégio
+— exatamente o oposto de escalação perigosa. Não substitui a disciplina da skill `db-change`
+(`ENABLE ROW LEVEL SECURITY` explícito continua sendo o contrato, não este trigger de rede de
+segurança) — **produção não foi conferida** e não se deve presumir que ela tem o mesmo trigger.
 
 ## 10. Fase 3 — RPCs diagnósticas e auditor mínimo
 
