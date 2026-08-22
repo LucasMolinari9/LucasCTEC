@@ -201,7 +201,7 @@
   .side-brand-txt span{font-size:10.5px;color:#7d93ab}
   /* #7d93ab mede 4,62:1 sobre o fundo REAL desta coluna (--navy-deep, #072a49) e passa no AA.
      A auditoria de 08/08/2026 registrou 3,69:1 porque mediu contra --navy (#0a3a63), que não é o
-     fundo daqui — ver docs/planos/2026-08-08-correcoes-auditoria.md. Se um dia o fundo da `.side`
+     fundo daqui — origem preservada no histórico do Git. Se um dia o fundo da `.side`
      clarear para --navy, este texto passa a reprovar: meça de novo antes de mexer. */
   .side-eyebrow{font-family:'IBM Plex Mono';font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#7d93ab;padding:6px 12px 10px}
 

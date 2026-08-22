@@ -3,63 +3,12 @@
 Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este arquivo descreve o
 **estado atual + regras**; a cronologia de como se chegou aqui está em **`docs/CHANGELOG.md`**.
 
-> **TRABALHO EM CURSO — leia antes de agir:**
-> **[`docs/historico/contexto-proxima-sessao-2026-08-14.md`](docs/historico/contexto-proxima-sessao-2026-08-14.md)**
-> — plano de 6 sessões respondendo a uma crítica externa. As Sessões **1** (rulesets do Semgrep),
-> **2** (`src/domain/agrupamento.mjs`), **3** (`src/domain/busca.mjs`), **4**
-> (`src/domain/view-state.mjs`, PR #131) e **5** (auditoria do custo do processo, PR #133) estão
-> **mergeadas**. Sobra a **Sessão 6** (retomada do PR #98), que depende do dono — ver abaixo.
-> Aquele arquivo traz a especificação de cada sessão, o protocolo combinado (um PR por sessão,
-> `@codex review`, sem merge por conta própria) e os limites medidos do ambiente do agente.
-> **A cota de code review do Codex está esgotada** desde 15/08: os PRs #130 e #131 pediram
-> `@codex review` e receberam "You have reached your Codex usage limits", três pedidos ao todo.
-> Enquanto não houver upgrade/créditos, o passo 3 do protocolo não roda — a revisão é própria, e
-> **ausência de revisão não é aprovação**: registre os achados no PR, como as duas sessões fizeram.
-> **Ressalva das Sessões 2 e 3:** `norm` saiu na frente e já está em `core.mjs` — a tabela do plano
-> a lista na Sessão 3, mas ela é dependência de `agrupamento.mjs` e não podia esperar, então a
-> Sessão 3 moveu **cinco** funções, não seis. **Ressalva da Sessão 4:** moveu as **treze** da
-> tabela, e a conferência do preview dela inclui **confirmar que a atualização ao vivo chega**, não
-> só que os cards aparecem — ela mexe no despacho do Realtime. Continua valendo o plano vivo
-> [`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`](docs/planos/2026-08-14-modularizacao-fatias-3-4.md),
-> que ordena as fases seguintes. Dele já entraram a **Fase B2** (helpers compartilhados e o seam de
-> seleção: `src/ui/doc.mjs`, `src/ui/paginacao.mjs`, `src/ui/listas.mjs`, `src/data/lookups.mjs`),
-> **fora de ordem, e a razão está registrada lá**: ela não depende de A nem de B. Ela também
-> **decidiu** a bifurcação que o plano deixava em aberto — opção 1, seam de seleção exposto —, e
-> essa decisão fixa o critério de saída das Fases D e E. E a **Fase A** (contexto explícito): todo
-> `render*`/loader do modal RECEBE `ctx = { view, gen, pane, host, line }`, nenhum lê
-> `currentView`/`activeLine`/`modalBody`, e a bancada `scripts/check_corrida_abas.mjs` guarda isso
-> criando a ordenação que os outros gates não criam. **A Fase A não encolheu o `app.js`** (3.001 →
-> 3.053) e nunca prometeu: ela é a precondição da Fase C, onde o bloco `MODAL` sai, uma família
-> por PR. E entrou a **Fase C1** (Frota · Histórico da linha · Itinerários), a primeira família a
-> sair inteira: `src/documentos/frota-historico-itinerarios.mjs`, mais `src/ui/blocos.mjs` (o
-> markup que MAIS DE UMA família usa), `src/data/campos.mjs` (as listas de coluna do `select=`) e
-> `src/documentos/shell.mjs` (o seam ÚNICO de injeção dos documentos). `app.js` 3.053 → 2.974;
-> `MODAL` 1.844 → 1.746 linhas, 58,7%. **A C1 decidiu onde vão os helpers compartilhados** —
-> em `src/ui/`, nunca num módulo de família —, e essa decisão fixa o formato de C2, C3 e C4;
-> a razão está no plano e no cabeçalho do `blocos.mjs`. E entrou a **Fase C2** (Estrutura
-> Operacional · Tarifas · Portaria), a segunda família a sair inteira:
-> `src/documentos/estrutura-tarifas-portaria.mjs` (251 linhas), mais o fechamento da última
-> aresta do grafo do `blocos.mjs` (`secoesTarifasHTML`/`quadroHorariosBodyHTML`, cada um usado
-> por DUAS famílias) e um módulo novo, `src/ui/empresas.mjs` (o chooser de empresa, achado no meio
-> da sessão: já era usado por mais de uma família). `app.js` 2.974 → 2.763; `MODAL` 1.746 → 1.527
-> linhas, 55,2%. A C2 também decidiu o destino de um dos quatro loaders órfãos que a C1 tinha
-> deixado sem família (`secoesPorLigacao` → C4); os outros três seguem sem decisão — ver o plano.
-> E entrou a **Fase C3** (Quadro de Horários · Empresas), a terceira família a sair inteira:
-> `src/documentos/quadro-empresas.mjs` (270 linhas). Sem aresta de grafo para fechar desta vez —
-> o markup compartilhado já morava em `blocos.mjs` desde C1/C2. `LOADERS.quadroHorarios` fica
-> (corpo — mesmo padrão de `LOADERS.tarifas`); `quadroLinhaRun` fica (wrapper de `lineSearchRun`,
-> shell puro sem seam); `LOADERS.empresasRegulares`/`openEmpresaLigacoes` ficam (dependem de
-> `runView`, shell puro, também sem seam) — restrição registrada, não decisão, para a Fase E.
-> `app.js` 2.763 → 2.573; `MODAL` 1.527 → 1.341 linhas, 52,1%. A C3 também limpou seis imports
-> mortos de `src/data/campos.mjs` e outros módulos — dois já estavam mortos desde a C1/C2 e
-> escaparam por engano. Faltam **C4**, a **Fase B** (`src/data/rest.mjs`, que encerra o mecanismo
-> `@canon`) e as Fases D/E.
->
-> Continua valendo:
-> **[`docs/historico/contexto-proxima-sessao-2026-08-09.md`](docs/historico/contexto-proxima-sessao-2026-08-09.md)**
-> — o PR **#98** segue aberto com `seguranca` e `qualidade` vermelhos, que **não são bug de
-> código**: são dois passos do dono que precisam de rede e de secrets, com runbook naquele arquivo.
-> Ele é a **Sessão 6**, por decisão do dono — as obras sem SQL vêm antes.
+> **TRABALHO EM CURSO:** o plano vivo de modularização está em
+> [`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`](docs/planos/2026-08-14-modularizacao-fatias-3-4.md).
+> As fases C1–C3 foram concluídas; seguem C4, B e D. A fase E permanece opcional e só entra se
+> reduzir acoplamento de forma mensurável. O plano de
+> [`hardening moderado`](docs/planos/fase-3-hardening-moderado.md) registra separadamente as
+> condições externas ainda necessárias antes de qualquer promoção para produção.
 >
 > **O dono opera pelo CELULAR:** "rode `node …` na sua máquina" não é instrução executável para ele
 > — o caminho é a aba Actions ou o painel do Supabase, no navegador (o **app** do GitHub não mostra
@@ -426,8 +375,8 @@ PDF não têm teste em Node; o que os módulos de `src/ui/` têm de markup puro 
    offline).
 2d. **Deriva docs×código — seção `[2b]` do `tests/check.js`** (offline, roda no gate de sempre).
    Irmã do `check_deriva.mjs`: ele guarda docs×**banco**, esta guarda docs×**código**. Cobra, nos
-   **docs vivos** (`CLAUDE.md`, `README.md`, `docs/*.md` de topo, `docs/adr/`, `docs/planos/` —
-   o `CHANGELOG` e `docs/historico/` ficam fora de propósito, são snapshots datados): fatos
+   **docs vivos** (`CLAUDE.md`, `README.md`, `docs/*.md` de topo, `docs/adr/` e `docs/planos/` —
+   o `CHANGELOG` fica fora de propósito por ser cronologia): fatos
    numéricos batendo com o código, links markdown resolvendo, `SB_URL`/`SB_KEY` nunca associadas
    ao `index.html` <!-- deriva-ok: enuncia a regra -->, mapa tabela→card cobrindo `RT_TABLES`,
    composição de `.claude/skills/`, e nenhum arquivo terminando com tag de ferramenta de IA

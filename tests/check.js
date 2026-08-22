@@ -427,8 +427,8 @@ console.log('\n[2b] Deriva docs × código');
   // `docs/adr/` e `docs/planos/` entram por DESCOBERTA, não por lista escrita à mão: ADR novo e
   // plano novo passam a ser cobrados sozinhos. Foi por estarem fora do alcance que o ADR-0002
   // pôde afirmar por 10 dias que "somente divatdetro.vercel.app usa produção" enquanto o app.js
-  // tinha três hosts — e ADR é NORMATIVO: quem o seguisse recriava o bug. `docs/historico/` fica
-  // de fora de propósito (retrato datado envelhece por desenho), como o CHANGELOG.
+  // tinha três hosts — e ADR é NORMATIVO: quem o seguisse recriava o bug. O CHANGELOG fica de
+  // fora de propósito porque é cronologia, não instrução vigente.
   const varrerDocs = dir => existe(dir)
     ? fs.readdirSync(path.join(RAIZ, dir)).filter(f => f.endsWith('.md')).sort().map(f => `${dir}/${f}`)
     : [];
@@ -720,23 +720,6 @@ console.log('\n[2b] Deriva docs × código');
     } else if (tipo === 'anon-jwt-legada' && !/JWT `anon` legada/.test(ler('CLAUDE.md'))) {
       fail('[CLAUDE.md] não registra que a chave atual é JWT anon legada');
     } else if (tipo !== 'desconhecido') okline(`tipo da chave pública documentado (${tipo})`);
-  }
-
-  // --- status estável do PR #73 nos dois handoffs correntes ---
-  // O merge é evento histórico estável. O que drifta é deixar o handoff continuar mandando
-  // "decidir o draft" depois de ele já ter entrado na main.
-  // `if (!existe) continue` era fail-open: ao mover estes dois para `docs/historico/` (08/08/2026)
-  // a guarda simplesmente PAROU DE IMPRIMIR, sem uma linha de aviso — o gate seguiu verde com dois
-  // checks a menos. Arquivo que a guarda cita por caminho e some é achado, não silêncio.
-  for (const doc of ['docs/historico/contexto-proxima-sessao-2026-07-31.md',
-                     'docs/historico/pendencias-2026-07-31-consolidado.md']) {
-    if (!existe(doc)) { fail(`[${doc}] sumiu — se o arquivo foi movido, atualize o caminho aqui (não apague a guarda)`); continue; }
-    const src = ler(doc);
-    if (!/0bfb38a/.test(src) || !/#73[^\n]*(mergeado|merge)/i.test(src)) {
-      fail(`[${doc}] não registra o merge do #73 em 0bfb38a`);
-    } else if (/draft aberto|decidir o destino|Decidir o #73/i.test(src)) {
-      fail(`[${doc}] ainda trata o #73 como decisão/draft aberto`);
-    } else okline(`${doc}: #73 registrado como mergeado`);
   }
 
   if (!existe('scripts/restore_rest.mjs') || !existe('tests/restore_rest.rig.mjs')) {

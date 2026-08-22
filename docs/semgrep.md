@@ -51,7 +51,7 @@ Até 14/08/2026 só havia (1) e (3). O padrão do wrapper rodava **5 regras** e 
 conjunto completo — então **verde local não era evidência de verde no CI**. Não é hipótese: em
 09/08/2026, **3 achados de `run-shell-injection` passaram do local para o CI** no workflow
 `atualizar-baseline.yml` (registrado em
-`docs/historico/contexto-proxima-sessao-2026-08-09.md`).
+o histórico do Git).
 
 Cachear os rulesets **fora** do git não resolveria para ninguém que trabalha neste repo: nem o
 agente nem o dono (que opera pelo celular, sem terminal) alcançam `semgrep.dev`. A cópia no git

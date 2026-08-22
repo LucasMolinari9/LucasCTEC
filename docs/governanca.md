@@ -1,17 +1,15 @@
 # Governança e critério de parada
 
-Esta é a fonte normativa para controlar o custo de documentação, gates e modularização. As
-medições que fundamentam as regras permanecem no
-[`plano de custo do processo`](planos/2026-08-19-custo-do-processo.md), e os limites técnicos da
-refatoração permanecem no
+Esta é a fonte normativa para controlar o custo de documentação, gates e modularização. Os
+limites técnicos da refatoração permanecem no
 [`plano de modularização`](planos/2026-08-14-modularizacao-fatias-3-4.md).
 
 ## Princípios
 
 1. **Reduzir custo de leitura, não apenas bytes ou linhas.** Índices e fontes canônicas têm
    prioridade sobre duplicação, ZIP ou fragmentação arbitrária.
-2. **Preservar antes de podar.** Nenhum registro é removido sem inventário, destino verificável
-   para os fatos duráveis e aprovação explícita do dono em entrega separada.
+2. **Preservar conhecimento, não narrativas.** Antes de remover um registro, transfira fatos
+   duráveis para a fonte vigente; o Git preserva a narrativa e o texto integral.
 3. **Uma autoridade por fato.** Outras páginas apontam para a fonte canônica em vez de copiar sua
    regra.
 4. **Mudança pequena e reversível.** Documentação, processo e código são tratados em PRs
@@ -24,18 +22,17 @@ refatoração permanecem no
   de detalhes para a fonte especializada e deixe apenas a regra operacional e o link necessários
   em toda sessão. A redução até 550 deve ser reversível e ocorrer em entrega própria.
 - Um fato permanente pertence à fonte especializada; um trabalho incompleto, a um plano vivo; um
-  fato datado, a `docs/historico/`.
+  fato datado e encerrado pertence ao histórico do Git, não à árvore de trabalho.
 - Um plano novo deve apontar para sua especificação ou motivação e declarar quando termina ou é
   abandonado.
-- Um snapshot novo só entra em `docs/historico/` se registrar data e estado que não sejam fonte
-  vigente. Histórico não entra no contexto padrão nem na checagem de deriva.
+- Handoffs, transcrições de sessão, auditorias encerradas e planos concluídos não ficam
+  versionados como arquivos ativos. Migre conclusões duráveis e remova o original no mesmo PR.
 - Documento novo só é admitido quando não houver uma fonte existente adequada. Se houver, amplie
   a fonte canônica em vez de criar uma concorrente.
 
 **Parar a organização documental quando:** uma sessão nova encontra o estado vigente a partir de
-[`docs/README.md`](README.md), seguindo apenas o documento especializado da tarefa; nenhum fato
-vigente exige abrir `docs/historico/`; e todo documento novo tem lugar, autoridade e condição de
-saída claros.
+[`docs/README.md`](README.md), seguindo apenas o documento especializado da tarefa, e todo
+documento novo tem lugar, autoridade e condição de saída claros.
 
 ## Admissão e aposentadoria de gates
 
