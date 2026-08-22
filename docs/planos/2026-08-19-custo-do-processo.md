@@ -1,5 +1,9 @@
 # Custo do processo — auditoria medida
 
+> **Autoridade:** este documento preserva as medições e recomendações de 19/08/2026. A política
+> normativa aprovada depois dele está em [`docs/governanca.md`](../governanca.md); mudanças futuras
+> devem seguir essa fonte, sem reescrever esta auditoria.
+
 **Sessão 5** do plano de 6 aberto em
 [`docs/historico/contexto-proxima-sessao-2026-08-14.md`](../historico/contexto-proxima-sessao-2026-08-14.md).
 Sem mudança de código: este documento **mede e recomenda**, não executa. As decisões de

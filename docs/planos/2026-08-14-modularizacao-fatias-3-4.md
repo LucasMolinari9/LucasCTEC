@@ -1,5 +1,9 @@
 # Plano — desmontar o monólito do `app.js` (fatias 3 e 4 do estudo)
 
+> **Autoridade:** este plano continua registrando a execução e os limites técnicos da
+> modularização. A política transversal vigente e a condição global de encerramento estão em
+> [`docs/governanca.md`](../governanca.md); em divergência futura, ela prevalece.
+
 Escrito em 14/08/2026, podado em 15/08/2026. Diferente dos arquivos de `docs/historico/`, este é um
 plano **vivo**: atualize-o conforme as fases entrarem, e apague-o quando a última fechar.
 
