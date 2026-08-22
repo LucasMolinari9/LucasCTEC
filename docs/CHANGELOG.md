@@ -526,8 +526,10 @@ nenhum sobre o portal.** É o que se espera quando a mudança é toda de ferrame
 de a revisão externa valer a pena mesmo com todos os gates verdes: gate confere o que alguém já
 pensou em conferir.
 
-**Pendente (só o dono, pela aba Actions):** rodar o workflow uma vez para preencher
-`.semgrep/vendor/`. Até lá o gap continua aberto — o que muda é que agora ele **avisa**.
+**Concluído em 14/08/2026:** o dono executou o workflow pela aba Actions; o run
+[`31845142284`](https://github.com/LucasMolinari9/LucasCTEC/actions/runs/31845142284) validou os
+173 rulesets vendorizados contra o registry, abriu a PR #127 e ela foi mesclada sem alterações fora
+de `.semgrep/vendor/`.
 
 ## 08–09/08/2026 — A auditoria completa vira 22 correções, e o gate passa a ver o que não via
 
