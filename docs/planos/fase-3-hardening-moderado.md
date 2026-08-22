@@ -38,10 +38,34 @@ Validações já concluídas no teste:
 - advisors de segurança: somente os quatro avisos `INFO` já esperados para staging com RLS e sem
   policy (`evento_dados`, `evento_textos`, `portaria_data`, `portaria_texto_teste`).
 
+## Drift descoberto e reparado em 22/08/2026
+
+Medido contra o banco de teste vivo, não suposto a partir da documentação: apesar de
+`20260729034018_phase3_moderate_hardening.sql` estar registrada como aplicada — e o próprio
+arquivo mover as **quatro** funções diagnósticas para `audit` com asserts que abortariam a
+transação se alguma ficasse para trás — o banco vivo só tinha **duas** em `audit`
+(`divat_security_shape`, `divat_data_quality`). `divat_api_shape` e `realtime_tables` estavam de
+volta em `public`, ainda executáveis por `anon`. Também foi medido que `postgres` havia
+recuperado a associação a `divat_audit_owner`/`divat_auditor`, que a migração original revogava
+na última linha. **A causa do drift não foi determinada** — não há gatilho, função, cron ou
+script neste repo que explique o reaparecimento; fica registrado como fato observado, não
+escondido atrás de um reparo silencioso.
+
+Reparado pela migração `20260822144441_phase3_repara_funcoes_publicas.sql` (idempotente, com o
+mesmo padrão de asserts + prova viva da migração original, reconfirmando as quatro funções, não
+só as duas que regrediram) — verificado independentemente depois de aplicar: as quatro em
+`audit`, `anon`/`authenticated` sem `EXECUTE`, `divat_auditor_ci` com `EXECUTE` nas quatro.
+**Isto não descarta a possibilidade do mesmo drift acontecer de novo** — sem causa identificada,
+não há como garantir que não volte. Se os gates `deriva`/`realtime` (que dependem de
+`divat_api_shape`/`realtime_tables`) começarem a falhar depois de terem passado, o primeiro
+lugar a olhar é se essas duas funções voltaram para `public`.
+
 ## Credencial auditora e secret
 
-A criação/rotação do login é deliberadamente separada da migração, para impedir senha em SQL
-versionado. Use uma senha aleatória entregue por gerenciador de segredos e uma validade curta:
+**Estado em 22/08/2026: login criado, secret configurado pelo dono.** A criação/rotação do login
+é deliberadamente separada da migração, para impedir senha em SQL versionado — por isso ela não
+mora em `supabase/migrations/`, só o resultado (grants, schema) mora. Runbook para uma próxima
+rotação, com `psql`:
 
 ```bash
 psql "$ADMIN_DATABASE_URL" \
@@ -50,14 +74,14 @@ psql "$ADMIN_DATABASE_URL" \
   --file=scripts/bootstrap_phase3_auditor.sql
 ```
 
-Depois, grave a URL de conexão no secret de Actions `SUPABASE_TEST_AUDIT_DATABASE_URL`. A URL deve
-usar o projeto `gontnlfmothfglssbyyk` e o login `divat_auditor_ci`; o runner recusa qualquer outro
+(Sem `psql` à mão — ex.: pelo celular — o mesmo efeito sai de um `DO $$ ... $$` colado direto no
+SQL Editor do painel, sem os comandos exclusivos de `psql`; mesmas regras de atributo do role,
+sem variável de sessão nenhuma.)
+
+Grave a URL de conexão no secret de Actions `SUPABASE_TEST_AUDIT_DATABASE_URL`. A URL deve usar o
+projeto `gontnlfmothfglssbyyk` e o login `divat_auditor_ci`; o runner recusa qualquer outro
 project ref, inclusive produção. Dispare manualmente o workflow `Phase 3 database security` e só
 promova o job `test-auditor` a check obrigatório após ele passar.
-
-O ambiente de automação que criou esta PR não possui acesso a Actions Secrets. Portanto o login e
-o secret são o único passo operacional pendente; não devem ser improvisados em comentário, log ou
-commit.
 
 ## Objetos novos
 
