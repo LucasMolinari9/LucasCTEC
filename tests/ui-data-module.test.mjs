@@ -385,7 +385,7 @@ t('configurarDocumentos liga os três slots, e todos repassam os argumentos', ()
   assert.deepEqual(chamadas, [['fetch', 'qh_teste', 'codlinha=eq.1'], ['linha', { codlinha:'1' }], ['ctx', 'V', 'P', 'H']]);
 });
 t('src/documentos/shell.mjs tem no máximo 6 slots injetados (critério de parada do plano)', () => {
-  // O plano vivo manda PARAR quando um módulo passa de ~6 dependências injetadas. Como todas as
+  // A governança manda PARAR quando um módulo passa de ~6 dependências injetadas. Como todas as
   // famílias da Fase C passam por este seam, a conta é o número de slots dele — e esta asserção
   // é o lugar em que o critério deixa de ser prosa. A C2 acrescentou o 3º (`novoCtx`, para o
   // painel de Portarias, que monta ctx novo por conta própria); ainda longe do sétimo.

@@ -315,7 +315,45 @@ AUSÊNCIA do campo de busca (`id="spInput"`) — o PDF é o documento, não o pa
 disciplina. O que a bancada ainda precisa provar, e prova, é que o ctx **chega** correto através
 da fronteira do módulo: o ATO 1 usa justamente o documento de Itinerários, que a C1 moveu.
 
-## 6. Histórico da organização
+## 6. Limite final da modularização (2026-08-22)
+
+A etapa D encerrou a composição do registro de views no shell. A inspeção seguinte aplicou o
+critério normativo de [`governanca.md`](governanca.md), sem usar tamanho ou contagem de linhas como
+argumento. A etapa E foi **deliberadamente não executada**: o recorte restante não contém uma
+responsabilidade de negócio completa; contém a coordenação entre DOM, estado de navegação e os
+módulos já extraídos.
+
+### Inventário que permanece no `app.js`
+
+| responsabilidade | estado mutável lido/escrito | fronteira que uma extração criaria | decisão |
+|---|---|---|---|
+| Chrome do modal | `overlay`, `modalBody`, fullscreen, foco e histórico do navegador | callbacks para fechar, imprimir/PDF, fullscreen e despacho delegado de cards | Shell: coordena APIs do navegador e nós que existem no `index.html`. |
+| Abas | `tabs`, `activeTabId`, `tabIdSeq`, `modalBody`, `activeLine`, `currentView`, scroll, `nav` e `stale` | pelo menos 9 estados mutáveis, além de `toast`, `runView`, `closeModal`, `syncHash`, `paintBanner`, `updateNeedChips` e `reloadTab` | Shell: aplica ao DOM as decisões puras de `view-state.mjs`; movê-lo inverteria a dependência ou criaria um objeto-deus de callbacks. |
+| Rotas | hash, aba ativa, linha ativa, view atual e estado do modal | callbacks bidirecionais entre roteador e modal/abas/cards | Shell: é a composição externa da aplicação, não domínio reutilizável. |
+| Listeners globais e delegados | foco, fullscreen, teclado, `document`, `window`, overlay, faixa e panes | registro/desregistro mais callbacks para todas as ações acima | Shell: são bootstrap e adaptação de eventos do navegador. |
+| `lineDocView`, `lineDocRun` e `lineSearchRun` | linha do `ctx`, `activeLine` via seleção, geração da view e pane corrente | rede, seleção da linha, render, resultado de busca e composição do painel; para possuir a seleção teria de receber/exportar estado do IIFE | Shell de busca: orquestra módulos, não implementa a apresentação de um documento. |
+| `searchPanel` | `ctx.pane`, `_panelRun`, valor/filtro e dropdown transitórios | DOM, `docHead`, `emptyBox`, `errorBox`, `debounce`, callback `onRun` e criação de novo `ctx` | Shell de painel: o estado transitório pertence à instância da view e a função só liga controles ao documento. |
+| `runView`, `setBody`, `closeModal`, seleção de documento e PDF | view/aba/linha ativas, pilha de detalhe, pane e hash | cruzaria chrome, abas, rotas, loaders e ciclo de vida em ambas as direções | Shell: é o ponto de composição e despacho. |
+
+### Medição de acoplamento e direção
+
+Hoje a direção é única: `app.js` importa os modelos puros e renderizadores de `src/`, injeta ações
+de borda no bootstrap e mantém os módulos sem acesso ao IIFE. Separar só o chrome exigiria que o
+novo módulo chamasse de volta o shell; separar abas exigiria expor **9 estados mutáveis** e pelo
+menos **7 ações mutáveis**; separar a busca completa exigiria compartilhar a linha ativa, a view,
+a geração e o pane. Mesmo o menor agrupamento completo (`searchPanel` + três wrappers) passa a
+depender de DOM, rede, seleção e ciclo de vida, sem retirar uma regra de negócio do shell.
+
+Isso satisfaz três condições independentes de parada: mais de aproximadamente seis dependências
+mutáveis, necessidade de atravessar o estado interno do IIFE e aumento de arestas bidirecionais.
+Além disso, o inventário é predominantemente wiring (bootstrap, DOM, listeners, rotas e
+composição). Não há redução mensurável de acoplamento que admita um plano separado para E.
+
+Reabrir a modularização exige um custo novo e mensurável — por exemplo, outro consumidor real do
+chrome ou uma mudança que permita ocultar mais estado atrás de uma interface menor. O tamanho do
+`app.js`, isoladamente, não é condição de reabertura.
+
+## 7. Histórico da organização
 
 - **Parte A (2026-07-16):** adicionado o índice no topo, o sub-índice do MODAL e as sub-marcas —
   **sem mover código** (mudança puramente aditiva de comentários). Deu navegação por `grep`.

@@ -4,6 +4,21 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 22/08/2026 — encerramento deliberado da modularização
+
+- Inventariadas as responsabilidades de shell restantes no `app.js` (chrome do modal, abas,
+  rotas, listeners, despacho, busca e painel) e medidas as fronteiras mutáveis que uma extração
+  teria de expor.
+- A etapa E foi deliberadamente não executada: ela atravessaria 9 estados de abas e ao menos 7
+  ações do shell, exportaria estado do IIFE ou criaria dependências bidirecionais, sem retirar uma
+  responsabilidade de negócio completa.
+- As conclusões duráveis foram transferidas para `docs/estrutura-frontend.md` e o plano vivo foi
+  removido conforme a política de saída documental.
+- Verificação final completada também nos gates que antes estavam pendentes por falta de
+  ferramentas no ambiente: `check_abas.mjs`, `check_selecao_linha.mjs` e
+  `check_corrida_abas.mjs` passaram no Chromium; `scripts/semgrep.sh` executou 121 regras sobre
+  103 arquivos, sem achados.
+
 ## 22/08/2026 — Fase C3: Quadro de Horários · Empresas saem do `app.js`
 
 **Fase C3 do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`): a terceira

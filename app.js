@@ -64,7 +64,7 @@ import {
 // junto (as duas primeiras já estavam mortas desde a C1/C2, e escaparam por engano).
 import { LINE_FIELDS } from './src/data/campos.mjs';
 // FASE C1 — a primeira família de documentos a sair inteira do arquivo. O que fica aqui embaixo
-// são os registros `LOADERS.*`, que são shell (wrappers de busca de linha) e saem nas Fases D/E.
+// são os registros `LOADERS.*`, que permanecem no shell (wrappers de busca de linha).
 // `configurarDocumentos` é o seam ÚNICO de `src/documentos/`: injeta a rede e a ação de shell
 // para TODAS as famílias da Fase C, e é onde o critério de parada do plano se mede.
 import { configurarDocumentos } from './src/documentos/shell.mjs';
@@ -72,7 +72,7 @@ import {
   renderLineHistory, renderItinerarios, renderFrota,
 } from './src/documentos/frota-historico-itinerarios.mjs';
 // FASE C2 — Estrutura Operacional · Tarifas · Portaria. `LOADERS.estrutura` (one-liner) e
-// `LOADERS.tarifas` (tem corpo — a composição do `searchPanel`, que é trabalho de Fase D) ainda
+// `LOADERS.tarifas` (tem corpo — a composição do `searchPanel`, responsabilidade do shell) ainda
 // ficam aqui embaixo; `LOADERS.portarias` virou o one-liner `renderPortarias`.
 import {
   renderTarifas, tarifaEmpresaRun, renderEstrutura, renderPortarias, invalidarPortariaAnos,
@@ -1351,7 +1351,7 @@ LOADERS.quadroHorarios = async (ctx) => {
    `src/documentos/estrutura-tarifas-portaria.mjs` na Fase C2. `secoesTarifasHTML`/`tarifaRowHTML`/
    `TARIFA_COLS`, que o Quadro de Horários (logo acima) TAMBÉM usa, foram para `src/ui/blocos.mjs`.
    Aqui fica só o registro — que É trabalho de shell (composição do `searchPanel` com dois
-   modos), não um one-liner; mover essa composição é trabalho da Fase D, não desta. */
+   modos), não um one-liner; essa composição permanece no shell. */
 LOADERS.tarifas = (ctx) => {
   searchPanel(ctx, {
     title:'Tarifas Vigentes',

@@ -19,8 +19,8 @@
    documento que saísse mudo (sem rede, sem banner) pintaria uma tela vazia sem erro, que é o modo
    de falha invisível a todo gate deste repo.
 
-   CRITÉRIO DE PARADA — este arquivo é onde ele se mede. O plano vivo
-   (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`, seção "Critério de parada") diz que mais
+   CRITÉRIO DE PARADA — este arquivo é onde ele se mede. A governança
+   (`docs/governanca.md`, seção "Admissão e parada da modularização") diz que mais
    de ~6 dependências INJETADAS é sinal de parar e registrar. Como todas as famílias da Fase C
    passam por aqui, a conta é o número de slots deste módulo. A C2 acrescentou o TERCEIRO —
    `novoCtx` — porque o loader de Portarias monta um ctx novo a cada busca (o painel não passa
@@ -31,7 +31,7 @@
    O QUE SAI DAQUI NA FASE B: `sbFetch` é andaime. Quando `src/data/rest.mjs` existir, o slot some
    e cada documento passa a importá-lo de lá — sem tocar em nenhum call site, porque o nome
    importado é o mesmo. `selecionarLinha` e `novoCtx` são ação/leitura de shell de verdade e
-   ficam até a Fase E. */
+   permanecem no shell conforme o inventário final de `docs/estrutura-frontend.md`. */
 
 let _sbFetch = null;
 let _selecionarLinha = null;

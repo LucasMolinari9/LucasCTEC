@@ -3,10 +3,9 @@
 Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este arquivo descreve o
 **estado atual + regras**; a cronologia de como se chegou aqui está em **`docs/CHANGELOG.md`**.
 
-> **TRABALHO EM CURSO:** o plano vivo de modularização está em
-> [`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`](docs/planos/2026-08-14-modularizacao-fatias-3-4.md).
-> As fases C1–C3 foram concluídas; seguem C4, B e D. A fase E permanece opcional e só entra se
-> reduzir acoplamento de forma mensurável. O plano de
+> **MODULARIZAÇÃO ENCERRADA:** o inventário final e a decisão deliberada de não executar a etapa E
+> estão em [`docs/estrutura-frontend.md`](docs/estrutura-frontend.md). Reabrir apenas diante de
+> acoplamento novo e mensurável, conforme [`docs/governanca.md`](docs/governanca.md). O plano de
 > [`hardening moderado`](docs/planos/fase-3-hardening-moderado.md) registra separadamente as
 > condições externas ainda necessárias antes de qualquer promoção para produção.
 >
@@ -76,7 +75,7 @@ exibe e **atualiza ao vivo** (Realtime).
   Portarias) para TODOS os documentos de `src/documentos/`. Os quatro **falham fechado**: sem
   configuração, `docHead`/`getEmpresas`/`bindLineRows`/`sbFetch` lançam em vez de sair mudos —
   regressão silenciosa aqui é invisível para todo gate. Módulo que precise de mais
-  de ~6 dependências injetadas é sinal de parar (ver o critério no plano vivo); o
+  de ~6 dependências injetadas é sinal de parar (ver `docs/governanca.md`); o
   `src/documentos/shell.mjs` é onde essa conta se mede para a Fase C inteira, e hoje ela é **3**.
   **Regra: função pura extraída deixa de ter cópia em `tests/*.harness.js`** — o harness passa a
   fazer `require` do módulo real, e o bloco `@canon` correspondente é APAGADO, não atualizado. A

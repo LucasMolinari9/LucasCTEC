@@ -1,8 +1,8 @@
 # Governança e critério de parada
 
 Esta é a fonte normativa para controlar o custo de documentação, gates e modularização. Os
-limites técnicos da refatoração permanecem no
-[`plano de modularização`](planos/2026-08-14-modularizacao-fatias-3-4.md).
+limites técnicos e o inventário final da refatoração permanecem em
+[`estrutura-frontend.md`](estrutura-frontend.md).
 
 ## Princípios
 
