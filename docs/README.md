@@ -13,23 +13,22 @@ Comece por este arquivo. O objetivo é localizar a fonte vigente sem varrer o hi
 | Decisões arquiteturais duráveis | [`adr/`](adr/) |
 | Vocabulário do domínio | [`../CONTEXT.md`](../CONTEXT.md) e [`agents/domain.md`](agents/domain.md) |
 
-## Estado e registro
+## Trabalho em curso e registro
 
-- [`planos/`](planos/) contém **planos vivos** e normativos enquanto o trabalho estiver aberto.
-- [`superpowers/specs/`](superpowers/specs/) e [`superpowers/plans/`](superpowers/plans/) contêm
-  especificações e planos produzidos pelo fluxo Superpowers; o plano vivo deve ser descobrível
-  neste índice ou em `planos/`.
-- [`CHANGELOG.md`](CHANGELOG.md) registra a cronologia do produto.
-- [`historico/README.md`](historico/README.md) é o índice do **arquivo frio**: snapshots, auditorias
-  e handoffs datados. Os originais preservam evidência, mas não são fonte vigente nem fazem parte
-  do contexto normal de uma sessão.
+- [`planos/2026-08-14-modularizacao-fatias-3-4.md`](planos/2026-08-14-modularizacao-fatias-3-4.md)
+  é o plano vivo de redução do `app.js`: C1–C3 estão concluídas; seguem C4, B e D. A fase E só
+  entra se reduzir acoplamento de forma mensurável.
+- [`planos/fase-3-hardening-moderado.md`](planos/fase-3-hardening-moderado.md) reúne o estado e as
+  condições ainda abertas para promover o hardening do banco.
+- [`CHANGELOG.md`](CHANGELOG.md) registra a cronologia do produto. Planos encerrados, handoffs e
+  auditorias removidos da árvore continuam disponíveis no histórico do Git.
 
-Se houver divergência, a fonte vigente especializada prevalece sobre um plano antigo, e qualquer
-fonte vigente prevalece sobre `historico/`. Não atualize um snapshot para fazê-lo parecer atual.
+Se houver divergência, a fonte vigente especializada prevalece sobre um plano. Registros antigos
+do Git explicam decisões passadas, mas não descrevem o estado atual.
 
 ## Rota curta para uma sessão nova
 
 1. Leia `CLAUDE.md` para as regras operacionais que valem hoje.
 2. Use este índice para abrir somente o documento especializado da tarefa.
 3. Consulte um plano vivo apenas se a tarefa fizer parte dele.
-4. Abra `historico/` somente para investigar a origem de uma decisão.
+4. Consulte `git log -- <arquivo>` somente quando precisar investigar a origem de uma decisão.

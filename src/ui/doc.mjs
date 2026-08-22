@@ -58,7 +58,7 @@ export function emptyBox(msg){ return `<div class="m-loading">${esc(msg)}</div>`
    view renderizar vazia SEM erro nenhum — e "nenhum itinerário cadastrado para esta linha" é,
    para o cidadão, indistinguível de linha que realmente não tem itinerário. Definição única
    para não divergir mensagem a mensagem; use em toda tela que responde por linha já escolhida.
-   Ver docs/planos/2026-08-08-correcoes-auditoria.md (Task 13) e CLAUDE.md (2e). */
+   Ver CLAUDE.md (2e); a origem está no histórico do Git. */
 export function emptyLinha(oQue){ return emptyBox(`Nenhum registro de ${oQue} foi localizado para esta linha.`); }
 export function errorBox(msg){ return `<div class="m-loading err">Erro ao carregar: ${esc(msg)}</div>`; }
 

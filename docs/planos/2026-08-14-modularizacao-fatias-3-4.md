@@ -4,8 +4,7 @@
 > modularização. A política transversal vigente e a condição global de encerramento estão em
 > [`docs/governanca.md`](../governanca.md); em divergência futura, ela prevalece.
 
-Escrito em 14/08/2026, podado em 15/08/2026. Diferente dos arquivos de `docs/historico/`, este é um
-plano **vivo**: atualize-o conforme as fases entrarem, e apague-o quando a última fechar.
+Escrito em 14/08/2026, podado em 15/08/2026. Este é um plano **vivo**: atualize-o conforme as fases entrarem, e apague-o quando a última fechar.
 
 ## Como este plano é escrito (leia antes de editá-lo)
 
@@ -42,7 +41,7 @@ por função, é exatamente isso que foi removido daqui, e por quê.
 ## Por que
 
 Uma crítica externa disse que o `app.js` é "um monólito de 3.500 linhas". Procede. As Sessões 1 e 2
-do plano de 6 ([`../historico/contexto-proxima-sessao-2026-08-14.md`](../historico/contexto-proxima-sessao-2026-08-14.md))
+do diagnóstico de 14/08/2026, preservado no histórico do Git,
 responderam à crítica **irmã** — a de que o processo virou projeto paralelo. O monólito mal foi
 arranhado.
 
@@ -83,9 +82,9 @@ imports de `src/data/campos.mjs` que já estavam mortos (dois deles, `ITINERARIO
 
 Pouco mais da metade do arquivo (era "dois terços" quando o `MODAL` estava em 60,4%; C1 o levou a
 58,7%; C2, a 55,2%; C3, a 52,1%), e é onde só C4/D/E ainda tocam. O estudo de 10/08
-([`../historico/estudo-modularizacao-frontend-2026-08-10.md`](../historico/estudo-modularizacao-frontend-2026-08-10.md))
+(estudo de modularização de 10/08/2026, preservado no histórico do Git)
 chama isso de fatias 3 e 4, e as **condiciona** no item 3 de "Próximas fatias recomendadas"
-(`docs/historico/estudo-modularizacao-frontend-2026-08-10.md:29`): separar documentos "somente após
+(estudo de 10/08/2026): separar documentos "somente após
 injetar explicitamente estado e render target; não exportar dezenas de variáveis do IIFE".
 
 O diagnóstico que justificava a ordem abaixo, e que a **Fase A resolveu**: um documento típico lia
@@ -721,7 +720,7 @@ seis imports mortos de `src/data/campos.mjs` (dois já mortos desde C1/C2). Nenh
 
 ## Fase D — `LOADERS` como composição explícita
 
-Entrega o item 4 do estudo (`docs/historico/estudo-modularizacao-frontend-2026-08-10.md:30`):
+Entrega o item 4 do estudo de 10/08/2026, preservado no histórico do Git:
 *"Por último, transformar o registro `LOADERS` em composição explícita. Não migrar todos os loaders
 de uma vez."*
 

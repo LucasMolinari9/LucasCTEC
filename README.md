@@ -101,7 +101,7 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 
 | Arquivo | Conteúdo |
 |---|---|
-| [`docs/README.md`](docs/README.md) | **Entrada canônica**: rota curta para encontrar fontes vigentes, planos e arquivo histórico. |
+| [`docs/README.md`](docs/README.md) | **Entrada canônica**: rota curta para encontrar fontes vigentes e planos vivos. |
 | [`docs/governanca.md`](docs/governanca.md) | Regras de admissão, aposentadoria e parada para documentação, gates e modularização. |
 | [`docs/estrutura-frontend.md`](docs/estrutura-frontend.md) | Como navegar o `app.js`, regras de rota/modal e as regras de segurança para reorganizar o JS. |
 | [`docs/schema.md`](docs/schema.md) | Mapa **relacional** das tabelas (como se ligam, por qual chave) + funções e trigger. |
@@ -113,16 +113,7 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | Cronologia do projeto — como se chegou ao estado atual. |
 | [`docs/adr/`](docs/adr/) | Decisões arquiteturais registradas (ADRs). |
 | [`docs/agents/`](docs/agents/) | Convenções para agentes: issue tracker, labels de triagem, docs de domínio. |
-| [`docs/planos/`](docs/planos/) | **Planos vivos** — trabalho combinado que ainda não terminou. Normativo enquanto estiver aberto; sai daqui quando fecha. |
-| [`docs/historico/`](docs/historico/) | **Retratos datados** — auditorias, revisões externas, handoffs de sessão e planos já executados. Cada um abre com `Snapshot de DD/MM/AAAA — não atualizar`. Registro, não guia. |
-
-> **O critério entre os dois:** plano vivo em [`docs/planos/`](docs/planos/), retrato datado em
-> [`docs/historico/`](docs/historico/). Um documento de `docs/historico/` descreve o repositório
-> como ele era naquele dia — números, caminhos de arquivo e pendências dele podem ter envelhecido
-> de propósito. Quando um doc histórico e o `CLAUDE.md` divergirem, o `CLAUDE.md` manda. Os
-> quatro anteriores a 21-22/07/2026 (as duas `analise-*` e as duas `revisao-externa-*`) são
-> **pré-split**: falam de um único `index.html` com CSS e JS embutidos, e suas citações
-> `index.html:NNN` não se traduzem para o `app.js` atual.
+| [`docs/planos/`](docs/planos/) | **Planos vivos** — somente trabalho ainda aberto; decisões permanentes migram para a fonte especializada e planos encerrados permanecem recuperáveis pelo Git. |
 
 > **Dados nunca vão para o git.** Os backups de dados (CSVs) ficam fora do repositório — ver
 > `docs/backup.md`. O `.gitignore` barra `*.csv` como rede de segurança.
