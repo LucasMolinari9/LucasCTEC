@@ -101,6 +101,8 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 
 | Arquivo | Conteúdo |
 |---|---|
+| [`docs/README.md`](docs/README.md) | **Entrada canônica**: rota curta para encontrar fontes vigentes, planos e arquivo histórico. |
+| [`docs/governanca.md`](docs/governanca.md) | Regras de admissão, aposentadoria e parada para documentação, gates e modularização. |
 | [`docs/estrutura-frontend.md`](docs/estrutura-frontend.md) | Como navegar o `app.js`, regras de rota/modal e as regras de segurança para reorganizar o JS. |
 | [`docs/schema.md`](docs/schema.md) | Mapa **relacional** das tabelas (como se ligam, por qual chave) + funções e trigger. |
 | [`docs/seguranca.md`](docs/seguranca.md) | Manual de segurança do dono: modelo de ameaça, checklist e resposta a incidente. |
