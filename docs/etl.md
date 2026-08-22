@@ -123,10 +123,22 @@ node scripts/check_data_quality.mjs
 ```
 
 Precisa de rede até o Supabase (não roda do ambiente do Claude; roda na máquina do dono e semanal
-no workflow `db-checks.yml`). Chama a RPC `divat_data_quality()` como `anon` e mede a integridade
-*hub-and-spoke* — quase tudo se liga a `tabela_vista_teste` por `codlinha`, mas a única foreign key
-real é a `fk_tarifa_linha`; os outros joins são convenção, feitos no JavaScript, e o Postgres não
-os garante.
+no workflow `db-checks.yml`) e de `SUPABASE_TEST_AUDIT_DATABASE_URL` no ambiente. Chama
+`audit.divat_data_quality()` pelo login mínimo `divat_auditor_ci`
+(`scripts/lib/audit-database.mjs`) e mede a integridade *hub-and-spoke* — quase tudo se liga a
+`tabela_vista_teste` por `codlinha`, mas a única foreign key real é a `fk_tarifa_linha`; os outros
+joins são convenção, feitos no JavaScript, e o Postgres não os garante.
+
+> ⚠️ **Este passo agora audita o projeto de TESTE (`gontnlfmothfglssbyyk`), não mais o de
+> PRODUÇÃO (`lwzsxuaqqeoamukduhev`, o "Supabase (bd_teste)" do diagrama do §1) — o mesmo onde o
+> ETL de verdade importa.** A migração dos quatro gates para o auditor PostgreSQL (ver
+> docs/seguranca.md § 10) trocou de banco porque só o projeto de teste tem o schema `audit`
+> aplicado hoje. **Consequência prática: rodar este comando depois de um import real não
+> confere mais os dados que você acabou de importar** — confere o projeto de teste, que pode
+> estar desatualizado ou ter dados diferentes. Até a Fase 3 chegar a produção (pré-requisito
+> documentado em `docs/planos/fase-3-hardening-moderado.md`), a conferência pós-ETL de produção
+> volta a depender de consulta manual pelo SQL Editor do painel — não há checagem automática
+> equivalente por enquanto.
 
 **Quando um filho aponta para `codlinha` que não existe no pai, o portal não avisa: a tela
 simplesmente aparece vazia, sem erro.** É por isso que este passo existe.
@@ -146,8 +158,10 @@ Duas coisas ao ler a saída:
 > velha que o cadastro. Por isso o script as **rebaixa a aviso** em vez de erro.
 
 Se o import mexeu em **Realtime** (tabela nova entrando na publicação) ou em **schema**, rode também
-`node scripts/check_realtime.mjs` e `node scripts/check_deriva.mjs`. Mudança estrutural de banco
-não é ETL: passa pela skill `db-change` e por uma migração em `supabase/migrations/`.
+`node scripts/check_realtime.mjs` e `node scripts/check_deriva.mjs` — mesma ressalva do aviso
+acima: os dois também migraram para o auditor PostgreSQL e hoje auditam o projeto de TESTE, não
+produção. Mudança estrutural de banco não é ETL: passa pela skill `db-change` e por uma migração
+em `supabase/migrations/`.
 
 ---
 

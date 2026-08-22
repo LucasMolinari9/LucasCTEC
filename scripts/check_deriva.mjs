@@ -13,6 +13,12 @@
 // gen_security_snapshot.sql + auditoria periódica do docs/seguranca.md) ficam de fora,
 // de propósito.
 //
+// Desde esta migração, a consulta a divat_api_shape() não passa mais pela anon key/PostgREST:
+// vai pelo login mínimo `divat_auditor_ci` via scripts/lib/audit-database.mjs, contra a função
+// audit.divat_api_shape() do projeto de TESTE (gontnlfmothfglssbyyk) — não mais produção. Ver
+// docs/seguranca.md § 10. A leitura de app.js para achar os `rpc/...` que o FRONT chama (item 3
+// abaixo) continua igual: não é credencial, é conteúdo do repo.
+//
 // Checagens:
 //   1. Toda tabela citada em CLAUDE.md / docs/schema.md existe no banco (teria pego os
 //      nomes fantasmas do ticket 01 da auditoria).
@@ -22,16 +28,17 @@
 //   4. Toda RPC exposta a anon está documentada no docs/schema.md (seção "Funções e
 //      trigger").
 //
-// Uso (na SUA máquina / CI — daqui o ambiente do Claude não alcança o Supabase):
+// Uso (precisa de SUPABASE_TEST_AUDIT_DATABASE_URL no ambiente e `psql` no PATH — runbook em
+// docs/planos/fase-3-hardening-moderado.md):
 //   node scripts/check_deriva.mjs
 //
-// Requer apenas Node 18+ (fetch nativo). Nenhuma dependência. Não precisa de chave no
-// ambiente: usa a URL e a anon key que já estão públicas no app.js.
-// Sai com código 0 se tudo confere, 1 se há deriva (ou erro/rede bloqueada).
+// Requer Node 18+ e o binário `psql` no PATH.
+// Sai com código 0 se tudo confere, 1 se há deriva, erro ou credencial/conexão recusada.
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { carregarConfiguracaoAuditora, executarFuncaoJson, AuditDatabaseError } from './lib/audit-database.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -41,15 +48,7 @@ const NAO_TABELA = new Set(['bd_teste']); // bd_teste = nome do projeto Supabase
 // policy, sem grant) — o OpenAPI de anon não as lista, então não dá para conferi-las daqui.
 const STAGING = new Set(['evento_dados', 'evento_textos', 'portaria_data', 'portaria_texto_teste']);
 
-function extrair(html, re, oquê) {
-  const m = re.exec(html);
-  if (!m) { console.error(`Não achei ${oquê} no app.js.`); process.exit(1); }
-  return m[1];
-}
-
 const appjs = await readFile(join(ROOT, 'app.js'), 'utf8');
-const SB_URL = extrair(appjs, /const SB_URL\s*=\s*'([^']+)'/, 'SB_URL');
-const SB_KEY = extrair(appjs, /const SB_KEY\s*=\s*'([^']+)'/, 'SB_KEY');
 
 // ---------- lado do REPO (parse antes da rede, para falhar cedo no que for local) ----------
 
@@ -93,21 +92,12 @@ console.log(`Repo lido: ${citacoes.length} citações de tabela nos docs, ` +
 
 let api;
 try {
-  const resp = await fetch(`${SB_URL}/rest/v1/rpc/divat_api_shape`, {
-    method: 'POST',
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-    body: '{}',
-  });
-  if (!resp.ok) {
-    console.error(`RPC divat_api_shape falhou (HTTP ${resp.status}): ${await resp.text()}`);
-    console.error('A função public.divat_api_shape() existe e tem GRANT EXECUTE para anon? (DDL na baseline docs/backup_schema.sql.)');
-    console.error('(Se o HTTP 403 vier de um proxy: o ambiente do Claude não alcança *.supabase.co — rode na sua máquina ou no CI.)');
-    process.exit(1);
-  }
-  api = await resp.json();
+  const config = carregarConfiguracaoAuditora();
+  api = executarFuncaoJson(config, 'divat_api_shape');
 } catch (e) {
-  console.error('Erro de rede ao chamar o Supabase (este script precisa de rede):', e.message);
-  console.error('O ambiente do Claude não alcança *.supabase.co — rode na sua máquina ou no CI.');
+  if (!(e instanceof AuditDatabaseError)) throw e;
+  console.error(e.message);
+  console.error('A função audit.divat_api_shape() existe e divat_auditor_ci pode executá-la? (DDL na baseline docs/backup_schema.sql.)');
   process.exit(1);
 }
 

@@ -30,10 +30,17 @@ os hosts conhecidos aplica default-deny aos previews: uma branch nova nasce dire
 banco de teste, nunca ao banco de produção.
 
 As declarações literais `const SB_URL` e `const SB_KEY` nas linhas 24–25 do `app.js` são parte
-de uma interface de automação e devem permanecer intocáveis. `check_deriva.mjs`,
-`check_realtime.mjs`, `check_data_quality.mjs` e `check_grants.mjs` extraem esses valores por
-regex para auditar sempre o banco de produção. Alterar o formato, o tipo da declaração ou
-substituí-las por uma expressão impediria os quatro gates de localizar a configuração.
+de uma interface de automação e devem permanecer intocáveis: `tests/environment.test.js` depende
+do formato. Até a migração dos quatro gates vivos para o auditor PostgreSQL, esta seção também
+dizia que `check_deriva.mjs`, `check_realtime.mjs`, `check_data_quality.mjs` e `check_grants.mjs`
+extraíam esses valores por regex para auditar sempre o banco de produção — não é mais o caso.
+Os quatro passaram a falar com o login mínimo `divat_auditor_ci` via
+`scripts/lib/audit-database.mjs` e agora auditam o projeto de TESTE (`gontnlfmothfglssbyyk`), não
+mais produção: só o de teste tem a migração da Fase 3 (schema `audit`) aplicada — ver
+docs/seguranca.md § 10 e docs/planos/fase-3-hardening-moderado.md. `check_deriva.mjs` e
+`check_realtime.mjs` continuam lendo o `app.js`, mas não mais para achar `SB_URL`/`SB_KEY`: só
+para conferir as RPCs citadas (`rpc/...`) e a lista `RT_TABLES`, que são conteúdo do repo, não
+credencial.
 
 ## Dívida assumida
 

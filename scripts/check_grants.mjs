@@ -8,18 +8,24 @@
 // É o gate que sustenta as correções SEC-01 e SEC-05: sem ele, os default privileges que acabaram
 // de ser fechados podem ser reabertos por um clique e nada avisa.
 //
-// Irmão do check_data_quality.mjs, check_realtime.mjs e check_deriva.mjs: mesma anon key pública
-// do app.js, mesma forma (função read-only no banco + runner fino aqui). A RPC
-// public.divat_security_shape() é SECURITY INVOKER com EXECUTE para anon, então o que este script
-// enxerga é exatamente o que um visitante anônimo enxergaria.
+// Irmão do check_data_quality.mjs, check_realtime.mjs e check_deriva.mjs: mesmo transporte
+// (scripts/lib/audit-database.mjs), mesma forma (função read-only no banco + runner fino aqui).
+// A função audit.divat_security_shape() roda pelo login mínimo `divat_auditor_ci` — desde esta
+// migração os QUATRO gates auditam o projeto de TESTE (gontnlfmothfglssbyyk), não mais produção:
+// a Fase 3 moveu essas funções de `public`/anon para `audit`, e por ora só o projeto de teste tem
+// essa migração aplicada (produção não tem o schema `audit` ainda). Ver docs/seguranca.md § 10 e
+// docs/planos/fase-3-hardening-moderado.md — inclusive o efeito colateral aceito: enquanto a Fase
+// 3 não chegar a produção, este gate deixa de dar cobertura automática ao risco §9.1 lá.
 //
-// Uso (na SUA máquina / CI — daqui o ambiente do Claude não alcança o Supabase):
+// Uso (precisa de SUPABASE_TEST_AUDIT_DATABASE_URL no ambiente e `psql` no PATH — runbook em
+// docs/planos/fase-3-hardening-moderado.md):
 //   node scripts/check_grants.mjs                     # respeita o baseline
 //   node scripts/check_grants.mjs --sem-baseline      # estado cru do banco
 //   node scripts/check_grants.mjs --atualizar-baseline  # SÓ LOCAL, nunca no CI
 //
-// Requer apenas Node 18+ (fetch nativo). Nenhuma dependência. Sai 1 se houver achado de
-// severidade `erro` fora do baseline.
+// Requer Node 18+ e o binário `psql` no PATH. Sai 1 se houver achado de severidade `erro` fora
+// do baseline, ou se a credencial/conexão auditora for recusada (contrato em
+// scripts/lib/audit-database.mjs — falha sempre fechado, nunca imprime segredo).
 //
 // SOBRE O BASELINE: mesmo espírito do data_quality_baseline.json — dívida REGISTRADA, não perdão.
 // Hoje ele carrega os defaults do role `supabase_admin`, que concedem escrita a anon/authenticated
@@ -34,6 +40,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { carregarConfiguracaoAuditora, executarFuncaoJson, AuditDatabaseError } from './lib/audit-database.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BASELINE = join(ROOT, 'scripts', 'security_baseline.json');
@@ -42,32 +49,14 @@ const args = new Set(process.argv.slice(2));
 const semBaseline = args.has('--sem-baseline') || args.has('--all');
 const atualizar = args.has('--atualizar-baseline');
 
-function extrair(js, re, oquê) {
-  const m = re.exec(js);
-  if (!m) { console.error(`Não achei ${oquê} no app.js.`); process.exit(1); }
-  return m[1];
-}
-
-const js = await readFile(join(ROOT, 'app.js'), 'utf8');
-const SB_URL = extrair(js, /const SB_URL\s*=\s*'([^']+)'/, 'SB_URL');
-const SB_KEY = extrair(js, /const SB_KEY\s*=\s*'([^']+)'/, 'SB_KEY');
-
 let forma;
 try {
-  const resp = await fetch(`${SB_URL}/rest/v1/rpc/divat_security_shape`, {
-    method: 'POST',
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-    body: '{}',
-  });
-  if (!resp.ok) {
-    const txt = await resp.text();
-    console.error(`RPC divat_security_shape falhou (HTTP ${resp.status}): ${txt}`);
-    console.error('A função public.divat_security_shape() existe e tem GRANT EXECUTE para anon?');
-    process.exit(1);
-  }
-  forma = await resp.json();
+  const config = carregarConfiguracaoAuditora();
+  forma = executarFuncaoJson(config, 'divat_security_shape');
 } catch (e) {
-  console.error('Erro de rede ao chamar o Supabase (este script precisa de rede):', e.message);
+  if (!(e instanceof AuditDatabaseError)) throw e;
+  console.error(e.message);
+  console.error('A função audit.divat_security_shape() existe e divat_auditor_ci pode executá-la?');
   process.exit(1);
 }
 

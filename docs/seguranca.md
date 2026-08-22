@@ -155,12 +155,18 @@ de default privileges que **não pertence ao `postgres`** e por isso **não é f
 `postgres` não é superusuário no Supabase. Consequência: a garantia "objeto novo nasce fechado",
 que vale para os defaults que controlamos, **não é completa**.
 
-**Controle que compensa, e que não pode ser removido enquanto o default existir:** o
-`docs/backup_schema.sql` revoga explicitamente tudo que não é SELECT, e o gate
-`scripts/check_grants.mjs` roda **diariamente** (workflow `db-checks.yml`), falhando se qualquer
-tabela aparecer com grant ou policy de escrita para `anon`/`authenticated`. A frequência é diária,
-não semanal, **por causa deste item** — quem for reduzi-la precisa fechar o item antes. Regras
-técnicas: `CLAUDE.md`, seção **Supabase → RLS / segurança**.
+**Controle que compensava, e que hoje NÃO cobre mais produção automaticamente:** o
+`docs/backup_schema.sql` revoga explicitamente tudo que não é SELECT — isto continua valendo,
+independente do que segue. O gate `scripts/check_grants.mjs` rodava **diariamente**
+(workflow `db-checks.yml`) contra **produção**, falhando se qualquer tabela aparecesse com grant
+ou policy de escrita para `anon`/`authenticated`. Desde a migração para o auditor PostgreSQL
+(§ 10), ele passou a rodar pelo login `divat_auditor_ci` contra o projeto de **TESTE** — produção
+ainda não tem o schema `audit`. **Efeito colateral aceito, não escondido:** enquanto a Fase 3 não
+chegar a produção, este risco em produção volta a depender só do checklist **trimestral manual**,
+o mesmo que este gate foi criado para substituir (achado SEC-04). A frequência diária do workflow
+continua — protegendo o projeto de teste hoje — pela mesma razão histórica: quando o gate
+recuperar alcance de produção (Fase 3 promovida), a cadência não deve regredir para semanal antes
+de fechar este item lá. Regras técnicas: `CLAUDE.md`, seção **Supabase → RLS / segurança**.
 
 **Segundo controle, pelo outro lado (Fase 3, § 10):** toda migração que cria tabela pública precisa
 **revogar `anon`/`authenticated` e ligar RLS na mesma transação**, e o gate
@@ -203,6 +209,10 @@ O owner `divat_audit_owner` é `NOLOGIN`, sem privilégios administrativos e her
 `divat_auditor` pode executá-las. O login externo `divat_auditor_ci`, quando criado pelo runbook,
 é apenas membro desse papel e não tem `SELECT` direto nas tabelas.
 
-A aplicação em produção exige autorização separada. Até lá, os gates vivos existentes continuam
-consultando produção pelo caminho anterior, e o novo workflow de auditoria PostgreSQL é exclusivo
-do projeto de teste. Decisões, evidências e rollback: `docs/planos/fase-3-hardening-moderado.md`.
+A aplicação em produção exige autorização separada. Os quatro gates vivos (`check_grants.mjs`,
+`check_deriva.mjs`, `check_data_quality.mjs`, `check_realtime.mjs`) migraram para este caminho —
+`scripts/lib/audit-database.mjs`, login `divat_auditor_ci` — e por isso passaram a auditar o
+projeto de **TESTE**, não mais produção pelo caminho anterior (anon/PostgREST). Não é meio-termo:
+até a Fase 3 chegar a produção, produção não tem mais nenhum dos quatro gates automatizados a
+observá-la (ver § 9.1 para o item que isso mais afeta). Decisões, evidências e rollback:
+`docs/planos/fase-3-hardening-moderado.md`.
