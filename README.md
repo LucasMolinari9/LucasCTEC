@@ -8,7 +8,7 @@ histórico/eventos, empresas e relatórios. Os dados são mantidos pelo dono dir
 ## Como funciona (resumo)
 
 - **Frontend = três arquivos estáticos:** [`index.html`](index.html) (HTML),
-  [`styles.css`](styles.css) (todo o CSS) e [`app.js`](app.js) (~2,6k linhas num
+  [`styles.css`](styles.css) (todo o CSS) e [`app.js`](app.js) (~1,9k linhas num
   IIFE). Não há build, framework nem `package.json`: é só servir a pasta. O JS entra por
   `<script src>` clássico no fim do `<body>` — **nada de `<script>` inline**, porque a CSP
   publica `script-src 'self'` e bloquearia.
@@ -53,7 +53,7 @@ ou de rede ficam de fora dele e rodam no CI:
 | Comando | O que cobre | Precisa de |
 |---|---|---|
 | `node tests/check.js` | sintaxe, anti-drift, lógica pura | nada |
-| `node scripts/check_views.mjs` | abre as 18 views num navegador headless | Chromium |
+| `node scripts/check_views.mjs` | abre as 20 views (cenários) num navegador headless | Chromium |
 | `node scripts/check_abas.mjs` | regressão das abas do modal | Chromium |
 | `./scripts/semgrep.sh` | padrões proibidos (`eval`, CDN em runtime, `pdfHTML` fora do seam) | Semgrep |
 | `node scripts/check_realtime.mjs` | publicação Realtime × `RT_TABLES` | rede |

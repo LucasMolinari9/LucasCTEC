@@ -62,7 +62,7 @@ cada teste novo).
 - `pure.test.js` — casos das funções puras.
 - `domain-module.test.mjs` — os módulos de `src/domain/` pelo caminho ESM (o mesmo `import` do
   navegador), provando que carregam e exportam o que prometem.
-- `ui-data-module.test.mjs` — o mesmo, para `src/ui/` e `src/data/`: markup de documento, caches
+- `ui-data-module.test.mjs` — o mesmo, para `src/ui/`, `src/data/` e contratos de `src/documentos/`: markup de documento, caches
   de lookup e o que a família de listas tem de markup puro. Inclui as guardas de configuração de `configurarRest`, `configurarDoc` e `configurarListas`. O que escreve no DOM não cabe
   aqui — Node não tem `document` e o repo é zero-dependência — e fica com os gates de navegador.
 - `realtime.test.js` — guarda a sincronização `VIEW_TABLES`/`RT_TABLES` (extrai os literais do `app.js`).

@@ -3,7 +3,7 @@
 // O que ele responde: "existe alguma tela que EXPLODE, fica em branco ou renderiza MENOS do que
 // as fixtures dão, e eu não sei?"
 //
-// Por que existe: ~54,4% do app.js é a seção MODAL / SISTEMA DE VIEWS (render/DOM). O
+// Por que existe: ~43,7% do app.js é a seção MODAL / SISTEMA DE VIEWS (render/DOM). O
 // tests/check.js é offline e sem dependências de propósito, então só cobre a lógica PURA
 // copiada nos *.harness.js — nada do render. Este script fecha esse buraco pela borda mais
 // barata: em vez de 17 testes escritos à mão, UM laço genérico que abre cada view e falha se
@@ -65,6 +65,29 @@ const VIEWS = [
   { key: 'secoesPorEmpresa',      busca: '101',      minimo: { 'tbody tr': 2 } },   // pede CÓDIGO, não nome
   { key: 'ligacoesPorLogradouro', busca: 'vargas',   minimo: { 'tbody tr': 1 } },
   { key: 'municipioRegiao',       busca: 'rio',      minimo: { 'tbody tr': 1 } },
+  // Reexecutar o painel da mesma view não pode devolver #regScope ao padrão.
+  { key: 'municipioRegiao', minimo: { 'tbody tr': 1 },
+    driver: async page => {
+      await page.selectOption('.modal-body.active #spSel', 'METROPOLITANA');
+      await page.waitForSelector('.modal-body.active #regScope');
+      await page.selectOption('.modal-body.active #regScope', 'dentro');
+      await page.waitForTimeout(500);
+      await page.click('.modal-body.active #spBtn');
+      await page.waitForSelector('.modal-body.active #regScope');
+      const valor = await page.inputValue('.modal-body.active #regScope');
+      if(valor !== 'dentro') throw new Error(`#regScope voltou para "${valor}" após recarregar`);
+    } },
+  // O filtro municipal também deve sobreviver ao await da classificação/repaint.
+  { key: 'municipioRegiao',
+    driver: async page => {
+      await page.fill('.modal-body.active #spInput', 'Rio de Janeiro');
+      await page.click('.modal-body.active #spBtn');
+      await page.waitForSelector('.modal-body.active #munScope');
+      await page.selectOption('.modal-body.active #munScope', 'inter');
+      await page.waitForTimeout(500);
+      const valor = await page.inputValue('.modal-body.active #munScope');
+      if(valor !== 'inter') throw new Error(`#munScope voltou para "${valor}" durante o recarregamento`);
+    } },
   // Formulário próprio (#locA/#locGo), não o painel de busca padrão. Os dois blocos do card
   // (a tabela e a lista "com seção") entram no mínimo: se um sumir, o outro não disfarça.
   { key: 'localidades', busca: 'rio', minimo: { 'tbody tr': 2, '.loc-linha-head': 1 },
