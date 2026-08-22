@@ -45,7 +45,8 @@ import {
   LINE_FIELDS, ITINERARIO_FIELDS, QH_INTERVALO_FIELDS, QH_PREDET_FIELDS,
   TARIFA_LINHA_FIELDS, FROTA_FIELDS,
 } from '../data/campos.mjs';
-import { sbFetch, novoCtx } from './shell.mjs';
+import { sbFetch } from '../data/rest.mjs';
+import { novoCtx } from './shell.mjs';
 
 /* ================================================================
    DOC · Tarifas

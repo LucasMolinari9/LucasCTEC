@@ -7,27 +7,13 @@
 // é público de propósito, porque quem sabe QUANDO invalidar é o Realtime (app.js), e quem sabe
 // O QUE invalidar é este módulo. Um cache que só ele soubesse limpar envelheceria em silêncio.
 //
-// A função que fala com a rede chega por `configurarLookups({ sbFetch })`, no bootstrap do
-// app.js. Injetada, o módulo é exercitável em Node puro com um `sbFetch` de mentira (é o que
-// `tests/ui-data-module.test.mjs` faz) — e é o seam por onde a Fase B do plano das fatias 3-4
-// vai trocar a injeção por um `import` de `src/data/rest.mjs`, sem tocar em nenhum call site.
+// O acesso à rede vem diretamente da fronteira única `src/data/rest.mjs`; este módulo esconde
+// apenas os caches e não mantém um segundo slot de configuração.
 
 import { dedupEmpresasPorRJ } from '../domain/agrupamento.mjs';
+import { sbFetch } from './rest.mjs';
 
-let sbFetch = null;
-
-/* Liga o módulo à camada de rede. Chamar UMA vez, no bootstrap. */
-export function configurarLookups({ sbFetch: fn } = {}){
-  sbFetch = fn;
-}
-// Falha FECHADO: sem configuração o portal ficaria com todo lookup vazio — nome de empresa caindo
-// no código, município sem nome — e nenhuma tela acusaria erro, só mostraria dado pior.
-const buscar = (tabela, qs) => {
-  if (typeof sbFetch !== 'function'){
-    throw new Error('src/data/lookups.mjs: configurarLookups({ sbFetch }) não foi chamado');
-  }
-  return sbFetch(tabela, qs);
-};
+const buscar = (tabela, qs) => sbFetch(tabela, qs);
 
 let ibgeMap   = null;    // { [codibge]: {nome,regiao,regiaoPrograma} }
 let origemMap = null;    // { [cod_origem]: nome_origem }

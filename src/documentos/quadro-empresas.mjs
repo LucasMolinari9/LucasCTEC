@@ -45,7 +45,7 @@ import { evBandHTML, evBlocksHTML, secoesTarifasHTML, quadroHorariosBodyHTML } f
 import { searchEmpresas, empresaChooserHTML, bindEmpresaRows } from '../ui/empresas.mjs';
 import { getOrigem, getEmpresas, empNome, empresasList, empresasMap, getEvLookups } from '../data/lookups.mjs';
 import { LINE_FIELDS, QH_INTERVALO_FIELDS, QH_PREDET_FIELDS, TARIFA_LINHA_FIELDS, EVENTO_FIELDS } from '../data/campos.mjs';
-import { sbFetch } from './shell.mjs';
+import { sbFetch } from '../data/rest.mjs';
 
 /* ================================================================
    DOC · Quadro de Horários

@@ -1,7 +1,7 @@
 /* Módulos de `src/ui/` e `src/data/` pelo caminho ESM — o mesmo `import` que o NAVEGADOR usa.
    Eles nasceram na Fase B2 do plano das fatias 3-4, e são a primeira leva que NÃO é de domínio
    puro: dois deles dependem de algo que só o app.js tem (o SVG do logo, a função de rede). Essa
-   dependência chega por injeção (`configurarDoc`/`configurarLookups`/`configurarListas`), e é
+   dependência chega por injeção (`configurarDoc`/`configurarListas`), e é
    justamente o que torna possível testá-los aqui, em Node puro, sem navegador.
 
    A Fase C1 acrescentou três: `src/ui/blocos.mjs` (o markup que MAIS DE UMA família usa),
@@ -26,6 +26,7 @@
 import assert from 'node:assert/strict';
 import * as doc from '../src/ui/doc.mjs';
 import * as lookups from '../src/data/lookups.mjs';
+import { configurarRest } from '../src/data/rest.mjs';
 import * as paginacao from '../src/ui/paginacao.mjs';
 import * as listas from '../src/ui/listas.mjs';
 import * as blocos from '../src/ui/blocos.mjs';
@@ -101,8 +102,8 @@ t('bannerTrunc só aparece com a marca não-enumerável do marcarTrunc', () => {
 /* ================================================================
    src/data/lookups.mjs
    ================================================================ */
-await tAsync('getEmpresas rejeita antes de configurarLookups', async () => {
-  await assert.rejects(() => lookups.getEmpresas(), /configurarLookups/);
+await tAsync('getEmpresas rejeita antes de configurarRest', async () => {
+  await assert.rejects(() => lookups.getEmpresas(), /configurarRest/);
 });
 
 // `sbFetch` de mentira: conta as chamadas por tabela, para provar que o cache é cache.
@@ -119,9 +120,11 @@ const RESPOSTAS = {
   evento_empresa_teste: [{ id:1, evento_empresa:'CRIAÇÃO' }],
   evento_linha_teste:   [{ id:2, evento_linha:'PRORROGAÇÃO' }],
 };
-lookups.configurarLookups({ sbFetch: async (tabela) => {
+configurarRest({ url:'https://example.invalid', key:'test', fetch: async (url) => {
+  const tabela = new URL(url).pathname.split('/').pop();
   chamadas[tabela] = (chamadas[tabela] || 0) + 1;
-  return RESPOSTAS[tabela] ?? [];
+  const body = RESPOSTAS[tabela] ?? [];
+  return { ok:true, status:200, json:async () => body };
 }});
 
 await tAsync('getEmpresas: dedup por RJ, cache de verdade e acessos derivados', async () => {
@@ -367,22 +370,19 @@ t('campos: as colunas que a Estrutura consolida estão nas listas gêmeas', () =
    ================================================================ */
 // O seam ÚNICO de src/documentos/. Como os três `configurar*` da B2, ele falha FECHADO: um
 // documento sem rede pintaria tela vazia sem erro — invisível para todo gate deste repo.
-t('sbFetch, selecionarLinha e novoCtx lançam antes de configurarDocumentos', () => {
-  assert.throws(() => shell.sbFetch('evento_teste', ''), /configurarDocumentos/);
+t('selecionarLinha e novoCtx lançam antes de configurarDocumentos', () => {
   assert.throws(() => shell.selecionarLinha({}), /configurarDocumentos/);
   assert.throws(() => shell.novoCtx('V','P','H'), /configurarDocumentos/);
 });
-t('configurarDocumentos liga os três slots, e todos repassam os argumentos', () => {
+t('configurarDocumentos liga os dois slots e repassa os argumentos', () => {
   const chamadas = [];
   shell.configurarDocumentos({
-    sbFetch: (tabela, qs) => { chamadas.push(['fetch', tabela, qs]); return 'ROWS'; },
     selecionarLinha: row => { chamadas.push(['linha', row]); },
     novoCtx: (view, pane, host) => { chamadas.push(['ctx', view, pane, host]); return 'CTX'; },
   });
-  assert.equal(shell.sbFetch('qh_teste', 'codlinha=eq.1'), 'ROWS');
   shell.selecionarLinha({ codlinha:'1' });
   assert.equal(shell.novoCtx('V', 'P', 'H'), 'CTX');
-  assert.deepEqual(chamadas, [['fetch', 'qh_teste', 'codlinha=eq.1'], ['linha', { codlinha:'1' }], ['ctx', 'V', 'P', 'H']]);
+  assert.deepEqual(chamadas, [['linha', { codlinha:'1' }], ['ctx', 'V', 'P', 'H']]);
 });
 t('src/documentos/shell.mjs tem no máximo 6 slots injetados (critério de parada do plano)', () => {
   // O plano vivo manda PARAR quando um módulo passa de ~6 dependências injetadas. Como todas as
@@ -397,10 +397,12 @@ t('src/documentos/shell.mjs tem no máximo 6 slots injetados (critério de parad
    src/ui/empresas.mjs  (Fase C2)
    ================================================================ */
 await tAsync('searchEmpresas filtra por nome (sem acento) ou código, ordena e limita', async () => {
-  lookups.configurarLookups({ sbFetch: async () => [
-    { codempresa:'10', nome_empresa:'Viação São José' },
-    { codempresa:'20', nome_empresa:'Auto Ônibus Zebu' },
-  ] });
+  configurarRest({ url:'https://example.invalid', key:'test', fetch: async () => ({
+    ok:true, status:200, json:async () => [
+      { codempresa:'10', nome_empresa:'Viação São José' },
+      { codempresa:'20', nome_empresa:'Auto Ônibus Zebu' },
+    ],
+  }) });
   lookups.INVALIDADORES_LOOKUP.codempresa_teste(); // zera o cache (populado por um teste anterior)
   await lookups.getEmpresas();
   const r = empresas.searchEmpresas('sao jose');

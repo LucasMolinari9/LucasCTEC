@@ -10,7 +10,7 @@ function ok(cond, name, detail){
 
 // --- Mock fetch infra ---
 let calls = 0;
-function setFetch(fn){ calls = 0; global.fetch = async (url, opts) => { calls++; return fn(calls, url, opts); }; }
+function setFetch(fn){ calls = 0; H.configurarFetch(async (url, opts) => { calls++; return fn(calls, url, opts); }); }
 function jsonResp(status, body){
   return { ok: status>=200 && status<300, status, json: async () => body };
 }
@@ -63,51 +63,43 @@ function jsonRespBadBody(status){
   threw=null;
   try { await H.sbFetch('t','select=*'); } catch(e){ threw=e; }
   ok(threw instanceof TypeError, 'e throws TypeError eventually', threw && threw.name);
-  ok(calls === H.SB_RETRIES+1, 'e attempts = SB_RETRIES+1', 'calls='+calls+' expected='+(H.SB_RETRIES+1));
+  ok(calls === 3, 'e attempts = SB_RETRIES+1', 'calls='+calls+' expected=3');
 
   // f) timeout: fetch never resolves but honors abort signal
   console.log('f) timeout');
-  H.SB_TIMEOUT_MS = 50; // shrink
-  setFetch((n, url, opts) => new Promise((resolve, reject) => {
-    const sig = opts && opts.signal;
-    if (sig){
-      sig.addEventListener('abort', () => {
-        const err = new DOMException('Aborted','AbortError');
-        reject(err);
-      });
-    }
-    // never resolves otherwise
-  }));
+  // O timeout real é privado; um AbortError imediato exercita a tradução e os retries sem expô-lo.
+  setFetch(() => { throw new DOMException('Aborted','AbortError'); });
   threw=null;
-  const tStart = Date.now();
   try { await H.sbFetch('t','select=*'); } catch(e){ threw=e; }
-  const elapsed = Date.now()-tStart;
   ok(threw && /Tempo de resposta esgotado/.test(threw.message), 'f throws timeout message', threw && threw.message);
-  ok(elapsed < 5000, 'f did not hang', 'elapsed='+elapsed+'ms');
-  // with retries: 3 attempts each ~50ms timeout + backoff 400+800; just sanity that it tried >1
-  ok(calls === H.SB_RETRIES+1, 'f attempts = SB_RETRIES+1', 'calls='+calls);
-  H.SB_TIMEOUT_MS = 20000; // restore
+  // O AbortError continua transitório: há três tentativas antes da mensagem final.
+  ok(calls === 3, 'f attempts = SB_RETRIES+1', 'calls='+calls);
 
   // g) marcarTrunc
   console.log('g) marcarTrunc');
   const a80 = Array.from({length:80}, (_,i)=>({i}));
-  const r80 = H.marcarTrunc(a80, 'select=*&limit=80');
+  setFetch(() => jsonResp(200, a80));
+  const r80 = await H.sbFetch('t', 'select=*&limit=80');
   ok(r80._trunc===true && r80._limite===80, 'g limit=80 len80 marked', '_trunc='+r80._trunc+' _limite='+r80._limite);
 
   const a79 = Array.from({length:79}, (_,i)=>({i}));
-  const r79 = H.marcarTrunc(a79, 'select=*&limit=80');
+  setFetch(() => jsonResp(200, a79));
+  const r79 = await H.sbFetch('t', 'select=*&limit=80');
   ok(r79._trunc===undefined, 'g len79 not marked', '_trunc='+r79._trunc);
 
   const a15 = Array.from({length:15}, (_,i)=>({i}));
-  const r15 = H.marcarTrunc(a15, 'limit=15');
+  setFetch(() => jsonResp(200, a15));
+  const r15 = await H.sbFetch('t', 'limit=15');
   ok(r15._trunc===undefined, 'g limit=15 (N<50) not marked', '_trunc='+r15._trunc);
 
   const aNoLim = Array.from({length:100}, (_,i)=>({i}));
-  const rNoLim = H.marcarTrunc(aNoLim, 'select=*');
+  setFetch(() => jsonResp(200, aNoLim));
+  const rNoLim = await H.sbFetch('t', 'select=*');
   ok(rNoLim._trunc===undefined, 'g no limit not marked', '_trunc='+rNoLim._trunc);
 
   const notArr = {foo:1};
-  const rNA = H.marcarTrunc(notArr, 'limit=80');
+  setFetch(() => jsonResp(200, notArr));
+  const rNA = await H.sbFetch('t', 'limit=80');
   ok(rNA===notArr, 'g non-array returned as-is');
 
   // non-enumerable checks
@@ -118,25 +110,29 @@ function jsonRespBadBody(status){
 
   // g3) limit exactly 50 boundary, full
   const a50 = Array.from({length:50},(_,i)=>i);
-  const r50 = H.marcarTrunc(a50, 'limit=50');
+  setFetch(() => jsonResp(200, a50));
+  const r50 = await H.sbFetch('t', 'limit=50');
   ok(r50._trunc===true && r50._limite===50, 'g limit=50 boundary marked', '_trunc='+r50._trunc);
 
   // g4) corte feito pelo SERVIDOR: pedimos 50000 e o PostgREST devolveu o teto dele
   // (pgrst.db_max_rows do role `authenticator`). Sem este segundo critério a lista sai
   // truncada sem banner e sem toast, porque data.length (30000) nunca alcança lim (50000).
-  const aTeto = Array.from({length:H.SB_MAX_ROWS},(_,i)=>i);
-  const rTeto = H.marcarTrunc(aTeto, 'limit=50000');
+  const aTeto = Array.from({length:30000},(_,i)=>i);
+  setFetch(() => jsonResp(200, aTeto));
+  const rTeto = await H.sbFetch('t', 'limit=50000');
   ok(rTeto._trunc===true, 'g4 corte do servidor é marcado', '_trunc='+rTeto._trunc);
-  ok(rTeto._limite===H.SB_MAX_ROWS, 'g4 limite relatado é o do servidor', '_limite='+rTeto._limite);
+  ok(rTeto._limite===30000, 'g4 limite relatado é o do servidor', '_limite='+rTeto._limite);
 
   // …e abaixo do teto continua sem marca: pedir mais do que o servidor dá não basta,
   // a resposta precisa ter CHEGADO no teto.
-  const aQuase = Array.from({length:H.SB_MAX_ROWS-1},(_,i)=>i);
-  ok(H.marcarTrunc(aQuase,'limit=50000')._trunc===undefined, 'g4 abaixo do teto não é marcado');
+  const aQuase = Array.from({length:29999},(_,i)=>i);
+  setFetch(() => jsonResp(200, aQuase));
+  ok((await H.sbFetch('t','limit=50000'))._trunc===undefined, 'g4 abaixo do teto não é marcado');
 
   // regressão: com limit MENOR que o teto, quem manda continua sendo o limit pedido.
   const a80b = Array.from({length:80},(_,i)=>i);
-  const r80b = H.marcarTrunc(a80b, 'limit=80');
+  setFetch(() => jsonResp(200, a80b));
+  const r80b = await H.sbFetch('t', 'limit=80');
   ok(r80b._limite===80, 'g4 limit abaixo do teto reporta o limit pedido', '_limite='+r80b._limite);
 
   // h) bannerTrunc

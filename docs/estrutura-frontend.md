@@ -34,7 +34,7 @@ mudou junto, e o que continua valendo:
   linha, com o seam de seleção) e **`src/data/lookups.mjs`** (os caches de referência).
   O que eles precisam do `app.js` **não é lido de global: é injetado**, num bootstrap único no
   topo do IIFE (`grep 'Bootstrap dos módulos'`) — `configurarDoc({logoSVG})`,
-  `configurarLookups({sbFetch})` e `configurarListas({aoSelecionarLinha})`. Três consequências
+  `configurarListas({aoSelecionarLinha})`; `lookups.mjs` importa `src/data/rest.mjs` diretamente. Três consequências
   práticas: (a) o módulo é exercitável em Node puro, sem navegador, porque a dependência entra
   por parâmetro (`tests/ui-data-module.test.mjs`); (b) a dependência aparece na assinatura, em
   vez de num acesso escondido no meio do corpo; (c) **os três falham fechado** — sem configurar,
@@ -44,16 +44,9 @@ mudou junto, e o que continua valendo:
   ação de clicar numa linha).
 - **Regra para extrair:** prefira módulos profundos com interface pequena. Não mova loaders/estado
   apenas para reduzir linhas; extraia quando a dependência puder ser expressa por imports claros.
-- **Extração paga o processo que ela torna desnecessário.** Enquanto a função mora no `app.js`, o
-  teste unitário roda sobre uma **cópia** em `tests/*.harness.js`, e essa cópia precisa da guarda
-  `@canon` para não divergir do original. Extraída, o harness importa o módulo real: cópia e guarda
-  são **apagadas** no mesmo commit — o teste passa a exercitar exatamente o código que o navegador
-  executa. Quando o último `@canon` sair, `tests/canon.js` e `tests/drift.test.js` se aposentam.
-  O `pure.harness.js` chegou lá na Sessão 4 (zero cópias); as 10 que faltam estão no `harness.js`
-  e dependem da Fase B (`src/data/rest.mjs`) — eram 12 até a Fase B2 levar `bannerTrunc` para
-  `src/ui/doc.mjs` e `preencherLookup` para `src/data/lookups.mjs`.
+- **Extração paga o processo que ela torna desnecessário.** Os harness importam os módulos reais, de modo que os testes exercitam exatamente o código que o navegador executa. A Fase B encerrou as últimas cópias e aposentou o mecanismo `@canon`.
 - **Toda extração tem três passos obrigatórios, não um:** mover a função + importar no `app.js`;
-  apagar o `@canon` e trocar por `require` no harness; e **reabrir o arquivo no `.vercelignore`**.
+  trocar o harness para o módulo real; e **reabrir o arquivo no `.vercelignore`**.
   Pular o terceiro derruba o portal inteiro (import ES é atômico — ver §`.vercelignore` no
   `CLAUDE.md`); o `check.js` §[1] reprova nomeando o arquivo que ficou de fora.
 - **CSS em `styles.css`** (extraído do `<style>` em 22/07/2026): cacheável separado do HTML e
@@ -105,7 +98,7 @@ achar por `grep` do texto da marca, nunca por linha.
   `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`. Eram 15: `UTILITÁRIOS` guardava só o `debounce`, que foi
   para `src/domain/core.mjs` na Fase B2 — seção que fica vazia sai, não vira comentário órfão.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~52,1% do JS (~1,3k linhas). Ele **subiu**
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~54,4% do JS (~1,3k linhas). Ele **subiu**
   de participação na Fase B2 tendo ENCOLHIDO em linhas — ela tirou 263 do arquivo e 98 dele, e o
   denominador caiu mais que o numerador. Nas Fases C1, C2 e C3 aconteceu o inverso: C1 tirou 98
   linhas do bloco (1.844 → 1.746) e o percentual CAIU (60,4% → 58,7%); C2 tirou mais 219

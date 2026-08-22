@@ -69,23 +69,16 @@ exibe e **atualiza ao vivo** (Realtime).
   eram usados por Tarifas, Quadro de Horários e Histórico da Empresa).
   **O que eles precisam do app.js chega por INJEÇÃO, num bootstrap único no topo do IIFE**
   (`grep 'Bootstrap dos módulos'`): `configurarDoc({logoSVG})` passa o SVG do `#brandLogo`,
-  `configurarLookups({sbFetch})` passa a função de rede, `configurarListas({aoSelecionarLinha})`
+  `lookups.mjs` importa a fronteira REST diretamente; `configurarListas({aoSelecionarLinha})`
   passa a ação de shell de clicar numa linha (selecionar + fechar o modal + toast) e
-  `configurarDocumentos({sbFetch, selecionarLinha, novoCtx})` passa a rede, a ação de tornar uma
-  linha ativa e a fábrica de ctx novo (o 3º slot, que a C2 acrescentou para o painel de
+  `configurarDocumentos({selecionarLinha, novoCtx})` passa a ação de tornar uma
+  linha ativa e a fábrica de ctx novo (o segundo slot, acrescentado para o painel de
   Portarias) para TODOS os documentos de `src/documentos/`. Os quatro **falham fechado**: sem
   configuração, `docHead`/`getEmpresas`/`bindLineRows`/`sbFetch` lançam em vez de sair mudos —
   regressão silenciosa aqui é invisível para todo gate. Módulo que precise de mais
   de ~6 dependências injetadas é sinal de parar (ver o critério no plano vivo); o
-  `src/documentos/shell.mjs` é onde essa conta se mede para a Fase C inteira, e hoje ela é **3**.
-  **Regra: função pura extraída deixa de ter cópia em `tests/*.harness.js`** — o harness passa a
-  fazer `require` do módulo real, e o bloco `@canon` correspondente é APAGADO, não atualizado. A
-  cobrança do `check.js` §[2] não tem lista a manter à mão: ela lê o `require` **de cada harness**
-  e o casa com os `export` do módulo citado, isentando o símbolo só quando aquele harness de fato
-  o liga ao módulo. Tirar um nome do `require` e recolocar uma cópia local reprova o gate — e
-  desestruturar nome que o módulo não exporta também, porque o binding chegaria `undefined`.
-  Módulo novo precisa de linha própria no `.vercelignore` (abaixo) e de `import` no `app.js` —
-  e, se ficar fora de `src/domain/`, nada muda no gate: a §[2] varre `src/` inteiro.
+  `src/documentos/shell.mjs` é onde essa conta se mede para a Fase C inteira, e hoje ela é **2**.
+  Os harness importam módulos reais; o mecanismo transitório `@canon` foi aposentado na Fase B.
 - As consultas usam **REST do Supabase via `fetch`** (PostgREST). O **supabase-js** é usado **só**
   para o canal **Realtime** — é **vendorado** em `vendor/supabase-js-2.110.7.min.js` (versão
   fixa, mesma origem, sem CDN em runtime; ver Armadilhas para atualizar) e **injetado
@@ -174,11 +167,11 @@ exibe e **atualiza ao vivo** (Realtime).
   - **Teto do PostgREST:** `pgrst.db_max_rows = 30000` no role `authenticator` (igual ao maior
     `limit` do front). **Ao criar query com `limit` > 30000, suba o teto junto**
     (`ALTER ROLE authenticator SET pgrst.db_max_rows = '<n>'; NOTIFY pgrst, 'reload config';`)
-    **e suba, na mesma tarefa, a constante `SB_MAX_ROWS` do `app.js`** (seção `SUPABASE CONFIG`):
+    **e suba, na mesma tarefa, a constante `SB_MAX_ROWS` de `src/data/rest.mjs`** (seção `SUPABASE CONFIG`):
     o `marcarTrunc` a usa como segundo critério de truncagem — é o que impede uma resposta cortada
     pelo SERVIDOR de passar sem banner, já que `data.length` nunca alcança um `limit` maior que o
     teto. Deixá-la para trás faz o portal avisar "resultado parcial" num teto que não é mais o
-    real. **São TRÊS lugares a mudar juntos:** o banco, o `SB_MAX_ROWS` do `app.js` e o
+    real. **São TRÊS lugares a mudar juntos:** o banco, o `SB_MAX_ROWS` de `src/data/rest.mjs` e o
     `docs/backup_schema.sql` (onde os `ALTER ROLE` passaram a ser versionados em 09/08/2026).
   - **Timeouts por role** (medidos em 09/08/2026, versionados na baseline): `anon` = **3s**,
     `authenticated` = **8s**, `authenticator` = 8s + `lock_timeout` 8s. Não são iguais de
@@ -242,15 +235,15 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | *(fora do `app.js`)* `src/ui/doc.mjs` | `configurarDoc`, `docHead`, `metaRows`, `colClass`, `tableHTML`, `loading`/`emptyBox`/`emptyLinha`/`errorBox`, `bannerTrunc` | Markup de documento e estados de tela — string de HTML, sem DOM nem estado. O SVG do logo chega por `configurarDoc` no bootstrap. |
 | *(fora do `app.js`)* `src/ui/paginacao.mjs` | `paginate`, `paginateTable`, `paginateEvents` | Paginação **só de tela** (25/pág), agnóstica de conteúdo; `paginateEvents` é o de UM evento por página, com filtros. Recebem `view`/`gen` de quem chama. |
 | *(fora do `app.js`)* `src/ui/listas.mjs` | `configurarListas`, `situacaoSelectHTML`, `linhasTable`, `bindLineRows`, `paginateLines`, `lineResults` | A família de listas de LINHA, o hub de ~10 cards. O clique numa linha é ação de shell e chega por `configurarListas({aoSelecionarLinha})`. |
-| *(fora do `app.js`)* `src/data/lookups.mjs` | `configurarLookups`, `getIbge`/`getOrigem`/`getTerminais`/`getEmpresas`/`empNome`/`getEvLookups`, `preencherLookup`, `INVALIDADORES_LOOKUP` | Caches de referência que quase todo card lê por baixo. Esconde o cache; **expõe** a invalidação, porque quem sabe QUANDO invalidar é o Realtime. |
+| *(fora do `app.js`)* `src/data/lookups.mjs` | `getIbge`/`getOrigem`/`getTerminais`/`getEmpresas`/`empNome`/`getEvLookups`, `preencherLookup`, `INVALIDADORES_LOOKUP` | Caches de referência que quase todo card lê por baixo. Esconde o cache; **expõe** a invalidação, porque quem sabe QUANDO invalidar é o Realtime. |
 | *(fora do `app.js`)* `src/ui/blocos.mjs` | `evBandHTML`/`evBlocksHTML`, `itinerarioTableHTML` + `SENTIDO_ORDER`/`normSentido`, `frotaBlockHTML`, `quadroHorariosBodyHTML`, `secoesTarifasHTML`/`tarifaRowHTML`/`TARIFA_COLS` | Markup de documento usado por MAIS DE UMA família da Fase C. Critério de entrada: **duas** famílias. Impede que um módulo de família importe o da irmã (ciclo). Os dois últimos entraram na C2 e fecharam a última aresta do grafo (C2↔C3). |
 | *(fora do `app.js`)* `src/ui/empresas.mjs` | `searchEmpresas`, `empresaChooserHTML`, `bindEmpresaRows` | **Fase C2** — o chooser de empresa (busca + tabela + bind de clique), usado por MAIS DE UMA família (Tarifas, Quadro de Horários, Histórico da Empresa). Mesmo critério do `blocos.mjs`; endereço diferente porque `bindEmpresaRows` toca DOM. |
 | *(fora do `app.js`)* `src/data/campos.mjs` | `LINE_FIELDS`, `ITINERARIO_FIELDS`, `QH_INTERVALO_FIELDS`, `QH_PREDET_FIELDS`, `TARIFA_LINHA_FIELDS`, `FROTA_FIELDS`, `EVENTO_FIELDS` | As listas de coluna do `select=`. Definição ÚNICA: coluna que diverge entre um documento e a Estrutura chega `undefined` e a tela sai vazia sem erro. |
-| *(fora do `app.js`)* `src/documentos/shell.mjs` | `configurarDocumentos`, `sbFetch`, `selecionarLinha`, `novoCtx` | O seam ÚNICO de injeção de `src/documentos/`: uma chamada no bootstrap serve todas as famílias da Fase C, e o número de slots (**3**, desde a C2) é onde o critério de parada do plano se mede. `sbFetch` é andaime — sai na Fase B; `novoCtx` entrou na C2 para o painel de Portarias, que monta o próprio ctx a cada busca. |
+| *(fora do `app.js`)* `src/documentos/shell.mjs` | `configurarDocumentos`, `selecionarLinha`, `novoCtx` | O seam ÚNICO de injeção de ações de shell em `src/documentos/`: são **2** slots; a rede vem diretamente de `src/data/rest.mjs`. |
 | *(fora do `app.js`)* `src/documentos/frota-historico-itinerarios.mjs` | `renderLineHistory`, `renderItinerarios`, `renderFrota` | **Fase C1** — a primeira família de documentos a sair inteira. Cada render recebe o `ctx` e não tem como ler `currentView`/`activeLine`: eles nem estão no escopo. Os registros `LOADERS.*` ficaram no `app.js` (são shell; saem nas Fases D/E). |
 | *(fora do `app.js`)* `src/documentos/estrutura-tarifas-portaria.mjs` | `renderTarifas`/`tarifaEmpresaRun`/`renderTarifasEmpresa`, `renderEstrutura`, `renderPortarias`/`showPortaria`/`invalidarPortariaAnos` | **Fase C2** — a segunda família a sair inteira. Portaria é o único documento de lista+detalhe da Fase C (`pushDetail`/`popDetail`, não `commitViewResult`). `LOADERS.estrutura` (one-liner) e `LOADERS.tarifas` (tem corpo — composição de Fase D) ficaram no `app.js`; `LOADERS.portarias` virou o one-liner `renderPortarias`. |
 | *(fora do `app.js`)* `src/documentos/quadro-empresas.mjs` | `renderLinhaQuadro`/`quadroEmpresaRun`/`renderEmpresaQuadros`, `ligacoesPorEmpresaRun`/`secoesPorEmpresaRun`/`renderEmpresaHistory`/`historicoEmpresaRun` | **Fase C3** — a terceira família a sair inteira. `LOADERS.quadroHorarios` (corpo — composição de Fase D) e `quadroLinhaRun` (wrapper de `lineSearchRun`, shell puro sem seam) ficaram no `app.js`; os três `LOADERS.*` de Empresas viraram wrappers finos. `LOADERS.empresasRegulares`/`openEmpresaLigacoes` ficaram — dependem de `runView`, sem seam de injeção. |
-| `SUPABASE CONFIG` | `sbFetch`, `fetchComTimeout`, `selecionarSupabase`, `marcarTrunc` | Config SB + fetch com timeout/retry. Os helpers de formatação e escape moraram para `src/domain/core.mjs`; o `bannerTrunc` que pinta a truncagem, para `src/ui/doc.mjs` (marcar é dado, pintar é markup). |
+| `SUPABASE CONFIG` | configuração de ambiente e `configurarRest` | URL/chave/fetch são injetados em `src/data/rest.mjs`, que esconde timeout/retry/truncagem. Os helpers de formatação e escape moraram para `src/domain/core.mjs`; o `bannerTrunc` que pinta a truncagem, para `src/ui/doc.mjs` (marcar é dado, pintar é markup). |
 | `ÍCONES` | objeto `I` | SVGs dos ícones. |
 | `SEÇÕES / CARDS` | array `SECTIONS` | Define os cards `[ícone, título, descrição, view, precisaLinha]`. |
 | `RENDER CARDS` | `selectTopic`, `renderSideNav`, `renderSideContent` | Monta o **painel lateral** (sidebar de tópicos + painel de conteúdo) a partir de `SECTIONS`; `selectTopic` troca o tópico ativo (clique na sidebar, busca do topo e rota `#/topico/<key>`). |
@@ -348,7 +341,7 @@ PDF não têm teste em Node; o que os módulos de `src/ui/` têm de markup puro 
 
 2a. **Mexeu em render/loader? `node scripts/check_views.mjs`** — abre as **18 views** num
    navegador headless e falha se alguma explodir, ficar no spinner ou pintar menos que o
-   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~52,1% do `app.js`), que o
+   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~54,4% do `app.js`), que o
    `check.js` **não** cobre. Aceita filtro: `check_views.mjs frota`.
    **O que quebra se esquecer:** view nova sem entrada em `VIEWS` (a checagem anti-drift do final
    pega); `select=` alterado sem ajustar a fixture em `scripts/lib/rig.mjs` — nome de coluna
@@ -447,7 +440,7 @@ PDF não têm teste em Node; o que os módulos de `src/ui/` têm de markup puro 
   portaria). As duas cópias andam juntas porque **o import de CSV alimenta as duas**. Até
   08/08/2026 esta linha afirmava que "o rebuild do ETL desfaz", como se houvesse um mecanismo
   automático; não há. Detalhe em `docs/etl.md` §3.
-- **Truncagem silenciosa:** a maioria dos loaders avisa via `marcarTrunc` (`app.js`, marca o
+- **Truncagem silenciosa:** a maioria dos loaders avisa via `src/data/rest.mjs` (marca o
   array) + `bannerTrunc` (`src/ui/doc.mjs`, pinta o aviso), mas
   cortes por `slice(0,N)` no cliente **perdem** a flag não-enumerável `_trunc` (o `slice` não a
   copia). Ao criar/editar view que faz `slice` no cliente, **reponha a flag** (ou avise o
