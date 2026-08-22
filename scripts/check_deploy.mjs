@@ -314,13 +314,12 @@ if (appResponse?.ok) {
   verifyAnonKey(prodKey, 'lwzsxuaqqeoamukduhev', 'produção');
   verifyAnonKey(testKey, 'gontnlfmothfglssbyyk', 'teste');
 
-  // Asserção sobre CÓDIGO, não sobre prosa. Até 29/07/2026 esta checagem procurava uma frase do
-  // comentário ("preview jamais pode usar produção como fallback"); reescrever o comentário
-  // derrubava o gate sem que nada de fato tivesse regredido — foi o que aconteceu no PR #76, onde
-  // trocar um verbo pintou de vermelho um deploy correto. A mensagem do `throw` é o próprio
-  // mecanismo fail-closed: se ela sumir do bundle publicado, a guarda sumiu de verdade.
-  if (/Configuração Supabase ausente para o ambiente de/.test(source)) ok('guarda fail-closed publicada');
-  else fail('app.js publicado não contém o throw fail-closed de selecionarSupabase');
+  // Asserção sobre CÓDIGO, não sobre prosa. A Fase B moveu selecionarSupabase e seu `throw`
+  // fail-closed para a fronteira REST. Procurá-lo ainda em app.js reprovaria todo deploy correto.
+  const restResponse = publicResponses.get('/src/data/rest.mjs');
+  const restSource = restResponse?.ok ? await restResponse.text() : '';
+  if (/Configuração Supabase ausente para o ambiente de/.test(restSource)) ok('guarda fail-closed publicada');
+  else fail('src/data/rest.mjs publicado não contém o throw fail-closed de selecionarSupabase');
 } else {
   fail('não foi possível validar a matriz porque /app.js não respondeu 200');
 }
