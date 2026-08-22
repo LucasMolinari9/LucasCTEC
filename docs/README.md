@@ -15,9 +15,9 @@ Comece por este arquivo. O objetivo é localizar a fonte vigente sem varrer o hi
 
 ## Trabalho em curso e registro
 
-- [`planos/2026-08-14-modularizacao-fatias-3-4.md`](planos/2026-08-14-modularizacao-fatias-3-4.md)
-  é o plano vivo de redução do `app.js`: C1–C3 estão concluídas; seguem C4, B e D. A fase E só
-  entra se reduzir acoplamento de forma mensurável.
+- [`estrutura-frontend.md`](estrutura-frontend.md) registra o limite final da modularização do
+  `app.js`: a etapa E foi deliberadamente encerrada sem extração porque o restante é shell e sua
+  separação aumentaria as dependências mutáveis.
 - [`planos/fase-3-hardening-moderado.md`](planos/fase-3-hardening-moderado.md) reúne o estado e as
   condições ainda abertas para promover o hardening do banco.
 - [`CHANGELOG.md`](CHANGELOG.md) registra a cronologia do produto. Planos encerrados, handoffs e

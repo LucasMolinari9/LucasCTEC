@@ -14,7 +14,7 @@
       ele delega a `lineSearchRun`, que só existe no `app.js` (chama `selectLine`, ação de shell
       que ainda não tem seam de injeção). Mover o wrapper sem mover `lineSearchRun` juntaria os
       dois em módulos diferentes por um acoplamento que já existe hoje — o plano deixa esses
-      wrappers para a Fase E de propósito (`lineDocView`/`lineDocRun`/`lineSearchRun`/
+      wrappers no shell de propósito (`lineDocView`/`lineDocRun`/`lineSearchRun`/
       `searchPanel`). `quadroEmpresaRun`, ao contrário, NÃO usa `lineSearchRun` — só chama
       `renderLinhaQuadro`/`renderEmpresaQuadros` (deste módulo) e helpers importáveis — por isso
       ele sai.
@@ -26,7 +26,7 @@
       ser injetados via `./shell.mjs` porque um documento MOVIDO precisava deles), aqui é o
       inverso: quem chama `runView` é o loader que FICOU. Forçar a saída exigiria um quarto tipo
       de slot (abrir view nova) só para isto — registrado como restrição, não decisão, para quem
-      mexer na Fase E (chrome do modal) depois.
+      atravessar o chrome do modal.
 
    `LOADERS.quadroHorarios` também fica — tem CORPO (a composição do `searchPanel` com dois
    modos), e essa composição é trabalho da Fase D, mesmo padrão de `LOADERS.tarifas` (C2).

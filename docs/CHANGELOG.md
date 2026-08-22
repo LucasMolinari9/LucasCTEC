@@ -4,6 +4,16 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 22/08/2026 — encerramento deliberado da modularização
+
+- Após B, C1–C4 e D, foram inventariadas as responsabilidades de shell restantes no `app.js`:
+  chrome do modal, abas, rotas, listeners, despacho, busca e painel.
+- A etapa E foi deliberadamente não executada: a extração atravessaria 9 estados de abas e ao
+  menos 7 ações do shell, exportaria estado do IIFE ou criaria dependências bidirecionais, sem
+  retirar uma responsabilidade de negócio completa.
+- As conclusões duráveis foram transferidas para `docs/estrutura-frontend.md` e o plano vivo foi
+  removido conforme a política de saída documental.
+
 ## 22/08/2026 — Fase D: `LOADERS` vira composição explícita
 
 O inventário pós-C4 encontrou 17 entradas. Dezesseis loaders documentais agora são exports das

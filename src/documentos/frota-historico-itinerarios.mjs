@@ -6,8 +6,8 @@
    `currentView`, `activeLine` ou `modalBody` — tudo vem em `ctx = { view, gen, pane, host, line }`.
 
    O QUE FICOU NO `app.js`, e não é falha: os três registros `LOADERS.*` são one-liners de SHELL
-   (`lineDocView`/`searchPanel` + `lineSearchRun`, os wrappers de busca de linha). O plano vivo
-   põe esses wrappers na Fase E e a composição do registro na Fase D — forçá-los agora seria
+   (`lineDocView`/`searchPanel` + `lineSearchRun`, os wrappers de busca de linha). O inventário
+   final mantém esses wrappers no shell — forçá-los para cá
    antecipar duas fases dentro desta.
 
    O QUE NÃO ESTÁ AQUI E PODERIA PARECER QUE DEVIA: `evBandHTML`/`evBlocksHTML`,

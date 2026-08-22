@@ -430,7 +430,7 @@ await tAsync('configurarDocumentos liga os seis slots e repassa os argumentos', 
   ]);
 });
 t('src/documentos/shell.mjs tem no máximo 6 slots injetados (critério de parada do plano)', () => {
-  // O plano vivo manda PARAR quando um módulo passa de ~6 dependências injetadas. Como todas as
+  // A governança manda PARAR quando um módulo passa de ~6 dependências injetadas. Como todas as
   // famílias da Fase C passam por este seam, a conta é o número de slots dele — e esta asserção
   // é o lugar em que o critério deixa de ser prosa. A C4 chegou exatamente ao sexto; o próximo
   // slot exige parar e manter a responsabilidade no app.js.
