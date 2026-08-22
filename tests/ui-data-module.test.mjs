@@ -34,6 +34,9 @@ import * as campos from '../src/data/campos.mjs';
 import * as shell from '../src/documentos/shell.mjs';
 import * as empresas from '../src/ui/empresas.mjs';
 import * as municipiosLocalidades from '../src/documentos/municipios-localidades.mjs';
+import * as frotaHistoricoItinerarios from '../src/documentos/frota-historico-itinerarios.mjs';
+import * as estruturaTarifasPortaria from '../src/documentos/estrutura-tarifas-portaria.mjs';
+import * as quadroEmpresas from '../src/documentos/quadro-empresas.mjs';
 
 let pass = 0, fail = 0;
 const fails = [];
@@ -46,9 +49,28 @@ const tAsync = async (nome, fn) => {
 
 t('módulo C4 exporta as quatro famílias completas e o invalidator de Localidades', () => {
   for (const nome of ['ligacoesPorLogradouro', 'municipioRegiao', 'ligacoesPorTerminal',
-                      'localidades', 'invalidarLocalidades']) {
+                      'secoesPorLigacao', 'localidades', 'invalidarLocalidades']) {
     assert.equal(typeof municipiosLocalidades[nome], 'function', `municipios-localidades.${nome} ausente`);
   }
+});
+
+t('Fase D: famílias C1–C3 exportam loaders finais e configuradores estreitos', () => {
+  for (const [modulo, nomes] of [
+    [frotaHistoricoItinerarios, ['configurarLoadersFrotaHistoricoItinerarios', 'loadHistoricoLinha', 'loadItinerarios', 'loadFrota']],
+    [estruturaTarifasPortaria, ['configurarLoadersEstruturaTarifas', 'loadTarifas', 'loadEstrutura']],
+    [quadroEmpresas, ['configurarLoadersQuadroEmpresas', 'loadQuadroHorarios', 'loadLigacoesPorEmpresa', 'loadSecoesPorEmpresa', 'loadHistoricoEmpresa', 'frotaPorEmpresa']],
+  ]) {
+    for (const nome of nomes) assert.equal(typeof modulo[nome], 'function', `${nome} ausente`);
+  }
+});
+
+t('Fase D: loaders de família falham fechado antes de receber o shell', () => {
+  const ctx = {};
+  for (const [loader, configurador] of [
+    [frotaHistoricoItinerarios.loadHistoricoLinha, 'configurarLoadersFrotaHistoricoItinerarios'],
+    [estruturaTarifasPortaria.loadTarifas, 'configurarLoadersEstruturaTarifas'],
+    [quadroEmpresas.loadQuadroHorarios, 'configurarLoadersQuadroEmpresas'],
+  ]) assert.throws(() => loader(ctx), new RegExp(configurador));
 });
 
 /* ================================================================

@@ -8,7 +8,7 @@ histórico/eventos, empresas e relatórios. Os dados são mantidos pelo dono dir
 ## Como funciona (resumo)
 
 - **Frontend = três arquivos estáticos:** [`index.html`](index.html) (HTML),
-  [`styles.css`](styles.css) (todo o CSS) e [`app.js`](app.js) (~1,9k linhas num
+  [`styles.css`](styles.css) (todo o CSS) e [`app.js`](app.js) (~1,7k linhas num
   IIFE). Não há build, framework nem `package.json`: é só servir a pasta. O JS entra por
   `<script src>` clássico no fim do `<body>` — **nada de `<script>` inline**, porque a CSP
   publica `script-src 'self'` e bloquearia.
