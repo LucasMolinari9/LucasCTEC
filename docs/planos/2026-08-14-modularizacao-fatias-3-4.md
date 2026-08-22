@@ -142,13 +142,13 @@ pelas famílias da C, e é ali que a redundância acaba — daí a precondição
 | 2 | Sessão 4 | `src/domain/view-state.mjs` | ✅ PR #131 |
 | 3 | **B2** | helpers compartilhados + o seam de seleção | ✅ feita — ver a seção da fase |
 | 4 | **A** | contexto explícito + bancada de corrida | ✅ feita — ver a seção da fase |
-| 5 | **B** | `src/data/rest.mjs` — encerra o mecanismo `@canon` | a fazer |
+| 5 | **B** | `src/data/rest.mjs` — encerra o mecanismo `@canon` | ✅ feita |
 | 6 | **C1** | Frota · Histórico da linha · Itinerários | ✅ feita — ver a seção da fase |
 | 7 | **C2** | Estrutura · Tarifas · Portaria | ✅ feita — ver a seção da fase |
 | 8 | **C3** | Quadro de Horários · Empresas | ✅ feita — ver a seção da fase |
-| 9 | **C4** | documentos por família | a fazer |
-| 10 | **D** | `LOADERS` como composição explícita | a fazer |
-| 11 | **E** | infra do modal (opcional) | a fazer |
+| 9 | **C4** | documentos por família | ✅ feita |
+| 10 | **D** | `LOADERS` como composição explícita | ✅ feita |
+| 11 | **E** | infra do modal (opcional) | não aberta — critério global manda parar |
 
 **B2 saiu na frente de A e de B, e a razão é medida, não conveniência.** A ordem original supunha
 que B2 dependesse das duas — "As Fases A e B não bastam para mover um documento". Supunha errado
@@ -276,7 +276,7 @@ helpers já importáveis. Um loader exportado por módulo pode entrar no registr
 
 ---
 
-## Fase B — módulo profundo de acesso REST
+## ✅ Fase B — módulo profundo de acesso REST (FEITA)
 
 `src/data/rest.mjs`, com o que cada símbolo é hoje: `esperar` (`app.js:176`), `SB_TIMEOUT_MS`
 (`:178`), `SB_RETRIES` (`:179`), `CANCELADO` (`:183`), `ehCancelamento` (`:184`), `fetchComTimeout`
@@ -394,7 +394,7 @@ reconferidos** — meça antes de dimensionar a sessão:
 | C1 | Frota · Histórico da linha · Itinerários | ✅ feita — ver abaixo |
 | C2 | Estrutura · Tarifas · Portaria | ✅ feita — ver abaixo |
 | C3 | Quadro de Horários · Empresas | ✅ feita — ver abaixo |
-| C4 | Municípios · Localidades | a fazer |
+| C4 | Municípios · Localidades | ✅ feita |
 
 C4 por último, e cada metade traz uma complicação própria. Municípios é a única família com filtro
 de escopo — `#regScope` (`app.js:1835`) e `#munScope` (`app.js:1884`), os dois únicos do arquivo —
@@ -717,7 +717,7 @@ seis imports mortos de `src/data/campos.mjs` (dois já mortos desde C1/C2). Nenh
 
 ---
 
-## Fase D — `LOADERS` como composição explícita
+## ✅ Fase D — `LOADERS` como composição explícita (FEITA)
 
 Entrega o item 4 do estudo de 10/08/2026, preservado no histórico do Git:
 *"Por último, transformar o registro `LOADERS` em composição explícita. Não migrar todos os loaders
@@ -735,6 +735,45 @@ seu.
 
 Os wrappers (`lineDocView`, `lineDocRun`, `lineSearchRun`, `searchPanel`) não são trabalho da D:
 são shell, e saem na E.
+
+### Inventário final pós-C4
+
+| entrada | classificação | wiring final |
+|---|---|---|
+| `historicoLinha` | composição fina de busca | associação direta a `loadHistoricoLinha` (C1) |
+| `itinerarios` | loader documental exportado | associação direta a `loadItinerarios` (C1) |
+| `quadroHorarios` | composição fina de busca | associação direta a `loadQuadroHorarios` (C3) |
+| `tarifas` | composição fina de busca | associação direta a `loadTarifas` (C2) |
+| `frota` | loader documental exportado | associação direta a `loadFrota` (C1) |
+| `estrutura` | loader documental exportado | associação direta a `loadEstrutura` (C2) |
+| `empresasRegulares` | infraestrutura do modal | permanece no `app.js`; lista empresas e abre nova view com `runView` |
+| `ligacoesPorEmpresa` | composição fina de busca | associação direta a `loadLigacoesPorEmpresa` (C3) |
+| `secoesPorEmpresa` | composição fina de busca | associação direta a `loadSecoesPorEmpresa` (C3) |
+| `historicoEmpresa` | composição fina de busca | associação direta a `loadHistoricoEmpresa` (C3) |
+| `ligacoesPorLogradouro` | loader documental exportado | associação direta ao export C4 homônimo |
+| `municipioRegiao` | loader documental exportado | associação direta ao export C4 homônimo |
+| `ligacoesPorTerminal` | loader documental exportado | associação direta ao export C4 homônimo |
+| `secoesPorLigacao` | loader documental exportado | acabamento C4 corrigido; associação direta ao export homônimo |
+| `frotaPorEmpresa` | loader documental exportado | acabamento C3 corrigido; associação direta ao export homônimo |
+| `portarias` | loader documental exportado | associação direta a `renderPortarias` (C2) |
+| `localidades` | loader documental exportado | associação direta ao export C4 homônimo |
+
+A auditoria encontrou dois corpos extensos ainda registrados inline: `secoesPorLigacao`, que a
+decisão da C2 já atribuía à C4, e `frotaPorEmpresa`, parente da família C3. A D não os absorveu:
+corrigiu o acabamento nas famílias responsáveis antes de compor o registro. Os demais 16 loaders
+documentais agora são imports associados diretamente; não há wrapper trivial que apenas repasse
+`ctx`.
+
+O wiring que permaneceu no shell é exato: `empresasRegulares`/`openEmpresaLigacoes` porque abrem
+uma view nova com `runView`; o bootstrap dos configuradores estreitos das famílias; e os quatro
+helpers `lineDocView`, `lineDocRun`, `lineSearchRun`, `searchPanel`. Não existe container global,
+service locator ou objeto genérico de dependências.
+
+### Avaliação do critério global de encerramento
+
+A Fase E não é aberta. O que resta é wiring de modal, navegação, DOM e bootstrap; movê-lo exigiria
+exportar estado do IIFE ou criar mais seams sem reduzir acoplamento mensurável. O critério de parada
+foi atingido, portanto nenhuma nova extração deve começar sem uma nova medição que demonstre ganho.
 
 ---
 

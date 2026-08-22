@@ -8,17 +8,38 @@
    O seam permanece com seis slots mutáveis: selecionarLinha, novoCtx, montarPainelBusca, abrirView,
    distinctCods e fetchLinesByCods. É o limite de parada acordado; a composição global de LOADERS
    continua no app.js e pertence à Fase D. */
-import { esc, enc, ilikeTerm, orDash, fmtCode, fmtLineName, boolChip, norm } from '../domain/core.mjs';
+import { esc, enc, ilikeTerm, orDash, fmtCode, fmtLineName, boolChip, norm, debounce } from '../domain/core.mjs';
 import { groupBy, countBy, fmtMoney, byCodlinha, rjOrder, classifyMunLines, terminaisDoMunicipio } from '../domain/agrupamento.mjs';
 import { localidadesQueCasam, orIlike, municipiosExatos } from '../domain/busca.mjs';
 import { isCurrentGen, commitViewResult, nextGen, filtrarSituacao } from '../domain/view-state.mjs';
-import { docHead, metaRows, tableHTML, loading, emptyBox, errorBox, bannerTrunc } from '../ui/doc.mjs';
+import { docHead, metaRows, tableHTML, loading, emptyBox, emptyLinha, errorBox, bannerTrunc } from '../ui/doc.mjs';
 import { paginate } from '../ui/paginacao.mjs';
 import { situacaoSelectHTML, linhasTable, bindLineRows, paginateLines, lineResults } from '../ui/listas.mjs';
 import { getIbge, getOrigem, getTerminais, getEmpresas, empNome } from '../data/lookups.mjs';
 import { LINE_FIELDS } from '../data/campos.mjs';
 import { sbFetch } from '../data/rest.mjs';
 import { novoCtx, montarPainelBusca, abrirView, distinctCods, fetchLinesByCods } from './shell.mjs';
+
+export async function secoesPorLigacao({ view, gen, pane, line }){
+  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,nome_ligacao,tarifa&order=secao`);
+  if(!isCurrentGen(view, gen)) return;
+  const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]]);
+  if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyLinha('seção')}</div>`; return; }
+  const cols = [{t:'Seção',w:'70px'},{t:'Descrição'},{t:'Tarifa',w:'90px'}];
+  const rowHTML = r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td></tr>`;
+  pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}
+    <div class="loc-tools"><label>Filtrar <input type="text" id="secF" placeholder="seção ou descrição" autocomplete="off"></label></div>
+    <div id="secResult"></div></div>`;
+  const result = pane.querySelector('#secResult'), inp = pane.querySelector('#secF');
+  const paint = ()=>{
+    const q = norm(inp.value.trim());
+    const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${r.nome_ligacao||''}`).includes(q)) : rows;
+    result.innerHTML = f.length ? tableHTML(cols, f.map(rowHTML).join(''), f.length+' seção(ões)') : emptyBox('Nenhuma seção com esse filtro.');
+  };
+  inp.addEventListener('input', debounce(paint));
+  paint();
+  commitViewResult(view, gen, { pdfHTML:null });
+}
 
 /* ---- Consultas (por logradouro, terminal, localidade, município) ---- */
 export async function ligacoesPorLogradouro(ctx){

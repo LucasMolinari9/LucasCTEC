@@ -56,33 +56,27 @@ import {
 // junto (as duas primeiras já estavam mortas desde a C1/C2, e escaparam por engano).
 import { LINE_FIELDS } from './src/data/campos.mjs';
 import { configurarRest, selecionarSupabase, sbFetch, ehCancelamento } from './src/data/rest.mjs';
-// FASE C1 — a primeira família de documentos a sair inteira do arquivo. O que fica aqui embaixo
-// são os registros `LOADERS.*`, que são shell (wrappers de busca de linha) e saem nas Fases D/E.
-// `configurarDocumentos` injeta apenas as duas ações de shell compartilhadas; a rede vem da
-// fronteira REST importada diretamente por cada família.
+// FASE D — as famílias exportam loaders finais e o registro os associa diretamente. Os
+// configuradores próprios recebem só os quatro helpers que continuam no shell para a Fase E.
 import { configurarDocumentos } from './src/documentos/shell.mjs';
 import {
-  renderLineHistory, renderItinerarios, renderFrota,
+  configurarLoadersFrotaHistoricoItinerarios,
+  loadHistoricoLinha, loadItinerarios, loadFrota,
 } from './src/documentos/frota-historico-itinerarios.mjs';
-// FASE C2 — Estrutura Operacional · Tarifas · Portaria. `LOADERS.estrutura` (one-liner) e
-// `LOADERS.tarifas` (tem corpo — a composição do `searchPanel`, que é trabalho de Fase D) ainda
-// ficam aqui embaixo; `LOADERS.portarias` virou o one-liner `renderPortarias`.
+// FASE C2 + D — Estrutura, Tarifas e Portaria exportam seus loaders finais.
 import {
-  renderTarifas, tarifaEmpresaRun, renderEstrutura, renderPortarias, invalidarPortariaAnos,
+  configurarLoadersEstruturaTarifas,
+  loadTarifas, loadEstrutura, renderPortarias, invalidarPortariaAnos,
 } from './src/documentos/estrutura-tarifas-portaria.mjs';
-// FASE C3 — Quadro de Horários · Empresas, a terceira família a sair inteira. `renderLinhaQuadro`
-// (modo "por linha") e `quadroEmpresaRun` (modo "por empresa") alimentam `LOADERS.quadroHorarios`,
-// que FICA (tem corpo — mesma razão de `LOADERS.tarifas`). `ligacoesPorEmpresaRun`/
-// `secoesPorEmpresaRun`/`historicoEmpresaRun` alimentam os três `LOADERS.*` de Empresas, que
-// viraram wrappers finos — mesmo padrão que a C2 usou para `tarifaEmpresaRun`.
+// FASE C3 + D — loaders finais do Quadro/Empresas, inclusive o acabamento de frotaPorEmpresa.
 import {
-  renderLinhaQuadro, quadroEmpresaRun,
-  ligacoesPorEmpresaRun, secoesPorEmpresaRun, historicoEmpresaRun,
+  configurarLoadersQuadroEmpresas,
+  loadQuadroHorarios, loadLigacoesPorEmpresa, loadSecoesPorEmpresa, loadHistoricoEmpresa,
+  frotaPorEmpresa,
 } from './src/documentos/quadro-empresas.mjs';
-// FASE C4 — Municípios · Localidades. As quatro famílias saíram completas; ficam no IIFE apenas
-// os registros de composição do LOADERS, sem antecipar a composição global da Fase D.
+// FASE C4 + D — loaders finais de Municípios/Localidades, inclusive secoesPorLigacao.
 import {
-  ligacoesPorLogradouro, municipioRegiao, ligacoesPorTerminal, localidades,
+  ligacoesPorLogradouro, municipioRegiao, ligacoesPorTerminal, secoesPorLigacao, localidades,
   invalidarLocalidades,
 } from './src/documentos/municipios-localidades.mjs';
 
@@ -138,6 +132,9 @@ configurarDocumentos({
   distinctCods: (rows, limit) => distinctCods(rows, limit),
   fetchLinesByCods: (cods, options) => fetchLinesByCods(cods, options),
 });
+configurarLoadersFrotaHistoricoItinerarios({ lineDocView, lineSearchRun, searchPanel });
+configurarLoadersEstruturaTarifas({ lineDocView, lineDocRun, searchPanel });
+configurarLoadersQuadroEmpresas({ lineSearchRun, searchPanel });
 
 /* ================================================================
    SUPABASE CONFIG
@@ -1202,80 +1199,38 @@ function lineDocRun(ctx, term, render){
    registro, que é shell: o painel de busca de linha e o `lineSearchRun` que resolve o termo.
    O MARKUP do evento (`evBandHTML`/`evBlocksHTML`) mora em `src/ui/blocos.mjs`, porque o
    Histórico da EMPRESA (mais abaixo, família C3) usa os mesmos dois blocos. */
-LOADERS.historicoLinha = async (ctx) => {
-  const pre = ctx.line ? (ctx.line.numero_ligacao || ctx.line.codlinha || '') : '';
-  searchPanel(ctx, { title:'Histórico da Linha', placeholder:'Nome, número ou código da linha', value:pre,
-    onRun: (term, rctx) => lineSearchRun(rctx, term, { render:renderLineHistory,
-      emptyMsg:'Busque pelo nome, número ou código da linha.', prompt:'clique para ver o histórico' }) });
-};
+LOADERS.historicoLinha = loadHistoricoLinha;
 
 /* --- DOC · Itinerários --------------------------------------------
    Render em `src/documentos/frota-historico-itinerarios.mjs`; a tabela e a normalização de
    sentido, em `src/ui/blocos.mjs` (a Estrutura Operacional, família C2, também as usa). */
-LOADERS.itinerarios = (ctx) => lineDocView(ctx, { subtitle:'Cadastro de Linhas: Itinerários', render:renderItinerarios });
+LOADERS.itinerarios = loadItinerarios;
 
 /* --- DOC · Quadro de Horários ---------------------------------
    `quadroMetaHTML`/`quadroDocInner`/`fetchQHByLines`, os renders (`renderLinhaQuadro`,
    `renderEmpresaQuadros`) e o modo empresa (`quadroEmpresaRun`) moraram para
-   `src/documentos/quadro-empresas.mjs` na Fase C3. `quadroLinhaRun` FICOU: é wrapper que chama
-   `lineSearchRun` (abaixo), que só existe aqui porque usa `selectLine` — shell puro, sem seam de
-   injeção (a razão está no cabeçalho do módulo novo). */
+   `src/documentos/quadro-empresas.mjs`; D fechou a composição fina dentro da família. */
 
-// Modo linha: resolve o termo (número, nome ou código) → 1 linha (mostra o quadro) ou várias (lista)
-function quadroLinhaRun(ctx, term){
-  return lineSearchRun(ctx, term, { render:renderLinhaQuadro, emptyMsg:'Busque a linha pelo número, nome ou código.', prompt:'clique para ver o quadro' });
-}
-
-LOADERS.quadroHorarios = async (ctx) => {
-  searchPanel(ctx, {
-    title:'Quadro de Horários',
-    placeholder:'Número, nome ou código da linha (ou empresa)',
-    selectOpts:[['linha','Por linha'],['empresa','Por empresa (PDF de todos)']],
-    note: 'Por linha: número, nome ou código → mostra o quadro dela. Por empresa: nome ou código → baixa o PDF de todos os quadros da operadora.',
-    onRun: (term, rctx, modo) => modo==='empresa' ? quadroEmpresaRun(rctx, term) : quadroLinhaRun(rctx, term)
-  });
-  // havendo linha ativa, prefill com a linha e mostra o quadro dela (modo "Por linha", padrão)
-  if (ctx.line){
-    const i = ctx.pane.querySelector('#spInput'); if(i) i.value = ctx.line.numero_ligacao || ctx.line.codlinha || '';
-    await renderLinhaQuadro(withHost(ctx, ctx.pane.querySelector('#spHost')));
-  }
-};
+LOADERS.quadroHorarios = loadQuadroHorarios;
 
 /* --- DOC · Tarifas --------------------------------------------
    Os renders (`renderTarifas`, `tarifaEmpresaRun`, `renderTarifasEmpresa`) e o markup só de
    Tarifas (`linhaTarifaRowHTML`/`LINHA_TARIFA_COLS`) moraram para
    `src/documentos/estrutura-tarifas-portaria.mjs` na Fase C2. `secoesTarifasHTML`/`tarifaRowHTML`/
    `TARIFA_COLS`, que o Quadro de Horários (logo acima) TAMBÉM usa, foram para `src/ui/blocos.mjs`.
-   Aqui fica só o registro — que É trabalho de shell (composição do `searchPanel` com dois
-   modos), não um one-liner; mover essa composição é trabalho da Fase D, não desta. */
-LOADERS.tarifas = (ctx) => {
-  searchPanel(ctx, {
-    title:'Tarifas Vigentes',
-    placeholder:'Nome, número ou código da linha (ou empresa)',
-    selectOpts:[['linha','Por linha'],['empresa','Por empresa']],
-    note:'Por linha: nome, número ou código → mostra as tarifas dela. Por empresa: nome ou código RJ → lista as tarifas de todas as linhas da operadora.',
-    onRun:(term, rctx, modo) => modo==='empresa' ? tarifaEmpresaRun(rctx, term) : lineDocRun(rctx, term, renderTarifas)
-  });
-  const host = ctx.pane.querySelector('#spHost');
-  if (ctx.line){
-    const i = ctx.pane.querySelector('#spInput');
-    if (i) i.value = ctx.line.numero_ligacao || ctx.line.codlinha || '';
-    renderTarifas(withHost(ctx, host));
-  } else {
-    host.innerHTML = emptyBox('Busque a linha pelo nome, número ou código — ou troque para "Por empresa".');
-  }
-};
+   D fechou a composição de busca na família; aqui fica só a associação direta. */
+LOADERS.tarifas = loadTarifas;
 
 /* --- DOC · Frota --------------------------------------------------
    Render em `src/documentos/frota-historico-itinerarios.mjs`; a grade de KPIs
    (`frotaBlockHTML`), em `src/ui/blocos.mjs` — a Estrutura Operacional, logo abaixo, a repete. */
-LOADERS.frota = (ctx) => lineDocView(ctx, { subtitle:'Frota da Linha', render:renderFrota });
+LOADERS.frota = loadFrota;
 
 /* --- DOC · Estrutura Operacional ------------------------------
    Render em `src/documentos/estrutura-tarifas-portaria.mjs` (Fase C2) — o documento consolidado
    (igual ao Relatório oficial): cadastro + Seções/Tarifas + Itinerário + Quadro de Horários e
    Frota, num único `.doc` (também usado no PDF). Aqui fica só o registro, one-liner de shell. */
-LOADERS.estrutura = (ctx) => lineDocView(ctx, { subtitle:'Cadastro de Linhas: Estrutura Operacional', render:renderEstrutura });
+LOADERS.estrutura = loadEstrutura;
 
 /* ---- Empresas ---- */
 LOADERS.empresasRegulares = async ({ view, gen, pane }) => {
@@ -1330,8 +1285,8 @@ LOADERS.empresasRegulares = async ({ view, gen, pane }) => {
    `ligacoesPorEmpresaRun`/`secoesPorEmpresaRun`/`historicoEmpresaRun` (a lógica que era o corpo
    do `onRun` de cada `LOADERS.*`) e `renderEmpresaHistory` moraram para
    `src/documentos/quadro-empresas.mjs` na Fase C3 — mesmo padrão que a C2 usou para
-   `tarifaEmpresaRun`. Os três registros ficaram como wrappers finos (`searchPanel` + a função
-   importada). `openEmpresaLigacoes` FICOU: abre uma view NOVA via `runView`, que é shell puro
+   `tarifaEmpresaRun`. D moveu os wrappers finos para o export final. `openEmpresaLigacoes`
+   FICOU: abre uma view NOVA via `runView`, que é shell puro
    sem seam de injeção — ver a nota no cabeçalho do módulo novo. */
 function openEmpresaLigacoes(cod){
   runView({ title:'Ligações por Empresa', tables:['tabela_vista_teste','codempresa_teste'], loader: async({ view, gen, pane })=>{
@@ -1345,21 +1300,9 @@ function openEmpresaLigacoes(cod){
     lineResults(pane.querySelector('#empLigResult'), rows, { view, gen });
   }});
 }
-LOADERS.ligacoesPorEmpresa = async (ctx) => {
-  const pre = ctx.line?.codempresa || '';
-  searchPanel(ctx, { title:'Ligações por Empresa', placeholder:'Código (ex. 101) ou nome da empresa', value:pre,
-    onRun: (term, rctx) => ligacoesPorEmpresaRun(rctx, term) });
-};
-LOADERS.secoesPorEmpresa = async (ctx) => {
-  const pre = ctx.line?.codempresa || '';
-  searchPanel(ctx, { title:'Seções por Empresa', placeholder:'Código da empresa (ex. 101)', value:pre,
-    onRun: (term, rctx) => secoesPorEmpresaRun(rctx, term) });
-};
-LOADERS.historicoEmpresa = async (ctx) => {
-  const pre = ctx.line?.codempresa || '';
-  searchPanel(ctx, { title:'Histórico da Empresa', placeholder:'Nome ou código da empresa (ex. 1001 ou AUTO VIAÇÃO)', value:pre,
-    onRun: (term, rctx) => historicoEmpresaRun(rctx, term) });
-};
+LOADERS.ligacoesPorEmpresa = loadLigacoesPorEmpresa;
+LOADERS.secoesPorEmpresa = loadSecoesPorEmpresa;
+LOADERS.historicoEmpresa = loadHistoricoEmpresa;
 
 /* ---- Consultas (por logradouro, terminal, localidade, município) ----
    Família C4 movida integralmente para `src/documentos/municipios-localidades.mjs`. Aqui ficam
@@ -1368,94 +1311,12 @@ LOADERS.ligacoesPorLogradouro = ligacoesPorLogradouro;
 LOADERS.municipioRegiao = municipioRegiao;
 LOADERS.ligacoesPorTerminal = ligacoesPorTerminal;
 
-LOADERS.secoesPorLigacao = async ({ view, gen, pane, line }) => {
-  // Tudo vem do ctx, incluindo a LINHA. Antes este documento lia `activeLine` DEPOIS do await:
-  // trocar de linha com a busca no ar fazia o cabeçalho sair com a linha nova e a tabela com as
-  // seções da velha — a mesma tela mostrando duas linhas diferentes, sem erro nenhum.
-  const rows = await sbFetch('tarifa_atual_teste', `codlinha=eq.${enc(line.codlinha)}&select=secao,nome_ligacao,tarifa&order=secao`);
-  if (!isCurrentGen(view, gen)) return;            // tentativa velha: descarta em silêncio
-  const meta = metaRows([['Ligação',esc(line.nome_ligacao||'—'),true],['Código',esc(fmtCode(line.codlinha))]]);
-  if(!rows.length){ pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}${emptyLinha('seção')}</div>`; return; }
-  const cols = [{t:'Seção',w:'70px'},{t:'Descrição'},{t:'Tarifa',w:'90px'}];
-  const rowHTML = r=>`<tr><td class="td-num">${esc(orDash(r.secao))}</td><td class="td-logr">${esc(orDash(r.nome_ligacao))}</td><td class="td-sentido">R$ ${esc(fmtMoney(r.tarifa))}</td></tr>`;
-  pane.innerHTML = `<div class="doc">${docHead('Seções por Ligação')}${meta}
-    <div class="loc-tools"><label>Filtrar <input type="text" id="secF" placeholder="seção ou descrição" autocomplete="off"></label></div>
-    <div id="secResult"></div></div>`;
-  const result = pane.querySelector('#secResult'), inp = pane.querySelector('#secF');
-  const paint = ()=>{
-    const q = norm(inp.value.trim());
-    const f = q ? rows.filter(r=>norm(`${orDash(r.secao)} ${r.nome_ligacao||''}`).includes(q)) : rows;
-    result.innerHTML = f.length ? tableHTML(cols, f.map(rowHTML).join(''), f.length+' seção(ões)') : emptyBox('Nenhuma seção com esse filtro.');
-  };
-  inp.addEventListener('input', debounce(paint));
-  paint();
-  commitViewResult(view, gen, { pdfHTML:null });
-};
+LOADERS.secoesPorLigacao = secoesPorLigacao;
 
 // A agregação (resumoFrota) e o filtro da tabela (filtrarFrotaEmpresas) vivem em
 // src/domain/agrupamento.mjs.
 // Frota consolidada por empresa (total geral + quebra por hierarquia) — item 16
-LOADERS.frotaPorEmpresa = async ({ view, gen, pane }) => {
-  const [rows] = await Promise.all([
-    sbFetch('qh_teste', `select=codempresa,hierarquia,frota_operacional,reserva&limit=10000`),
-    getEmpresas()
-  ]);
-  if(!isCurrentGen(view, gen)) return;
-  if(!rows.length){
-    pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}${emptyBox('Nenhuma frota cadastrada.')}</div>`;
-    commitViewResult(view, gen, { pdfHTML:null });
-    return;
-  }
-  const fmtN = n => n.toLocaleString('pt-BR');
-  const { totOp, totRes, porEmp, porHier } = resumoFrota(rows);
-  const frotaEmpresas = porEmp.map(e=>{
-    const cadastro = empresaPorCod(e.cod);
-    return { ...e, nome_empresa:cadastro?.nome_empresa || empNome(e.cod), situacao:cadastro?.situacao || '' };
-  });
-  const h3 = t => `<h3 class="doc-h3">${t}</h3>`;
-  const kpisHTML = `<div class="kpi-grid">
-      <div class="kpi"><b>${fmtN(totOp)}</b><span>Frota operacional</span></div>
-      <div class="kpi"><b>${fmtN(totRes)}</b><span>Reserva</span></div>
-      <div class="kpi"><b>${rows.length}</b><span>Linhas</span></div>
-      <div class="kpi"><b>${porEmp.length}</b><span>Empresas</span></div>
-      <div class="kpi"><b>${porHier.length}</b><span>Hierarquias</span></div>
-    </div>`;
-  const empCols = [{t:'RJ',w:'62px'},{t:'Empresa'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}];
-  const empRowHTML = e=>`<tr><td class="td-num">${esc(e.cod)}</td><td class="td-logr">${esc(e.nome_empresa)}</td><td class="td-num">${e.n}</td><td class="td-sentido">${fmtN(e.op)}</td><td class="td-num">${fmtN(e.res)}</td></tr>`;
-  const empTableHTML = items=>tableHTML(empCols, items.map(empRowHTML).join(''), `${items.length} empresa(s)`);
-  const hierHTML = tableHTML([{t:'Hierarquia'},{t:'Linhas',w:'78px'},{t:'Operacional',w:'108px'},{t:'Reserva',w:'90px'}],
-    porHier.map(x=>`<tr><td class="td-logr">${esc(orDash(x.h))}</td><td class="td-num">${x.n}</td><td class="td-sentido">${fmtN(x.op)}</td><td class="td-num">${fmtN(x.res)}</td></tr>`).join(''));
-  const footHTML = `<div class="doc-foot">Consolidado sobre ${rows.length} linhas · cadastro DETRO-RJ · DIVAT</div>`;
-  const pdfHTML = items=>`<div class="doc">${docHead('Frota por Empresa')}${bannerTrunc(rows)}${kpisHTML}
-    ${h3('Frota por empresa')}${items.length ? empTableHTML(items) : emptyBox('Nenhuma empresa com esse filtro.')}
-    ${h3('Frota por hierarquia')}${hierHTML}${footHTML}</div>`;
-  pane.innerHTML = `<div class="doc">${docHead('Frota por Empresa')}
-    ${bannerTrunc(rows)}${kpisHTML}
-    ${h3('Frota por empresa')}
-    <div class="loc-tools">
-      <label>Situação <select id="frotaEmpSit"><option value="todas">Todas</option><option value="ativas" selected>Ativas</option><option value="canceladas">Canceladas</option></select></label>
-      <label>Buscar <input type="text" id="frotaEmpBusca" placeholder="nome ou RJ" autocomplete="off"></label>
-    </div>
-    <div id="frotaEmpResult"></div>
-    ${h3('Frota por hierarquia')}${hierHTML}${footHTML}</div>`;
-  const result = pane.querySelector('#frotaEmpResult');
-  const sel = pane.querySelector('#frotaEmpSit'), inp = pane.querySelector('#frotaEmpBusca');
-  const paint = ()=>{
-    const filtradas = filtrarFrotaEmpresas(frotaEmpresas, sel.value, inp.value);
-    if(!filtradas.length){
-      result.innerHTML = emptyBox('Nenhuma empresa com esse filtro.');
-    } else {
-      paginateTable(result, filtradas, {
-        cols:empCols, rowHTML:empRowHTML, foot:t=>t+' empresa(s)', unit:'empresas',
-        pageSize:25, pdf:false, view, gen,
-      });
-    }
-    commitViewResult(view, gen, { pdfHTML:()=>pdfHTML(filtradas) });
-  };
-  sel.addEventListener('change', paint);
-  inp.addEventListener('input', debounce(paint));
-  paint();
-};
+LOADERS.frotaPorEmpresa = frotaPorEmpresa;
 /* --- DOC · Portaria -----------------------------------------------
    `getPortariaAnos`/`renderPortarias`/`showPortaria` moraram para
    `src/documentos/estrutura-tarifas-portaria.mjs` na Fase C2 — é o único documento de

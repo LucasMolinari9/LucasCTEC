@@ -24,6 +24,27 @@ import { EVENTO_FIELDS, ITINERARIO_FIELDS, FROTA_FIELDS } from '../data/campos.m
 import { sbFetch } from '../data/rest.mjs';
 import { selecionarLinha } from './shell.mjs';
 
+let _loaderShell = null;
+export function configurarLoadersFrotaHistoricoItinerarios(shell){ _loaderShell = shell; }
+function loaderShell(){
+  if(!_loaderShell) throw new Error('configurarLoadersFrotaHistoricoItinerarios precisa ser chamado antes dos loaders');
+  return _loaderShell;
+}
+
+export function loadHistoricoLinha(ctx){
+  const { searchPanel, lineSearchRun } = loaderShell();
+  const pre = ctx.line ? (ctx.line.numero_ligacao || ctx.line.codlinha || '') : '';
+  return searchPanel(ctx, { title:'Histórico da Linha', placeholder:'Nome, número ou código da linha', value:pre,
+    onRun: (term, rctx) => lineSearchRun(rctx, term, { render:renderLineHistory,
+      emptyMsg:'Busque pelo nome, número ou código da linha.', prompt:'clique para ver o histórico' }) });
+}
+export function loadItinerarios(ctx){
+  return loaderShell().lineDocView(ctx, { subtitle:'Cadastro de Linhas: Itinerários', render:renderItinerarios });
+}
+export function loadFrota(ctx){
+  return loaderShell().lineDocView(ctx, { subtitle:'Frota da Linha', render:renderFrota });
+}
+
 /* ================================================================
    DOC · Histórico (linha)
    Um evento por página, descrição/observação por extenso. A impressão e o PDF saem com TODOS

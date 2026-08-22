@@ -4,6 +4,24 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 22/08/2026 — Fase D: `LOADERS` vira composição explícita
+
+O inventário pós-C4 encontrou 17 entradas. Dezesseis loaders documentais agora são exports das
+famílias associados diretamente no `app.js`; `empresasRegulares` é a única infraestrutura do
+modal mantida inline, porque abre outra view por `runView`. Wrappers que apenas repassavam `ctx`
+foram removidos, enquanto `lineDocView`, `lineDocRun`, `lineSearchRun` e `searchPanel` continuam no
+shell para a Fase E opcional.
+
+A auditoria também encontrou dois corpos extensos indevidamente remanescentes: `secoesPorLigacao`
+voltou à família C4 e `frotaPorEmpresa` à C3 antes de D prosseguir. As composições finas de C1–C3
+recebem apenas seus helpers de shell em configuradores próprios fail-closed; o seam compartilhado
+de C4 segue em seis slots e não nasceu container global ou service locator. O gate estrutural
+novo exige associações diretas e preserva os quatro helpers de E.
+
+O critério global manda parar: o restante é bootstrap, DOM, navegação, abas e abertura de views;
+a Fase E não foi aberta porque não há redução mensurável de acoplamento. `app.js` caiu de 1.870
+para 1.730 linhas e o bloco modal, de 821 para 685 linhas (~39,6%). `version.json` avançou para 12.
+
 ## 22/08/2026 — Fase C4: Municípios · Localidades saem do `app.js`
 
 **Fase C4 em PR próprio**, sem a composição global da Fase D. A medição foi refeita sobre o

@@ -1,7 +1,7 @@
 # Estrutura e navegação do frontend (`index.html` + `styles.css` + `app.js`) — Portal DIVAT
 
 > **Por que este arquivo existe:** o frontend tem `index.html` (HTML), `styles.css` (CSS),
-> `app.js` (~1,9k linhas — extraído do HTML e ainda envolto num IIFE) e módulos em `src/`. Continua
+> `app.js` (~1,7k linhas — extraído do HTML e ainda envolto num IIFE) e módulos em `src/`. Continua
 > **zero-build**: nada de bundler, framework ou `package.json`. Este doc registra (1) *por que*
 > essa forma, (2) *como navegar* no `app.js` sem se perder, e (3) as **regras de segurança** para
 > reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do `CLAUDE.md` (que lista as
@@ -98,7 +98,7 @@ achar por `grep` do texto da marca, nunca por linha.
   `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`. Eram 15: `UTILITÁRIOS` guardava só o `debounce`, que foi
   para `src/domain/core.mjs` na Fase B2 — seção que fica vazia sai, não vira comentário órfão.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~43,7% do JS (~0,8k linhas). Ele **subiu**
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~39,5% do JS (~0,7k linhas). Ele **subiu**
   de participação na Fase B2 tendo ENCOLHIDO em linhas — ela tirou 263 do arquivo e 98 dele, e o
   denominador caiu mais que o numerador. Nas Fases C1, C2 e C3 aconteceu o inverso: C1 tirou 98
   linhas do bloco (1.844 → 1.746) e o percentual CAIU (60,4% → 58,7%); C2 tirou mais 219

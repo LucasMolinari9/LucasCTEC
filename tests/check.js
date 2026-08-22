@@ -53,6 +53,31 @@ if (!fs.existsSync(VERSION) || !js.includes("'/version.json")) {
   fail('auto-atualização deve observar /version.json');
 }
 
+// Fase D: o registro é composição explícita. Loader documental já extraído precisa entrar por
+// associação direta ao export da família; wrapper `(ctx) => importado(ctx)` só esconde a origem
+// e recria no shell uma camada sem comportamento. Os quatro helpers abaixo são exceção deliberada:
+// pertencem à infraestrutura do modal e ficam para a Fase E opcional.
+{
+  const diretos = [
+    'loadHistoricoLinha', 'loadItinerarios', 'loadQuadroHorarios', 'loadTarifas', 'loadFrota',
+    'loadEstrutura', 'loadLigacoesPorEmpresa', 'loadSecoesPorEmpresa', 'loadHistoricoEmpresa',
+    'ligacoesPorLogradouro', 'municipioRegiao', 'ligacoesPorTerminal', 'secoesPorLigacao',
+    'frotaPorEmpresa', 'localidades', 'renderPortarias',
+  ];
+  const faltam = diretos.filter(nome => !new RegExp(`LOADERS\\.[A-Za-z0-9_$]+\\s*=\\s*${nome}\\s*;`).test(js));
+  if (faltam.length) fail(`Fase D: loaders documentais sem associação direta: ${faltam.join(', ')}`);
+  else okline(`Fase D: ${diretos.length} loaders documentais associados diretamente`);
+
+  const wrappers = [...js.matchAll(/LOADERS\.([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?\(ctx\)\s*=>\s*([A-Za-z0-9_$]+)\(ctx\)\s*;/g)];
+  if (wrappers.length) fail(`Fase D: wrappers que apenas repassam ctx: ${wrappers.map(m => m[1]).join(', ')}`);
+  else okline('Fase D: nenhum wrapper LOADERS.* repassa ctx sem comportamento');
+
+  const helpersShell = ['lineDocView', 'lineDocRun', 'lineSearchRun', 'searchPanel'];
+  const ausentes = helpersShell.filter(nome => !new RegExp(`function\\s+${nome}\\s*\\(`).test(js));
+  if (ausentes.length) fail(`Fase E antecipada: helpers removidos do app.js: ${ausentes.join(', ')}`);
+  else okline('Fase E não antecipada: quatro helpers de busca/modal permanecem no app.js');
+}
+
 // Guarda de PUBLICAÇÃO: todo asset que o app.js exige em runtime tem de sobreviver ao deploy.
 // Motivo (produção, 10/08/2026): o app.js virou ES module e passou a importar
 // `src/domain/core.mjs`, mas a allowlist do .vercelignore não reabria `src/` — o import

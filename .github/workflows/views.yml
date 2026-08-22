@@ -13,7 +13,7 @@
 #     que as fixtures dão?" Abre as 20 views (cenários) por deep link com o PostgREST stubado e falha se
 #     alguma lançar erro, ficar presa no spinner, pintar só a moldura, não achar nada ou ficar
 #     abaixo do `minimo` declarado para ela. É a rede sob a seção MODAL / SISTEMA DE
-#     VIEWS (~43,7% do app.js), que o tests/check.js não cobre — ele só testa a lógica pura.
+#     VIEWS (~39,5% do app.js), que o tests/check.js não cobre — ele só testa a lógica pura.
 #     Estes dois números são cobrados pela seção [2b] do tests/check.js, que desde 30/07/2026
 #     varre também os comentários deste arquivo — atualize o número, não apague a frase.
 #   scripts/check_abas.mjs — regressão das abas do modal / seletor de documentos.
