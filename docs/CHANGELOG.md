@@ -4,6 +4,55 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 22/08/2026 — Fase C4: Municípios · Localidades saem do `app.js` (última família da Fase C)
+
+**Fase C4 do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`): a quarta e
+última família de documentos a sair inteira. Zero SQL, nenhuma mudança de comportamento
+pretendida.
+
+**Medido:** `app.js` 2.573 → **2.004** (`wc -l`; −569, a maior queda de todas as fases C); o
+bloco `MODAL / SISTEMA DE VIEWS` 1.341 → **833** (−508), e o percentual caiu de novo
+(52,1% → 41,5%). `src/` sozinho foi de 1.718 para **2.473** (+755, quase todo em
+`municipios-localidades.mjs`, novo). Fator "sai do `app.js` → aparece em módulo" ≈1,3x — mais
+baixo que os anteriores, porque parte do que saiu (`distinctCods`/`fetchLinesByCods` e vários
+imports mortos) não tinha correspondente em módulo — era binding morto puro.
+
+- **Um módulo novo:** `src/documentos/municipios-localidades.mjs` (731 linhas) — as DUAS metades
+  (Município, Localidades) no MESMO arquivo, porque compartilham markup de verdade
+  (`renderLocalidadeSecoes`/`pintarLocalidadeSecoes` e os helpers ao redor são usados por
+  `mostrarLinhasResultado` E `mostrarLinhasPorLocalidade`) e saem no MESMO PR — a aresta nunca
+  vira aresta entre módulos.
+- **O quarto slot de `src/documentos/shell.mjs` — `runView`.** Diferente do caso análogo da C3
+  (`openEmpresaLigacoes`, função-folha que ficou para trás sem travar mais nada),
+  `openLinhasPorIbge` ("Linhas no Município") é chamada por DUAS funções da própria família
+  (`municipioRegiaoRun` e `mostrarLinhasEntreMunicipios`, esta do lado Localidades) — deixar
+  `runView` de fora prenderia a família INTEIRA ao `app.js`, não uma função pequena. Resolvido
+  dentro do orçamento (4 de ~6 dependências injetadas).
+- **Correção ao registro da C2:** `secoesPorLigacao` foi descrito lá como listagem "por
+  município/logradouro"; medido agora, é documento POR LINHA (`line.codlinha` do ctx,
+  `needsLine:true`). A C2 errou o CONTEÚDO, não o DESTINO — a decisão de mover para C4 foi
+  mantida (autocontido, sem família melhor, última fase C) e virou o one-liner
+  `renderSecoesPorLigacao`.
+- **Decisão sobre o último loader órfão:** `LOADERS.frotaPorEmpresa` NÃO se move — por conteúdo
+  (frota por empresa/hierarquia, nada de município/localidade) e por categoria (o próprio
+  `SECTIONS` o lista sob o tópico "Empresa", já C3). Sem bloqueio técnico, só sem família — fica
+  órfão no `app.js`, restrição registrada para limpeza futura independente.
+- **Limpeza de imports mortos no `app.js`:** `groupBy`/`countBy`/`fmtMoney`/`rjOrder`/
+  `classifyMunLines`/`terminaisDoMunicipio` (agrupamento.mjs), `localidadesQueCasam`/`orIlike`/
+  `municipiosExatos` (busca.mjs — a família que os usava, `termosLocalidade`, era I/O e nunca
+  morou no módulo puro), `fmtLineName` (core.mjs), `emptyLinha` (ui/doc.mjs), `paginate`
+  (ui/paginacao.mjs), `bindLineRows`/`paginateLines` (ui/listas.mjs) e `nextGen`/`filtrarSituacao`
+  (view-state.mjs) — todos sem call site depois da família sair. Também achados, fora do escopo
+  mas no mesmo bloco de import: `fmtTime`/`fmtDate` (core.mjs), mortos desde antes da C4.
+- **Prova por mutação: duas tentativas, as duas morderam.** `municipioRegiaoRun` esvaziado →
+  `check_views.mjs municipioRegiao` vermelho (`0 "tbody tr"`, esperado ≥1); `renderLocalidades`
+  esvaziado → `check_views.mjs localidades` vermelho (timeout — o formulário nem monta).
+- Sem testes novos em `tests/ui-data-module.test.mjs` no corpo dos documentos (mesma nota das
+  C1/C3 — a família mistura DOM/rede); o teste de `src/documentos/shell.mjs` ganhou o 4º slot
+  (`runView`).
+- Gates: `check.js`, `check_views` 18/18, `check_abas`, `check_selecao_linha`, `check_corrida_abas`
+  e `semgrep` (121 regras, 0 achados) verdes. `version.json` 10 → 11, carimbo `build 22/08-B`.
+
 ## 22/08/2026 — Fase C3: Quadro de Horários · Empresas saem do `app.js`
 
 **Fase C3 do plano vivo** (`docs/planos/2026-08-14-modularizacao-fatias-3-4.md`): a terceira

@@ -42,21 +42,20 @@ do plano de 6 ([`../historico/contexto-proxima-sessao-2026-08-14.md`](../histori
 responderam à crítica **irmã** — a de que o processo virou projeto paralelo. O monólito mal foi
 arranhado.
 
-Medido no `app.js` de **2.574 linhas** (`split('\n').length`, a mesma conta do `tests/check.js`
-§[2b]; remedido em 22/08/2026, sobre a branch da Fase C3). Cada faixa vai da **marca da seção**
-até a linha anterior à marca seguinte — a convenção que o extrator do `tests/check.js` §[2b] usa,
-e que as faixas anteriores desta tabela erravam por duas linhas:
+Medido no `app.js` de **2.005 linhas** (`split('\n').length`, a mesma conta do `tests/check.js`
+§[2b]; remedido em 22/08/2026, sobre a branch da Fase C4). Cada faixa vai da **marca da seção**
+até a linha anterior à marca seguinte — a convenção que o extrator do `tests/check.js` §[2b] usa:
 
 | bloco | linhas | % |
 |---|---|---|
-| `MODAL / SISTEMA DE VIEWS` (`app.js:754`–`:2093`) | 1.341 | 52,1% |
-| `COMPONENTES AUXILIARES` (`:2095`–`:2251`) | 158 | 6,1% |
-| `SUPABASE CONFIG` (`:138`–`:304`) | 168 | 6,5% |
+| `MODAL / SISTEMA DE VIEWS` (`app.js:777`–`:1609`) | 833 | 41,5% |
+| `COMPONENTES AUXILIARES` (`:1610`–`:1682`) | 73 | 3,6% |
+| `SUPABASE CONFIG` (`:161`–`:328`) | 168 | 8,4% |
 
 Antes da C1, sobre um `app.js` de 3.053: `MODAL` = 1.844 (60,4%), `COMPONENTES AUXILIARES` = 164
 (5,4%), `SUPABASE CONFIG` = 168 (5,5%). Depois da C1 e antes da C2, sobre um `app.js` de 2.974:
 `MODAL` = 1.746 (58,7%). Depois da C2 e antes da C3, sobre um `app.js` de 2.763: `MODAL` = 1.527
-(55,2%).
+(55,2%). Depois da C3 e antes da C4, sobre um `app.js` de 2.574: `MODAL` = 1.341 (52,1%).
 
 O `MODAL` subiu de 58,3% para 60,3% na Fase B2 tendo PERDIDO 98 linhas — a B2 tirou 263 do arquivo
 inteiro, e o denominador encolheu mais que o numerador. A Fase A fez o contrário: **acrescentou**
@@ -76,9 +75,14 @@ arquivo, 190 — desta vez o arquivo perdeu MAIS que o bloco, porque a sessão t
 imports de `src/data/campos.mjs` que já estavam mortos (dois deles, `ITINERARIO_FIELDS` e
 `FROTA_FIELDS`, desde a C1/C2 — escaparam por engano) e três de outros módulos
 (`getEvLookups`, `paginateEvents`, o trio `searchEmpresas`/`empresaChooserHTML`/`bindEmpresaRows`).
+A **Fase C4** repetiu de novo, e com a maior queda das quatro (52,1% → 41,5%): o bloco perdeu 508
+linhas (1.341 → 833) e o arquivo, 569 (`wc -l`: 2.573 → 2.004) — de novo o arquivo perdeu MAIS
+que o bloco, porque a família triplicou a limpeza de imports mortos das fases anteriores
+(dezoito bindings sem call site, contra seis na C3 — ver a seção da fase).
 
-Pouco mais da metade do arquivo (era "dois terços" quando o `MODAL` estava em 60,4%; C1 o levou a
-58,7%; C2, a 55,2%; C3, a 52,1%), e é onde só C4/D/E ainda tocam. O estudo de 10/08
+Pouco mais de dois quintos do arquivo (era "dois terços" quando o `MODAL` estava em 60,4%; C1 o
+levou a 58,7%; C2, a 55,2%; C3, a 52,1%; C4, a 41,5%), e é onde só D/E ainda tocam — a Fase C
+(quatro famílias, C1–C4) está **completa**. O estudo de 10/08
 ([`../historico/estudo-modularizacao-frontend-2026-08-10.md`](../historico/estudo-modularizacao-frontend-2026-08-10.md))
 chama isso de fatias 3 e 4, e as **condiciona** no item 3 de "Próximas fatias recomendadas"
 (`docs/historico/estudo-modularizacao-frontend-2026-08-10.md:29`): separar documentos "somente após
@@ -90,7 +94,7 @@ O diagnóstico que justificava a ordem abaixo, e que a **Fase A resolveu**: um d
 dava 23, uma delas dentro do comentário de contrato). Enquanto fosse verdade, mover o arquivo
 trocaria um monólito por módulos rasos acoplados por variável global — piorar com aparência de
 melhorar. Hoje `grep -c 'const view = currentView' app.js` = **0**: cada documento recebe o
-contexto por parâmetro, e o `lineSearchRun` (`app.js:1273`) é o exemplo que mostra por quê — a
+contexto por parâmetro, e o `lineSearchRun` (`app.js:1312`) é o exemplo que mostra por quê — a
 linha certa só existe depois do await dele.
 
 **O padrão de injeção já existe e está em produção.** O seam do `pdfHTML` fez cinco helpers
@@ -143,7 +147,7 @@ pelas famílias da C, e é ali que a redundância acaba — daí a precondição
 | 6 | **C1** | Frota · Histórico da linha · Itinerários | ✅ feita — ver a seção da fase |
 | 7 | **C2** | Estrutura · Tarifas · Portaria | ✅ feita — ver a seção da fase |
 | 8 | **C3** | Quadro de Horários · Empresas | ✅ feita — ver a seção da fase |
-| 9 | **C4** | documentos por família | a fazer |
+| 9 | **C4** | Municípios · Localidades | ✅ feita — ver a seção da fase |
 | 10 | **D** | `LOADERS` como composição explícita | a fazer |
 | 11 | **E** | infra do modal (opcional) | a fazer |
 
@@ -153,7 +157,7 @@ em um ponto: *bastar* não é *preceder*. Os helpers que a B2 moveu não leem `c
 `activeLine`; o que faltava a eles era um endereço importável, não um contexto explícito. As duas
 dependências reais foram resolvidas sem invadir as outras fases:
 `src/data/lookups.mjs` precisa de `sbFetch` e o recebe **injetado**
-(`configurarLookups({ sbFetch })`, `app.js:102`) em vez de importar o `src/data/rest.mjs` que a
+(`configurarLookups({ sbFetch })`, `app.js:135`) em vez de importar o `src/data/rest.mjs` que a
 Fase B ainda vai criar — quando ela criar, troca-se a injeção por um `import` sem tocar em nenhum
 call site; e `bannerTrunc`, que a Fase B listava, saiu aqui porque é markup, não infraestrutura
 (ver a nota na Fase B). O custo de ter invertido: nenhum. O ganho: A e C passam a ter os helpers
@@ -275,14 +279,16 @@ helpers já importáveis. Um loader exportado por módulo pode entrar no registr
 
 ## Fase B — módulo profundo de acesso REST
 
-`src/data/rest.mjs`, com o que cada símbolo é hoje: `esperar` (`app.js:176`), `SB_TIMEOUT_MS`
-(`:178`), `SB_RETRIES` (`:179`), `CANCELADO` (`:183`), `ehCancelamento` (`:184`), `fetchComTimeout`
-(`:191`), `sbFetch` (`:209`), `SB_MAX_ROWS` (`:253`), `marcarTrunc` (`:261`) e
-`selecionarSupabase` (`:155`).
+`src/data/rest.mjs`, com o que cada símbolo é hoje (reconferido em 22/08/2026, depois da Fase C4
+— citações anteriores a esta datavam da B2 e já haviam derivado, arrastadas pelos `import`/
+bootstrap que cada fase C acrescentou acima da seção `SUPABASE CONFIG`): `esperar`
+(`app.js:218`), `SB_TIMEOUT_MS` (`:220`), `SB_RETRIES` (`:221`), `CANCELADO` (`:225`),
+`ehCancelamento` (`:226`), `fetchComTimeout` (`:233`), `sbFetch` (`:251`), `SB_MAX_ROWS` (`:295`),
+`marcarTrunc` (`:303`) e `selecionarSupabase` (`:197`).
 Só entra se a interface **esconder** timeout, retry e truncagem — condição literal do estudo.
 Config (URL, chave, `fetch`) injetada, não lida de global.
 **O consumidor já está pronto:** `src/data/lookups.mjs` recebe `sbFetch` por injeção
-(`configurarLookups`, `app.js:102`), então esta fase troca a injeção por um `import` lá dentro sem
+(`configurarLookups`, `app.js:135`), então esta fase troca a injeção por um `import` lá dentro sem
 tocar em nenhum call site.
 
 **Dois símbolos saíram desta lista na Fase B2, e não por conveniência.** `bannerTrunc` era listado
@@ -392,13 +398,17 @@ reconferidos** — meça antes de dimensionar a sessão:
 | C1 | Frota · Histórico da linha · Itinerários | ✅ feita — ver abaixo |
 | C2 | Estrutura · Tarifas · Portaria | ✅ feita — ver abaixo |
 | C3 | Quadro de Horários · Empresas | ✅ feita — ver abaixo |
-| C4 | Municípios · Localidades | a fazer |
+| C4 | Municípios · Localidades | ✅ feita — ver abaixo |
 
-C4 por último, e cada metade traz uma complicação própria. Municípios é a única família com filtro
-de escopo — `#regScope` (`app.js:1835`) e `#munScope` (`app.js:1884`), os dois únicos do arquivo —
-e com dois ramos de PDF na mesma tela (`app.js:1911` e `:1915`, ambos `pdf:false`). Localidades tem
-o bloco secundário cujo `pdfHTML` cobre os DOIS blocos: por isso o `paginateLines` dele vai com
-`pdf:false` (`app.js:2580`) e o `commitViewResult` único vem depois, em `:2582`.
+C4 por último, e cada metade trouxe a complicação própria que este parágrafo previa — as duas
+citações abaixo foram reconferidas DEPOIS da fase, já em
+`src/documentos/municipios-localidades.mjs` (regra do topo deste plano). Municípios é a única
+família com filtro de escopo — `#regScope` (`:211`, dentro de `municipioRegiaoRun`) e `#munScope`
+(`:128`, dentro de `openLinhasPorIbge`), os dois únicos do módulo — e com dois ramos de PDF na
+mesma tela (`:155` e `:159`, ambos `pdf:false`, dentro de `openLinhasPorIbge`). Localidades tem o
+bloco secundário cujo `pdfHTML` cobre os DOIS blocos: por isso o `paginateLines` dele vai com
+`pdf:false` (`:725`, dentro de `pintarLocalidadeSecoes`) e o `commitViewResult` único vem depois,
+em `:727`.
 
 **A B2 removeu a restrição que ameaçava encolher C3 e C4.** `lineResults`, `paginateLines`,
 `linhasTable` e `bindLineRows` são importáveis (`src/ui/listas.mjs`), e o clique numa linha chega
@@ -426,6 +436,12 @@ afirmou "3 assim, 14 assado" e estava errada. Abra o loader da família antes de
 O registro `LOADERS` guarda **loaders**, nunca renders: o valor é invocado como função de carga em
 `app.js:1229` e `:2818`, e desde a Fase A as duas invocações passam `ctx`. Um loader exportado por
 módulo pode entrar no registro sem adaptador — é o que torna a Fase D possível.
+
+**As Fases C1–C4 fecharam — esta introdução (e as citações `app.js:NNN` acima) descrevem o
+estado ANTES de C1 rodar, e ficam como registro de por que a ordem "mais isolado primeiro" fazia
+sentido, não como ponteiro para o código de hoje.** As quatro famílias já saíram — ver as quatro
+seções `✅ … (FEITA)` abaixo, cada uma com suas próprias citações reconferidas depois da sua
+própria sessão.
 
 ---
 
@@ -715,6 +731,121 @@ seis imports mortos de `src/data/campos.mjs` (dois já mortos desde C1/C2). Nenh
 
 ---
 
+### ✅ C4 — Municípios · Localidades (FEITA)
+
+A quarta e última família da Fase C a sair, num módulo novo —
+`src/documentos/municipios-localidades.mjs` (731 linhas): `openLinhasPorIbge`,
+`linhasNoMunicipio`, `mostrarLinhasResultado`, `mostrarLinhasEntreMunicipios`,
+`ligacoesPorLogradouroRun`/`municipioRegiaoRun`/`ligacoesPorTerminalRun`, `renderSecoesPorLigacao`
+(Município); `getLocalidades`/`termosLocalidade`/`codsPorLocalidade`/`mostrarLinhasPorLocalidade`/
+`LOC_FILTERS`/`renderLocalidades` (Localidades); `distinctCods`/`fetchLinesByCods`/
+`secoesLocalidadeTable`/`renderLocalidadeSecoes`/`locLinhaSecHTML`/`locComSecaoHTML`/
+`LOC_SEM_SECAO_OBS`/`pintarLocalidadeSecoes` (compartilhado pelas duas metades).
+
+**Diferente de C1/C2/C3, as DUAS metades saem no MESMO arquivo, e a razão é medida, não
+conveniência.** `renderLocalidadeSecoes`/`pintarLocalidadeSecoes` (e os helpers ao redor) são
+chamados por `mostrarLinhasResultado` (Município) E `mostrarLinhasPorLocalidade` (Localidades) —
+o critério de duas famílias que manda um bloco para `src/ui/blocos.mjs` (fixado na C1) existe
+para evitar CICLO ENTRE MÓDULOS quando as famílias saem em PRs diferentes. Aqui não há PRs
+diferentes: as duas saem juntas, então a aresta nunca vira aresta entre módulos, e criar um
+`blocos.mjs`-like só para esta sessão seria indireção sem ganho. `distinctCods`/`fetchLinesByCods`
+(antes em "COMPONENTES AUXILIARES" do `app.js`) tiveram o mesmo destino pela mesma razão — medido
+antes de mover: toda chamada aos dois, sem exceção, vinha de dentro desta família.
+
+**O quarto slot de `src/documentos/shell.mjs` — `runView` — e por que ele não podia ficar de fora
+como a C3 deixou `openEmpresaLigacoes`.** `openLinhasPorIbge` ("Linhas no Município") abre uma
+view nova via `runView({...})` — mesma classe de dependência que prendeu `openEmpresaLigacoes`/
+`LOADERS.empresasRegulares` no `app.js` na C3. A diferença medida: `openEmpresaLigacoes` era uma
+função-FOLHA, chamada por um loader que já ia ficar; `openLinhasPorIbge` é chamada por DUAS
+funções que esta sessão MOVEU — `municipioRegiaoRun` (linha digitada com 1 resultado, tabela de
+drill-down, chips de região) e `mostrarLinhasEntreMunicipios`, do lado Localidades (quando só o
+campo A é preenchido e casa um município só). Deixar `runView` de fora não pouparia uma função
+pequena: manteria as DUAS metades presas ao `app.js`, porque nenhuma pode chamar de volta uma
+função que só existe lá (`grep -c '^export ' app.js` = 0). Resolvido com um quarto slot em
+`src/documentos/shell.mjs` — dentro do orçamento do critério de parada (4 de ~6).
+
+**O que ficou no `app.js`, por medição — três loaders com corpo, mesmo padrão de
+`LOADERS.tarifas`/`quadroHorarios`:** `LOADERS.ligacoesPorLogradouro` (monta `munOpts` de
+`getIbge()` antes do `searchPanel`), `LOADERS.municipioRegiao` (monta `regioes`) e
+`LOADERS.ligacoesPorTerminal` (monta `munOpts`/`suggest` de três lookups) — todos preparam dados
+para `selectOpts`/`suggest` ANTES de chamar `searchPanel`, que é shell reservado à Fase E. Os
+`onRun` de cada um saíram como `xxxRun(ctx, term, …)`, mesmo padrão que a C2 usou para
+`tarifaEmpresaRun`. `LOADERS.secoesPorLigacao` e `LOADERS.localidades` viraram one-liners
+(`renderSecoesPorLigacao`, `renderLocalidades`) — nenhum dos dois passa por `searchPanel`.
+
+**A decisão sobre `secoesPorLigacao`, e a correção ao registro da C2.** A C2 (seção "O achado dos
+4 loaders órfãos", acima) decidiu que este loader ficaria com a C4, descrevendo-o como uma
+listagem "por município/logradouro". **Medido agora, essa descrição estava errada:** o loader
+(`LOADERS.secoesPorLigacao = async ({ view, gen, pane, line }) => { const rows = await
+sbFetch('tarifa_atual_teste', codlinha=eq.${line.codlinha}…`) é um documento POR LINHA — usa
+`line.codlinha` do ctx, e o `SECTIONS` o declara com `needsLine:true`. Não lista nada por
+município ou logradouro. A C2 errou o CONTEÚDO, não o DESTINO: o loader é autocontido (sem
+`runView`/`searchPanel`), não tem família melhor (Tarifas, o parente mais próximo por conteúdo,
+já fechou sem ele na C2), e esta é a última fase C — não há mais chance de reavaliar. A DECISÃO
+(mover para C4) foi mantida; a DESCRIÇÃO, corrigida — o cabeçalho do módulo novo registra a
+correção com a citação completa.
+
+**A decisão sobre o último loader órfão — `LOADERS.frotaPorEmpresa` NÃO se move.** Dos "4 loaders
+órfãos" que a C2 catalogou, três (`ligacoesPorLogradouro`, `ligacoesPorTerminal`,
+`secoesPorLigacao`) já estavam fisicamente dentro do escopo do que esta sessão mediu como
+Município. `frotaPorEmpresa` é o único que sobra sem decisão, e a medição desta sessão fecha o
+caso: por CONTEÚDO (frota consolidada por empresa e hierarquia — nada de município ou
+localidade) e por CATEGORIA (o próprio `SECTIONS` do `app.js` lista "Frota por Empresa" sob o
+tópico "Empresa", junto de `empresasRegulares`/`historicoEmpresa`/`ligacoesPorEmpresa`/
+`secoesPorEmpresa` — todos C3, já fechada), ele não é desta família. Incluí-lo aqui só porque
+"C4 é a última chance" violaria a regra do próprio plano ("Cada fase C move a SUA família... não
+junte numa fase final: migrar tudo de uma vez é o que o estudo proíbe"). Diferente dos órfãos que
+a C3 deixou por bloqueio técnico (`runView`, sem seam), `frotaPorEmpresa` não usa
+`runView`/`searchPanel`/`lineSearchRun` — só `sbFetch`, lookups e helpers já importáveis; mover
+não é tecnicamente difícil, é só que ele não pertence a NENHUMA família declarada do plano.
+Fica no `app.js`, órfão, registrado como candidato a uma limpeza pequena e independente (não é
+trabalho de Fase D — o loader não compõe modos, é um documento único).
+
+**Achado, fora da família mas no mesmo bloco de `import`, declarado:** ao editar os imports do
+`app.js` para remover o que a família movida deixou órfão, `fmtTime`/`fmtDate`
+(`src/domain/core.mjs`) já estavam mortos desde antes da C4 — nenhum call site no `app.js`, e
+outros módulos (`quadro-empresas.mjs`) os importam por conta própria. Removidos aqui pelo mesmo
+motivo que a C1 e a C3 já tinham encontrado bindings mortos ao editar este bloco (`matchEvent`/
+`pageBounds`/`preencherLookup` na C1; seis em `src/data/campos.mjs` e outros módulos na C3) — o
+risco de import morto escapar não é hipotético, já aconteceu em três das quatro fases C.
+
+**Custo em linhas, medido:** `app.js` 2.573 → **2.004** (`wc -l`; −569, a maior queda de todas as
+fases C); `MODAL` 1.341 → **833** (−508, 52,1% → 41,5%); `src/` sozinho foi de **1.718** para
+**2.473** (+755, quase todo em `municipios-localidades.mjs`, novo — mais o crescimento de
+`shell.mjs`, +24, pelo quarto slot). Total do projeto (`app.js` + `src/**/*.mjs`) foi de
+**4.291** (pós-C3) para **4.477** (+186 líquido). Fator "sai do `app.js` → aparece em módulo" =
+755/569 ≈ **1,3x** — mais baixo que o ~1,4–1,8x das fases anteriores, porque parte do que saiu
+não tinha correspondente em módulo: os **dezoito** bindings mortos removidos (contra seis na C3)
+eram puro binding, sem linha equivalente do lado de cá.
+
+### O que ficou provado, e como
+
+- `node tests/check.js` verde; `check_views.mjs` 18/18 (as duas views de Município, as duas
+  checagens de Localidades, `secoesPorLigacao` e `frotaPorEmpresa` inclusos); `check_abas.mjs`,
+  `check_selecao_linha.mjs` e `check_corrida_abas.mjs` verdes; `./scripts/semgrep.sh` 0 achados em
+  121 regras.
+- **Prova por mutação — duas tentativas, as duas morderam.** (1) `municipioRegiaoRun` esvaziado
+  (retorno antes de montar o corpo) → `check_views.mjs municipioRegiao` vermelho (`0 "tbody tr"`,
+  esperado ≥1). (2) `renderLocalidades` esvaziado (retorno antes de montar o formulário) →
+  `check_views.mjs localidades` vermelho — modo diferente do (1): a fixture tenta preencher e
+  clicar num formulário que não existe mais, e o gate acusa timeout em vez de contagem de
+  elementos. Os dois são vermelhos genuínos, só com sintomas diferentes.
+- Sem testes novos em `tests/ui-data-module.test.mjs` para o corpo dos documentos — mesma nota
+  das C1/C3 (a família mistura DOM/rede, cobertura fica com os gates de navegador). O teste do
+  `src/documentos/shell.mjs` ganhou o 4º slot (`runView`) nos três casos já existentes (lança sem
+  configurar; `configurarDocumentos` liga; conta de slots ≤6).
+
+### Revisão própria — achados registrados (Codex esgotado desde 15/08)
+
+Quatro achados, todos já descritos acima: a correção à descrição de `secoesPorLigacao` na C2
+(destino mantido, conteúdo corrigido), a decisão de não mover `LOADERS.frotaPorEmpresa`
+(restrição por conteúdo/categoria, não bloqueio técnico — candidata a limpeza independente), o
+quarto slot de `runView` em `src/documentos/shell.mjs` (decidido, não deixado como restrição,
+porque a alternativa prendia a família inteira) e os dois bindings mortos (`fmtTime`/`fmtDate`)
+encontrados fora do escopo original. Nenhum outro achado.
+
+---
+
 ## Fase D — `LOADERS` como composição explícita
 
 Entrega o item 4 do estudo (`docs/historico/estudo-modularizacao-frontend-2026-08-10.md:30`):
@@ -739,7 +870,8 @@ são shell, e saem na E.
 ## Fase E — infra do modal (opcional)
 
 Chrome do modal e faixa de abas para `src/ui/`, mais o shell de busca de linha (`lineDocView`,
-`app.js:1247`; `lineDocRun`, `:1290`; `lineSearchRun`, `:1273`; `searchPanel`, `:2604`). A
+`app.js:1286`; `lineDocRun`, `:1329`; `lineSearchRun`, `:1312`; `searchPanel`, `:1634` —
+reconferidas em 22/08/2026, depois da Fase C4). A
 família de listas **não** está mais nesta lista: saiu na B2.
 
 É a área que o `check_abas.mjs` exercita diretamente — ele clica `#modalTabAdd` em
@@ -795,10 +927,11 @@ listeners, rotas, composição — e wiring não é o defeito que a crítica apo
 
 1. **Produção sai apenas da `main`.** Push em branch gera *preview deploy*, em domínio próprio. Os
    únicos caminhos para produção são o merge (auto-deploy) e a promoção manual pelo painel.
-2. **Preview não alcança o banco de produção.** `HOSTS_PROD` (`app.js:149`) é allowlist, e o
-   `selecionarSupabase` (`app.js:155`) decide por pertencimento: `hostsProd.includes(host)` em
-   `app.js:158` e o ternário de `:159`–`:161` mandam todo host fora da lista para o banco de teste.
-   Branch nova nasce apontando para teste, por desenho fail-closed.
+2. **Preview não alcança o banco de produção.** `HOSTS_PROD` (`app.js:191`) é allowlist, e o
+   `selecionarSupabase` (`app.js:197`) decide por pertencimento: `hostsProd.includes(host)` em
+   `app.js:200` e o ternário de `:201`–`:203` mandam todo host fora da lista para o banco de teste
+   (reconferido em 22/08/2026, depois da Fase C4). Branch nova nasce apontando para teste, por
+   desenho fail-closed.
 3. **Zero SQL neste plano.** Nenhuma migração, query, chave ou policy.
 
 A ressalva que mantém isso honesto: não mergear protege o **site**, não o **repositório**. O único

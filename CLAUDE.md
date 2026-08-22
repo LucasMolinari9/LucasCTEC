@@ -52,8 +52,21 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > `runView`, shell puro, também sem seam) — restrição registrada, não decisão, para a Fase E.
 > `app.js` 2.763 → 2.573; `MODAL` 1.527 → 1.341 linhas, 52,1%. A C3 também limpou seis imports
 > mortos de `src/data/campos.mjs` e outros módulos — dois já estavam mortos desde a C1/C2 e
-> escaparam por engano. Faltam **C4**, a **Fase B** (`src/data/rest.mjs`, que encerra o mecanismo
-> `@canon`) e as Fases D/E.
+> escaparam por engano. E entrou a **Fase C4** (Municípios · Localidades), a quarta e última
+> família a sair inteira: `src/documentos/municipios-localidades.mjs` (731 linhas) — as DUAS
+> metades no MESMO módulo, porque compartilham markup de verdade
+> (`renderLocalidadeSecoes`/`pintarLocalidadeSecoes`) e saem no MESMO PR, então a aresta nunca vira
+> aresta ENTRE módulos. A C4 **decidiu abrir o quarto slot de `src/documentos/shell.mjs`
+> (`runView`)** — diferente do caso análogo da C3 (`openEmpresaLigacoes`, uma função-folha que
+> ficou para trás sem travar mais nada), aqui `runView` é o coração do drill-down
+> "Município → Linhas no Município" e travava as DUAS metades inteiras; abrir o slot resolveu a
+> família toda dentro do orçamento (4 de ~6). A C4 também **corrigiu a descrição da C2** sobre
+> `secoesPorLigacao` (é documento POR LINHA, não por município — a C2 errou o conteúdo, não o
+> destino) e **decidiu não mover `LOADERS.frotaPorEmpresa`**, o único dos "4 loaders órfãos" sem
+> família por CONTEÚDO E CATEGORIA (o próprio `SECTIONS` o lista sob "Empresa", já C3) — fica
+> órfão no `app.js`, sem bloqueio técnico, candidato a limpeza futura independente. `app.js`
+> 2.573 → **2.004**; `MODAL` 1.341 → **833** linhas, 41,5%. Faltam a **Fase B**
+> (`src/data/rest.mjs`, que encerra o mecanismo `@canon`) e as Fases D/E.
 >
 > Continua valendo:
 > **[`docs/historico/contexto-proxima-sessao-2026-08-09.md`](docs/historico/contexto-proxima-sessao-2026-08-09.md)**
@@ -72,7 +85,7 @@ empresas, relatórios). Os dados são **alimentados pelo dono direto no Supabase
 exibe e **atualiza ao vivo** (Realtime).
 
 ## Arquitetura (importante)
-- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (quase todo o JS, ~2,6k
+- **Frontend = `index.html` (HTML) + `styles.css` (todo o CSS) + `app.js` (quase todo o JS, ~2,0k
   linhas, num IIFE)** — zero-build: sem framework, sem `package.json`, `<script src>` clássico no
   fim do `<body>`. Todo JS novo vai no `app.js` (o `tests/check.js` **falha** se aparecer
   `<script>` inline no `index.html` — a CSP publica `script-src 'self'` e bloquearia) e todo CSS
@@ -122,13 +135,15 @@ exibe e **atualiza ao vivo** (Realtime).
   (`grep 'Bootstrap dos módulos'`): `configurarDoc({logoSVG})` passa o SVG do `#brandLogo`,
   `configurarLookups({sbFetch})` passa a função de rede, `configurarListas({aoSelecionarLinha})`
   passa a ação de shell de clicar numa linha (selecionar + fechar o modal + toast) e
-  `configurarDocumentos({sbFetch, selecionarLinha, novoCtx})` passa a rede, a ação de tornar uma
-  linha ativa e a fábrica de ctx novo (o 3º slot, que a C2 acrescentou para o painel de
-  Portarias) para TODOS os documentos de `src/documentos/`. Os quatro **falham fechado**: sem
+  `configurarDocumentos({sbFetch, selecionarLinha, novoCtx, runView})` passa a rede, a ação de
+  tornar uma linha ativa, a fábrica de ctx novo (o 3º slot, que a C2 acrescentou para o painel de
+  Portarias) e o dispatcher de view nova (o 4º slot, que a C4 acrescentou para o drill-down de
+  Município — ver a nota da C4 no topo deste arquivo) para TODOS os documentos de
+  `src/documentos/`. Os quatro **falham fechado**: sem
   configuração, `docHead`/`getEmpresas`/`bindLineRows`/`sbFetch` lançam em vez de sair mudos —
   regressão silenciosa aqui é invisível para todo gate. Módulo que precise de mais
   de ~6 dependências injetadas é sinal de parar (ver o critério no plano vivo); o
-  `src/documentos/shell.mjs` é onde essa conta se mede para a Fase C inteira, e hoje ela é **3**.
+  `src/documentos/shell.mjs` é onde essa conta se mede para a Fase C inteira, e hoje ela é **4**.
   **Regra: função pura extraída deixa de ter cópia em `tests/*.harness.js`** — o harness passa a
   fazer `require` do módulo real, e o bloco `@canon` correspondente é APAGADO, não atualizado. A
   cobrança do `check.js` §[2] não tem lista a manter à mão: ela lê o `require` **de cada harness**
@@ -160,11 +175,13 @@ exibe e **atualiza ao vivo** (Realtime).
   reabertos um a um (hoje `domain/core.mjs`, `domain/agrupamento.mjs`, `domain/busca.mjs`,
   `domain/view-state.mjs`, `ui/doc.mjs`, `ui/paginacao.mjs`, `ui/listas.mjs`, `ui/blocos.mjs`,
   `ui/empresas.mjs`, `data/lookups.mjs`, `data/campos.mjs`, `documentos/shell.mjs`,
-  `documentos/frota-historico-itinerarios.mjs`, `documentos/estrutura-tarifas-portaria.mjs` e
-  `documentos/quadro-empresas.mjs` — cada subdiretório novo de `src/` também precisa das suas
+  `documentos/frota-historico-itinerarios.mjs`, `documentos/estrutura-tarifas-portaria.mjs`,
+  `documentos/quadro-empresas.mjs` e `documentos/municipios-localidades.mjs` — cada subdiretório
+  novo de `src/` também precisa das suas
   três linhas, e a Fase C1 abriu `src/documentos/` pagando exatamente isso; arquivo novo num
-  subdiretório já aberto custa só a linha dele, como C2 e C3 pagaram para `ui/empresas.mjs`,
-  `documentos/estrutura-tarifas-portaria.mjs` e `documentos/quadro-empresas.mjs`).
+  subdiretório já aberto custa só a linha dele, como C2, C3 e C4 pagaram para `ui/empresas.mjs`,
+  `documentos/estrutura-tarifas-portaria.mjs`, `documentos/quadro-empresas.mjs` e
+  `documentos/municipios-localidades.mjs`).
   Arquivo público novo (ícone, fonte) precisa ser reaberto lá, senão vira 404. **`src/` é reaberto
   arquivo a arquivo**, não com um `!/src` de uma linha: é diretório cujo nome convida a guardar o
   que não se serve, e reabri-lo inteiro publicaria em silêncio o que alguém largar ali. Reabrir só
@@ -288,7 +305,7 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 |---|---|---|
 | *(fora do `app.js`)* `src/domain/core.mjs` | `fmtCode/fmtTime/fmtDate`, `esc/enc/ilikeTerm/orDash`, `norm`, `debounce`, `isLinhaAtiva`/`isVigente` | Formatação, escaping, normalização de texto, o `debounce` compartilhado e as regras de situação da linha. |
 | *(fora do `app.js`)* `src/domain/agrupamento.mjs` | `groupBy`, `countBy`, `fmtMoney`, `byCodlinha`, `rjOrder`, `scoreEmpresa`/`dedupEmpresasPorRJ`, `classifyMunLines`/`terminaisDoMunicipio`, `resumoFrota`/`filtrarFrotaEmpresas` | Agregação, ordenação e filtros de conjunto — importados pelo `app.js` e pelos testes, sem cópia no meio. |
-| *(fora do `app.js`)* `src/domain/busca.mjs` | `yearOf`/`matchEvent`, `localidadesQueCasam`, `orIlike`, `municipiosExatos` | Filtro do histórico de eventos (no cliente) e preparação do termo que vai ao servidor (o `or=()` do PostgREST). O I/O ficou de fora: `termosLocalidade` continua no `app.js` porque faz `await getLocalidades()`. |
+| *(fora do `app.js`)* `src/domain/busca.mjs` | `yearOf`/`matchEvent`, `localidadesQueCasam`, `orIlike`, `municipiosExatos` | Filtro do histórico de eventos (no cliente) e preparação do termo que vai ao servidor (o `or=()` do PostgREST). O I/O ficou de fora: `termosLocalidade` (`await getLocalidades()`) não é lido daqui pelo `app.js` — mora em `src/documentos/municipios-localidades.mjs` (Fase C4), que importa este módulo por conta própria. |
 | *(fora do `app.js`)* `src/domain/view-state.mjs` | `beginGen`/`isCurrentGen`/`commitViewResult`/`pushDetail`/`popDetail`, `makeCtx`/`withLine`/`withHost`/`nextGen`, `MAX_TABS`/`makeTab`/`openTabState`/`closeTabState`, `tabMatchesEvent`/`dispatchRealtime`, `pageBounds`, `filtrarSituacao` | Regras puras sobre o ESTADO DO QUE ESTÁ NA TELA: qual tentativa de carga ainda vale, quais abas existem, qual delas se importa com um evento, e que fatia/subconjunto uma lista mostra. Quem APLICA a decisão (DOM, fetch, toast) continua no `app.js`. |
 | *(fora do `app.js`)* `src/ui/doc.mjs` | `configurarDoc`, `docHead`, `metaRows`, `colClass`, `tableHTML`, `loading`/`emptyBox`/`emptyLinha`/`errorBox`, `bannerTrunc` | Markup de documento e estados de tela — string de HTML, sem DOM nem estado. O SVG do logo chega por `configurarDoc` no bootstrap. |
 | *(fora do `app.js`)* `src/ui/paginacao.mjs` | `paginate`, `paginateTable`, `paginateEvents` | Paginação **só de tela** (25/pág), agnóstica de conteúdo; `paginateEvents` é o de UM evento por página, com filtros. Recebem `view`/`gen` de quem chama. |
@@ -297,10 +314,11 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | *(fora do `app.js`)* `src/ui/blocos.mjs` | `evBandHTML`/`evBlocksHTML`, `itinerarioTableHTML` + `SENTIDO_ORDER`/`normSentido`, `frotaBlockHTML`, `quadroHorariosBodyHTML`, `secoesTarifasHTML`/`tarifaRowHTML`/`TARIFA_COLS` | Markup de documento usado por MAIS DE UMA família da Fase C. Critério de entrada: **duas** famílias. Impede que um módulo de família importe o da irmã (ciclo). Os dois últimos entraram na C2 e fecharam a última aresta do grafo (C2↔C3). |
 | *(fora do `app.js`)* `src/ui/empresas.mjs` | `searchEmpresas`, `empresaChooserHTML`, `bindEmpresaRows` | **Fase C2** — o chooser de empresa (busca + tabela + bind de clique), usado por MAIS DE UMA família (Tarifas, Quadro de Horários, Histórico da Empresa). Mesmo critério do `blocos.mjs`; endereço diferente porque `bindEmpresaRows` toca DOM. |
 | *(fora do `app.js`)* `src/data/campos.mjs` | `LINE_FIELDS`, `ITINERARIO_FIELDS`, `QH_INTERVALO_FIELDS`, `QH_PREDET_FIELDS`, `TARIFA_LINHA_FIELDS`, `FROTA_FIELDS`, `EVENTO_FIELDS` | As listas de coluna do `select=`. Definição ÚNICA: coluna que diverge entre um documento e a Estrutura chega `undefined` e a tela sai vazia sem erro. |
-| *(fora do `app.js`)* `src/documentos/shell.mjs` | `configurarDocumentos`, `sbFetch`, `selecionarLinha`, `novoCtx` | O seam ÚNICO de injeção de `src/documentos/`: uma chamada no bootstrap serve todas as famílias da Fase C, e o número de slots (**3**, desde a C2) é onde o critério de parada do plano se mede. `sbFetch` é andaime — sai na Fase B; `novoCtx` entrou na C2 para o painel de Portarias, que monta o próprio ctx a cada busca. |
+| *(fora do `app.js`)* `src/documentos/shell.mjs` | `configurarDocumentos`, `sbFetch`, `selecionarLinha`, `novoCtx`, `runView` | O seam ÚNICO de injeção de `src/documentos/`: uma chamada no bootstrap serve todas as famílias da Fase C, e o número de slots (**4**, desde a C4) é onde o critério de parada do plano se mede. `sbFetch` é andaime — sai na Fase B; `novoCtx` entrou na C2 para o painel de Portarias, que monta o próprio ctx a cada busca; `runView` entrou na C4 para o drill-down de Município (abrir "Linhas no Município" como view nova). |
 | *(fora do `app.js`)* `src/documentos/frota-historico-itinerarios.mjs` | `renderLineHistory`, `renderItinerarios`, `renderFrota` | **Fase C1** — a primeira família de documentos a sair inteira. Cada render recebe o `ctx` e não tem como ler `currentView`/`activeLine`: eles nem estão no escopo. Os registros `LOADERS.*` ficaram no `app.js` (são shell; saem nas Fases D/E). |
 | *(fora do `app.js`)* `src/documentos/estrutura-tarifas-portaria.mjs` | `renderTarifas`/`tarifaEmpresaRun`/`renderTarifasEmpresa`, `renderEstrutura`, `renderPortarias`/`showPortaria`/`invalidarPortariaAnos` | **Fase C2** — a segunda família a sair inteira. Portaria é o único documento de lista+detalhe da Fase C (`pushDetail`/`popDetail`, não `commitViewResult`). `LOADERS.estrutura` (one-liner) e `LOADERS.tarifas` (tem corpo — composição de Fase D) ficaram no `app.js`; `LOADERS.portarias` virou o one-liner `renderPortarias`. |
 | *(fora do `app.js`)* `src/documentos/quadro-empresas.mjs` | `renderLinhaQuadro`/`quadroEmpresaRun`/`renderEmpresaQuadros`, `ligacoesPorEmpresaRun`/`secoesPorEmpresaRun`/`renderEmpresaHistory`/`historicoEmpresaRun` | **Fase C3** — a terceira família a sair inteira. `LOADERS.quadroHorarios` (corpo — composição de Fase D) e `quadroLinhaRun` (wrapper de `lineSearchRun`, shell puro sem seam) ficaram no `app.js`; os três `LOADERS.*` de Empresas viraram wrappers finos. `LOADERS.empresasRegulares`/`openEmpresaLigacoes` ficaram — dependem de `runView`, sem seam de injeção. |
+| *(fora do `app.js`)* `src/documentos/municipios-localidades.mjs` | `openLinhasPorIbge`, `mostrarLinhasResultado`/`mostrarLinhasEntreMunicipios`, `ligacoesPorLogradouroRun`/`municipioRegiaoRun`/`ligacoesPorTerminalRun`, `renderSecoesPorLigacao`, `getLocalidades`/`termosLocalidade`/`mostrarLinhasPorLocalidade`/`renderLocalidades`, `renderLocalidadeSecoes`/`pintarLocalidadeSecoes`, `distinctCods`/`fetchLinesByCods` | **Fase C4** — a quarta e última família a sair inteira. As DUAS metades (Município, Localidades) moram no MESMO módulo — compartilham markup de verdade. `LOADERS.ligacoesPorLogradouro`/`municipioRegiao`/`ligacoesPorTerminal` ficaram (têm corpo — mesmo padrão de `LOADERS.tarifas`); `LOADERS.secoesPorLigacao`/`localidades` viraram one-liners. `LOADERS.frotaPorEmpresa` FICOU — sem família (nem Município/Localidade, nem C3/Empresas por conteúdo E categoria). |
 | `SUPABASE CONFIG` | `sbFetch`, `fetchComTimeout`, `selecionarSupabase`, `marcarTrunc` | Config SB + fetch com timeout/retry. Os helpers de formatação e escape moraram para `src/domain/core.mjs`; o `bannerTrunc` que pinta a truncagem, para `src/ui/doc.mjs` (marcar é dado, pintar é markup). |
 | `ÍCONES` | objeto `I` | SVGs dos ícones. |
 | `SEÇÕES / CARDS` | array `SECTIONS` | Define os cards `[ícone, título, descrição, view, precisaLinha]`. |
@@ -308,8 +326,8 @@ em **`docs/estrutura-frontend.md`**. Visão geral:
 | `STATE + CACHES` | `activeLine`, `tabs`/`activeTab`/`setActiveLine`, `searchEmpresas` | Estado global desta tela. Os caches de lookup foram para `src/data/lookups.mjs` (linha acima); ficou a busca de empresa do modal, que só lê a lista que o módulo expõe. |
 | `BUSCA DE LINHAS (hero)` | `doSearch`, `closeDropdown` | Busca do topo e dropdown de resultados. |
 | `LINHA ATIVA — BANNER` | `selectLine`, `bannerEmpHTML` | Banner navy da linha selecionada. |
-| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody`, `baixarPdf`, `setCurrentView`/`activateTab` (wiring das abas, sobre o modelo puro do `view-state.mjs`), `renderBlankTab`/`renderTabChooser` (seletor de documentos da aba do "+") e os `render*` que **ainda** não saíram | **Maior bloco**: abre/preenche o modal e renderiza os documentos que a Fase C ainda não moveu. Desde a C1/C2/C3, oito marcas `DOC ·` (Histórico da linha, Itinerários, Quadro de Horários, Tarifas, Frota, Estrutura, Empresas, Portaria) guardam só shell — registro `LOADERS.*` ou wrapper fino (Tarifas e Quadro de Horários com corpo próprio — a composição do `searchPanel`, trabalho de Fase D) — o render mora em `src/documentos/`. |
-| `COMPONENTES AUXILIARES` | `searchPanel`, `distinctCods`/`fetchLinesByCods`, `empresaChooserHTML`/`bindEmpresaRows`, `renderLocalidadeSecoes`/`pintarLocalidadeSecoes` | Painel de busca reutilizável e os helpers de listagem que ainda dependem de estado desta tela. A tabela de linhas e a paginação moraram para `src/ui/listas.mjs` e `src/ui/paginacao.mjs`. |
+| `MODAL / SISTEMA DE VIEWS` | `runView` (dispatcher), `closeModal`, `setBody`, `baixarPdf`, `setCurrentView`/`activateTab` (wiring das abas, sobre o modelo puro do `view-state.mjs`), `renderBlankTab`/`renderTabChooser` (seletor de documentos da aba do "+") | **Maior bloco**: abre/preenche o modal. As **quatro** famílias da Fase C (C1–C4) saíram inteiras — sob as **dez** marcas `DOC ·` sobra só shell (registro `LOADERS.*`, wrapper fino ou composição de `searchPanel`, trabalho de Fase D). **Uma exceção real:** `LOADERS.frotaPorEmpresa` (órfão sem família, C4 mediu e decidiu não mover) ainda tem corpo de render completo, fisicamente sob a marca `DOC · Municípios`. |
+| `COMPONENTES AUXILIARES` | `searchPanel` | Painel de busca reutilizável (shell reservado à Fase E). `distinctCods`/`fetchLinesByCods` e `renderLocalidadeSecoes`/`pintarLocalidadeSecoes` moraram para `src/documentos/municipios-localidades.mjs` na Fase C4. A tabela de linhas e a paginação moraram para `src/ui/listas.mjs` e `src/ui/paginacao.mjs`. |
 | `CLIQUE NOS CARDS` | — | Liga o clique do card → abre a view. |
 | `TOAST` | `toast` | Avisos transitórios. |
 | `REALTIME` | `RT_TABLES`, `CACHE_INVALIDATORS` (espalha o `INVALIDADORES_LOOKUP` do módulo e acrescenta os caches desta camada), `invalidateCaches`, `scheduleReload`/`reloadTab`, `markStale`, `onRealtime`, `initRealtime` (a decisão de quem recarrega, `dispatchRealtime`, vem de `src/domain/view-state.mjs`) | Assina mudanças do Supabase e despacha por aba: a aba ativa recarrega ao vivo, as de segundo plano só ficam `stale` (recarregam ao serem reativadas). supabase-js injetado dinamicamente aqui. |
@@ -399,7 +417,7 @@ PDF não têm teste em Node; o que os módulos de `src/ui/` têm de markup puro 
 
 2a. **Mexeu em render/loader? `node scripts/check_views.mjs`** — abre as **18 views** num
    navegador headless e falha se alguma explodir, ficar no spinner ou pintar menos que o
-   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~52,1% do `app.js`), que o
+   `minimo` declarado. É a rede sob a seção `MODAL / SISTEMA DE VIEWS` (~41,5% do `app.js`), que o
    `check.js` **não** cobre. Aceita filtro: `check_views.mjs frota`.
    **O que quebra se esquecer:** view nova sem entrada em `VIEWS` (a checagem anti-drift do final
    pega); `select=` alterado sem ajustar a fixture em `scripts/lib/rig.mjs` — nome de coluna

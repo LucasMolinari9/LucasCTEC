@@ -1,7 +1,7 @@
 # Estrutura e navegação do frontend (`index.html` + `styles.css` + `app.js`) — Portal DIVAT
 
 > **Por que este arquivo existe:** o frontend tem `index.html` (HTML), `styles.css` (CSS),
-> `app.js` (~2,6k linhas — extraído do HTML e ainda envolto num IIFE) e módulos em `src/`. Continua
+> `app.js` (~2,0k linhas — extraído do HTML e ainda envolto num IIFE) e módulos em `src/`. Continua
 > **zero-build**: nada de bundler, framework ou `package.json`. Este doc registra (1) *por que*
 > essa forma, (2) *como navegar* no `app.js` sem se perder, e (3) as **regras de segurança** para
 > reorganizar o JS sem quebrar nada. Complementa o "Mapa do código" do `CLAUDE.md` (que lista as
@@ -108,12 +108,13 @@ achar por `grep` do texto da marca, nunca por linha.
   `AUTO-ATUALIZAÇÃO` · `ROTAS (hash)`. Eram 15: `UTILITÁRIOS` guardava só o `debounce`, que foi
   para `src/domain/core.mjs` na Fase B2 — seção que fica vazia sai, não vira comentário órfão.
 - **Sub-marcas** (dentro de uma seção), formato mais leve: `/* --- Título --- */`. Só o bloco
-  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~52,1% do JS (~1,3k linhas). Ele **subiu**
+  `MODAL / SISTEMA DE VIEWS` tem sub-marcas, porque é ~41,5% do JS (~0,8k linhas). Ele **subiu**
   de participação na Fase B2 tendo ENCOLHIDO em linhas — ela tirou 263 do arquivo e 98 dele, e o
-  denominador caiu mais que o numerador. Nas Fases C1, C2 e C3 aconteceu o inverso: C1 tirou 98
+  denominador caiu mais que o numerador. Nas Fases C1, C2, C3 e C4 aconteceu o inverso: C1 tirou 98
   linhas do bloco (1.844 → 1.746) e o percentual CAIU (60,4% → 58,7%); C2 tirou mais 219
   (1.746 → 1.527) e caiu de novo (58,7% → 55,2%); C3 tirou mais 186 (1.527 → 1.341) e caiu de
-  novo (55,2% → 52,1%) — nas três a saída foi quase toda dele. Nos quatro casos a lição é a
+  novo (55,2% → 52,1%); C4 tirou mais 508 (1.341 → 833) e caiu de novo (52,1% → 41,5%) — nas
+  quatro a saída foi quase toda dele. Nos cinco casos a lição é a
   mesma — percentual de seção não mede progresso de modularização; o total mede.
 
 ### Sub-marcas do bloco `MODAL / SISTEMA DE VIEWS`
@@ -129,20 +130,26 @@ O próprio marcador do bloco traz um **sub-índice**. A ordem das sub-marcas:
 Cada bloco `DOC · X` reúne, **juntos**, tudo daquele documento **que ainda mora no `app.js`**:
 helper(s) HTML (`xxxHTML`), o render (`renderX`), eventuais runners e o registro `LOADERS.x = …`.
 
-**Desde a Fase C1, "juntos" quer dizer menos do que dizia.** Três dessas marcas — `DOC · Histórico
-(linha)`, `DOC · Itinerários` e `DOC · Frota` — guardam **só** o registro `LOADERS.x`: o render
-mora em `src/documentos/frota-historico-itinerarios.mjs` e o markup compartilhado, em
-`src/ui/blocos.mjs`. A marca fica porque é por ela que se acha o registro, e cada uma diz, em
-comentário, para onde o resto foi. A sub-marca `Eventos — helpers compartilhados` **sumiu**, junto
-com o markup que a batizava. C2, C3 e C4 vão esvaziar as outras do mesmo jeito.
+**Desde a Fase C1, "juntos" quer dizer menos do que dizia — e desde a C4, todas as dez marcas
+esvaziaram.** As **quatro** famílias da Fase C (C1–C4) saíram inteiras: cada `DOC · X` guarda
+**só** o registro `LOADERS.x` — one-liner, wrapper fino, ou composição de `searchPanel` (trabalho
+de Fase D, ex. `LOADERS.tarifas`/`quadroHorarios`/`ligacoesPorLogradouro`/`municipioRegiao`/
+`ligacoesPorTerminal`). O render mora em `src/documentos/*` e o markup compartilhado entre
+famílias, em `src/ui/blocos.mjs`. A marca fica porque é por ela que se acha o registro, e cada
+uma diz, em comentário, para onde o resto foi. A sub-marca `Eventos — helpers compartilhados`
+**sumiu**, junto com o markup que a batizava.
 
-**NÃO dimensione uma fase pela marca — meça por SÍMBOLO.** As faixas entre marcas derivaram do
-código, e três registros moram sob a marca de outra família (medido em 21/08/2026): além do
-`LOADERS.empresasRegulares` documentado no §6, `LOADERS.municipioRegiao` mora sob `DOC · Empresas`,
-e `ligacoesPorTerminal`/`secoesPorLigacao`/`frotaPorEmpresa` moram sob `DOC · Municípios`. O
-arquivo também usa **dois** estilos de sub-marca (`/* --- X --- */` e `/* ---- X ---- */`), então
-um extrator que só case o primeiro reparte errado. Quem mover essas famílias conserta as suas
-marcas — a C1 consertou as três dela.
+**NÃO dimensione nada pela marca — meça por SÍMBOLO.** As faixas entre marcas derivaram do
+código, e quatro registros moram sob a marca de outra família (medido em 21/08/2026, residual
+desde a C4 — não é mais "quem mover a família seguinte conserta a sua", as quatro já saíram):
+além do `LOADERS.empresasRegulares` documentado no §6, `LOADERS.municipioRegiao` mora sob
+`DOC · Empresas`, e `ligacoesPorTerminal`/`secoesPorLigacao` moram sob `DOC · Municípios`. Nenhum
+dos quatro tem corpo de render — o mau posicionamento é só cosmético. **Uma exceção real:**
+`LOADERS.frotaPorEmpresa`, também sob `DOC · Municípios`, TEM corpo de render completo — é o
+loader órfão que a C4 mediu e decidiu não mover (não é Município/Localidade por conteúdo nem por
+categoria; o `SECTIONS` o lista sob "Empresa", já C3 — ver o cabeçalho de
+`src/documentos/municipios-localidades.mjs`). O arquivo também usa **dois** estilos de sub-marca
+(`/* --- X --- */` e `/* ---- X ---- */`), então um extrator que só case o primeiro reparte errado.
 
 ## 3. Regras de segurança ao reorganizar o JS (leia antes de mover código)
 
@@ -204,8 +211,9 @@ cortados.
   Portarias, cujo clique abre `rows[+idx]`). `foot(total)` monta o rodapé com o **total**.
 - **`paginateLines(container, rows, {grouped, pdf=true})`** (`src/ui/listas.mjs`) — listas de
   **linha**. `grouped` insere os cabeçalhos de empresa **dentro** de cada página (contagem = total
-  do grupo). Usado por `lineResults`, o hub das listagens de linha — hoje **8 call sites**, todos
-  em documentos que as Fases C3/C4 vão mover. Ele fica no módulo (e não no `app.js`) porque a
+  do grupo). Usado por `lineResults`, o hub das listagens de linha — hoje **8 call sites**: 7 em
+  `src/documentos/*` (Fases C1–C4) e 1 no `app.js` (`openEmpresaLigacoes`, que fica por depender
+  de `runView` sem seam — restrição da C3). Ele fica no módulo (e não no `app.js`) porque a
   única coisa que o prendia lá era o CLIQUE na linha, que agora entra pelo seam
   `configurarListas({aoSelecionarLinha})`.
 - **`paginateEvents`** (`src/ui/paginacao.mjs`) — o paginador **antigo e diferente**: **um evento

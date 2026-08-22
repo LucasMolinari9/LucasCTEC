@@ -367,28 +367,35 @@ t('campos: as colunas que a Estrutura consolida estão nas listas gêmeas', () =
    ================================================================ */
 // O seam ÚNICO de src/documentos/. Como os três `configurar*` da B2, ele falha FECHADO: um
 // documento sem rede pintaria tela vazia sem erro — invisível para todo gate deste repo.
-t('sbFetch, selecionarLinha e novoCtx lançam antes de configurarDocumentos', () => {
+t('sbFetch, selecionarLinha, novoCtx e runView lançam antes de configurarDocumentos', () => {
   assert.throws(() => shell.sbFetch('evento_teste', ''), /configurarDocumentos/);
   assert.throws(() => shell.selecionarLinha({}), /configurarDocumentos/);
   assert.throws(() => shell.novoCtx('V','P','H'), /configurarDocumentos/);
+  assert.throws(() => shell.runView({}), /configurarDocumentos/);
 });
-t('configurarDocumentos liga os três slots, e todos repassam os argumentos', () => {
+t('configurarDocumentos liga os quatro slots, e todos repassam os argumentos', () => {
   const chamadas = [];
   shell.configurarDocumentos({
     sbFetch: (tabela, qs) => { chamadas.push(['fetch', tabela, qs]); return 'ROWS'; },
     selecionarLinha: row => { chamadas.push(['linha', row]); },
     novoCtx: (view, pane, host) => { chamadas.push(['ctx', view, pane, host]); return 'CTX'; },
+    runView: view => { chamadas.push(['view', view]); return 'VIEW'; },
   });
   assert.equal(shell.sbFetch('qh_teste', 'codlinha=eq.1'), 'ROWS');
   shell.selecionarLinha({ codlinha:'1' });
   assert.equal(shell.novoCtx('V', 'P', 'H'), 'CTX');
-  assert.deepEqual(chamadas, [['fetch', 'qh_teste', 'codlinha=eq.1'], ['linha', { codlinha:'1' }], ['ctx', 'V', 'P', 'H']]);
+  assert.equal(shell.runView({ title:'X' }), 'VIEW');
+  assert.deepEqual(chamadas, [
+    ['fetch', 'qh_teste', 'codlinha=eq.1'], ['linha', { codlinha:'1' }], ['ctx', 'V', 'P', 'H'],
+    ['view', { title:'X' }],
+  ]);
 });
 t('src/documentos/shell.mjs tem no máximo 6 slots injetados (critério de parada do plano)', () => {
   // O plano vivo manda PARAR quando um módulo passa de ~6 dependências injetadas. Como todas as
   // famílias da Fase C passam por este seam, a conta é o número de slots dele — e esta asserção
   // é o lugar em que o critério deixa de ser prosa. A C2 acrescentou o 3º (`novoCtx`, para o
-  // painel de Portarias, que monta ctx novo por conta própria); ainda longe do sétimo.
+  // painel de Portarias, que monta ctx novo por conta própria); a C4 acrescentou o 4º (`runView`,
+  // para o drill-down de Município); ainda longe do sétimo.
   const slots = Object.keys(shell).filter(k => k !== 'configurarDocumentos');
   assert.ok(slots.length <= 6, `slots injetados: ${slots.join(', ')} — o plano manda parar acima de ~6`);
 });
