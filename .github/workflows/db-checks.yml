@@ -22,8 +22,14 @@
 # TRÊS rodam em paralelo e reportam independentemente. O ticket #63 pediu um arquivo só; o
 # arquivo é um, os veredictos são três.
 #
-# Nenhum segredo: os três usam a anon key pública que já está no app.js. Não há chave no
-# ambiente deste workflow — se algum dia precisar de service key, ela NÃO vem para cá.
+# SECRET desde a migração para o auditor PostgreSQL (scripts/lib/audit-database.mjs): os três
+# jobs agora exigem SUPABASE_TEST_AUDIT_DATABASE_URL (login mínimo `divat_auditor_ci`, projeto
+# de TESTE) — não mais a anon key pública do app.js. Ver docs/seguranca.md § 10 e
+# docs/planos/fase-3-hardening-moderado.md. Por isso cada job:
+#   - roda SÓ para PR do mesmo repositório (a condição `if:` abaixo): PR de fork nunca recebe
+#     o secret do GitHub Actions, e não deve nem tentar usá-lo;
+#   - falha fechado (sai 1) em cron, workflow_dispatch, push na main e PR interno se o secret
+#     estiver ausente — scripts/lib/audit-database.mjs aborta sozinho, sem vazar segredo.
 #
 # Os `uses:` estão presos ao SHA (o `# v4` ao lado é só legenda) — ver docs/semgrep.md
 # § "Actions presas ao SHA".
@@ -46,6 +52,7 @@ on:
       - scripts/data_quality_baseline.json
       - scripts/check_grants.mjs
       - scripts/security_baseline.json
+      - scripts/lib/audit-database.mjs
       - docs/backup_schema.sql
       - docs/schema.md
       - .github/workflows/db-checks.yml
@@ -57,6 +64,7 @@ on:
       - scripts/data_quality_baseline.json
       - scripts/check_grants.mjs
       - scripts/security_baseline.json
+      - scripts/lib/audit-database.mjs
       - docs/backup_schema.sql
       - docs/schema.md
       - .github/workflows/db-checks.yml
@@ -69,8 +77,14 @@ permissions:
 
 jobs:
   realtime:
+    # PR de fork nunca recebe secrets do repositório — nem tenta: o job inteiro é pulado
+    # (não falha) quando o evento é pull_request e a origem não é este repositório. Para
+    # schedule/workflow_dispatch/push/PR interno a condição é sempre verdadeira.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      SUPABASE_TEST_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_TEST_AUDIT_DATABASE_URL }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -78,12 +92,17 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
+      - name: Instalar cliente PostgreSQL
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: RT_TABLES (app.js) x publicacao supabase_realtime
         run: node scripts/check_realtime.mjs
 
   qualidade:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      SUPABASE_TEST_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_TEST_AUDIT_DATABASE_URL }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -91,6 +110,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
+      - name: Instalar cliente PostgreSQL
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
       # Respeita scripts/data_quality_baseline.json: passa com a divida ja conhecida e falha
       # quando aparece achado NOVO ou um conhecido PIORA. Para ver o estado cru do banco,
       # rode localmente com --sem-baseline.
@@ -107,8 +128,11 @@ jobs:
   # esconder o outro. NUNCA rodar --atualizar-baseline aqui: baseline se atualiza local, com diff
   # revisavel em PR.
   seguranca:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      SUPABASE_TEST_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_TEST_AUDIT_DATABASE_URL }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -116,5 +140,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
+      - name: Instalar cliente PostgreSQL
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: RLS, grants, policies e privilegios de funcao
         run: node scripts/check_grants.mjs

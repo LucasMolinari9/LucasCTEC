@@ -38,10 +38,34 @@ Validações já concluídas no teste:
 - advisors de segurança: somente os quatro avisos `INFO` já esperados para staging com RLS e sem
   policy (`evento_dados`, `evento_textos`, `portaria_data`, `portaria_texto_teste`).
 
+## Drift descoberto e reparado em 22/08/2026
+
+Medido contra o banco de teste vivo, não suposto a partir da documentação: apesar de
+`20260729034018_phase3_moderate_hardening.sql` estar registrada como aplicada — e o próprio
+arquivo mover as **quatro** funções diagnósticas para `audit` com asserts que abortariam a
+transação se alguma ficasse para trás — o banco vivo só tinha **duas** em `audit`
+(`divat_security_shape`, `divat_data_quality`). `divat_api_shape` e `realtime_tables` estavam de
+volta em `public`, ainda executáveis por `anon`. Também foi medido que `postgres` havia
+recuperado a associação a `divat_audit_owner`/`divat_auditor`, que a migração original revogava
+na última linha. **A causa do drift não foi determinada** — não há gatilho, função, cron ou
+script neste repo que explique o reaparecimento; fica registrado como fato observado, não
+escondido atrás de um reparo silencioso.
+
+Reparado pela migração `20260822144441_phase3_repara_funcoes_publicas.sql` (idempotente, com o
+mesmo padrão de asserts + prova viva da migração original, reconfirmando as quatro funções, não
+só as duas que regrediram) — verificado independentemente depois de aplicar: as quatro em
+`audit`, `anon`/`authenticated` sem `EXECUTE`, `divat_auditor_ci` com `EXECUTE` nas quatro.
+**Isto não descarta a possibilidade do mesmo drift acontecer de novo** — sem causa identificada,
+não há como garantir que não volte. Se os gates `deriva`/`realtime` (que dependem de
+`divat_api_shape`/`realtime_tables`) começarem a falhar depois de terem passado, o primeiro
+lugar a olhar é se essas duas funções voltaram para `public`.
+
 ## Credencial auditora e secret
 
-A criação/rotação do login é deliberadamente separada da migração, para impedir senha em SQL
-versionado. Use uma senha aleatória entregue por gerenciador de segredos e uma validade curta:
+**Estado em 22/08/2026: login criado, secret configurado pelo dono.** A criação/rotação do login
+é deliberadamente separada da migração, para impedir senha em SQL versionado — por isso ela não
+mora em `supabase/migrations/`, só o resultado (grants, schema) mora. Runbook para uma próxima
+rotação, com `psql`:
 
 ```bash
 psql "$ADMIN_DATABASE_URL" \
@@ -50,14 +74,14 @@ psql "$ADMIN_DATABASE_URL" \
   --file=scripts/bootstrap_phase3_auditor.sql
 ```
 
-Depois, grave a URL de conexão no secret de Actions `SUPABASE_TEST_AUDIT_DATABASE_URL`. A URL deve
-usar o projeto `gontnlfmothfglssbyyk` e o login `divat_auditor_ci`; o runner recusa qualquer outro
+(Sem `psql` à mão — ex.: pelo celular — o mesmo efeito sai de um `DO $$ ... $$` colado direto no
+SQL Editor do painel, sem os comandos exclusivos de `psql`; mesmas regras de atributo do role,
+sem variável de sessão nenhuma.)
+
+Grave a URL de conexão no secret de Actions `SUPABASE_TEST_AUDIT_DATABASE_URL`. A URL deve usar o
+projeto `gontnlfmothfglssbyyk` e o login `divat_auditor_ci`; o runner recusa qualquer outro
 project ref, inclusive produção. Dispare manualmente o workflow `Phase 3 database security` e só
 promova o job `test-auditor` a check obrigatório após ele passar.
-
-O ambiente de automação que criou esta PR não possui acesso a Actions Secrets. Portanto o login e
-o secret são o único passo operacional pendente; não devem ser improvisados em comentário, log ou
-commit.
 
 ## Objetos novos
 
@@ -83,14 +107,17 @@ de teste e requer confirmação do snapshot pré-migração; não executar em pr
 
 ⚠️ **Ler antes de aplicar esta migração em `lwzsxuaqqeoamukduhev`.** Não é risco atual: a migração
 vive só no teste e produção não tem o schema `audit`. Mas no dia em que ela for aplicada em
-produção, **quatro gates param de funcionar de uma vez** — e este PR não toca em nenhum dos quatro
-(conferido no diff).
+produção, **quatro gates param de funcionar de uma vez** se ainda estiverem no caminho anterior —
+por isso este pré-requisito teve que vir primeiro.
 
-A migração move as quatro RPCs diagnósticas de `public` para `audit` e revoga o `execute` de
-`anon` (linhas 67-83). Os gates chamam exatamente essas RPCs, por `POST /rest/v1/rpc/<nome>` com a
-chave anon lida do `app.js`:
+A migração de teste move as quatro RPCs diagnósticas de `public` para `audit` e revoga o
+`execute` de `anon`. Até esta migração dos gates, eles chamavam essas RPCs por
+`POST /rest/v1/rpc/<nome>` com a chave anon lida do `app.js` — e, por lerem essa chave, sempre
+apontavam para **produção** (`docs/adr/0002-ambiente-de-teste-isolado.md`), nunca para o projeto
+de teste. Hoje os quatro chamam `audit.<nome>()` pelo login mínimo `divat_auditor_ci`
+(`scripts/lib/audit-database.mjs`), contra o projeto de **teste**:
 
-| Gate | RPC | Frequência hoje |
+| Gate | Função (schema `audit`) | Frequência hoje |
 |---|---|---|
 | `scripts/check_grants.mjs` | `divat_security_shape` | **diária** (`db-checks.yml`) |
 | `scripts/check_deriva.mjs` | `divat_api_shape` | semanal + push/PR (`deriva.yml`) |
@@ -98,18 +125,28 @@ chave anon lida do `app.js`:
 | `scripts/check_realtime.mjs` | `realtime_tables` | semanal (`db-checks.yml`) |
 
 O mais grave é o **diário**: o `check_grants.mjs` é o controle que `docs/seguranca.md` § 9.1 nomeia
-como compensação do default não-fechável do `supabase_admin`. Perdê-lo em silêncio troca um buraco
-fechado por um buraco sem alarme — e a falha seria de leitura, não de escrita, então o portal
-continuaria funcionando normalmente enquanto o gate ficasse cego.
+como compensação do default não-fechável do `supabase_admin` **em produção**. Migrar o transporte
+não devolve essa cobertura sozinho — produção só volta a ser auditada automaticamente quando a
+Fase 3 (schema `audit` + credencial auditora) for promovida para lá; até então, o item §9.1 em
+produção depende só do checklist trimestral manual, como antes deste gate existir. Isso é
+esperado, não um efeito colateral não previsto: era exatamente o preço de fazer a migração dos
+gates ANTES da promoção, para não ficar sem gate NENHUM (nem em teste, nem em produção) durante a
+janela entre as duas.
 
-**Portanto, na ordem:** migrar os quatro gates para a credencial de auditor (o mesmo caminho do
-job `test-auditor`, via `divat_auditor_ci`) **antes** de qualquer DDL em produção. Aplicar primeiro
-e consertar depois deixa uma janela sem o gate diário.
+**Ordem cumprida:** os quatro gates foram migrados para a credencial de auditor (o mesmo caminho
+do job `test-auditor`, via `divat_auditor_ci`) antes de qualquer DDL em produção — isto valia
+como bloqueio para aplicar a migração de Fase 3 em produção, e agora está feito no código. O que
+falta é só o operacional: criar/rotacionar `divat_auditor_ci` (se ainda não existir) e configurar
+o secret `SUPABASE_TEST_AUDIT_DATABASE_URL` também para `db-checks.yml` e `deriva.yml` (o
+`test-auditor` já dependia dele) — ver "Credencial auditora e secret" acima. Sem o secret, os
+quatro gates falham fechado (saem 1) em vez de rodar cegos.
 
-Consequência para os scripts: os quatro hoje derivam `SB_URL`/`SB_KEY` do `app.js` por regex. Um
-gate que fale por credencial de auditor não pode continuar fazendo isso — passa a depender de
-secret, e portanto deixa de rodar em PR de fora do repositório, igual ao `test-auditor`. Essa perda
-de alcance é parte da decisão, não um detalhe de implementação.
+Consequência para os scripts, já aplicada: os quatro deixaram de derivar `SB_URL`/`SB_KEY` do
+`app.js` por regex (`check_deriva.mjs` e `check_realtime.mjs` continuam lendo o `app.js`, mas só
+para conferir RPCs citadas e `RT_TABLES` — conteúdo do repo, não credencial). Um gate que fale por
+credencial de auditor não podia continuar fazendo isso — passou a depender de secret, e portanto
+deixou de rodar em PR de fora do repositório, igual ao `test-auditor` (o job é pulado, nunca tenta
+usar o secret). Essa perda de alcance é parte da decisão, não um detalhe de implementação.
 
 ## Critérios antes de qualquer promoção
 
@@ -120,4 +157,8 @@ de alcance é parte da decisão, não um detalhe de implementação.
 5. Confirmar no GitHub que os checks obrigatórios bloqueiam alteração da `main`.
 6. Manter a PR em rascunho e solicitar autorização separada para qualquer ação em produção.
 7. **Antes de tocar produção:** migrar os quatro gates vivos para a credencial de auditor — ver a
-   seção acima. Sem isso, aplicar a migração cega o gate diário de grants.
+   seção acima. **Feito no código; falta o secret.** Sem `SUPABASE_TEST_AUDIT_DATABASE_URL`
+   configurado e um run verde de `db-checks.yml`/`deriva.yml` contra o projeto de teste, não há
+   evidência de que a migração dos gates funciona de verdade — e aplicar a migração da Fase 3 em
+   produção sem essa evidência arrisca cegar o gate diário de grants nos dois projetos ao mesmo
+   tempo.

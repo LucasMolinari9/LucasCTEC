@@ -6,17 +6,27 @@
 // do ETL, não do banco. Quando um filho aponta para codlinha/cod_origem que não existe no pai,
 // o portal NÃO avisa: a tela simplesmente aparece vazia, sem erro. Este script é o alarme.
 //
-// Irmão do check_realtime.mjs e do check_deriva.mjs: mesma anon key pública do app.js, mesma
-// forma (função read-only no banco + runner fino aqui). A função public.divat_data_quality()
-// é SECURITY INVOKER com EXECUTE para anon, então roda exatamente com a visão de anon.
+// Irmão do check_realtime.mjs e do check_deriva.mjs: mesmo transporte
+// (scripts/lib/audit-database.mjs), mesma forma (função read-only no banco + runner fino aqui).
+// A função audit.divat_data_quality() roda pelo login mínimo `divat_auditor_ci` — desde esta
+// migração os QUATRO gates auditam o projeto de TESTE (gontnlfmothfglssbyyk), não mais produção.
+// Ver docs/seguranca.md § 10 e docs/planos/fase-3-hardening-moderado.md.
 //
-// Uso (na SUA máquina / CI — daqui o ambiente do Claude não alcança o Supabase):
+// ATENÇÃO ao ler a dívida abaixo: ela foi medida contra PRODUÇÃO em 27/07/2026, antes desta
+// migração. O baseline (scripts/data_quality_baseline.json) precisa ser remedido contra o
+// projeto de TESTE — `--atualizar-baseline`, local ou pelo workflow "Atualizar baseline" — antes
+// de confiar que ele descreve o estado atual; os dois bancos são cópias mantidas manualmente
+// (docs/adr/0002-ambiente-de-teste-isolado.md, seção "Dívida assumida") e podem divergir.
+//
+// Uso (precisa de SUPABASE_TEST_AUDIT_DATABASE_URL no ambiente e `psql` no PATH — runbook em
+// docs/planos/fase-3-hardening-moderado.md):
 //   node scripts/check_data_quality.mjs                  # respeita o baseline
 //   node scripts/check_data_quality.mjs --sem-baseline    # estado cru do banco
 //   node scripts/check_data_quality.mjs --atualizar-baseline
 //
-// Requer apenas Node 18+ (fetch nativo). Nenhuma dependência. Sai 1 se houver achado de
-// severidade `erro` além do baseline; avisos nunca derrubam.
+// Requer Node 18+ e o binário `psql` no PATH. Sai 1 se houver achado de severidade `erro` além
+// do baseline (avisos nunca derrubam), ou se a credencial/conexão auditora for recusada
+// (contrato em scripts/lib/audit-database.mjs — falha sempre fechado, nunca imprime segredo).
 //
 // SOBRE O BASELINE (leia antes de mexer): quando este script nasceu, o banco JÁ tinha 5
 // achados de erro (17 codlinhas órfãs em 4 tabelas + 4 linhas com cod_origem inválido) — a
@@ -61,6 +71,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { carregarConfiguracaoAuditora, executarFuncaoComoArray, AuditDatabaseError } from './lib/audit-database.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const BASELINE = join(ROOT, 'scripts', 'data_quality_baseline.json');
@@ -69,32 +80,14 @@ const args = new Set(process.argv.slice(2));
 const semBaseline = args.has('--sem-baseline') || args.has('--all');
 const atualizar = args.has('--atualizar-baseline');
 
-function extrair(js, re, oquê) {
-  const m = re.exec(js);
-  if (!m) { console.error(`Não achei ${oquê} no app.js.`); process.exit(1); }
-  return m[1];
-}
-
-const js = await readFile(join(ROOT, 'app.js'), 'utf8');
-const SB_URL = extrair(js, /const SB_URL\s*=\s*'([^']+)'/, 'SB_URL');
-const SB_KEY = extrair(js, /const SB_KEY\s*=\s*'([^']+)'/, 'SB_KEY');
-
 let achados;
 try {
-  const resp = await fetch(`${SB_URL}/rest/v1/rpc/divat_data_quality`, {
-    method: 'POST',
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-    body: '{}',
-  });
-  if (!resp.ok) {
-    const txt = await resp.text();
-    console.error(`RPC divat_data_quality falhou (HTTP ${resp.status}): ${txt}`);
-    console.error('A função public.divat_data_quality() existe e tem GRANT EXECUTE para anon?');
-    process.exit(1);
-  }
-  achados = await resp.json();
+  const config = carregarConfiguracaoAuditora();
+  achados = executarFuncaoComoArray(config, 'divat_data_quality');
 } catch (e) {
-  console.error('Erro de rede ao chamar o Supabase (este script precisa de rede):', e.message);
+  if (!(e instanceof AuditDatabaseError)) throw e;
+  console.error(e.message);
+  console.error('A função audit.divat_data_quality() existe e divat_auditor_ci pode executá-la?');
   process.exit(1);
 }
 

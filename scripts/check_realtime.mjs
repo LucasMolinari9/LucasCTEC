@@ -6,17 +6,20 @@
 // lacuna: pergunta ao BANCO quais tabelas estão na publicação supabase_realtime e compara
 // com RT_TABLES do app.js. Roda depois de mexer no Realtime (e vale como passo de CI).
 //
-// Uso (na SUA máquina / CI — daqui o ambiente do Claude não alcança o Supabase):
+// Uso (precisa de SUPABASE_TEST_AUDIT_DATABASE_URL no ambiente e `psql` no PATH — runbook em
+// docs/planos/fase-3-hardening-moderado.md):
 //   node scripts/check_realtime.mjs
 //
-// Requer apenas Node 18+ (fetch nativo). Nenhuma dependência. Não precisa de chave no
-// ambiente: usa a URL e a anon key que já estão públicas no app.js, e uma função RPC
-// public.realtime_tables() (SECURITY DEFINER, EXECUTE p/ anon) que lista a publicação.
-// Sai com código 0 se bate, 1 se há divergência (ou erro).
+// Requer Node 18+ e o binário `psql` no PATH. RT_TABLES continua lido do app.js (não é
+// segredo); a consulta à publicação passa pelo login mínimo `divat_auditor_ci`, via
+// scripts/lib/audit-database.mjs — desde esta migração este gate audita o projeto de TESTE
+// (gontnlfmothfglssbyyk), não mais produção. Ver docs/seguranca.md § 10.
+// Sai com código 0 se bate, 1 se há divergência, erro ou credencial/conexão recusada.
 
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { carregarConfiguracaoAuditora, executarFuncaoComoArray, AuditDatabaseError } from './lib/audit-database.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -28,30 +31,19 @@ function extrair(html, re, oquê) {
 
 const html = await readFile(join(ROOT, 'app.js'), 'utf8');
 
-const SB_URL = extrair(html, /const SB_URL\s*=\s*'([^']+)'/, 'SB_URL');
-const SB_KEY = extrair(html, /const SB_KEY\s*=\s*'([^']+)'/, 'SB_KEY');
-
 // RT_TABLES é um array de string literais; pega o bloco e extrai os nomes entre aspas.
 const bloco = extrair(html, /const RT_TABLES\s*=\s*\[([\s\S]*?)\]/, 'RT_TABLES');
 const rtTables = [...bloco.matchAll(/'([^']+)'/g)].map(m => m[1]).sort();
 
-// Pergunta ao banco a publicação real via RPC.
+// Pergunta ao banco a publicação real via o auditor mínimo.
 let doBanco;
 try {
-  const resp = await fetch(`${SB_URL}/rest/v1/rpc/realtime_tables`, {
-    method: 'POST',
-    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-    body: '{}',
-  });
-  if (!resp.ok) {
-    const txt = await resp.text();
-    console.error(`RPC realtime_tables falhou (HTTP ${resp.status}): ${txt}`);
-    console.error('A função public.realtime_tables() existe e tem GRANT EXECUTE para anon?');
-    process.exit(1);
-  }
-  doBanco = (await resp.json()).sort();
+  const config = carregarConfiguracaoAuditora();
+  doBanco = executarFuncaoComoArray(config, 'realtime_tables').sort();
 } catch (e) {
-  console.error('Erro de rede ao chamar o Supabase (este script precisa de rede):', e.message);
+  if (!(e instanceof AuditDatabaseError)) throw e;
+  console.error(e.message);
+  console.error('A função audit.realtime_tables() existe e divat_auditor_ci pode executá-la?');
   process.exit(1);
 }
 

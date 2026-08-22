@@ -178,17 +178,20 @@ ao auditor produzir o mesmo retrato público sem receber `SELECT` direto nas tab
 | `f_unaccent(text)` | `private` | implementação de `divat_busca_logradouro` |
 | `fn_vigor_auto()` | `private` | trigger `trg_vigor_auto` |
 
-> ⚠️ **`rls_auto_enable()` NÃO EXISTE — esta tabela a listava por engano.** Até 09/08/2026 havia
-> aqui uma linha descrevendo-a como "função de plataforma em `public`, chamada por event trigger
-> gerenciado que liga RLS em tabela pública nova". **Medido contra o banco vivo: não existe função
-> com esse nome**, e nenhum dos 6 event triggers do banco (`pgrst_ddl_watch`, `pgrst_drop_watch`,
-> `grant_pg_cron_access`, `grant_pg_graphql_access`, `grant_pg_net_access`,
-> `set_graphql_placeholder` — todos do Supabase) tem relação com RLS.
+> ⚠️ **`rls_auto_enable()` voltou a existir no projeto de TESTE — medido em 22/08/2026, ao
+> configurar o auditor da migração dos gates.** Entre 09/08/2026 (quando esta nota media "não
+> existe função com esse nome" e nenhum event trigger tinha relação com RLS) e agora, alguém
+> instalou a função de verdade **e** um event trigger `ensure_rls` (`ddl_command_end`) que a
+> chama. A origem não foi determinada — não há PR, migração versionada ou registro neste repo que
+> a explique. O corpo (lido antes de aceitar): `SECURITY DEFINER`, roda em toda `CREATE TABLE` de
+> `public` e faz só `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` — nunca concede privilégio,
+> nunca lê dado. Exceção aceita e justificada em `docs/seguranca.md` § 9.4.
 >
-> **Consequência prática, e o motivo de o registro ficar aqui em vez de a linha só sumir:** não há
-> automatismo ligando RLS em tabela nova. **Tabela pública nova precisa de `ENABLE ROW LEVEL
-> SECURITY` explícito**, além do `GRANT SELECT` e da policy que o default-deny já exige (skill
-> `db-change`). Quem lesse a linha antiga concluiria que o banco se protege sozinho.
+> **Isso NÃO dispensa a disciplina.** `docs/seguranca.md` § 9.4 é explícito: **produção não foi
+> conferida** — não presuma que ela tem o mesmo trigger. **Tabela pública nova continua exigindo
+> `ENABLE ROW LEVEL SECURITY` explícito**, além do `GRANT SELECT` e da policy que o default-deny
+> já exige (skill `db-change`) — este trigger é rede de segurança medida só em teste, não
+> contrato a que o restante da documentação (nem produção) deva se ajustar.
 
 **Trigger:** `trg_vigor_auto` em `portaria_teste` — `BEFORE INSERT OR UPDATE`, executa
 `private.fn_vigor_auto()`. É o **único** trigger do projeto: os demais que aparecem no catálogo

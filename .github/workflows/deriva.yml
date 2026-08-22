@@ -1,9 +1,17 @@
 # Deriva (docs × banco) — roda scripts/check_deriva.mjs.
 #
 # Por que existe: as 8 divergências da auditoria de 26/07/2026 nasceram todas de um fato do
-# banco copiado à mão para um doc e nunca mais conferido. O script pergunta ao PostgREST o
-# OpenAPI de `anon` (mesma anon key pública do app.js — nenhum segredo aqui) e compara com o
-# que CLAUDE.md / docs/schema.md / app.js afirmam.
+# banco copiado à mão para um doc e nunca mais conferido. O script confere o formato de
+# app.js/CLAUDE.md/docs/schema.md contra divat_api_shape().
+#
+# SECRET desde a migração para o auditor PostgreSQL (scripts/lib/audit-database.mjs): o job
+# exige SUPABASE_TEST_AUDIT_DATABASE_URL (login mínimo `divat_auditor_ci`, projeto de TESTE) —
+# não mais a anon key pública do app.js/PostgREST. Ver docs/seguranca.md § 10 e
+# docs/planos/fase-3-hardening-moderado.md. Por isso o job:
+#   - roda SÓ para PR do mesmo repositório (a condição `if:` abaixo): PR de fork nunca recebe
+#     o secret do GitHub Actions, e não deve nem tentar usá-lo;
+#   - falha fechado (sai 1) em cron, workflow_dispatch, push na main e PR interno se o secret
+#     estiver ausente — scripts/lib/audit-database.mjs aborta sozinho, sem vazar segredo.
 #
 # Por que SEMANAL além de push/PR: a deriva nasce de mudança NO BANCO (que não gera push)
 # tanto quanto de mudança nos docs — mesma razão do backup.yml. O filtro de `paths` cobre o
@@ -31,6 +39,7 @@ on:
       - docs/schema.md
       - app.js
       - scripts/check_deriva.mjs
+      - scripts/lib/audit-database.mjs
       - .github/workflows/deriva.yml
   pull_request:
     paths:
@@ -38,6 +47,7 @@ on:
       - docs/schema.md
       - app.js
       - scripts/check_deriva.mjs
+      - scripts/lib/audit-database.mjs
       - .github/workflows/deriva.yml
 
 # GITHUB_TOKEN no mínimo: nenhum destes workflows faz push, abre PR ou comenta.
@@ -48,8 +58,14 @@ permissions:
 
 jobs:
   deriva:
+    # PR de fork nunca recebe secrets do repositório — nem tenta: o job inteiro é pulado
+    # (não falha) quando o evento é pull_request e a origem não é este repositório. Para
+    # schedule/workflow_dispatch/push/PR interno a condição é sempre verdadeira.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      SUPABASE_TEST_AUDIT_DATABASE_URL: ${{ secrets.SUPABASE_TEST_AUDIT_DATABASE_URL }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -57,5 +73,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
+      - name: Instalar cliente PostgreSQL
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Verificador de deriva docs×banco
         run: node scripts/check_deriva.mjs

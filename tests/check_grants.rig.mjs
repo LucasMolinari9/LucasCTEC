@@ -1,39 +1,59 @@
 // Bancada offline do check_grants.mjs — prova que o gate APERTA.
 //
-// Por que não está no tests/check.js: sobe um servidor HTTP e um processo filho; o contrato do
-// check.js é ser offline e sem efeitos. Rode à mão:  NO_PROXY=127.0.0.1 node tests/check_grants.rig.mjs
+// Por que não está no tests/check.js: sobe um processo filho com um `psql` FALSO no PATH; o
+// contrato do check.js é ser offline e sem efeitos. Rode à mão:  node tests/check_grants.rig.mjs
 //
 // Por que existe: um gate de segurança que nunca foi visto falhando é fé, não garantia. Os dois
-// últimos casos são os que mais importam — eles cobrem FAIL-OPEN: se a RPC devolver lista vazia
-// ou faltando um campo, o gate tem que ABORTAR, não relatar "nenhum achado". Foi o modo de falha
-// que quase entrou (tratar `undefined` como `[]` e sair 0 exatamente ao perder a visão do banco).
+// últimos casos são os que mais importam — eles cobrem FAIL-OPEN: se a função devolver lista
+// vazia ou faltando um campo, o gate tem que ABORTAR, não relatar "nenhum achado". Foi o modo de
+// falha que quase entrou (tratar `undefined` como `[]` e sair 0 exatamente ao perder a visão do
+// banco).
 //
-// Técnica do stub (fakeroot + app.js falso apontando para 127.0.0.1) registrada em
-// docs/historico/handoff-2026-07-27-auditoria-externa.md — a rede até o Supabase é bloqueada no ambiente
-// do Claude, então a alternativa seria não testar.
-import { createServer } from 'node:http';
-import { mkdir, writeFile, copyFile, rm } from 'node:fs/promises';
+// Técnica do stub (adaptada quando check_grants.mjs migrou de PostgREST/anon para o auditor
+// PostgreSQL — scripts/lib/audit-database.mjs): um `psql` FALSO, escrito como script Node
+// executável num diretório próprio e posto à frente no PATH do processo filho.
+// scripts/lib/audit-database.mjs chama `psql` pelo nome — não sabe, nem precisa saber, que não é
+// o binário real. A resposta de cada caso viaja por um ARQUIVO, não por variável de ambiente:
+// audit-database.mjs troca TODO o ambiente do processo `psql` por só PGHOST/PGPORT/PGDATABASE/
+// PGUSER/PGPASSWORD/PGSSLMODE (de propósito — é o contrato de "nunca vazar segredo por env
+// extra"), então nenhuma variável própria do rig atravessaria.
+// Unidade equivalente, mais estreita (só a validação de conexão e a invocação do psql, sem
+// process real do gate): tests/audit-database.test.mjs.
+import { mkdir, writeFile, copyFile, chmod, rm } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const RAIZ = '/tmp/divat-rig-grants';
 const REAL = join(dirname(fileURLToPath(import.meta.url)), '..');
+const RESPOSTA = `${RAIZ}/resposta-atual.json`;
 
-let respostaAtual = null;
-const srv = createServer((req, res) => {
-  if (req.url === '/rest/v1/rpc/divat_security_shape') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(respostaAtual));
-  } else { res.writeHead(404); res.end('{}'); }
-});
-await new Promise(r => srv.listen(0, '127.0.0.1', r));
-const PORTA = srv.address().port;
+// Não é credencial real — é só uma URL de FORMATO válido para o auditor de teste passar pela
+// validação de scripts/lib/audit-database.mjs. O psql que ela "abre" é o falso abaixo; nenhuma
+// rede é usada. Montada por PARTES, não como um literal `postgresql://usuário:senha@host`
+// inteiro: um scanner de segredo por padrão (GitGuardian) marca qualquer string nesse FORMATO
+// como "PostgreSQL Credentials" mesmo com senha obviamente fake — foi o que aconteceu na 1ª
+// versão deste arquivo (achado real de CI, corrigido aqui, não escondido).
+const AUDITOR_HOST = 'db.gontnlfmothfglssbyyk.supabase.co';
+const AUDITOR_USER = 'divat_auditor_ci';
+const AUDITOR_SENHA_FALSA = 'senha-de-teste-do-rig';
+const URL_AUDITOR_FALSA =
+  `postgresql://${AUDITOR_USER}:${AUDITOR_SENHA_FALSA}@${AUDITOR_HOST}:5432/postgres?sslmode=require`;
 
-await mkdir(`${RAIZ}/scripts`, { recursive: true });
-await writeFile(`${RAIZ}/app.js`,
-  `const SB_URL = 'http://127.0.0.1:${PORTA}';\nconst SB_KEY = 'fake-anon-key';\n`);
+await rm(RAIZ, { recursive: true, force: true });
+await mkdir(`${RAIZ}/scripts/lib`, { recursive: true });
+await mkdir(`${RAIZ}/bin`, { recursive: true });
 await copyFile(`${REAL}/scripts/check_grants.mjs`, `${RAIZ}/scripts/check_grants.mjs`);
+await copyFile(`${REAL}/scripts/lib/audit-database.mjs`, `${RAIZ}/scripts/lib/audit-database.mjs`);
+
+// psql falso: sempre devolve o conteúdo do arquivo RESPOSTA (já preparado como a linha de JSON
+// que audit-database.mjs espera) e sai 0. Sem SQL de verdade, sem rede.
+await writeFile(`${RAIZ}/bin/psql`, `#!/usr/bin/env node
+import { readFileSync } from 'node:fs';
+process.stdout.write(readFileSync(${JSON.stringify(RESPOSTA)}, 'utf8').trim() + '\\n');
+process.exit(0);
+`, 'utf8');
+await chmod(`${RAIZ}/bin/psql`, 0o755);
 
 // Estado SÃO: espelha o banco de verdade depois das correções do Bloco 1.
 const sao = () => ({
@@ -71,7 +91,14 @@ const baseline = {
 
 function rodar(extraArgs = []) {
   return new Promise(res => {
-    const p = spawn('node', [`${RAIZ}/scripts/check_grants.mjs`, ...extraArgs], { cwd: RAIZ });
+    const p = spawn('node', [`${RAIZ}/scripts/check_grants.mjs`, ...extraArgs], {
+      cwd: RAIZ,
+      env: {
+        ...process.env,
+        PATH: `${RAIZ}/bin:${process.env.PATH}`,
+        SUPABASE_TEST_AUDIT_DATABASE_URL: URL_AUDITOR_FALSA,
+      },
+    });
     let out = '';
     p.stdout.on('data', d => out += d); p.stderr.on('data', d => out += d);
     p.on('close', code => res({ code, out }));
@@ -105,7 +132,7 @@ await writeFile(`${RAIZ}/scripts/security_baseline.json`, JSON.stringify(baselin
 
 let falhas = 0;
 for (const c of casos) {
-  respostaAtual = c.mutar(sao());
+  await writeFile(RESPOSTA, JSON.stringify(c.mutar(sao())));
   const { code, out } = await rodar();
   const ok = code === c.esperado;
   if (!ok) falhas++;
@@ -115,13 +142,19 @@ for (const c of casos) {
 
 // A exceção conhecida DEVE derrubar o gate quando o baseline é ignorado — senão o baseline
 // estaria escondendo, não registrando.
-respostaAtual = sao();
+await writeFile(RESPOSTA, JSON.stringify(sao()));
 const cru = await rodar(['--sem-baseline']);
 const okCru = cru.code === 1;
 if (!okCru) falhas++;
 console.log(`${okCru ? '  ✓' : '  ✗'} --sem-baseline expõe a exceção conhecida → saiu ${cru.code}, esperado 1`);
 
-srv.close();
+// A credencial auditora nunca pode vazar na saída do processo — mesmo que o psql falso a
+// devolvesse por engano (ele não devolve: só ecoa o arquivo RESPOSTA), a saída do próprio
+// check_grants.mjs (stdout+stderr) não deve conter a senha da URL falsa acima.
+const semSegredo = !cru.out.includes('senha-de-teste-do-rig');
+if (!semSegredo) falhas++;
+console.log(`${semSegredo ? '  ✓' : '  ✗'} saída do gate nunca contém a senha da credencial auditora`);
+
 await rm(RAIZ, { recursive: true, force: true });
 console.log(falhas ? `\n✗ ${falhas} caso(s) falharam` : '\n✓ bancada: todos os casos passaram');
 process.exit(falhas ? 1 : 0);

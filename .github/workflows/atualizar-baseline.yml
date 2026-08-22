@@ -20,12 +20,15 @@
 # graves. `check_grants.mjs` recusa e sai 1 antes de escrever — a resposta certa ali é revogar o
 # privilégio, não registrar exceção. Este workflow não tem como contornar isso, e é de propósito.
 #
-# ARMADILHA CONHECIDA — `seguranca` + `producao`: produção ainda não tem as migrações da Fase 3,
-# então `divat_security_digest` não existe lá e o script cai no caminho antigo
-# (`divat_security_shape`). Esse ramo mede `achados` — a POLÍTICA — e não preenche slot de medição
-# nenhum. Ou seja, a combinação existe, roda e faz uma coisa diferente da que o nome sugere. O PR
-# vai dizer isso no corpo; leia antes de dar merge. Depois da promoção descrita em
-# docs/planos/fase-3-hardening-moderado.md ela passa a se comportar como o teste.
+# ARMADILHA CONHECIDA — `alvo: producao`: desde a migração dos quatro gates para o auditor
+# PostgreSQL (scripts/lib/audit-database.mjs), `check_grants.mjs`/`check_data_quality.mjs` só
+# aceitam o project ref de TESTE (gontnlfmothfglssbyyk) — produção não tem o schema `audit`
+# ainda (ver docs/planos/fase-3-hardening-moderado.md). Rodar este workflow com `alvo: producao`
+# falha fechado no passo "Medir e escrever o slot": o script recusa a conexão antes de medir
+# qualquer coisa (sem tocar no banco, sem vazar segredo), então o job para ali e os passos
+# seguintes (diff, abrir PR) nem rodam. Isso vale para os dois baselines — não só `seguranca`.
+# `SUPABASE_PROD_AUDIT_DATABASE_URL` fica declarado abaixo para quando a Fase 3 chegar a
+# produção; até lá não tem efeito nos dois baselines.
 #
 # COMO USAR (pelo navegador, celular inclusive): aba Actions → "Atualizar baseline" → "Run
 # workflow" → escolha a branch, o baseline e o alvo → Run. Ao fim, um PR aparece com o diff.
@@ -73,10 +76,10 @@ jobs:
         with:
           node-version: '20'
 
-      # Só o caminho da qualidade usa psql (login auditor). Instalar sempre custaria ~20s a cada
-      # run da segurança, que não o usa.
+      # Os dois baselines usam psql (login auditor) desde a migração de check_grants.mjs e
+      # check_data_quality.mjs para scripts/lib/audit-database.mjs — revisão anterior encontrou
+      # este passo condicionado só a `qualidade` (correção confirmada: segurança também precisa).
       - name: Instalar cliente PostgreSQL
-        if: inputs.baseline == 'qualidade'
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       # TODA entrada passa por `env:` e é lida como "$VAR" no shell — nunca `${{ }}` dentro do
@@ -141,16 +144,12 @@ jobs:
           git add scripts/
           git commit -m "chore(baseline): mede $BASELINE em $ALVO" -m "Medição feita pelo workflow 'Atualizar baseline' (run $RUN_ID), disparada à mão. Só o slot de '$ALVO' foi escrito; a política do topo e o slot do outro banco seguem intactos — confira no diff."
           git push -u origin "$RAMO"
-          AVISO=''
-          if [ "$BASELINE" = "seguranca" ] && [ "$ALVO" = "producao" ]; then
-            AVISO=$'\n> **Atenção:** produção ainda não tem as migrações da Fase 3, então isto rodou pelo caminho antigo (`divat_security_shape`), que mede `achados` — a **política** — e não preenche slot de medição. Confira se é isso mesmo que você queria.\n'
-          fi
           gh pr create \
             --base "$BASE" \
             --head "$RAMO" \
             --title "chore(baseline): $BASELINE medido em $ALVO" \
             --body "Medição disparada à mão pelo workflow \`Atualizar baseline\` ([run]($RUN_URL)).
-          $AVISO
+
           **O que conferir antes do merge**
 
           - o diff toca **só** o slot de \`$ALVO\`; a política do topo (\`achados\` / \`orfaos_conhecidos\`) e o slot do outro banco não podem ter mudado;

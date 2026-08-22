@@ -139,8 +139,8 @@ bloco `SET ROLE anon` + tentativas de INSERT/UPDATE/DELETE/SELECT em transação
 
 ## 9. Riscos residuais conhecidos e ACEITOS
 
-Três coisas não estão fechadas. Estão aqui para não serem redescobertas como "achado novo" a cada
-auditoria — e para que a decisão de conviver com elas seja explícita, não esquecimento.
+Quatro coisas não estão fechadas. Estão aqui para não serem redescobertas como "achado novo" a
+cada auditoria — e para que a decisão de conviver com elas seja explícita, não esquecimento.
 
 > **Por que esta seção é curta.** Ela registra **que** cada risco foi avaliado, **qual controle o
 > compensa** e **por que a convivência foi aceita** — é registro de decisão, não log de auditoria.
@@ -155,12 +155,18 @@ de default privileges que **não pertence ao `postgres`** e por isso **não é f
 `postgres` não é superusuário no Supabase. Consequência: a garantia "objeto novo nasce fechado",
 que vale para os defaults que controlamos, **não é completa**.
 
-**Controle que compensa, e que não pode ser removido enquanto o default existir:** o
-`docs/backup_schema.sql` revoga explicitamente tudo que não é SELECT, e o gate
-`scripts/check_grants.mjs` roda **diariamente** (workflow `db-checks.yml`), falhando se qualquer
-tabela aparecer com grant ou policy de escrita para `anon`/`authenticated`. A frequência é diária,
-não semanal, **por causa deste item** — quem for reduzi-la precisa fechar o item antes. Regras
-técnicas: `CLAUDE.md`, seção **Supabase → RLS / segurança**.
+**Controle que compensava, e que hoje NÃO cobre mais produção automaticamente:** o
+`docs/backup_schema.sql` revoga explicitamente tudo que não é SELECT — isto continua valendo,
+independente do que segue. O gate `scripts/check_grants.mjs` rodava **diariamente**
+(workflow `db-checks.yml`) contra **produção**, falhando se qualquer tabela aparecesse com grant
+ou policy de escrita para `anon`/`authenticated`. Desde a migração para o auditor PostgreSQL
+(§ 10), ele passou a rodar pelo login `divat_auditor_ci` contra o projeto de **TESTE** — produção
+ainda não tem o schema `audit`. **Efeito colateral aceito, não escondido:** enquanto a Fase 3 não
+chegar a produção, este risco em produção volta a depender só do checklist **trimestral manual**,
+o mesmo que este gate foi criado para substituir (achado SEC-04). A frequência diária do workflow
+continua — protegendo o projeto de teste hoje — pela mesma razão histórica: quando o gate
+recuperar alcance de produção (Fase 3 promovida), a cadência não deve regredir para semanal antes
+de fechar este item lá. Regras técnicas: `CLAUDE.md`, seção **Supabase → RLS / segurança**.
 
 **Segundo controle, pelo outro lado (Fase 3, § 10):** toda migração que cria tabela pública precisa
 **revogar `anon`/`authenticated` e ligar RLS na mesma transação**, e o gate
@@ -191,6 +197,22 @@ SEC-06 continua **mitigado**, não encerrado.
 (exige a máquina dele e um projeto Supabase descartável); o checklist do que falta está no
 `docs/backup.md`, seção **O que a integridade do dump garante (e o que NÃO garante)**.
 
+**9.4 — `rls_auto_enable()` é `SECURITY DEFINER` (aceito em 22/08/2026).** Medido contra o
+projeto de TESTE ao configurar o auditor desta PR: existe um event trigger `ensure_rls`
+(`ddl_command_end`), instalado depois de 09/08/2026 — quando `docs/schema.md` chegou a afirmar,
+medido, que a função **não existia** e que não havia automatismo ligando RLS. A provisão não é
+mais verdadeira para o projeto de teste; a origem exata (quem/quando instalou) não foi
+determinada. A função está registrada como exceção aceita em `scripts/security_baseline.json`
+(achado `funcao_security_definer`), depois de ler o corpo dela.
+
+**Por que é aceito, não revogado:** o corpo só faz `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`
+em tabela nova de `public` — nunca concede privilégio a `anon`/`authenticated`, nunca lê dado.
+`SECURITY DEFINER` é necessário aqui por desenho: um event trigger roda com os direitos de quem
+emitiu o DDL, e a ideia é ligar RLS **mesmo que** quem criou a tabela não tivesse esse privilégio
+— exatamente o oposto de escalação perigosa. Não substitui a disciplina da skill `db-change`
+(`ENABLE ROW LEVEL SECURITY` explícito continua sendo o contrato, não este trigger de rede de
+segurança) — **produção não foi conferida** e não se deve presumir que ela tem o mesmo trigger.
+
 ## 10. Fase 3 — RPCs diagnósticas e auditor mínimo
 
 No projeto de teste, a migração `20260729034018_phase3_moderate_hardening.sql` removeu as quatro
@@ -203,6 +225,10 @@ O owner `divat_audit_owner` é `NOLOGIN`, sem privilégios administrativos e her
 `divat_auditor` pode executá-las. O login externo `divat_auditor_ci`, quando criado pelo runbook,
 é apenas membro desse papel e não tem `SELECT` direto nas tabelas.
 
-A aplicação em produção exige autorização separada. Até lá, os gates vivos existentes continuam
-consultando produção pelo caminho anterior, e o novo workflow de auditoria PostgreSQL é exclusivo
-do projeto de teste. Decisões, evidências e rollback: `docs/planos/fase-3-hardening-moderado.md`.
+A aplicação em produção exige autorização separada. Os quatro gates vivos (`check_grants.mjs`,
+`check_deriva.mjs`, `check_data_quality.mjs`, `check_realtime.mjs`) migraram para este caminho —
+`scripts/lib/audit-database.mjs`, login `divat_auditor_ci` — e por isso passaram a auditar o
+projeto de **TESTE**, não mais produção pelo caminho anterior (anon/PostgREST). Não é meio-termo:
+até a Fase 3 chegar a produção, produção não tem mais nenhum dos quatro gates automatizados a
+observá-la (ver § 9.1 para o item que isso mais afeta). Decisões, evidências e rollback:
+`docs/planos/fase-3-hardening-moderado.md`.
