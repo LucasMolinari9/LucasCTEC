@@ -41,14 +41,10 @@ on:
       - scripts/check_deriva.mjs
       - scripts/lib/audit-database.mjs
       - .github/workflows/deriva.yml
+  # Sem filtro de paths: `deriva` é check obrigatório da `main`. Com `pull_request.paths`, uma
+  # PR fora da lista não cria run e fica presa em "Waiting for status to be reported". O filtro
+  # de push acima continua cobrindo mudanças relevantes sem duplicar runs na `main`.
   pull_request:
-    paths:
-      - CLAUDE.md
-      - docs/schema.md
-      - app.js
-      - scripts/check_deriva.mjs
-      - scripts/lib/audit-database.mjs
-      - .github/workflows/deriva.yml
 
 # GITHUB_TOKEN no mínimo: nenhum destes workflows faz push, abre PR ou comenta.
 # Sem este bloco o token herda o default do repo/organização, que pode ser contents: write

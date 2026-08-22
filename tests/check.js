@@ -279,6 +279,33 @@ console.log('\n[1c] Workflows: nenhum env: com chave duplicada ignorando maiúsc
   if (!achados) okline(`ok (${blocos} bloco(s) env: em ${arquivos.length} workflow(s))`);
 }
 
+// ---------- [1d] checks obrigatórios sempre reportam em PR ----------
+console.log('\n[1d] Workflows obrigatórios: pull_request sem filtro de caminho');
+// Um check exigido pelo ruleset da `main` não pode ter `pull_request.paths`: quando a PR não
+// toca esses caminhos, o GitHub não cria run nenhum e o required check fica eternamente em
+// "Waiting for status to be reported". A guarda lista só os workflows vivos que o ruleset
+// tornou obrigatórios e que antes filtravam PR por caminho; CI, Views e Semgrep já rodam em toda
+// PR. Filtros de `push` continuam permitidos porque não participam do merge da PR.
+{
+  const WF = path.join(__dirname, '..', '.github', 'workflows');
+  const obrigatorios = ['db-checks.yml', 'deriva.yml', 'phase3-security.yml'];
+  let filtrados = 0;
+  for (const f of obrigatorios){
+    const src = fs.readFileSync(path.join(WF, f), 'utf8');
+    const bloco = /^  pull_request:\s*$([\s\S]*?)(?=^(?:[A-Za-z_]|  [A-Za-z_])[A-Za-z0-9_-]*:|(?![\s\S]))/m.exec(src);
+    if (!bloco){
+      fail(`${f} não declara pull_request; o check obrigatório nunca seria reportado em PR.`);
+      filtrados++;
+      continue;
+    }
+    if (/^    (?:paths|paths-ignore|branches|branches-ignore):/m.test(bloco[1])){
+      fail(`${f} filtra pull_request; PR fora do filtro fica presa em "Waiting for status to be reported".`);
+      filtrados++;
+    }
+  }
+  if (!filtrados) okline(`${obrigatorios.length} workflow(s) obrigatórios reportam em toda PR`);
+}
+
 // ---------- [2] guarda docs × código ----------
 // Irmã offline do scripts/check_deriva.mjs. Ele guarda docs × BANCO (tabelas, colunas, RPCs);
 // esta guarda o eixo que ficava descoberto: docs × CÓDIGO. As duas nascem da mesma causa —

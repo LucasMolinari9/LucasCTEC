@@ -171,7 +171,7 @@ usar o secret). Essa perda de alcance é parte da decisão, não um detalhe de i
    em 22/08/2026.**
 2. Executar os workflows manuais e anexar os resultados à PR. **Cumprido em 22/08/2026; ver os
    três runs na seção "Credencial auditora e secret".**
-3. Rodar todos os testes, 17 views e gates existentes da PR.
+3. Rodar todos os testes, 20 cenários de views e gates existentes da PR.
 4. Fazer smoke do preview protegido; configurar `VERCEL_AUTOMATION_BYPASS_SECRET` se ainda faltar.
 5. Confirmar no GitHub que os checks obrigatórios bloqueiam alteração da `main`.
 6. Manter a PR em rascunho e solicitar autorização separada para qualquer ação em produção.
