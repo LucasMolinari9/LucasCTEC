@@ -15,9 +15,13 @@ histórico/eventos, empresas e relatórios. Os dados são mantidos pelo dono dir
 - A lógica **pura** vai saindo do `app.js` para módulos ES nativos em [`src/domain/`](src/domain)
   (hoje `core.mjs`, `agrupamento.mjs`, `busca.mjs` e `view-state.mjs`), importados tanto pelo
   navegador quanto pelos testes — continua sem build: são `import` nativos, não bundle. Ao lado
-  deles, [`src/ui/`](src/ui) (markup de documento, paginação e listas de linha) e
-  [`src/data/`](src/data) (os caches de lookup) guardam o que não é puro mas também não é desta
-  tela; o que essas peças precisam do `app.js` chega por injeção, num bootstrap único.
+  deles, [`src/ui/`](src/ui) (markup de documento, paginação, listas de linha e o chooser de
+  empresa) e [`src/data/`](src/data) (caches de lookup, listas de coluna do `select=` e a
+  fronteira REST) guardam o que não é puro mas também não é desta tela. Cada família de
+  documentos do modal (Frota, Itinerários, Histórico, Estrutura, Tarifas, Portaria, Quadro de
+  Horários, Empresas, Municípios/Localidades) saiu inteira para
+  [`src/documentos/`](src/documentos). O que essas peças precisam do `app.js` chega por injeção,
+  num bootstrap único — mapa completo em [`CLAUDE.md`](CLAUDE.md).
 - As consultas vão direto ao **Supabase via REST** (PostgREST) com `fetch`. O `supabase-js`
   entra **só** para o canal **Realtime**, é **vendorado** em
   [`vendor/`](vendor/) (versão fixa, mesma origem) e é injetado dinamicamente pelo `app.js`.
@@ -68,7 +72,8 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 [`views.yml`](.github/workflows/views.yml) (navegador),
 [`semgrep.yml`](.github/workflows/semgrep.yml) (estático),
 [`deriva.yml`](.github/workflows/deriva.yml) (semanal + sob demanda),
-[`db-checks.yml`](.github/workflows/db-checks.yml) (semanal — Realtime e qualidade dos dados) e
+[`db-checks.yml`](.github/workflows/db-checks.yml) (diário — Realtime, qualidade dos dados e
+segurança/grants) e
 [`backup.yml`](.github/workflows/backup.yml) (backup semanal),
 [`deploy-smoke.yml`](.github/workflows/deploy-smoke.yml) (produção e previews) e
 [`phase3-security.yml`](.github/workflows/phase3-security.yml) (contrato da migration + auditor).
@@ -86,6 +91,7 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 |---|---|
 | `index.html` | A marcação do portal. |
 | `app.js` | Todo o JS, num IIFE. Dividido em seções com marcas `/* ===== TÍTULO ===== */`. |
+| [`src/`](src/) | Módulos ES extraídos do `app.js`: domínio puro, markup/paginação de UI, caches de dados e as famílias de documentos do modal. Reaberto arquivo a arquivo no `.vercelignore`. |
 | `styles.css` | Todo o CSS, inclusive os `@font-face` das fontes vendoradas. |
 | `vendor/` | `supabase-js` (versão fixa), fontes (Archivo, IBM Plex Mono/Sans) e o ícone. Nada disso vem de CDN em runtime. |
 | `manifest.webmanifest` | Manifest do PWA. |
@@ -93,6 +99,7 @@ outro: [`ci.yml`](.github/workflows/ci.yml) (gate leve),
 | `tests/` | Testes da lógica pura + o gate `check.js`. Ver [`tests/README.md`](tests/README.md). |
 | `scripts/` | Checagens de navegador/rede, backup, importador NDJSON e snapshot de segurança. |
 | `docs/` | Documentação técnica (abaixo). |
+| `supabase/migrations/` | Migrações de schema versionadas (ver skill `db-change`). |
 | `CLAUDE.md` | Contexto detalhado do projeto para sessões de IA (mapa do código, banco, armadilhas). |
 | `CONTEXT.md` | Glossário do domínio (termos do cadastro de linhas). |
 | `.github/workflows/` | Os 10 workflows de automação e CI (ver a tabela de testes acima). |
