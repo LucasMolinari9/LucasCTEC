@@ -8,8 +8,9 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > [`docs/estrutura-frontend.md`](docs/estrutura-frontend.md): o restante é wiring de shell e não há
 > redução mensurável de acoplamento. Reabrir apenas conforme
 > [`docs/governanca.md`](docs/governanca.md). O plano de
-> [`hardening moderado`](docs/planos/fase-3-hardening-moderado.md) registra separadamente as
-> condições externas ainda necessárias antes de qualquer promoção para produção.
+> [`hardening moderado`](docs/planos/fase-3-hardening-moderado.md) registra as condições externas
+> ainda necessárias; o [`dossiê de promoção`](docs/planos/fase-3-promocao-producao.md) reúne as
+> evidências e aguarda autorização humana separada para aplicar o DDL em produção.
 >
 > **O dono opera pelo CELULAR:** "rode `node …` na sua máquina" não é instrução executável para ele
 > — o caminho é a aba Actions ou o painel do Supabase, no navegador (o **app** do GitHub não mostra
@@ -103,12 +104,14 @@ exibe e **atualiza ao vivo** (Realtime).
   `manifest.webmanifest`, `vercel.json`, `version.json`, `vendor/` e os módulos de `src/`
   reabertos um a um (hoje `domain/core.mjs`, `domain/agrupamento.mjs`, `domain/busca.mjs`,
   `domain/view-state.mjs`, `ui/doc.mjs`, `ui/paginacao.mjs`, `ui/listas.mjs`, `ui/blocos.mjs`,
-  `ui/empresas.mjs`, `data/lookups.mjs`, `data/campos.mjs`, `documentos/shell.mjs`,
-  `documentos/frota-historico-itinerarios.mjs`, `documentos/estrutura-tarifas-portaria.mjs` e
-  `documentos/quadro-empresas.mjs` — cada subdiretório novo de `src/` também precisa das suas
-  três linhas, e a Fase C1 abriu `src/documentos/` pagando exatamente isso; arquivo novo num
-  subdiretório já aberto custa só a linha dele, como C2 e C3 pagaram para `ui/empresas.mjs`,
-  `documentos/estrutura-tarifas-portaria.mjs` e `documentos/quadro-empresas.mjs`).
+  `ui/empresas.mjs`, `data/lookups.mjs`, `data/campos.mjs`, `data/rest.mjs`,
+  `documentos/shell.mjs`, `documentos/frota-historico-itinerarios.mjs`,
+  `documentos/estrutura-tarifas-portaria.mjs`, `documentos/quadro-empresas.mjs` e
+  `documentos/municipios-localidades.mjs` — cada subdiretório novo de `src/` também precisa das
+  suas três linhas, e a Fase C1 abriu `src/documentos/` pagando exatamente isso; arquivo novo num
+  subdiretório já aberto custa só a linha dele, como C2, C3 e C4 pagaram para `ui/empresas.mjs`,
+  `documentos/estrutura-tarifas-portaria.mjs`, `documentos/quadro-empresas.mjs` e
+  `documentos/municipios-localidades.mjs`).
   Arquivo público novo (ícone, fonte) precisa ser reaberto lá, senão vira 404. **`src/` é reaberto
   arquivo a arquivo**, não com um `!/src` de uma linha: é diretório cujo nome convida a guardar o
   que não se serve, e reabri-lo inteiro publicaria em silêncio o que alguém largar ali. Reabrir só
@@ -155,6 +158,9 @@ exibe e **atualiza ao vivo** (Realtime).
     **RLS não bloqueia TRUNCATE**, e a anon key é pública, então era caminho aberto para esvaziar o
     banco. Por isso o `backup_schema.sql` agora revoga tudo que não é SELECT, não só `MAINTAIN`.
     Mitigação: o gate `scripts/check_grants.mjs` roda **diariamente** enquanto esse default existir.
+    **Cobertura atual do gate é o projeto de TESTE, não produção** — migrou para o auditor
+    PostgreSQL mínimo (`divat_auditor_ci`) e por isso produção fica sem nenhum dos quatro gates
+    vivos até a Fase 3 chegar lá; detalhe em `docs/seguranca.md` §10 e §9.1.
   - **NUNCA conceda escrita (GRANT nem policy de INSERT/UPDATE/DELETE) a `anon`/`authenticated`.**
     Se um dia precisar de edição logada legítima, crie policy **restrita por tabela/coluna** —
     nunca `ALL USING(true)`.
@@ -308,17 +314,20 @@ PDF não têm teste em Node; o que os módulos de `src/ui/` têm de markup puro 
    `deploy-smoke.yml`, `backup.yml`, `atualizar-baseline.yml` e `atualizar-semgrep-rulesets.yml`
    (os dois últimos são **só** `workflow_dispatch` e existem pelo mesmo motivo: fazer, pela aba
    Actions, o que de outro modo exigiria terminal — um mede um banco e abre PR com o diff do
-   baseline; o outro baixa os rulesets do Semgrep e abre PR com o diff deles). Os cinco primeiros
-   mais o contrato offline da Fase 3 podem entrar num PR conforme os arquivos tocados; o smoke
-   acompanha deploys; o backup é cron/manual. Um vermelho não esconde o outro.
+   baseline; o outro baixa os rulesets do Semgrep e abre PR com o diff deles). `check`, `views`,
+   `semgrep`, `deriva`, `realtime`, `qualidade`, `seguranca` e `migration-contract` (o contrato
+   offline da Fase 3) são **checks obrigatórios** de um ruleset da `main`: rodam em **toda PR**,
+   sem filtro de caminho — desde 22/08/2026, quando o filtro saiu de `db-checks.yml`,
+   `deriva.yml` e `phase3-security.yml` porque um required check fora do filtro trava o merge em
+   "Waiting for status to be reported". O smoke acompanha deploys; o backup é cron/manual. Um
+   vermelho não esconde o outro.
    Se previews estiverem protegidos pela Vercel, configure um **Protection Bypass for
    Automation** e grave o mesmo valor no secret GitHub `VERCEL_AUTOMATION_BYPASS_SECRET`;
    sem isso o smoke recebe a tela de login em vez do portal e falha de propósito.
-   **Onde os gates disparam (desde 30/07/2026):** `ci`, `views`, `semgrep`, `deriva` e
-   `db-checks` rodam em **`pull_request`** e em **push na `main`** — não mais em push de branch
-   qualquer, que fazia cada um rodar **duas vezes** quando havia PR aberto. Consequência prática:
-   **push numa branch sem PR aberto não dispara gate nenhum.** Rode `node tests/check.js` local,
-   ou dispare pela aba Actions → Run workflow (`workflow_dispatch`, que os cinco têm).
+   **Onde os gates disparam (desde 30/07/2026):** push de branch **sem** PR aberto não dispara
+   gate nenhum — evita rodar cada um **duas vezes** quando há PR. Rode `node tests/check.js`
+   local, ou dispare pela aba Actions → Run workflow (`workflow_dispatch`, que os que não exigem
+   segredo têm).
 2. **Antes de publicar, rode `node tests/check.js`** — valida a sintaxe do `app.js`, garante que
    não voltou `<script>` inline no `index.html`, confere as cópias de teste (anti-drift), cobra a
    **deriva docs×código** (seção `[2b]`, ver abaixo) e roda todos os testes. Só publique tudo
@@ -364,7 +373,9 @@ PDF não têm teste em Node; o que os módulos de `src/ui/` têm de markup puro 
    Actions → workflow `atualizar-semgrep-rulesets` → abre PR com o diff.
    Runbook e como escrever regra nova: **`docs/semgrep.md`**.
 2c. **Deriva docs×banco — `node scripts/check_deriva.mjs`** (precisa de rede). Confere que toda
-   tabela/coluna/RPC que o repo afirma existe mesmo, na visão de `anon`.
+   tabela/coluna/RPC que o repo afirma existe mesmo — pelo auditor PostgreSQL mínimo
+   (`divat_auditor_ci`), contra o projeto de **teste**, não mais na visão de `anon`/produção
+   (migração registrada em `docs/seguranca.md` §10).
    **O que quebra se esquecer:** nada imediato — por isso o workflow `deriva.yml` roda **semanal**
    além de push/PR: deriva também nasce de mudança NO BANCO, que não gera push. Do ambiente do
    Claude não roda; é para a máquina do dono e o CI. Fica **fora** do `check.js` (contrato dele:
@@ -385,8 +396,9 @@ PDF não têm teste em Node; o que os módulos de `src/ui/` têm de markup puro 
    mudou de forma, ajuste o regex na tabela `FATOS`). Ela é deliberadamente estreita: a 1ª versão
    varria todo token em backtick e deu 61 falsos positivos contra 0 verdadeiros.
 2e. **Qualidade dos dados pós-ETL — `node scripts/check_data_quality.mjs`** (precisa de rede;
-   chama a RPC `divat_data_quality()` como `anon`). Fecha a issue #63. Roda semanal no
-   `db-checks.yml`, junto do `check_realtime.mjs`.
+   chama `divat_data_quality()` pelo auditor PostgreSQL mínimo, contra o projeto de **teste** —
+   não mais a RPC como `anon`/produção). Fecha a issue #63. Roda **diariamente** no
+   `db-checks.yml`, junto do `check_realtime.mjs` e do `check_grants.mjs` (job `seguranca`).
    **A integridade hub-and-spoke JÁ ESTÁ VIOLADA no banco:** 17 codlinhas órfãs em 4 tabelas + 4
    linhas com `cod_origem` inexistente, medidas em 27/07/2026. **As views dessas linhas renderizam
    VAZIAS, sem erro.** A dívida está registrada em `scripts/data_quality_baseline.json` — o gate

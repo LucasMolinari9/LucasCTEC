@@ -4,6 +4,27 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 22/08/2026 — checks obrigatórios em toda PR
+
+- Ruleset novo na `main` exige oito checks antes do merge: `check`, `views`, `semgrep`, `deriva`,
+  `realtime`, `qualidade`, `seguranca` e `migration-contract`. Bloqueia também exclusão, force
+  push e exige conversas resolvidas, sem lista de bypass.
+- `db-checks.yml`, `deriva.yml` e `phase3-security.yml` perderam o filtro de `paths` no gatilho
+  `pull_request`: um required check fora do filtro nunca cria run, e a PR fica presa para sempre
+  em "Waiting for status to be reported". O filtro de `push` na `main` (que já era econômico)
+  continua valendo — só o lado de PR ficou incondicional.
+- Guarda nova, `tests/check.js` §[1d]: falha se um dos três workflows voltar a filtrar
+  `pull_request` por caminho, branch ou qualquer outro seletor.
+
+## 22/08/2026 — dossiê de promoção para produção (Fase 3)
+
+- Novo plano vivo, `docs/planos/fase-3-promocao-producao.md`: reúne as evidências dos gates
+  contra o projeto de teste e da `main` atual, descreve o ruleset de proteção da `main`, o gate de
+  autorização humana separada para aplicar o DDL em `lwzsxuaqqeoamukduhev`, a checklist de
+  validação pós-promoção e a parada obrigatória em caso de drift.
+- Esta PR é só documentação e evidência — não altera frontend, modularização, dados nem schema; o
+  DDL versionado que poderá ser promovido já está em `supabase/migrations/`.
+
 ## 22/08/2026 — encerramento deliberado da modularização
 
 - Após B, C1–C4 e D, foram inventariadas as responsabilidades de shell restantes no `app.js`:

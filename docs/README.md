@@ -20,6 +20,9 @@ Comece por este arquivo. O objetivo é localizar a fonte vigente sem varrer o hi
   separação aumentaria as dependências mutáveis.
 - [`planos/fase-3-hardening-moderado.md`](planos/fase-3-hardening-moderado.md) reúne o estado e as
   condições ainda abertas para promover o hardening do banco.
+- [`planos/fase-3-promocao-producao.md`](planos/fase-3-promocao-producao.md) é o dossiê de
+  evidências e o roteiro operacional para aplicar esse hardening em produção; aguarda autorização
+  humana separada.
 - [`CHANGELOG.md`](CHANGELOG.md) registra a cronologia do produto. Planos encerrados, handoffs e
   auditorias removidos da árvore continuam disponíveis no histórico do Git.
 
