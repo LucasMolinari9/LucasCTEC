@@ -4,6 +4,33 @@ Cronologia dos endurecimentos e mudanças estruturais. O `CLAUDE.md` descreve s�
 atual + regras**; o histórico de *como se chegou nele* vive aqui (com links para os relatórios
 de auditoria em `docs/`).
 
+## 24/08/2026 — Fase 3 promovida a produção (DDL aplicado)
+
+- Migrações `20260729034018_phase3_moderate_hardening.sql`,
+  `20260822144441_phase3_repara_funcoes_publicas.sql` e
+  `20260824015658_phase3_guarda_fecha_security_digest.sql` aplicadas contra
+  `lwzsxuaqqeoamukduhev` (produção), nesta ordem, via MCP do Supabase. As 4 RPCs diagnósticas
+  saíram de `public` para `audit`; `anon`/`authenticated` perderam `EXECUTE` nelas;
+  `authenticated` ficou sem privilégio de tabela; a allowlist anônima de `public` ficou exata em
+  `divat_busca_logradouro`/`divat_linhas_regiao`. Validado ao vivo (leitura): as 4 funções em
+  `audit`, nenhuma em `public`; smoke de `divat_busca_logradouro` como `anon` retornou dados; as
+  14 tabelas de produto legíveis por `anon` sem escrita e com RLS; as 14 tabelas esperadas na
+  publicação `supabase_realtime`. Detalhe completo, inclusive o que ainda falta (credencial de
+  auditor de produção + apontar o gate diário para ela — itens 7/8, ainda pendentes):
+  `docs/planos/fase-3-promocao-producao.md`.
+- Achado à parte, descoberto ao preparar a promoção: `20260822151652_phase3_fecha_security_digest.sql`
+  (já mergeada desde a PR #142, fechando um achado real do `check_deriva.mjs` — uma função
+  `divat_security_digest()` diferente de `divat_security_shape`, exposta a `anon` em teste, nunca
+  documentada nos três documentos da Fase 3) assume que a função existe em algum lugar e falha
+  com "function does not exist" contra um banco onde ela nunca existiu — o caso real de produção,
+  medido em 24/08/2026. Nova migração `20260824015658_phase3_guarda_fecha_security_digest.sql`
+  corrige isso (idempotente em qualquer estado, sem editar a migração já aplicada em teste) e
+  rodou em produção no lugar da 3. Documentado nos três lugares que já descreviam a Fase 3:
+  `fase-3-promocao-producao.md`, `fase-3-hardening-moderado.md` e `seguranca.md` §10.
+- Backup automatizado (`backup.yml`) não pôde ser disparado nesta sessão (403 do token do MCP do
+  GitHub em `workflow_dispatch`); mitigado capturando a definição exata das 8 funções afetadas
+  antes de aplicar qualquer DDL, já que nenhuma das migrações toca dado de tabela.
+
 ## 22/08/2026 — checks obrigatórios em toda PR
 
 - Ruleset novo na `main` exige oito checks antes do merge: `check`, `views`, `semgrep`, `deriva`,

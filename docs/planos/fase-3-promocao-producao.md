@@ -1,8 +1,11 @@
 # Fase 3 — dossiê de promoção para produção
 
-> Estado: **pré-promoção**. Este documento não autoriza nem executa DDL. A aplicação no projeto
-> de produção `lwzsxuaqqeoamukduhev` depende de autorização humana explícita e separada, solicitada
-> somente depois que a PR em rascunho estiver verde.
+> **Estado: DDL aplicado em produção em 24/08/2026.** As migrações 1, 2 e 4 (ver lista abaixo)
+> rodaram contra `lwzsxuaqqeoamukduhev` e as validações pós-promoção 1, 3, 4, 5 e 6 foram
+> confirmadas ao vivo — ver "Resultado da promoção" abaixo. **A promoção não está encerrada:** os
+> itens 7 e 8 (credencial de auditor de produção + apontar o gate diário para ela) ainda não
+> foram feitos, então produção segue sem o gate automático diário de grants (o mesmo estado
+> descrito em `docs/seguranca.md` §9.1) até esses dois itens saírem.
 
 ## Escopo desta PR
 
@@ -21,12 +24,13 @@ voltar a aparecer em `public`.
    primeira aplicação em produção).
 3. `20260822151652_phase3_fecha_security_digest.sql` — fecha `divat_security_digest()`, achado
    separado do `check_deriva.mjs` em 22/08/2026 (ver `fase-3-hardening-moderado.md`, seção
-   "Achado adicional"). Essa função **nunca existiu em produção** (medido em 24/08/2026); a
-   migração falha com "function does not exist" se rodada sozinha contra um banco onde a função
-   nunca existiu — por isso a migração 4 é obrigatória junto.
-4. `20260824015658_phase3_guarda_fecha_security_digest.sql` — corrige o problema da migração 3
-   para bancos onde `divat_security_digest()` nunca existiu (produção): idempotente em qualquer
-   estado, não edita a migração já aplicada em teste.
+   "Achado adicional"). **NÃO aplicada em produção**: essa função nunca existiu lá (medido em
+   24/08/2026), e a migração falha com "function does not exist" se rodada contra um banco onde
+   a função nunca existiu em lugar nenhum — aplicá-la teria só abortado sem efeito.
+4. `20260824015658_phase3_guarda_fecha_security_digest.sql` — substitui a migração 3 para
+   produção: mesmo efeito onde a função existe, no-op seguro onde nunca existiu. Idempotente em
+   qualquer estado, não edita a migração já aplicada em teste. **Esta é a que rodou em produção**
+   no lugar da 3.
 
 ## Evidências prévias
 
@@ -99,30 +103,50 @@ Todas as precondições batem — a migração 1 deve passar seu próprio bloco 
 
 ## Gate de autorização para produção
 
-Depois que a PR estiver verde, solicitar ao proprietário uma resposta inequívoca que autorize
-**separadamente** executar o DDL da Fase 3 em `lwzsxuaqqeoamukduhev`. Ausência de resposta,
-aprovação da PR ou autorização para merge não substituem essa autorização operacional. Antes do
-DDL, confirmar backup fresco conforme `docs/backup.md`.
+Autorização concedida pelo dono no chat em 24/08/2026 ("tente fazer você", em resposta direta à
+pergunta se deveria autenticar/usar o MCP do Supabase para aplicar o DDL). Backup automatizado
+(`backup.yml`, modo público/dados) **não pôde ser disparado** nesta sessão — o token do MCP do
+GitHub recebeu 403 ao tentar `workflow_dispatch`. Como as quatro migrações não tocam dado nenhum
+(só schema/função/role/grant), a mitigação usada foi capturar, antes de aplicar, a definição
+exata de cada uma das 8 funções afetadas (via `pg_get_functiondef`, só leitura) — rollback
+preciso disponível sem depender do backup de dados. Recomendado ao dono rodar o backup manual em
+paralelo (aba Actions → Backup → Run workflow) por redundância.
 
-## Validação imediata depois da promoção autorizada
+## Resultado da promoção (24/08/2026)
 
-Sem encerrar a janela operacional, executar e anexar os resultados destas verificações contra
-produção:
+Migrações 1, 2 e 4 aplicadas nesta ordem contra `lwzsxuaqqeoamukduhev` via MCP do Supabase, cada
+uma com sucesso e sem precisar de `force`/retry — os blocos de precondição e assert de cada
+arquivo passaram (teriam abortado a transação com `raise exception` em caso de divergência). A
+migração 3 foi deliberadamente **não aplicada** em produção (ver lista de migrações acima).
 
-1. confirmar que as quatro funções diagnósticas existem em `audit` e nenhuma delas existe em
-   `public`: `divat_security_shape`, `divat_api_shape`, `divat_data_quality` e
-   `realtime_tables`;
-2. executar os quatro diagnósticos como o auditor mínimo, provando também que ele não ganhou
-   `SELECT` direto em tabela;
-3. confirmar a allowlist anônima exata das RPCs de produto:
-   `divat_busca_logradouro(text,integer)` e `divat_linhas_regiao(text,text)`;
-4. confirmar `authenticated` sem funções executáveis e sem privilégios nas tabelas;
-5. confirmar as 14 tabelas públicas legíveis por `anon`, sem `INSERT`, `UPDATE`, `DELETE` ou
-   `TRUNCATE`, e com RLS ligado;
-6. confirmar as 14 tabelas esperadas na publicação `supabase_realtime`;
-7. configurar a credencial auditora de produção sem reutilizar nem ampliar a credencial de teste;
-8. apontar o gate diário de grants para a credencial auditora mínima de produção e comprovar uma
-   execução verde de `seguranca`, preservando os demais gates independentes.
+## Validação pós-promoção — o que foi conferido ao vivo (só leitura)
+
+1. ✅ **Confirmado.** As quatro funções diagnósticas existem em `audit`; nenhuma delas, nem
+   `divat_security_digest`, existe em `public`.
+2. ⚠️ **Coberto indiretamente, não reverificável isoladamente por enquanto.** Cada migração já
+   prova, dentro da própria transação, que `divat_auditor` consegue chamar as quatro funções
+   (`set local role divat_auditor; perform ...;`) — isso rodou e passou nas três migrações. Uma
+   segunda checagem independente, fora de uma migração, falhou com `permission denied to set
+   role "divat_auditor"` — **esperado**: as migrações revogam a associação de `postgres` a
+   `divat_auditor`/`divat_audit_owner` na última linha, de propósito, então nenhuma sessão tem
+   acesso parado a esse papel. Reverificar isso de fora de uma migração exige a credencial de
+   auditor de produção (item 7), que ainda não existe.
+3. ✅ **Confirmado.** Allowlist anônima de `public` é exatamente
+   `{divat_busca_logradouro, divat_linhas_regiao}`; smoke ao vivo de
+   `divat_busca_logradouro('silva', null)` como `anon` devolveu 469 linhas.
+4. ✅ **Confirmado.** `authenticated` sem nenhum privilégio (`select`/`insert`/`update`/`delete`/
+   `truncate`) nas 18 tabelas de `public`, e sem `EXECUTE` em nenhuma função de `public`/`audit`.
+5. ✅ **Confirmado.** As 14 tabelas de produto legíveis por `anon`, RLS ligado nas 18 (as 14 +
+   as 4 de staging do ETL), zero escrita de `anon` em qualquer uma; as 4 de staging
+   (`evento_dados`, `evento_textos`, `portaria_data`, `portaria_texto_teste`) continuam
+   invisíveis para `anon`.
+6. ✅ **Confirmado.** 14 tabelas na publicação `supabase_realtime`, mesma lista das 14 tabelas de
+   produto.
+7. ❌ **Pendente.** Credencial de auditor de produção (separada da de teste) não foi criada —
+   exige gerar senha e decidir onde guardar o secret; não é decisão que se toma sozinha no meio
+   de uma sessão.
+8. ❌ **Pendente**, depende do item 7. Enquanto isso, o gate diário de grants continua observando
+   só o projeto de teste (mesmo estado de `docs/seguranca.md` §9.1).
 
 ## Parada obrigatória em caso de drift
 
@@ -136,4 +160,6 @@ associações de roles com o drift documentado em
 
 A promoção só pode ser declarada concluída depois que todas as validações pós-promoção estiverem
 verdes, seus links estiverem anexados à PR e o próximo disparo diário de `seguranca` estiver
-confirmado. Até lá, esta PR permanece como registro de uma operação em andamento.
+confirmado. **Ainda não está concluída**: itens 7 e 8 seguem pendentes (credencial de auditor de
+produção + apontar o gate diário). Até lá, este documento permanece como registro de uma operação
+em andamento, não de um trabalho encerrado.

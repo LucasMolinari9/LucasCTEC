@@ -7,10 +7,13 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > decisão deliberada de não executar a etapa E estão em
 > [`docs/estrutura-frontend.md`](docs/estrutura-frontend.md): o restante é wiring de shell e não há
 > redução mensurável de acoplamento. Reabrir apenas conforme
-> [`docs/governanca.md`](docs/governanca.md). O plano de
-> [`hardening moderado`](docs/planos/fase-3-hardening-moderado.md) registra as condições externas
-> ainda necessárias; o [`dossiê de promoção`](docs/planos/fase-3-promocao-producao.md) reúne as
-> evidências e aguarda autorização humana separada para aplicar o DDL em produção.
+> [`docs/governanca.md`](docs/governanca.md). **Fase 3 promovida a produção em 24/08/2026** — ver
+> [`dossiê de promoção`](docs/planos/fase-3-promocao-producao.md) para as evidências e o que ainda
+> falta: a credencial de auditor **de produção** (separada da de teste) não foi criada, e por isso
+> o gate diário de grants (`check_grants.mjs`) continua observando só o projeto de teste — item
+> aberto do dossiê, não travado por autorização, só pelo trabalho de criar/rotacionar a credencial
+> sem versionar senha. O [`plano de hardening moderado`](docs/planos/fase-3-hardening-moderado.md)
+> mantém o histórico de decisões e do drift já reparado.
 >
 > **O dono opera pelo CELULAR:** "rode `node …` na sua máquina" não é instrução executável para ele
 > — o caminho é a aba Actions ou o painel do Supabase, no navegador (o **app** do GitHub não mostra
