@@ -32,10 +32,11 @@ jobs:
        (github.event.deployment_status.environment_url != '' ||
         github.event.deployment_status.target_url != ''))
     runs-on: ubuntu-latest
+    environment: deploy-smoke
     timeout-minutes: 5
     env:
       # Para previews com Deployment Protection, crie um Protection Bypass for Automation na
-      # Vercel e salve o MESMO valor como secret do repositório com este nome. Sem ele, o script
+      # Vercel e salve o MESMO valor como secret do Environment com este nome. Sem ele, o script
       # falha com diagnóstico explícito em vez de testar por engano a tela de login da Vercel.
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       # O deployment_status entrega a URL POR-DEPLOY (divatdetro-<hash>-….vercel.app), que não
@@ -75,7 +76,15 @@ jobs:
               *prod*) url="$PRODUCTION_URL" ;;
             esac
           fi
+          case "$url" in
+            ''|*$'\r'*|*$'\n'*)
+              echo 'URL de smoke vazia ou contendo CR/LF' >&2
+              exit 2
+              ;;
+          esac
           echo "Verificando: $url"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
+          printf 'url=%s\n' "$url" >> "$GITHUB_OUTPUT"
       - name: Headers, allowlist e isolamento do Supabase
-        run: node scripts/check_deploy.mjs "${{ steps.alvo.outputs.url }}" "$DEPLOY_ENVIRONMENT"
+        env:
+          SMOKE_URL: ${{ steps.alvo.outputs.url }}
+        run: node scripts/check_deploy.mjs "$SMOKE_URL" "$DEPLOY_ENVIRONMENT"
