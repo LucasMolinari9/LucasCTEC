@@ -11,19 +11,22 @@
  * pelo hostname efetivamente publicado.
  */
 
+import {
+  ALLOWED_DEPLOY_HOSTS,
+  fetchSameOrigin,
+  normalizeDeployTarget,
+} from './lib/deploy-target.mjs';
+
 const [, , rawUrl, rawEnvironment = 'auto'] = process.argv;
 if (!rawUrl) {
   console.error('Uso: node scripts/check_deploy.mjs <url> [preview|production|auto]');
   process.exit(2);
 }
 
-const base = new URL(rawUrl);
-if (base.protocol !== 'https:') {
-  throw new Error(`Deploy precisa usar HTTPS: ${base.href}`);
-}
-base.pathname = '/';
-base.search = '';
-base.hash = '';
+// Esta validação completa precisa preceder até mesmo a leitura do segredo. A allowlist contém
+// somente aliases estáveis já controlados pelo projeto; hostnames efêmeros `*.vercel.app` não
+// autenticam que o deployment pertence a este projeto e, portanto, nunca recebem o bypass.
+const base = normalizeDeployTarget(rawUrl, ALLOWED_DEPLOY_HOSTS);
 const vercelBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
 
 const failures = [];
@@ -53,8 +56,7 @@ async function request(pathname) {
     // Não é preciso cookie nenhum: o header de bypass vai em TODA requisição deste script.
   }
   try {
-    return await fetch(new URL(pathname, base), {
-      redirect: 'follow',
+    return await fetchSameOrigin(new URL(pathname, base), {
       signal: controller.signal,
       headers,
     });
