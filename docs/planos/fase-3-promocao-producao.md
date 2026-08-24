@@ -11,6 +11,23 @@ altera frontend, modularização, dados nem schema. O DDL versionado que poderá
 está em `supabase/migrations/`. Nenhuma migração deve ser reaplicada às cegas se um diagnóstico
 voltar a aparecer em `public`.
 
+**As quatro migrações a aplicar em produção, nesta ordem** (conferidas contra as precondições de
+`lwzsxuaqqeoamukduhev` em 24/08/2026 — ver "Verificação de precondições" abaixo):
+
+1. `20260729034018_phase3_moderate_hardening.sql` — move as 4 RPCs diagnósticas para `audit`,
+   fecha o `EXECUTE` de `anon`/`authenticated` no schema `public` e cria os papéis de auditoria.
+2. `20260822144441_phase3_repara_funcoes_publicas.sql` — idempotente; reconfirma as 4 funções em
+   `audit` (não faz nada de novo se a migração 1 já as deixou corretas, que é o caso esperado numa
+   primeira aplicação em produção).
+3. `20260822151652_phase3_fecha_security_digest.sql` — fecha `divat_security_digest()`, achado
+   separado do `check_deriva.mjs` em 22/08/2026 (ver `fase-3-hardening-moderado.md`, seção
+   "Achado adicional"). Essa função **nunca existiu em produção** (medido em 24/08/2026); a
+   migração falha com "function does not exist" se rodada sozinha contra um banco onde a função
+   nunca existiu — por isso a migração 4 é obrigatória junto.
+4. `20260824015658_phase3_guarda_fecha_security_digest.sql` — corrige o problema da migração 3
+   para bancos onde `divat_security_digest()` nunca existiu (produção): idempotente em qualquer
+   estado, não edita a migração já aplicada em teste.
+
 ## Evidências prévias
 
 Todos os runs abaixo terminaram com sucesso em 22/08/2026:
@@ -55,6 +72,30 @@ atinge `~DEFAULT_BRANCH`, exige PR atualizada e bloqueia merge até estes oito c
 O ruleset também bloqueia exclusão e force push, exige resolução das conversas e não possui lista
 de bypass. Como os runs acima são anteriores a esta PR documental, os oito checks da própria PR
 também precisam terminar verdes antes de solicitar autorização de produção.
+
+## Verificação de precondições contra produção (24/08/2026)
+
+A migração 1 tem seu próprio bloco de precondição (aborta com `raise exception` se o banco não
+bater com o formato esperado — ver o arquivo). Antes de solicitar autorização, essas precondições
+foram conferidas **ao vivo** contra `lwzsxuaqqeoamukduhev`, só leitura:
+
+| Precondição | Esperado | Medido em produção |
+|---|---|---|
+| Tabelas em `public` | 18 | 18 ✓ |
+| Schema `private` já existe | não | não ✓ |
+| Schema `audit` já existe | não | não ✓ |
+| Papéis `divat_audit_owner`/`divat_auditor` já existem | não | não ✓ |
+| `divat_busca_logradouro(text,integer)` existe em `public` | sim | sim ✓ |
+| `divat_linhas_regiao(text,text)` existe em `public` | sim | sim ✓ |
+| `divat_api_shape()` existe em `public`, `anon`/`authenticated` conseguem executar | sim | sim ✓ |
+| `divat_security_shape()` idem | sim | sim ✓ |
+| `divat_data_quality()` idem | sim | sim ✓ |
+| `realtime_tables()` idem | sim | sim ✓ |
+| `f_unaccent(text)` existe em `public` | sim | sim ✓ |
+| `fn_vigor_auto()` existe em `public` | sim | sim ✓ |
+| `divat_security_digest()` existe em algum schema | não (nunca existiu em produção) | não ✓ |
+
+Todas as precondições batem — a migração 1 deve passar seu próprio bloco de guarda sem abortar.
 
 ## Gate de autorização para produção
 

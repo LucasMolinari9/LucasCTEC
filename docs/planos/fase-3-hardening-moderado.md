@@ -60,6 +60,29 @@ não há como garantir que não volte. Se os gates `deriva`/`realtime` (que depe
 `divat_api_shape`/`realtime_tables`) começarem a falhar depois de terem passado, o primeiro
 lugar a olhar é se essas duas funções voltaram para `public`.
 
+## Achado adicional — `divat_security_digest()`, fechado em 22/08/2026
+
+Mesmo dia, achado separado: o `check_deriva.mjs`, já rodando contra o banco de teste vivo, achou
+`public.divat_security_digest()` — **não é a mesma função que `divat_security_shape`** —
+executável por `anon` e sem documentação em lugar nenhum. Ela devolve um hash SHA-256 +
+contadores da postura de segurança inteira (RLS por tabela, grants de anon/authenticated,
+funções `SECURITY DEFINER` executáveis por anon, defaults permissivos), cruzando
+`public`+`audit`+`private` — exatamente o tipo de diagnóstico que a Fase 3 existe para tirar do
+alcance de `anon`. Não veio de nenhuma migração deste repo (mesma origem não determinada do
+drift acima); foi criada direto no projeto de teste. Fechada por
+`20260822151652_phase3_fecha_security_digest.sql` (move para `audit`, `security definer`,
+owner `divat_audit_owner`, revoga `anon`/`authenticated`, prova via `divat_auditor`).
+
+**Medido em 24/08/2026 contra produção, antes de qualquer promoção:** essa função nunca existiu
+em `lwzsxuaqqeoamukduhev`, nem em `public` nem em `audit` — produção nunca esteve exposta a ela.
+Mas a migração original assume que a função existe em algum lugar; os passos depois do primeiro
+`alter ... set schema` são incondicionais e por isso **erram com "function does not exist"
+(42883)** num banco onde ela nunca existiu, abortando a transação. `20260824015658_phase3_guarda_
+fecha_security_digest.sql` corrige isso com uma migração nova (não edita a já aplicada): fecha a
+função se ela existir em `public` ou já estiver em `audit`, não faz nada, sem erro, se ela nunca
+existiu. Validado por reaplicação em teste (idempotente, estado final inalterado) antes de
+qualquer aplicação em produção.
+
 ## Credencial auditora e secret
 
 **Estado verificado em 22/08/2026: login ativo e secret configurado.** O secret de Actions

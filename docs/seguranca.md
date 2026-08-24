@@ -242,3 +242,9 @@ projeto de **TESTE**, não mais produção pelo caminho anterior (anon/PostgREST
 até a Fase 3 chegar a produção, produção não tem mais nenhum dos quatro gates automatizados a
 observá-la (ver § 9.1 para o item que isso mais afeta). Decisões, evidências e rollback:
 `docs/planos/fase-3-hardening-moderado.md`.
+
+Achado separado em 22/08/2026, mesmo dia: `public.divat_security_digest()` — não é a mesma função
+que `divat_security_shape` acima — devolvia um hash SHA-256 + contadores da postura de segurança
+inteira, executável por `anon`, criada fora de qualquer migração deste repo. Fechada em teste;
+medido em 24/08/2026 que ela nunca existiu em produção. Detalhe: `fase-3-hardening-moderado.md`,
+seção "Achado adicional".
