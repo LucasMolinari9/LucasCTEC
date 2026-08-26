@@ -11,19 +11,36 @@
  * pelo hostname efetivamente publicado.
  */
 
+import { validarDestinoDeploy, hostsProdDe } from './lib/destino_deploy.mjs';
+
 const [, , rawUrl, rawEnvironment = 'auto'] = process.argv;
 if (!rawUrl) {
   console.error('Uso: node scripts/check_deploy.mjs <url> [preview|production|auto]');
   process.exit(2);
 }
 
-const base = new URL(rawUrl);
-if (base.protocol !== 'https:') {
-  throw new Error(`Deploy precisa usar HTTPS: ${base.href}`);
+// Achado SEC-03 (auditoria de 26/08/2026): aqui só se conferia `https:`, e o segredo de bypass
+// ia para QUALQUER host que a URL apontasse — `inputs.url` do workflow_dispatch e
+// `environment_url` do deployment_status não são constantes do repositório. A allowlist sai do
+// app.js LOCAL (o do checkout), nunca do publicado: no primeiro request o publicado ainda não
+// foi lido, e perguntar ao alvo se pode falar com o alvo é circular.
+const { readFileSync } = await import('node:fs');
+const { fileURLToPath: caminhoDe } = await import('node:url');
+const HOSTS_PROD_LOCAIS = (() => {
+  try {
+    return hostsProdDe(readFileSync(new URL('../app.js', import.meta.url), 'utf8'));
+  } catch {
+    return [];   // sem app.js à mão sobra o domínio da Vercel — lista vazia só restringe
+  }
+})();
+
+let base;
+try {
+  base = validarDestinoDeploy(rawUrl, { hostsProd: HOSTS_PROD_LOCAIS });
+} catch (e) {
+  console.error(`ERRO: ${e.message}`);
+  process.exit(2);
 }
-base.pathname = '/';
-base.search = '';
-base.hash = '';
 const vercelBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
 
 const failures = [];
@@ -53,8 +70,11 @@ async function request(pathname) {
     // Não é preciso cookie nenhum: o header de bypass vai em TODA requisição deste script.
   }
   try {
+    // redirect:'error' (SEC-03): com 'follow', um 302 no alvo reenviava
+    // `x-vercel-protection-bypass` para o host de destino do redirect, contornando a allowlist
+    // que acabou de ser aplicada sobre a URL de entrada.
     return await fetch(new URL(pathname, base), {
-      redirect: 'follow',
+      redirect: 'error',
       signal: controller.signal,
       headers,
     });

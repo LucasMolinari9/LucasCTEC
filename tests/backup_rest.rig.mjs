@@ -15,7 +15,7 @@
 //  - SHA-256 no manifest é determinístico.
 
 import { createServer } from 'node:http';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -99,8 +99,19 @@ function rodar(saida) {
 let falhas = 0;
 const checar = (ok, nome, extra = '') => { if (!ok) falhas++; console.log(`${ok ? '  ✓' : '  ✗'} ${nome}${ok ? '' : ' — ' + extra}`); };
 
+// Desde a correcao do SEC-04/SEC-05 (26/08/2026) o script EXIGE pasta de saida nova: `mkdtemp`
+// ja cria o diretorio, entao passa-se uma SUBPASTA ainda inexistente dentro dele. O `mkdtemp`
+// continua sendo o sandbox descartavel; o que muda e que o alvo do backup nasce do proprio
+// script.
+const raizes = [];
+async function novaSaida() {
+  const raiz = await mkdtemp(join(tmpdir(), 'divat-bk-'));
+  raizes.push(raiz);
+  return join(raiz, 'saida');
+}
+
 // --- caso 1: dump são -------------------------------------------------------------------------
-let dir = await mkdtemp(join(tmpdir(), 'divat-bk-'));
+let dir = await novaSaida();
 pedidos = [];
 let r = await rodar(dir);
 checar(r.code === 0, 'dump são termina com sucesso', `saiu ${r.code}\n${r.out}`);
@@ -114,26 +125,42 @@ checar(chaveOpacaCorreta, 'sb_publishable_* vai em apikey, nunca como Bearer JWT
 const sha1 = man.tabelas.itinerario_teste.sha256;
 
 // --- caso 2: determinismo do hash -------------------------------------------------------------
-const dir2 = await mkdtemp(join(tmpdir(), 'divat-bk-'));
+const dir2 = await novaSaida();
 await rodar(dir2);
 const man2 = JSON.parse(await readFile(join(dir2, 'manifest.json'), 'utf8'));
 checar(man2.tabelas.itinerario_teste.sha256 === sha1, 'SHA-256 é determinístico entre execuções');
 
 // --- caso 3: servidor conta MAIS do que desceu → aborta ---------------------------------------
 mentirContagem = 5;
-const dir3 = await mkdtemp(join(tmpdir(), 'divat-bk-'));
+const dir3 = await novaSaida();
 r = await rodar(dir3);
 checar(r.code === 1, 'backup incompleto (desceu menos que a contagem) ABORTA', `saiu ${r.code}`);
 checar(/BACKUP INCOMPLETO/.test(r.out), 'e diz por quê');
 
 // --- caso 4: servidor conta MENOS do que desceu → só avisa ------------------------------------
 mentirContagem = -5;
-const dir4 = await mkdtemp(join(tmpdir(), 'divat-bk-'));
+const dir4 = await novaSaida();
 r = await rodar(dir4);
 checar(r.code === 0, 'linha inserida durante o dump apenas AVISA', `saiu ${r.code}\n${r.out}`);
 checar(/não invalida/.test(r.out), 'e o aviso explica que não invalida');
 
+// --- caso 5: pasta de saida preexistente NAO e sobrescrita (SEC-05) --------------------------
+// Antes da correcao o script fazia `mkdir(OUT, { recursive: true })` + `writeFile` truncante:
+// apontar para uma pasta com conteudo destruia o que estava la, sem aviso. Mede-se o comportamento
+// COMPLETO, nao so a guarda isolada de tests/guardas_backup.test.mjs.
+mentirContagem = 0;
+const dir5 = await novaSaida();
+await rodar(dir5);                                    // primeira execucao: cria e popula
+const antes = await readFile(join(dir5, 'manifest.json'), 'utf8');
+await writeFile(join(dir5, 'NAO_APAGUE.txt'), 'arquivo do usuario\n');
+r = await rodar(dir5);                                // segunda: mesma pasta, agora existente
+checar(r.code === 1, 'pasta de saida ja existente ABORTA', `saiu ${r.code}\n${r.out}`);
+checar(/j\u00e1 existe/.test(r.out), 'e diz que a pasta ja existe');
+checar(await readFile(join(dir5, 'manifest.json'), 'utf8') === antes, 'manifest anterior intacto');
+checar((await readFile(join(dir5, 'NAO_APAGUE.txt'), 'utf8')) === 'arquivo do usuario\n',
+  'arquivo do usuario intacto');
+
 srv.close();
-for (const d of [dir, dir2, dir3, dir4]) await rm(d, { recursive: true, force: true });
+for (const d of raizes) await rm(d, { recursive: true, force: true });
 console.log(falhas ? `\n✗ ${falhas} caso(s) falharam` : '\n✓ bancada do backup: todos os casos passaram');
 process.exit(falhas ? 1 : 0);

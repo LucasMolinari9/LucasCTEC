@@ -27,11 +27,12 @@
 //
 // Requer apenas Node 18+ (usa fetch nativo). Nenhuma dependência.
 
-import { mkdir, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { validarOrigem, pastaNova } from './lib/guardas_backup.mjs';
 
-const URL = process.env.SUPABASE_URL;
+const URL_BRUTA = process.env.SUPABASE_URL;
 const SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -41,8 +42,25 @@ const PUBLICO = !SECRET_KEY && !SERVICE_KEY; // sem chave administrativa → só
 const OUT = process.argv[2] || `./backup_${new Date().toISOString().slice(0, 10)}`;
 const PAGE = 1000; // linhas por requisição (abaixo de qualquer max-rows do PostgREST)
 
-if (!URL || !KEY) {
+if (!URL_BRUTA || !KEY) {
   console.error('Faltou SUPABASE_URL e/ou uma chave (SECRET/SERVICE para completo; PUBLISHABLE/ANON para público). Veja o cabeçalho do arquivo.');
+  process.exit(1);
+}
+
+// Achado SEC-04 (auditoria de 26/08/2026): até aqui o script mandava a chave secret/service para
+// o que estivesse em SUPABASE_URL, sem validar protocolo, host nem redirect — o `restore_rest.mjs`
+// já validava, o backup não. A regra agora é uma só, em scripts/lib/guardas_backup.mjs.
+// `permitirLocal` fica com a bancada offline (tests/backup_rest.rig.mjs sobe HTTP em 127.0.0.1),
+// e ali a chave é sempre publishable falsa — daí `chaveAdmin` recusar o par local+administrativa.
+let URL;
+try {
+  ({ origem: URL } = validarOrigem(URL_BRUTA, {
+    nome: 'SUPABASE_URL',
+    permitirLocal: true,
+    chaveAdmin: !PUBLICO,
+  }));
+} catch (e) {
+  console.error(`ERRO: ${e.message}`);
   process.exit(1);
 }
 
@@ -110,7 +128,12 @@ async function dumpTabela(tabela, pk) {
   for (;;) {
     const url = `${URL}/rest/v1/${tabela}?select=*&order=${cols.map(c => `${c}.asc`).join(',')}&limit=${PAGE}`
       + (ultimo ? filtroKeyset(cols, ultimo) : '');
-    const r = await fetch(url, { headers: ultimo ? headers : { ...headers, Prefer: 'count=exact' } });
+    // redirect:'error' — sem isso um 302 na resposta levaria a chave administrativa para outro
+    // host, que é o mesmo buraco do SEC-04 pelo lado da RESPOSTA em vez da variável de ambiente.
+    const r = await fetch(url, {
+      headers: ultimo ? headers : { ...headers, Prefer: 'count=exact' },
+      redirect: 'error',
+    });
     if (!r.ok) throw new Error(`${tabela}: HTTP ${r.status} — ${await r.text()}`);
     if (esperado === null) {
       // Content-Range: "0-999/52146" — o que vem depois da barra é o total.
@@ -125,7 +148,8 @@ async function dumpTabela(tabela, pk) {
 
   const arquivo = join(OUT, `${tabela}.ndjson`);
   const conteudo = linhas.map((x) => JSON.stringify(x)).join('\n') + (linhas.length ? '\n' : '');
-  await writeFile(arquivo, conteudo);
+  // flag 'wx': falha se o arquivo já existe, em vez de truncar (SEC-05).
+  await writeFile(arquivo, conteudo, { flag: 'wx' });
 
   // SHA-256 do arquivo: detecta corrupção em trânsito e no armazenamento. NÃO prova consistência
   // lógica — um dump internamente incoerente tem hash tão válido quanto um bom. Está aqui para
@@ -135,7 +159,7 @@ async function dumpTabela(tabela, pk) {
 }
 
 async function main() {
-  await mkdir(OUT, { recursive: true });
+  await pastaNova(OUT);
   const alvo = Object.entries(TABELAS).filter(([t]) => !PUBLICO || !STAGING.has(t));
   console.log(`Modo: ${PUBLICO ? 'PÚBLICO (publishable/anon — sem staging)' : 'COMPLETO (secret/service)'} — ${alvo.length} tabelas`);
   const manifest = { formato: 1, gerado_em: new Date().toISOString(), url: URL, modo: PUBLICO ? 'publico' : 'completo', tabelas: {} };
@@ -155,7 +179,7 @@ async function main() {
     console.log(`${linhas} linhas${esperado !== null && linhas !== esperado ? ` (servidor: ${esperado})` : ''}`);
   }
   manifest.total_linhas = total;
-  await writeFile(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+  await writeFile(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' });
 
   if (sobrando.length) {
     console.log(`\n⚠ Mais linhas que a contagem inicial (provável escrita durante o dump) — não invalida:`);

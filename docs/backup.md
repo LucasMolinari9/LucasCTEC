@@ -331,6 +331,23 @@ Desde 27/07/2026 (achado SEC-06 da auditoria externa), o `backup_rest.mjs`:
 - O `restore_rest.mjs` refaz a validação antes de escrever, recusa destino ocupado/origem e confere
   as contagens depois de cada tabela. As bancadas de backup e restore rodam no CI.
 
+Desde 26/08/2026 (achados SEC-04 a SEC-06 da auditoria local), os dois scripts também:
+
+- **Validam o destino antes de a credencial sair da máquina** — HTTPS e endpoint direto
+  `https://<ref>.supabase.co`, com path/query descartados e `redirect: 'error'` em toda
+  requisição. Antes disso, o `backup_rest.mjs` mandava a chave secret/service para o que
+  estivesse em `SUPABASE_URL`, sem conferir nada. A regra tem definição única em
+  `scripts/lib/guardas_backup.mjs`, importada pelos dois.
+- **Exigem pasta de saída NOVA.** O `backup_rest.mjs` fazia `mkdir` recursivo e `writeFile`
+  truncante: apontar para uma pasta com conteúdo destruía o que estava lá. Agora a pasta é criada
+  pelo próprio script e cada arquivo é escrito com `flag: 'wx'`. **Consequência prática: reexecutar
+  o backup sobre a mesma pasta falha de propósito** — escolha um caminho novo.
+- **Leem cada NDJSON uma vez só, no restore.** O SHA-256 era conferido numa leitura e os lotes do
+  POST montados em OUTRA, do mesmo caminho — dava para trocar o arquivo entre as duas e enviar
+  conteúdo nunca validado. A bancada `tests/restore_rest.rig.mjs` cria essa janela e mediu o
+  buraco antes da correção: as linhas trocadas entravam no banco. Symlink no lugar do NDJSON é
+  recusado no próprio `open` (`O_NOFOLLOW`).
+
 **O que isso NÃO prova:** o SHA-256 responde "este arquivo é o mesmo que eu gerei?", não "este
 dump presta?". Um dump internamente incoerente tem hash tão válido quanto um bom. E nenhuma dessas
 verificações substitui o item abaixo.

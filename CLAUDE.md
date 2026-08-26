@@ -16,6 +16,25 @@ Contexto para qualquer sessão futura do Claude trabalhar neste projeto. Este ar
 > — o caminho é a aba Actions ou o painel do Supabase, no navegador (o **app** do GitHub não mostra
 > o botão *Run workflow*; só o site). Ao fechar esses passos, atualize este ponteiro ou remova-o.
 
+## Regra permanente: medir, não afirmar
+
+Vale antes de qualquer afirmação sobre este projeto, em qualquer sessão.
+
+- **Prosa não é evidência.** Afirmação sobre banco, permissão, workflow ou deploy só vale com a
+  medição colada junto: saída de comando, log de run, resposta da API. Sem medição, escreva
+  "não medido" — nunca uma frase confiante.
+- **Doc deste repo não é fonte para segurança.** Já esteve invertida: em 27/07/2026 este arquivo
+  afirmava que os `ALTER DEFAULT PRIVILEGES` impediam concessão nova quando faziam o oposto
+  (SEC-01), e em 22/08/2026 o grafo de roles voltou sozinho ao estado revogado
+  (`supabase/migrations/20260822144441_phase3_repara_funcoes_publicas.sql`, "causa não
+  determinada"). Meça contra o banco vivo.
+- **Não conseguiu medir? Diga isso e entregue a medição a quem consegue** — a query, o passo na
+  aba Actions, o comando. Nunca preencher a lacuna com estimativa.
+- **Severidade sai do custo de errar, não da probabilidade de ataque.** "Quem atacaria isso?" não
+  é argumento aqui: os jobs com credencial rodam em toda PR — medido na PR #155, onde `deriva`,
+  `realtime`, `qualidade` e `seguranca` executaram código de uma branch de agente com
+  `SUPABASE_TEST_AUDIT_DATABASE_URL` no ambiente.
+
 ## O que é
 Portal **público de consulta (somente leitura)** do DETRO/RJ · DIVAT. Os usuários buscam linhas
 de ônibus e abrem documentos (itinerários, quadro de horários, tarifas, frota, histórico/eventos,

@@ -22,11 +22,9 @@
 // Compatibilidade temporária: SUPABASE_RESTORE_SERVICE_KEY aceita a service_role JWT legada.
 // Nunca use chave anon/publishable aqui: restauração é escrita administrativa.
 
-import { createReadStream } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
-import { createInterface } from 'node:readline';
 import { join, resolve } from 'node:path';
+import { validarOrigem, lerValidado } from './lib/guardas_backup.mjs';
 
 const TODAS = [
   'tabela_vista_teste', // pai da única FK — precisa vir antes de tarifa_atual_teste
@@ -74,27 +72,6 @@ function argumentos(argv) {
   };
 }
 
-function origemNormalizada(valor, nome) {
-  let u;
-  try { u = new URL(valor); } catch { throw new Error(`${nome} não é uma URL válida`); }
-  const local = u.hostname === '127.0.0.1' || u.hostname === 'localhost';
-  if (u.protocol !== 'https:' && !(local && u.protocol === 'http:')) {
-    throw new Error(`${nome} precisa usar HTTPS`);
-  }
-  u.pathname = '';
-  u.search = '';
-  u.hash = '';
-  return u.origin;
-}
-
-function projectRef(url) {
-  const host = new URL(url).hostname;
-  if (host === '127.0.0.1' || host === 'localhost') return host;
-  const m = /^([a-z0-9]+)\.supabase\.co$/i.exec(host);
-  if (!m) throw new Error('SUPABASE_RESTORE_URL deve ser o endpoint direto https://<ref>.supabase.co');
-  return m[1];
-}
-
 function mesmoConjunto(a, b) {
   return a.length === b.length && a.every(x => b.includes(x));
 }
@@ -126,51 +103,52 @@ async function carregarManifest(pasta) {
   if (Number.isFinite(manifest.total_linhas) && manifest.total_linhas !== soma) {
     throw new Error(`manifest total_linhas=${manifest.total_linhas}, mas as tabelas somam ${soma}`);
   }
-  if (manifest.url) origemNormalizada(manifest.url, 'url de origem do manifest');
+  if (manifest.url) validarOrigem(manifest.url, { nome: 'url de origem do manifest', permitirLocal: true });
   return manifest;
 }
 
-async function sha256Arquivo(arquivo) {
-  const h = createHash('sha256');
-  for await (const chunk of createReadStream(arquivo)) h.update(chunk);
-  return h.digest('hex');
-}
-
-async function percorrerNdjson(arquivo, aoLote, tamanhoLote = 500) {
-  const linhas = createInterface({ input: createReadStream(arquivo, { encoding: 'utf8' }), crlfDelay: Infinity });
+// Parse do NDJSON a partir do TEXTO já validado — nunca a partir do caminho.
+//
+// Achado SEC-06 (auditoria de 26/08/2026): antes havia DUAS leituras do mesmo caminho — uma em
+// `validarArquivos` (para o SHA-256) e outra aqui, já com `aoLote`, para montar os POSTs. Entre
+// as duas cabia uma troca do arquivo, e o que ia para o banco não era o que tinha sido conferido.
+// A bancada `tests/restore_rest.rig.mjs` (caso 7) CRIA essa janela e mediu o resultado antes da
+// correção: as linhas trocadas (`row_id` 666/667) entraram no banco no lugar das validadas.
+function linhasDoTexto(rotulo, texto) {
+  const linhas = [];
   let numero = 0;
-  let lote = [];
-  for await (const linha of linhas) {
+  for (const linha of texto.split('\n')) {
     if (!linha.trim()) continue;
     numero++;
     let dado;
     try { dado = JSON.parse(linha); }
-    catch (e) { throw new Error(`${arquivo}:${numero}: JSON inválido (${e.message})`); }
+    catch (e) { throw new Error(`${rotulo}:${numero}: JSON inválido (${e.message})`); }
     if (!dado || typeof dado !== 'object' || Array.isArray(dado)) {
-      throw new Error(`${arquivo}:${numero}: cada linha precisa ser um objeto JSON`);
+      throw new Error(`${rotulo}:${numero}: cada linha precisa ser um objeto JSON`);
     }
-    lote.push(dado);
-    if (lote.length >= tamanhoLote) {
-      if (aoLote) await aoLote(lote);
-      lote = [];
-    }
+    linhas.push(dado);
   }
-  if (lote.length && aoLote) await aoLote(lote);
-  return numero;
+  return linhas;
 }
 
+// Lê UMA vez por tabela, confere o SHA-256 sobre esses bytes e DEVOLVE as linhas já parseadas.
+// Quem restaura usa este resultado; não há segundo `open` do mesmo caminho em lugar nenhum.
 async function validarArquivos(pasta, manifest) {
   let total = 0;
+  const conteudos = new Map();
   for (const tabela of TODAS.filter(t => manifest.tabelas[t])) {
     const arquivo = join(pasta, `${tabela}.ndjson`);
-    const [sha256, linhas] = await Promise.all([sha256Arquivo(arquivo), percorrerNdjson(arquivo)]);
     const meta = manifest.tabelas[tabela];
-    if (sha256 !== meta.sha256) throw new Error(`${tabela}: SHA-256 não confere; arquivo alterado ou corrompido`);
-    if (linhas !== meta.linhas) throw new Error(`${tabela}: arquivo tem ${linhas} linhas; manifest declara ${meta.linhas}`);
-    total += linhas;
-    console.log(`  ✓ ${tabela}: ${linhas} linhas, SHA-256 confere`);
+    const bytes = await lerValidado(arquivo, meta.sha256);
+    const linhas = linhasDoTexto(arquivo, bytes.toString('utf8'));
+    if (linhas.length !== meta.linhas) {
+      throw new Error(`${tabela}: arquivo tem ${linhas.length} linhas; manifest declara ${meta.linhas}`);
+    }
+    conteudos.set(tabela, linhas);
+    total += linhas.length;
+    console.log(`  ✓ ${tabela}: ${linhas.length} linhas, SHA-256 confere`);
   }
-  return total;
+  return { total, conteudos };
 }
 
 function cabecalhos(chave, extras = {}) {
@@ -207,6 +185,7 @@ async function contar(url, chave, tabela) {
   const r = await fetch(`${url}/rest/v1/${tabela}?select=*&limit=1`, {
     method: 'HEAD',
     headers: cabecalhos(chave, { Prefer: 'count=exact', Range: '0-0', 'Range-Unit': 'items' }),
+    redirect: 'error',
   });
   if (!r.ok) {
     throw new Error(`${tabela}: Data API respondeu HTTP ${r.status}. Confirme schema public exposto, grants e RLS antes de restaurar.`);
@@ -218,27 +197,31 @@ async function contar(url, chave, tabela) {
 }
 
 async function inserir(url, chave, tabela, lote) {
+  // redirect:'error' — um 302 levaria a chave administrativa E os dados para outro host.
   const r = await fetch(`${url}/rest/v1/${tabela}`, {
     method: 'POST',
     headers: cabecalhos(chave, { 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
     body: JSON.stringify(lote),
+    redirect: 'error',
   });
   if (!r.ok) throw new Error(`${tabela}: INSERT HTTP ${r.status} — ${await r.text()}`);
 }
 
-async function restaurar(pasta, manifest, opts) {
+async function restaurar(manifest, conteudos, opts) {
   const urlBruta = process.env.SUPABASE_RESTORE_URL;
   const chave = process.env.SUPABASE_RESTORE_SECRET_KEY || process.env.SUPABASE_RESTORE_SERVICE_KEY;
   if (!urlBruta || !chave) {
     throw new Error('com --apply, defina SUPABASE_RESTORE_URL e SUPABASE_RESTORE_SECRET_KEY (ou a SERVICE_KEY legada)');
   }
   exigirChaveAdministrativa(chave);
-  const url = origemNormalizada(urlBruta, 'SUPABASE_RESTORE_URL');
-  const ref = projectRef(url);
+  const { origem: url, ref } = validarOrigem(urlBruta, {
+    nome: 'SUPABASE_RESTORE_URL',
+    permitirLocal: true,
+  });
   if (!opts.confirmarRef || opts.confirmarRef !== ref) {
     throw new Error(`confirmação ausente/incorreta: use --confirm-ref=${ref}`);
   }
-  if (manifest.url && origemNormalizada(manifest.url, 'url de origem do manifest') === url) {
+  if (manifest.url && validarOrigem(manifest.url, { nome: 'url de origem do manifest', permitirLocal: true }).origem === url) {
     throw new Error('o destino é o mesmo projeto que gerou o backup; restaure somente em projeto novo/descartável');
   }
 
@@ -254,10 +237,12 @@ async function restaurar(pasta, manifest, opts) {
   console.log('\nAplicando dados:');
   for (const tabela of ordem) {
     let enviados = 0;
-    await percorrerNdjson(join(pasta, `${tabela}.ndjson`), async lote => {
+    const linhas = conteudos.get(tabela) || [];
+    for (let i = 0; i < linhas.length; i += opts.batch) {
+      const lote = linhas.slice(i, i + opts.batch);
       await inserir(url, chave, tabela, lote);
       enviados += lote.length;
-    }, opts.batch);
+    }
     const final = await contar(url, chave, tabela);
     const esperado = manifest.tabelas[tabela].linhas;
     if (enviados !== esperado || final !== esperado) {
@@ -277,14 +262,14 @@ async function main() {
 
   console.log(`Validando backup em ${opts.pasta}:`);
   const manifest = await carregarManifest(opts.pasta);
-  const total = await validarArquivos(opts.pasta, manifest);
+  const { total, conteudos } = await validarArquivos(opts.pasta, manifest);
   console.log(`\n✓ BACKUP VÁLIDO — modo ${manifest.modo}, ${Object.keys(manifest.tabelas).length} tabelas, ${total} linhas.`);
 
   if (!opts.aplicar) {
     console.log('Simulação concluída: nenhum acesso ao banco e nenhuma escrita. Use --apply somente após preparar um projeto vazio.');
     return;
   }
-  await restaurar(opts.pasta, manifest, opts);
+  await restaurar(manifest, conteudos, opts);
 }
 
 main().catch(e => {

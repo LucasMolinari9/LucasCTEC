@@ -3,7 +3,8 @@
 
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
@@ -75,7 +76,13 @@ await writeFile(alvoCorrupto, original);
 const banco = new Map(PUBLICAS.map(t => [t, []]));
 const posts = [];
 let authOpacaCorreta = true;
+// Gancho do caso 7 (SEC-06): roda na PRIMEIRA requisicao de uma execucao, ou seja, depois de o
+// script ter validado os arquivos e antes de ele montar qualquer lote para POST. E a unica
+// forma de CRIAR a janela do TOCTOU de forma deterministica — mesma doutrina do
+// scripts/check_corrida_abas.mjs, que tambem fabrica a ordenacao do bug em vez de torcer por ela.
+let aoPrimeiroPedido = null;
 const servidor = createServer((req, res) => {
+  if (aoPrimeiroPedido) { const f = aoPrimeiroPedido; aoPrimeiroPedido = null; f(); }
   const u = new URL(req.url, 'http://x');
   const tabela = u.pathname.split('/').filter(Boolean).at(-1);
   if (!banco.has(tabela)) { res.writeHead(404); res.end(); return; }
@@ -124,6 +131,35 @@ const postsAntes = posts.length;
 r = await rodar(dir, ['--apply', '--confirm-ref=127.0.0.1'], env);
 checar(r.code === 1 && /destino não está vazio/.test(r.out), 'destino ocupado é recusado', r.out);
 checar(posts.length === postsAntes, 'recusa acontece antes de qualquer escrita nova');
+
+// 7. SEC-06 (TOCTOU): trocar o arquivo DEPOIS da validacao nao pode contaminar o que e enviado.
+// Antes da correcao o script hasheava o arquivo em validarArquivos e RELIA o mesmo caminho para
+// montar os lotes: a troca abaixo entrava no banco sem passar por SHA nenhum.
+const dirCorrida = await mkdtemp(join(tmpdir(), 'divat-restore-'));
+await criarFixture(dirCorrida);
+for (const t of PUBLICAS) banco.set(t, []);
+posts.length = 0;
+const alvoCorrida = join(dirCorrida, 'itinerario_teste.ndjson');
+aoPrimeiroPedido = () => {
+  // conteudo com o MESMO numero de linhas, para nao ser pego pela conferencia de contagem
+  writeFileSync(alvoCorrida, '{"row_id":666}\n{"row_id":667}\n');
+};
+r = await rodar(dirCorrida, ['--apply', '--confirm-ref=127.0.0.1', '--batch=1'], env);
+const idsGravados = banco.get('itinerario_teste').map(x => x.row_id).sort((a, b) => a - b);
+checar(r.code === 0, 'restore com arquivo trocado no meio ainda termina verde', r.out);
+checar(JSON.stringify(idsGravados) === '[1,2]',
+  'o que foi ENVIADO sao os bytes validados, nao os trocados depois', JSON.stringify(idsGravados));
+
+// 8. Symlink no lugar do NDJSON e recusado: o alvo pode mudar sem o caminho mudar.
+const dirLink = await mkdtemp(join(tmpdir(), 'divat-restore-'));
+await criarFixture(dirLink);
+const realLink = join(dirLink, 'itinerario_teste.ndjson');
+const guardado = await readFile(realLink, 'utf8');
+await rm(realLink);
+await writeFile(join(dirLink, 'alvo_real.ndjson'), guardado);
+await symlink(join(dirLink, 'alvo_real.ndjson'), realLink);
+r = await rodar(dirLink);
+checar(r.code === 1 && /symlink/.test(r.out), 'NDJSON via symlink e recusado', r.out);
 
 // 6. O projeto que gerou o backup nunca pode ser o destino.
 const dirMesmo = await mkdtemp(join(tmpdir(), 'divat-restore-'));
